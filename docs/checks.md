@@ -51,14 +51,16 @@
 
 ## The static check
 
-- **The steps are the repository's,** declared in order under `[check]` (`docs/declaration.md`): a
-  type check, a format check, a lint, a front-end build. Each runs from the repository's root through
-  `sh`, in the lane it declares or where it stands, and is timed.
-- **The quick checks go first,** the ones the repository enables (「The quick checks」).
-- **A Cargo workspace's check** runs where a crate is marked: `cargo fmt --check`, then `cargo clippy
-  --workspace --all-targets --locked` with every warning an error, both through the Cargo verb, in the
-  wide lane, run again where the kernel killed it for want of memory; formatting compiles nothing and
-  runs at once.
+- **The quick checks go first,** where the repository enables any (「The quick checks」).
+- **Then the steps are the repository's,** declared in order under `[check]` (`docs/declaration.md`):
+  a type check, a format check, a lint, a front-end build. Each runs through `sh` in the directory it
+  declares, the root by default, in the lane it declares or where it stands, and is timed. A step
+  declaring the paths that reach it runs only for a change touching one of them; a check of every path
+  runs them all.
+- **A Cargo workspace's check comes last,** where a crate is marked: `cargo fmt --check`, then
+  `cargo clippy --workspace --all-targets --locked` with every warning an error, both through the
+  Cargo verb, in the wide lane, run again where the kernel killed it for want of memory; formatting
+  compiles nothing and runs at once.
 - **Every step runs to its end,** a failing one stopping none after it, and each says its exit code,
   how long it waited for its turn and how long it ran.
 

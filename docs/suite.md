@@ -143,6 +143,8 @@
   migration files. Every run and every checkout whose migrations are the same shares one template and
   its pool. A repository declaring no migrations has no template and no pool; its tests are handed the
   server alone.
+  - The suite names the template in `BMO_TEST_TEMPLATE` for every process it starts, so a file's
+    process claims its slot from that template's pool.
   - It is made by the repository's declared migrate command, handed the template's address. A run
     makes it before its first file starts where it does not stand yet; otherwise the first file to ask
     makes it, under a lock the others wait on. The `template` verb is behind both

@@ -11,6 +11,13 @@ name = "turn"
 [quick]
 name = "quick checks"
 
+# A Cargo workspace's formatting and lints, where the static check reaches a crate.
+[cargo-format]
+name = "cargo format"
+
+[cargo-lint]
+name = "cargo lint"
+
 # The suite.
 [tests]
 name = "tests"

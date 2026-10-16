@@ -74,6 +74,7 @@ pub struct LineWords {
   pub library_tests: String,
   pub binaries: String,
   pub plan: String,
+  pub no_browser: String,
 }
 
 #[derive(Debug, Deserialize)]

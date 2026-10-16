@@ -12,6 +12,8 @@ use serde::Deserialize;
 pub enum DeployStep {
   Turn,
   Quick,
+  CargoFormat,
+  CargoLint,
   Tests,
   BackupSnapshot,
   BackupPack,
@@ -21,9 +23,11 @@ pub enum DeployStep {
 
 impl DeployStep {
   /// Every step, in the order a deployment can pass them.
-  pub const ALL: [Self; 7] = [
+  pub const ALL: [Self; 9] = [
     Self::Turn,
     Self::Quick,
+    Self::CargoFormat,
+    Self::CargoLint,
     Self::Tests,
     Self::BackupSnapshot,
     Self::BackupPack,

@@ -71,7 +71,9 @@ building = "building {what} of {crate}: exit {code}"
 tests = "the tests"
 library_tests = "the library's own tests"
 binaries = "the binaries"
-plan = "{count} files, {width} at a time, the ones under {browser} one at a time beside them, and the projects of their own, the tools checked by their manifest and the crates one at a time in a lane of their own"
+# The plan, {browser} the declared browser globs or `no_browser`.
+plan = "{count} files, {width} at a time, the browser files ({browser}) one at a time beside them, and the projects of their own, the tools checked by their manifest and the crates one at a time in a lane of their own"
+no_browser = "none declared"
 
 # One unit's result, written whole as it ends: its mark, its seconds and its name, then what it printed.
 [file]
