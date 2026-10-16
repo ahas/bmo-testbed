@@ -1,0 +1,63 @@
+# A repository's declaration (docs/declaration.md): the file it is read from, every default a key the
+# declaration leaves out takes, and what a declaration that does not read is refused with. A job reads
+# the refusals, so they are English. Each `{name}` is filled in with what it names.
+
+# The declaration's file, at the checkout's root.
+file = "testbed.toml"
+
+# The defaults, one for each key whose default is a number or a word, under the table that key stands in.
+[defaults.test]
+guard_seconds = 240
+file_guard_seconds = 90
+test_timeout_seconds = 30
+memory_gb = 8
+
+[defaults.database]
+max_files = 10
+
+[defaults.projects]
+check_script = "check"
+
+[defaults.tools]
+manifest = "tool.toml"
+check_key = "tool.check"
+
+[defaults.check]
+main = "main"
+
+[defaults.build]
+cargo_profile = "release"
+
+[defaults.deploy]
+link = "deploy"
+health_wait_seconds = 300
+stay_up_seconds = 30
+step_timeout_seconds = 1200
+
+[defaults.backup]
+keep = 5
+
+[defaults.events]
+timeout_seconds = 30
+
+# What a declaration that does not read is refused with. {file} is the declaration's path.
+[refusal]
+# {error} is the TOML reader's own account, {table} where it stands; a key the schema does not name is
+# one such.
+unreadable = "the declaration {file} does not read at {table}: {error}"
+# The {table} of a key standing at the top level.
+top_level = "the top level"
+# {declared} is the major the declaration names, {own} this testbed's.
+other_major = "the declaration {file} is written for testbed major {declared}, and this testbed is major {own}"
+# {key} is the dotted key, {why} what it asks for.
+breaks = "the declaration {file} is refused at {key}: {why}"
+
+# What a key that breaks a rule asks for, under `breaks`.
+[refusal.why]
+# {name} is the name given, {names} the names there are.
+unknown_language = "no language is named {name}; the languages are {names}"
+needs_input = "the quick check {name} reads {input}, which the declaration does not name"
+needs_data_root = "a deploy root needs its data root"
+half_database = "the migrations and the migrate command are named together or not at all"
+# {id} is the id two steps share.
+duplicate_step = "two steps are named {id}"

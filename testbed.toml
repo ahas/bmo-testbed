@@ -1,0 +1,27 @@
+# How this repository is tested, checked, built and deployed, read against the schema in
+# docs/declaration.md by every verb run in a checkout of it.
+
+testbed = 0
+name = "bmo-testbed"
+
+[test]
+# The Cargo workspace's crates, and the test kit's own tests run by `bun test`.
+languages = ["cargo", "bun"]
+files = ["testkit/tests/**/*.test.ts"]
+setup = ["cd testkit && bun install --frozen-lockfile"]
+
+# The scratch database's tests make their own databases on the server, so no template is named.
+[test.database]
+
+[check]
+quick = ["dashes", "korean", "layout", "dependencies"]
+# The text a person reads: the verbs' words in the policy, and the literals of the crates and the kit.
+people_text = ["policy/*.toml", "*/src/**/*.rs", "testkit/*.ts"]
+korean_ledger = "docs/korean-in-code-ledger.json"
+
+[build]
+binaries = ["bmo-testbed"]
+
+[deploy]
+root = "~/.local/share/bmo-testbed"
+data_root = "~/.local/share/bmo-testbed/data"

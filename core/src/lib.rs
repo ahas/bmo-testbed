@@ -4,6 +4,7 @@
 //! the verb over them, and the policy every number and word of theirs is read from.
 
 pub mod close_line;
+pub mod declaration;
 pub mod languages;
 pub mod memory;
 pub mod policy;

@@ -36,8 +36,9 @@ pub fn process_env() -> Env {
   std::env::vars().collect()
 }
 
-/// The lanes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// The lanes, named in a declaration by their own lowercase names.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Lane {
   /// The machine's whole width.
   Wide,

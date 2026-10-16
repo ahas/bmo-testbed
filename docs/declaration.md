@@ -12,6 +12,11 @@
 - **Paths are relative to the root** unless they begin with `~/` or `/`. Globs are git's pathspec
   globs. A command is one string run through `sh -c` from the directory its table says, the root
   unless named.
+- **What keys ask of each other is held as the file is read,** and a declaration breaking it is
+  refused naming the key: a language or a quick check the testbed has no member for, a quick check
+  without the input it reads, a deploy root without its data root, a test database naming only one of
+  its migrations and its migrate command, and two steps of one table under the same id. Whether a path
+  exists is asked by the verb that reads it, not here.
 
 ## The top level
 
@@ -36,11 +41,13 @@
 ### `[test.database]`: the test database
 
 Present only where the repository's tests use PostgreSQL (`docs/suite.md`, 「The test database」).
+The migrations and the migrate command are named together or not at all: a repository whose tests
+make their own databases names neither, and its tests are handed the server alone.
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `migrations` | list of globs | required | The files whose contents name the template; any change makes another template |
-| `migrate` | command | required | Makes the template: run with `BMO_TEST_TEMPLATE_URL` naming the empty template database, ends 0 once it is migrated |
+| `migrations` | list of globs | `[]` | The files whose contents name the template; any change makes another template |
+| `migrate` | command | none | Makes the template: run with `BMO_TEST_TEMPLATE_URL` naming the empty template database, ends 0 once it is migrated |
 | `max_files` | integer | 10 | How many files using the database run at once |
 
 ## `[projects]`: projects of their own

@@ -7,6 +7,7 @@ pub mod backups;
 pub mod close_line;
 pub mod count;
 pub mod daily;
+pub mod declaration;
 pub mod deploy;
 pub mod deploy_steps;
 pub mod lanes;

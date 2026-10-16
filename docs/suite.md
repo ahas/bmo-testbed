@@ -141,7 +141,8 @@
     starts.
 - **The template is named by the migrations:** `bmo_test_tmpl_<hash>`, the hash of the declared
   migration files. Every run and every checkout whose migrations are the same shares one template and
-  its pool.
+  its pool. A repository declaring no migrations has no template and no pool; its tests are handed the
+  server alone.
   - It is made by the repository's declared migrate command, handed the template's address. A run
     makes it before its first file starts where it does not stand yet; otherwise the first file to ask
     makes it, under a lock the others wait on. The `template` verb is behind both
