@@ -1,5 +1,5 @@
-//! What the repository's close line says (docs/testbed.md, 「The close line」), each line with the
-//! `{name}` marks its file names.
+//! What the repository's close line says and the number it keeps to (docs/testbed.md, 「The close
+//! line」), each line with the `{name}` marks its file names.
 
 use serde::Deserialize;
 
@@ -15,6 +15,12 @@ pub struct LineWords {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct LineNumbers {
+  pub notice_seconds: u64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct StretchWords {
   pub command: String,
   pub front_first: String,
@@ -25,6 +31,7 @@ pub struct StretchWords {
 #[serde(deny_unknown_fields)]
 pub struct CloseLine {
   pub line: LineWords,
+  pub numbers: LineNumbers,
   pub stretch: StretchWords,
 }
 

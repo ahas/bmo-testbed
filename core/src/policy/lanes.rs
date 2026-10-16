@@ -1,5 +1,5 @@
-//! What the machine's turn for heavy commands says (docs/testbed.md), each line with the `{name}` marks
-//! its file names.
+//! What the machine's turn for heavy commands says and the numbers it keeps to (docs/testbed.md), each
+//! line with the `{name}` marks its file names.
 
 use serde::Deserialize;
 
@@ -8,6 +8,32 @@ use serde::Deserialize;
 pub struct LaneWords {
   pub wide: String,
   pub narrow: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Numbers {
+  pub job_wait_seconds: u64,
+  pub unit_wait_seconds: u64,
+  pub front_allowance_seconds: u64,
+  pub kept_place_seconds: u64,
+  pub notice_seconds: u64,
+  pub poll_milliseconds: u64,
+  pub watch_seconds: u64,
+  pub stop_grace_seconds: u64,
+  pub guard_seconds: u64,
+  pub failure_lines: usize,
+  pub log_keep_days: u64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MemoryLimitNumbers {
+  pub settle_seconds: u64,
+  pub needed_gigabytes: u64,
+  pub poll_seconds: u64,
+  pub wait_seconds: u64,
+  pub runs: u32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -123,6 +149,8 @@ pub struct MemoryWords {
 #[serde(deny_unknown_fields)]
 pub struct Lanes {
   pub lanes: LaneWords,
+  pub numbers: Numbers,
+  pub memory_limits: MemoryLimitNumbers,
   pub waiting: WaitingWords,
   pub entry: EntryWords,
   pub settled: SettledWords,

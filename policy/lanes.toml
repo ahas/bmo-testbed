@@ -1,11 +1,43 @@
-# What the machine's turn for heavy commands says (docs/testbed.md, 「The turn」): the lines a waiter
-# writes while it stands in a lane's line, and what a caller says once its turn is settled. A job reads
-# them, so they are English. Each `{name}` is filled in with what it names.
+# What the machine's turn for heavy commands says and the numbers it keeps to (docs/testbed.md, 「The
+# turn」): the lines a waiter writes while it stands in a lane's line, and what a caller says once its
+# turn is settled. A job reads the words, so they are English. Each `{name}` is filled in with what it names.
 
 # Every lane's turn, by lane.
 [lanes]
 wide = "the machine's turn"
 narrow = "the narrow lane's turn"
+
+# The turn's and the run's own numbers (docs/testbed.md, 「The turn」 and 「The result」).
+[numbers]
+# How long a caller inside a job's call waits for the turn, and how long one no job's call bounds.
+job_wait_seconds = 180
+unit_wait_seconds = 1500
+# How much longer a caller waits while a caller at the front holds the lane or stands ahead of it.
+front_allowance_seconds = 360
+# How long a job's place in the line is kept once its wait has run out.
+kept_place_seconds = 600
+# How often a waiter says where it stands, and how often a waiter looks at the line.
+notice_seconds = 30
+poll_milliseconds = 500
+# How often the watch on a job holding a turn looks whether the job is still there, and how long the
+# holder and what runs under it are given once asked to stop.
+watch_seconds = 2
+stop_grace_seconds = 5
+# How long a command may hold the machine before it is cut, how many failure lines its result keeps,
+# and how many days a run's log is kept.
+guard_seconds = 1800
+failure_lines = 60
+log_keep_days = 7
+
+# How a command killed for want of memory is run again (docs/testbed.md, 「Memory」): how long it waits
+# before it looks at the memory at all, how many gigabytes have to be available, how often and how long
+# it looks, and how many runs it is given in all, the first included.
+[memory_limits]
+settle_seconds = 30
+needed_gigabytes = 6
+poll_seconds = 5
+wait_seconds = 600
+runs = 4
 
 [waiting]
 # Said every half minute while a {command} waits for {lane}, {seconds} so far, {ahead} standing ahead of
@@ -81,7 +113,8 @@ next = " — next after the front"
 kept = " — place kept for a job coming back"
 close_line = "the close line:"
 
-# The `run` and `status` verbs' own words: their usage, {verb} the binary's name, and their refusals.
+# The `run` and `status` verbs' own words: their usage, {verb} the binary's name and {guard},
+# {job_wait}, {unit_wait} and {kept} the `numbers` they stand for, and their refusals.
 [verb]
 usage = """
 usage: {verb} run [--narrow] [--adapter <name>] [--guard <seconds>] [--wait <seconds>] -- <command…>
@@ -96,11 +129,11 @@ waited, and the log holding its whole output — with what failed under it.
            command that needs only a few threads — one file run again and again, a script of
            its own over one test
 --adapter  the language that runs it, instead of the one that claims the command
---guard    seconds the command may hold the machine before it is cut (default 1800)
---wait     seconds to wait for the turn (default 180 in a job's call, 1500 elsewhere)
+--guard    seconds the command may hold the machine before it is cut (default {guard})
+--wait     seconds to wait for the turn (default {job_wait} in a job's call, {unit_wait} elsewhere)
 
 Where the turn does not come within the wait, nothing runs, it ends with exit code 75, and a job's
-place in the line is kept for 600 seconds: run the same command again at once.
+place in the line is kept for {kept} seconds: run the same command again at once.
 
 status  each lane: who holds the turn, since when, and who waits behind it in order, then the close
         line of the repository it is run in (docs/testbed.md)"""

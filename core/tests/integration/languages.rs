@@ -1,0 +1,271 @@
+//! The languages a command is run and read by (docs/testbed.md, 「Languages」): what each claims, how it
+//! widens a command, and what it reads out of a log.
+
+use std::collections::BTreeMap;
+
+use bmo_testbed_core::languages::{
+  Browser, Bun, Cargo, LANGUAGES, Language, Node, PLAIN, Tally, failures_of_log, language_for,
+  program_words, tally_of_log,
+};
+
+fn words(line: &[&str]) -> Vec<String> {
+  line.iter().map(|word| (*word).to_owned()).collect()
+}
+
+fn claims(language: &dyn Language, program: &str, args: &[&str]) -> bool {
+  language.claims(program, &words(args))
+}
+
+fn env(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
+  pairs.iter().map(|(name, value)| ((*name).to_owned(), (*value).to_owned())).collect()
+}
+
+fn lines(text: &[&str]) -> String {
+  text.join("\n")
+}
+
+fn tally(pass: u64, fail: u64, skip: u64) -> Option<Tally> {
+  Some(Tally { pass, fail, skip })
+}
+
+// "a language is named once in the list of members beside it": the one list every reader asks.
+#[test]
+fn every_language_is_one_member_of_the_one_list_in_the_order_of_their_names() {
+  assert_eq!(LANGUAGES.map(|one| one.name()), ["browser", "bun", "cargo", "node"]);
+}
+
+// "run a command by the first that claims it, the one named, or the plain one"
+#[test]
+fn a_command_runs_by_the_first_language_that_claims_it_the_one_named_or_the_plain_one() {
+  let name = |command: &[&str], named: Option<&str>| {
+    language_for(&LANGUAGES, &words(command), named).map(|one| one.name())
+  };
+
+  assert_eq!(name(&["env", "RUST_LOG=1", "cargo", "test"], None), Ok("cargo"));
+  assert_eq!(name(&["make", "all"], None), Ok(PLAIN.name()));
+  assert_eq!(name(&["make", "check"], Some("cargo")), Ok("cargo"));
+  assert_eq!(name(&["make"], Some("cobol")), Err(vec!["browser", "bun", "cargo", "node", "plain"]));
+}
+
+// "read a command's program past assignments and env"
+#[test]
+fn a_command_s_program_is_read_past_assignments_and_env() {
+  assert_eq!(
+    program_words(&words(&["FOO=1", "/usr/bin/env", "/usr/local/bin/cargo", "build"])),
+    Some(("cargo".to_owned(), words(&["build"])))
+  );
+  assert_eq!(program_words(&words(&["FOO=1"])), None);
+}
+
+// A package script prints whatever its runners print, Cargo's results beside bun's.
+// "read one log together, every language's summary summed"
+#[test]
+fn one_log_is_read_together_every_language_s_summary_summed() {
+  let log = lines(&[
+    " 3 pass",
+    " 1 fail",
+    "(fail) adds",
+    "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out",
+  ]);
+
+  assert_eq!(tally_of_log(&LANGUAGES, &log), tally(5, 1, 0));
+  assert_eq!(failures_of_log(&LANGUAGES, &log), ["adds"]);
+  assert_eq!(tally_of_log(&LANGUAGES, "built"), None);
+}
+
+// "claims Playwright's runner and a bun test over a browser file"
+#[test]
+fn browser_claims_playwright_s_runner_and_a_bun_test_over_a_browser_file() {
+  assert!(claims(&Browser, "npx", &["playwright", "test"]));
+  assert!(claims(&Browser, "pnpm", &["exec", "playwright", "test", "e2e/"]));
+  assert!(claims(&Browser, "bun", &["test", "client/browser/live.test.ts"]));
+  assert!(!claims(&Browser, "npx", &["playwright", "install"]));
+  assert!(!claims(&Browser, "bun", &["test", "server/a.test.ts"]));
+}
+
+// "hands Playwright a quarter of the width, at least one, unless the command names its own"
+#[test]
+fn browser_hands_playwright_a_quarter_of_the_width_unless_the_command_names_its_own() {
+  let widened = |command: &[&str], width: usize| Browser.widen(&words(command), width).command;
+
+  assert_eq!(
+    widened(&["npx", "playwright", "test"], 24),
+    words(&["npx", "playwright", "test", "--workers=6"])
+  );
+  assert_eq!(
+    widened(&["npx", "playwright", "test"], 2),
+    words(&["npx", "playwright", "test", "--workers=1"])
+  );
+  assert_eq!(
+    widened(&["npx", "playwright", "test", "--workers=2"], 24),
+    words(&["npx", "playwright", "test", "--workers=2"])
+  );
+  assert_eq!(
+    widened(&["bun", "test", "client/browser/a.test.ts"], 24),
+    words(&["bun", "test", "client/browser/a.test.ts"])
+  );
+}
+
+// "reads Playwright's closing counts and its failed tests"
+#[test]
+fn browser_reads_playwright_s_closing_counts_and_its_failed_tests() {
+  let log = lines(&[
+    "  1) [chromium] › login.spec.ts:3:1 › signs in",
+    "",
+    "  1 failed",
+    "  2 skipped",
+    "  9 passed (12.3s)",
+  ]);
+
+  assert_eq!(Browser.tally(&log), tally(9, 1, 2));
+  assert_eq!(Browser.failures(&log), ["[chromium] › login.spec.ts:3:1 › signs in"]);
+}
+
+// "claims a run over several files, a directory or a name, never one test file or a browser file"
+#[test]
+fn bun_claims_a_run_over_several_files_never_one_test_file_or_a_browser_file() {
+  assert!(claims(&Bun, "bun", &["test"]));
+  assert!(claims(&Bun, "bun", &["test", "--parallel", "a.test.ts", "b.test.ts"]));
+  assert!(!claims(&Bun, "bun", &["test", "--timeout", "9000", "a.test.ts"]));
+  assert!(claims(&Bun, "bun", &["test", "testbed/testbed/"]));
+  assert!(claims(&Bun, "bun", &["test", "suite-run"]));
+  assert!(!claims(&Bun, "bun", &["test", "client/browser/x.test.ts", "a.test.ts"]));
+  assert!(!claims(&Bun, "bun", &["run", "test"]));
+  assert!(!claims(&Bun, "node", &["test"]));
+}
+
+// "hands its parallel workers the width, leaving a number already named"
+#[test]
+fn bun_hands_its_parallel_workers_the_width_leaving_a_number_already_named() {
+  let widened = Bun.widen(&words(&["bun", "test", "--parallel", "a", "b"]), 24);
+
+  assert_eq!(widened.command, words(&["bun", "test", "--parallel=24", "a", "b"]));
+  assert_eq!(widened.env, env(&[("BMO_TEST_PARALLEL", "24")]));
+  assert_eq!(
+    Bun.widen(&words(&["bun", "test", "--parallel=4"]), 24).command,
+    words(&["bun", "test", "--parallel=4"])
+  );
+}
+
+// "sums every summary block and names the failed tests"
+#[test]
+fn bun_sums_every_summary_block_and_names_the_failed_tests() {
+  let log = lines(&[
+    "(fail) one > two [1.20ms]",
+    " 3 pass",
+    " 1 skip",
+    " 1 fail",
+    "",
+    " 1,002 pass",
+    " 0 fail",
+  ]);
+
+  assert_eq!(Bun.tally(&log), tally(1005, 1, 1));
+  assert_eq!(Bun.failures(&log), ["one > two"]);
+  assert_eq!(Bun.tally("nothing here"), None);
+}
+
+// "claims what compiles, past a toolchain and the options before it, and nothing that only reads"
+#[test]
+fn cargo_claims_what_compiles_and_nothing_that_only_reads() {
+  assert!(claims(&Cargo, "cargo", &["test", "--workspace"]));
+  assert!(claims(&Cargo, "cargo", &["+nightly", "--locked", "clippy"]));
+  assert!(claims(&Cargo, "cargo", &["b"]));
+  assert!(!claims(&Cargo, "cargo", &["fmt", "--check"]));
+  assert!(!claims(&Cargo, "cargo", &["metadata"]));
+  assert!(!claims(&Cargo, "cargo", &["run"]));
+}
+
+// "hands Cargo the width as its jobs, unless the command names its own"
+#[test]
+fn cargo_is_handed_the_width_as_its_jobs_unless_the_command_names_its_own() {
+  let widened = Cargo.widen(&words(&["cargo", "build"]), 24);
+
+  assert_eq!(widened.command, words(&["cargo", "build"]));
+  assert_eq!(widened.env, env(&[("CARGO_BUILD_JOBS", "24")]));
+  assert!(Cargo.widen(&words(&["cargo", "build", "-j", "2"]), 24).env.is_empty());
+  assert!(Cargo.widen(&words(&["cargo", "build", "--jobs=2"]), 24).env.is_empty());
+}
+
+// "sums every test binary's result, and names failed tests and compiler errors with their place"
+#[test]
+fn cargo_sums_every_test_binary_and_names_failed_tests_and_compiler_errors_with_their_place() {
+  let log = lines(&[
+    "test result: ok. 4 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out",
+    "test parse::reads_lines ... FAILED",
+    "test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out",
+    "error[E0308]: mismatched types",
+    "  --> crates/a/src/lib.rs:3:5",
+    "error: could not compile `a` due to 1 previous error",
+    "error: expect(received).toBe(expected)",
+  ]);
+
+  assert_eq!(Cargo.tally(&log), tally(6, 1, 1));
+  assert_eq!(
+    Cargo.failures(&log),
+    ["parse::reads_lines", "error[E0308]: mismatched types (crates/a/src/lib.rs:3:5)"]
+  );
+  assert_eq!(Cargo.tally("   Compiling a v0.1.0"), None);
+}
+
+// "claims package scripts that test, check or build, node --test, Vitest and Jest"
+#[test]
+fn node_claims_package_scripts_that_test_check_or_build_node_test_vitest_and_jest() {
+  assert!(claims(&Node, "npm", &["test"]));
+  assert!(claims(&Node, "npm", &["--prefix", "web", "run", "build"]));
+  assert!(claims(&Node, "pnpm", &["-C", "client", "test:unit"]));
+  assert!(claims(&Node, "yarn", &["check"]));
+  assert!(claims(&Node, "bun", &["run", "check:hub"]));
+  assert!(claims(&Node, "node", &["--test", "test/"]));
+  assert!(claims(&Node, "npx", &["vitest", "run"]));
+  assert!(claims(&Node, "pnpm", &["exec", "jest"]));
+  assert!(claims(&Node, "jest", &[]));
+}
+
+// "leaves light scripts and bun's own test runner alone"
+#[test]
+fn node_leaves_light_scripts_and_bun_s_own_test_runner_alone() {
+  assert!(!claims(&Node, "npm", &["run", "lint"]));
+  assert!(!claims(&Node, "npm", &["install"]));
+  assert!(!claims(&Node, "bun", &["run", "typecheck"]));
+  assert!(!claims(&Node, "bun", &["test"]));
+  assert!(!claims(&Node, "node", &["server.js"]));
+  assert!(!claims(&Node, "npx", &["tsc"]));
+}
+
+// "hands each runner the width its own way, leaving a number already named"
+#[test]
+fn node_hands_each_runner_the_width_its_own_way_leaving_a_number_already_named() {
+  let handed = env(&[("BMO_TEST_PARALLEL", "24"), ("CARGO_BUILD_JOBS", "24")]);
+  let node = Node.widen(&words(&["node", "--test"]), 24);
+  let npm = Node.widen(&words(&["npm", "test"]), 24);
+
+  assert_eq!(node.command, words(&["node", "--test", "--test-concurrency=24"]));
+  assert_eq!(node.env, handed);
+  assert_eq!(
+    Node.widen(&words(&["npx", "vitest", "run"]), 24).command,
+    words(&["npx", "vitest", "run", "--maxWorkers=24"])
+  );
+  assert_eq!(
+    Node.widen(&words(&["npx", "jest", "--maxWorkers=2"]), 24).command,
+    words(&["npx", "jest", "--maxWorkers=2"])
+  );
+  assert_eq!(npm.command, words(&["npm", "test"]));
+  assert_eq!(npm.env, handed);
+}
+
+// "reads node's, Vitest's and Jest's summaries and failures"
+#[test]
+fn node_reads_node_s_vitest_s_and_jest_s_summaries_and_failures() {
+  assert_eq!(
+    Node.tally(&lines(&["# pass 5", "# fail 1", "# skipped 2", "not ok 3 - reads a line"])),
+    tally(5, 1, 2)
+  );
+  assert_eq!(Node.tally("      Tests  2 failed | 7 passed (9)"), tally(7, 2, 0));
+  assert_eq!(Node.tally("Tests:       1 failed, 5 passed, 6 total"), tally(5, 1, 0));
+  assert_eq!(
+    Node.failures(&lines(&["not ok 3 - reads a line", " FAIL  src/a.test.ts > adds", "  ● sums > two"])),
+    ["reads a line", "src/a.test.ts > adds", "sums > two"]
+  );
+  assert_eq!(Node.tally("built in 3s"), None);
+}
