@@ -1,0 +1,13 @@
+[package]
+name = "bmo-testbed-test-support"
+description = "What every Rust test shares: the fixed ids of a user, a room, a message, an account, a worker and a unit."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dev-dependencies]
+# The test kit's ids, read by the TypeScript parser to hold the two sets the same.
+oxc_allocator.workspace = true
+oxc_ast.workspace = true
+oxc_parser.workspace = true
+oxc_span.workspace = true

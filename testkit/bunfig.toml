@@ -1,0 +1,4 @@
+[test]
+# The test kit's own tests run as a consumer's would: the stand-ins first, then a preload of the
+# kit's own that sets up the home from a neutral ask (docs/suite.md, 「The test home」).
+preload = ["./test-stand-ins.ts", "./tests/preload.ts"]

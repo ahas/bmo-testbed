@@ -32,7 +32,7 @@ and a release-based deployment of a repository onto the machine it runs on.
 | `suite/` | The whole-suite runner, change selection, the static check, the quick checks, the Cargo verb and the build directory prune |
 | `deploy/` | Releases, the deploy tree link, unit links, the deploy run, progress, rollback and backups |
 | `cli/` | The `bmo-testbed` binary: reading the words of each verb and handing them to the crates |
-| `test-support/` | Helpers the crates' own tests share |
+| `test-support/` | The fixed ids a Rust test names its people, rooms and units by, the same as the test kit's |
 | `scratch-database/` | Per-test PostgreSQL databases cloned from a template a consumer's migrator makes |
 | `testkit/` | The TypeScript test kit a consumer preloads: the test home and the stand-ins |
 | `policy/` | The testbed's own fixed numbers and words, read by `core`'s policy loader |

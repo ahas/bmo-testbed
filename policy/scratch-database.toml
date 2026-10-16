@@ -1,0 +1,16 @@
+# The scratch databases a Rust test is handed (docs/suite.md, 「The test database」): the names they go
+# by and the server they stand on where the run names none.
+
+[names]
+# What a template's and a copy's names begin with, ahead of the process that made them; the binary that
+# makes a template drops every one of either whose process is gone.
+template = "bmo_rs_tmpl_"
+copy = "bmo_rs_copy_"
+
+[server]
+# The test server where BMO_TEST_POSTGRES names none: the machine's own socket.
+address = "postgres:///bmo_test?host=/var/run/postgresql"
+# The database on it every template and copy is made and dropped from.
+admin_database = "postgres"
+# The connections each scratch database is opened with.
+connections = 4

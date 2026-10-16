@@ -154,28 +154,52 @@
   - Nothing is dropped as a file ends: dropping or making a database waits on a checkpoint.
 - **The sweep:** every run starts the `template sweep` with its own template's name. It drops every
   other template made more than a day ago whose pool no living process holds, with that pool.
-- **A Rust test's own database** is a copy of a template its test binary migrated once, through the
-  `scratch-database` crate, which takes the migrator from its caller; each test is handed a copy,
-  dropped as the test ends, and the next binary drops every template and copy whose process is gone.
+- **A Rust test's own database** comes from the `scratch-database` crate, handed the migrator of the
+  crate under test:
+  - The first test of a binary to ask makes the binary's template, `bmo_rs_tmpl_<process>_<n>`, one
+    for each migrator handed in, and migrates it; each test is handed a copy,
+    `bmo_rs_copy_<process>_<n>`, which the server makes in a fraction of the time a migration takes.
+  - A copy is dropped as its test ends, its connections ended with it. The first template a binary
+    makes drops every template and copy whose process is gone.
+  - The server is the one `BMO_TEST_POSTGRES` names, which the suite sets; with nothing named, the
+    machine's own PostgreSQL socket.
 - **At most ten files that use the database run at once,** whatever the sweep's width.
 
 ## The test home
 
-- **The test kit's preload gives every test file a home of its own:** a temporary directory that is
-  `HOME`, with the configuration directories inside it, so no test reads or writes the account's real
-  home.
+- **Every test file runs in a home of its own:** a temporary directory, `bmo-test-home-<random>`, that
+  is `HOME`, set up before the file's first line, so no test reads or writes the account's real home.
+  - A consumer's own preload sets it up, handing the test kit what it asks for: the variables to take
+    away, the programs to stand in for, and the directories of the home to name in variables. The
+    lists are the consumer's; the test kit names none.
+  - The home is named in `BMO_TEST_HOME`, so a process that carries it is a test. `XDG_CONFIG_HOME`
+    is a directory of the home.
 - **The variables a consumer names are taken away:** set empty where a reader takes empty as unset and
-  an env file would otherwise hand the value back, removed where the reader takes a present empty
-  value as given. The list is the consumer's, handed to the test kit; the test kit names none.
+  an env file would otherwise hand the value back; removed, by name or by the beginning of the name,
+  where the reader takes a present empty value as given.
+- **What still comes from the real home,** named where it stands so that moving the home does not move
+  it, unless the caller named it already: git's global configuration, so a test committing in a
+  temporary repository keeps its author; the user cache; the browser builds the browser lane uses.
 - **No user service manager:** `XDG_RUNTIME_DIR` is a directory of the home holding no socket and
   `DBUS_SESSION_BUS_ADDRESS` is removed, so a test reaches no service manager unless it stands one up.
+- **The machine's turn is the home's:** `BMO_TESTBED_LOCK` names a lock in the home and
+  `BMO_TESTBED_HELD` is removed, so a heavy command a test starts takes its turn there and never waits
+  on the run the file stands in.
 - **Stand-ins:** the home's `bin` goes at the front of `PATH`, with a stand-in for each program the
-  consumer names. A stand-in writes that it was called, with its arguments, into the home, and exits
-  with failure; at the end of each file the preload reads what was written, and a file whose test
-  called a stand-in fails, naming it.
-- **Launches use the current environment,** so a program a test starts finds the home and the
-  stand-ins.
+  consumer names. A stand-in writes that it was called, with its arguments, into the home's `refused`
+  file, and exits 97; at the end of the file the record is read, and a file whose test called a
+  stand-in fails, naming it, though its own tests passed.
+- **Launches use the current environment:** starting a program and looking one up default to the
+  environment as it stands, so a program a test starts finds the home and the stand-ins.
 - **A home left by a file that died** is cleaned up by the next file after an hour.
+- **Nothing reaches for the process's standard error as it loads:** a library building a stream on it
+  while a worker holds an earlier one is refused, and the file whose import caused it drops out
+  uncounted. The test kit's stand-ins preload answers the `debug` library's colours question, and
+  stands in, at the consumer's asking, for a module that would take standard error outright, which
+  then refuses whatever is asked of it.
+- **A scratch directory** a test asks the test kit for, under a name beginning `bmo-`, is taken away
+  as its file ends, whatever became of its tests. A directory a killed run left under the same
+  beginning is taken away an hour on; only directories the test kit made, never a file.
 
 ## What failed runs once more
 

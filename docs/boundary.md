@@ -230,8 +230,9 @@ bmo-testbed backups
 | `BMO_TESTBED_PLACEMENT` | `run`, `suite` | The placement endpoint, over the declaration's |
 | `BMO_TESTBED_EVENT_HOOK` | every verb that sends events | The event hook, over the declaration's, and the hook for a verb run outside a repository |
 | `BMO_SUITE_MEMORY_GB` | the suite | The fence's memory ceiling |
-| `BMO_TEST_POSTGRES` | the suite, `template` | The test database server's address; set by the suite for every process it starts |
+| `BMO_TEST_POSTGRES` | the suite, `template`, `scratch-database` | The test database server's address; set by the suite for every process it starts |
 | `BMO_TEST_TEMPLATE_URL` | the declared migrate command | Set by `template make`: the database to migrate |
+| `BMO_TEST_HOME` | a consumer's code under test | Set by the test kit's test home: the file's home. A process that carries it is a test |
 | `BMO_FULL_CHECK_DIR` | `full` | The daily whole run's tree |
 | `BMO_DEPLOY_DIR` | `deploy`, every process of a release | The release a process reads; handed on to what it starts |
 | `BMO_DEPLOY_UNIT` | `deploy`, `full` | Set inside a deployment's or a whole run's unit: its name. A run finding it runs where it is |
@@ -339,11 +340,21 @@ keep (`docs/deploy.md`, 「The unit links」).
   superseded removal and the prune.
 - **`deploy`:** releases, the link flip, unit links, the deploy run, the progress record, rollback
   through the tree's and the services' hands, backups.
-- **`scratch-database`:** per-test databases copied from a template its caller's migrator makes; a
-  consumer's crate may take it as a dev-dependency.
-- **`testkit`:** the TypeScript test home and stand-ins, which a consumer preloads, handing in its own
-  variable list and stand-in names; a consumer may take it as a dev-dependency.
-- **`test-support`:** helpers the testbed's own tests share; not part of the boundary.
+- **`scratch-database`:** per-test databases copied from a template the migrator a test hands in
+  makes (`docs/suite.md`, 「The test database」): a scratch database dropped with its guard, its
+  address and connection, and the test server's address; a consumer's crate may take it as a
+  dev-dependency.
+- **`testkit`:** the TypeScript package `@bmo-testbed/testkit`, which a consumer may take as a
+  dev-dependency (`docs/suite.md`, 「The test home」):
+  - `test-stand-ins` answers the colours question on loading, and stands in for a module the consumer
+    names, refusing whatever is asked of it; it is preloaded first.
+  - `test-home` sets up the file's home from the consumer's ask, the variables to empty and remove, the
+    programs to stand in for and the directories to name, and answers the home and its `bin`;
+    the consumer's own preload calls it once.
+  - `scratch` hands a test a directory taken away as its file ends; `ids` holds the fixed ids.
+- **`test-support`:** the fixed ids a test names a user, a room, a message, an account, a worker and a
+  unit by, the same values as the test kit's `ids`; a consumer's crate may take it as a
+  dev-dependency.
 
 ## Versions
 

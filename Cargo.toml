@@ -5,6 +5,8 @@
 resolver = "3"
 members = [
   "core",
+  "scratch-database",
+  "test-support",
 ]
 
 # One version for the whole repository, over the boundary docs/boundary.md states.

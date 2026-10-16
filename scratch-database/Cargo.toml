@@ -1,0 +1,17 @@
+[package]
+name = "bmo-testbed-scratch-database"
+description = "A Rust test's own database: a copy of the template its test binary migrated with the migrator it was handed, on the suite's PostgreSQL server."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+# The policy loader its names and numbers are read through.
+bmo-testbed-core = { path = "../core" }
+sea-orm.workspace = true
+sea-orm-migration.workspace = true
+serde.workspace = true
+sqlx.workspace = true
+tokio.workspace = true
+# The test server's address, with another database in place of its own.
+url.workspace = true
