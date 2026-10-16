@@ -1,0 +1,17 @@
+# What the repository's close line says (docs/testbed.md, 「The close line」): the line a close writes
+# while it waits for the line, and what it says of the wide lane it holds through its check. A job reads
+# them, so they are English. Each `{name}` is filled in with what it names.
+
+# The repository's close line, {who} where it stands: its job's place and its checkout joined, or its pid.
+[line]
+waiting = "close line: waiting for the repository's close line ({seconds}s so far): {ahead} ahead, {holder}"
+nobody = "nobody holding it yet"
+held_by = "held by {who}"
+joiner = " · "
+pid = "pid {pid}"
+
+# The wide lane a close holds through each part of its check, {words} how its turn was settled.
+[stretch]
+command = "the close's check"
+front_first = "close: lets a deployment waiting at the front take the machine's turn first"
+held = "close: the machine's turn {words}; held through the check"

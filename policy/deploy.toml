@@ -1,0 +1,34 @@
+# What a deployment says where its caller reads it (docs/deploy.md): the account of a rollback, and the
+# account of a deployment its gate or its own run refused. A job and the readers of the deploy events
+# read them, so they are English. Each `{name}` is filled in with what it names.
+
+# The account of a deployment whose service did not come up: first why, then what the rollback came to,
+# then where to read the cause (docs/deploy.md, 「Rollback」). {commit} and {to} are short commits.
+[rollback]
+restart_refused = "deployment failed: the service could not be restarted on {commit}."
+not_answering = "deployment failed: the service on {commit} did not answer within {seconds}s of its restart."
+died_after_start = "deployment failed: the service on {commit} answered and then did not stay up {seconds}s."
+# Before the deploy tree was flipped: nothing changed, so nothing is rolled back.
+untouched = "The deploy tree was not flipped, so neither the services nor the deploy tree changed; the service still runs the earlier release."
+answers = "Rolled back to the earlier release {to}, and the service answers again."
+silent = "Rolled back to the earlier release {to}, but the service still does not answer; it is down."
+# Why nothing was rolled back, followed by the line after them.
+first = "No release was live before, so nothing was rolled back."
+before_start = "A deployment with --before-start is not rolled back by itself; a rollback by hand is an ordinary deployment of the older commit (docs/deploy.md, 「Rollback」)."
+tree = "The deploy tree could not be rolled back: {detail}"
+bot_down = "The service is down."
+# Where the cause is read: {cause} is a journal command, or `output`.
+cause = "Cause: {cause}"
+output = "the deploy output"
+# The restart reason the service that comes back is handed.
+reason = "rolled back after a failed deployment: the service on {commit} did not come up, so it is back on the earlier release {back}"
+
+# A deployment that put nothing live, {main} the main branch with its short commit.
+[refusal]
+check_failed = "the deployment of {main} did not pass the static check, so nothing went live."
+# {files} is `files`, or nothing.
+suite_failed = "the deployment of {main} did not pass the suite, so nothing went live.{files}"
+files = " Failing files: {files}."
+failed = "the deployment of {main} did not finish (exit {code}), so nothing went live; what stopped where is in the deploy unit's journal."
+# A deployment refused while another holds the lock.
+locked = "the deployment was refused, so nothing went live: another deployment is running; start it again once that one ends."

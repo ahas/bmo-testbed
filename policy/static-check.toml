@@ -1,0 +1,9 @@
+# What the static check says of its steps (docs/checks.md, 「The static check」): a line for each step as
+# it ends, and the line a check that failed or did not run ends on. A job reads them, so they are
+# English. Each `{name}` is filled in with what it names; {step} is a step as `step` names it.
+
+step = "{name} ({command} in {dir})"
+ended = "static check: {step} — exit {code}, {times}"
+not_run = "static check: not run"
+not_had = "{mark} — {step} did not get its turn within its wait; run this again at once"
+failed = "static check: FAILED — {step} exited {code}"

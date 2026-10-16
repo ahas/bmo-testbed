@@ -1,0 +1,136 @@
+# What the machine's turn for heavy commands says (docs/testbed.md, 「The turn」): the lines a waiter
+# writes while it stands in a lane's line, and what a caller says once its turn is settled. A job reads
+# them, so they are English. Each `{name}` is filled in with what it names.
+
+# Every lane's turn, by lane.
+[lanes]
+wide = "the machine's turn"
+narrow = "the narrow lane's turn"
+
+[waiting]
+# Said every half minute while a {command} waits for {lane}, {seconds} so far, {ahead} standing ahead of
+# it, and {holder} one of `nobody` or `held_by`.
+line = "testbed: {command} waiting for {lane} ({seconds}s so far): {ahead} ahead, {holder}"
+nobody = "nobody holding it yet"
+# Who holds the turn, {who} as `entry` names it.
+held_by = "held by {who}"
+
+# Where an entry stands: its job's place, its checkout and its command joined by `joiner`, or `pid` where
+# it names none of them.
+[entry]
+joiner = " · "
+pid = "pid {pid}"
+
+[settled]
+inside = "inside the turn its caller holds"
+own = "taken after {seconds}s waiting on other heavy commands on this machine"
+# A turn not had within its wait, {holder} one of `nobody` or the waiting `held_by`, and {kept} the
+# `kept` clause where its place is kept.
+queued = "not had within {seconds}s: {ahead} ahead, {holder}{kept}"
+nobody = "nobody holding it"
+kept = "; its place is kept for {seconds}s, so run the same command again now to wait on from there"
+
+# A heavy run placed on another machine (docs/testbed.md, 「A run on another machine」), {machine} the
+# machine the placement endpoint named.
+[placed]
+# The endpoint gave no answer that reads, {endpoint} where it was asked and {why} what it came to.
+local = "testbed: the placement endpoint {endpoint} gave no answer ({why}); running here"
+failed = "{machine}: {said}"
+unpushed = "{machine}: the checkout's commit could not reach the bench: {said}"
+uncopied = "{machine}: the checkout's open files could not be copied: {said}"
+running = "testbed: running on {machine} in {bench}"
+
+# A command's wait and run, as every step of a check says them.
+[times]
+line = "waited {waited}s, ran {ran}s"
+
+# The one result a run ends on (docs/testbed.md, 「The result」).
+[run]
+# A run whose turn did not come, {turn} the `settled.queued` words.
+not_run = "testbed: FAILED — not run, nothing tested: the machine's turn was {turn}"
+# A run that ran: {verdict} `ok` or `failed`, {language} the language that read it, {counts} the
+# `counts` or the `exit` words, {cut} the `cut` clause where its guard cut it, and {log} its log.
+line = "testbed: {verdict} in {seconds}s (waited {waited}s) — {language}: {counts}{cut}; log: {log}"
+ok = "ok"
+failed = "FAILED"
+counts = "{pass} passed, {fail} failed, {skip} skipped"
+exit = "exit {code}"
+by_signal = "by signal"
+cut = "; cut at its guard"
+# What failed, under the line: the heading, or the heading of a list cut at {count} lines, then each.
+failures = "failed:"
+failures_first = "failed (the first {count}):"
+failure = "  {line}"
+# A command that could not be started at all.
+unstarted = "testbed: {program} could not be started: {why}"
+# A run's log that could not be written.
+no_log = "testbed: the log could not be written in {dir}: {why}"
+# A run a placed machine dropped, {machine} the machine and {said} the last line it gave.
+dropped = "testbed: not run — {machine} dropped it: {said}; run the same command again"
+
+# The lanes and the close line, as `status` prints them.
+[status]
+lane = "{lane} ({width} threads):"
+holding = "  holding it: {who}"
+nobody = "nobody"
+waiting = "  waiting {at}: {who}"
+# How long ago an entry asked, or its turn came.
+age = " ({seconds}s)"
+front = " — at the front"
+next = " — next after the front"
+kept = " — place kept for a job coming back"
+close_line = "the close line:"
+
+# The `run` and `status` verbs' own words: their usage, {verb} the binary's name, and their refusals.
+[verb]
+usage = """
+usage: {verb} run [--narrow] [--adapter <name>] [--guard <seconds>] [--wait <seconds>] -- <command…>
+       {verb} status [--json]
+
+Runs a heavy test or build command in the machine's turn: it waits behind every other such
+command of its lane on this machine, then runs alone there, handed the lane's width, and ends on
+one line — passed or not, how many tests passed, failed and were skipped, how long it ran and
+waited, and the log holding its whole output — with what failed under it.
+
+--narrow   the narrow lane: beside the wide lane's holder, on a quarter of the machine, for a
+           command that needs only a few threads — one file run again and again, a script of
+           its own over one test
+--adapter  the language that runs it, instead of the one that claims the command
+--guard    seconds the command may hold the machine before it is cut (default 1800)
+--wait     seconds to wait for the turn (default 180 in a job's call, 1500 elsewhere)
+
+Where the turn does not come within the wait, nothing runs, it ends with exit code 75, and a job's
+place in the line is kept for 600 seconds: run the same command again at once.
+
+status  each lane: who holds the turn, since when, and who waits behind it in order, then the close
+        line of the repository it is run in (docs/testbed.md)"""
+hint = "Run {verb} --help for the whole usage."
+takes_value = "testbed: {flag} takes a value"
+seconds = "testbed: {flag} takes a positive number of seconds"
+flag_as_command = "testbed: {word} is not a flag this command reads, and a command does not begin with one"
+no_command = "testbed: name the command after --, or ask for status"
+no_language = "testbed: no language is named {name}; there are {names}"
+
+# The refusal of a heavy command started outside the testbed (docs/testbed.md, 「A shell hook sends a
+# job's heavy command to it」), {words} the command and {testbed} the line that runs it there.
+[refusal]
+heavy = "refused: `{words}` is a heavy test or build command, and one such command runs at a time on this machine, in the testbed's turn, whichever repository it runs in. Run it there in its place — {testbed} -- {words} — with the call's timeout set to 600000. It waits its turn, saying where it stands, runs alone and wide, and ends on one result line with the log's path; where the turn does not come in time it ends with exit 75 and keeps the job's place, so run the same line again (docs/testbed.md)."
+
+# A heavy command run in its turn and run again where the kernel killed it for want of the machine's
+# memory rather than at the ceiling of a fence it stands in (docs/testbed.md, 「Memory」). Every line
+# opens with `mark`, so a caller can lift them out of the command's output; {what} is the command, {end}
+# the `exit` or `signal` words it ended on, {run} and {runs} the run and the runs it is given, and
+# {available} and {ceiling} amounts of memory in gigabytes.
+[memory]
+mark = "memory turn:"
+not_run = "{what} not run — the machine's turn was {turn}"
+took = "{what} took the machine's turn after {seconds}s waiting on other heavy commands on this machine"
+unread = "the available memory cannot be read; running {what} again"
+freed = "{available} available; running {what} again"
+short = "only {available} available after {minutes} minutes; running {what} again anyway"
+fenced = "FAILED — {what} failed ({end}) while the kernel killed a process at the {ceiling} memory ceiling of the fence it stands in, {fence}; the same run meets the same ceiling again, so it does not run again"
+spent = "FAILED — {what} failed while the kernel killed a process for want of memory on all {runs} runs; the code was never judged, so run it again once the machine has memory to spare"
+again = "{what} failed ({end}) while the kernel killed a process for want of memory (run {run} of {runs}); this is not taken for the change failing, and it runs again once memory frees"
+times = "{what} {times}"
+exit = "exit {code}"
+signal = "signal {signal}"

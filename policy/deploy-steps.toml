@@ -1,0 +1,30 @@
+# The name each of the testbed's own heavy steps of a deployment and its gate is written under: the
+# progress record, the log's lines and a failure's line (docs/deploy.md, 「What a deployment says of
+# itself as it runs」). A repository's declared steps are named by their own ids. Only the suite runs
+# tests, so only the suite is named for them.
+
+# The machine's turn the gate holds from its first step to the suite's end.
+[turn]
+name = "turn"
+
+# The quick checks the repository enables.
+[quick]
+name = "quick checks"
+
+# The suite.
+[tests]
+name = "tests"
+
+# The backup's parts: the snapshot, the data root packed, and the pack read back.
+[backup-snapshot]
+name = "snapshot"
+
+[backup-pack]
+name = "pack"
+
+[backup-check]
+name = "check"
+
+# The Cargo release build, where the repository has a Cargo workspace.
+[cargo-release]
+name = "cargo release build"

@@ -1,0 +1,46 @@
+# What the daily whole run says (docs/suite.md, 「The daily whole run」): the lines it writes into its
+# log, and the summary its `full-suite-failed` event carries (docs/boundary.md, 「Events」). A job or the
+# event's reader reads them, so they are English. Each `{name}` is filled in with what it names.
+
+# The tree the run stands in.
+[tree]
+# A tree that was there could not be moved to {commit}, or one that was not could not be made at it.
+not_moved = "the check tree {tree} could not be moved to {commit}: {said}"
+not_made = "the check tree {tree} could not be made at {commit}: {said}"
+
+[run]
+# Where it went, since it never runs in its caller's process.
+unit_failed = "full-suite: refused — its unit {unit} could not be started, and it does not run in this shell instead: {said}"
+started = "full-suite: running as {unit}, which outlives this call; read it with: journalctl --user -u {unit} --no-pager"
+# A second run meeting one at work.
+refused = "full-suite: refused — another daily run is going; read it with journalctl --user -u 'bmo-full-suite-*'"
+# A run that `--due` found already started since {due}.
+not_due = "full-suite: a run started at {started}, since {due}, so none starts now"
+# The main branch's head did not read: the line said, and the verdict the event carries.
+no_head = "full-suite: FAILED — the head of {main} could not be read, so nothing ran"
+no_head_verdict = "the head of {main} could not be read"
+# The run begins at {head}, its log in {log}.
+begins = "full-suite: every test at {head}, its log in {log}"
+# The tree could not be put on the head.
+failed = "full-suite: FAILED — {why}"
+# Files a round never started, run again by name.
+again = "full-suite: {count} never started; running them again: {files}"
+# A round that wrote no verdict.
+no_verdict = "suite: no verdict was written (exit {code})"
+# Between the verdicts of a pass's rounds.
+joiner = "; run again: "
+
+# The summary of a run that did not pass: {where} where it ran, {verdict} what failed, {files} the
+# failing files where any are named, {log} the run's log.
+[account]
+summary = "the daily whole run did not pass {where}: {verdict}.{files} It may show a dependency the selected runs do not follow. Log: {log}"
+# Where it ran: the main branch's {head}, or the main branch unread.
+at_head = "at {main} ({head})"
+no_head = "with {main} unread"
+# The failing files, each {file} with its {unit}, joined by `joiner`.
+files = " Failing files: {files}."
+file = "{file} ({unit})"
+joiner = ", "
+# The unit of a file standing in none: as a file names it, and among the units.
+outside = "outside every unit"
+outside_listed = "(outside every unit)"

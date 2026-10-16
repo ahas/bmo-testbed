@@ -329,6 +329,8 @@ keep (`docs/deploy.md`, 「The unit links」).
 
 ## The crates
 
+- **Each crate's package is named for its folder** after `bmo-testbed-`: `bmo-testbed-core`,
+  `bmo-testbed-scratch-database` and so on.
 - **`core`:** the lanes, the turn, the queue, the close line, the run and its result, the languages,
   memory limits, the declaration reader and the policy loader. Its public types are the ones the status
   fields above serialise: the lane, the queue, the entry, the close line and its entry; the turn's ask

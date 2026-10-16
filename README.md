@@ -38,8 +38,8 @@ and a release-based deployment of a repository onto the machine it runs on.
 | `policy/` | The testbed's own fixed numbers and words, read by `core`'s policy loader |
 | `docs/` | The documents above |
 
-At the root stand the Cargo workspace manifest and lockfile, the version, this repository's own
-`testbed.toml`, and `CLAUDE.md`.
+At the root stand the Cargo workspace manifest, which holds the version, and its lockfile, the
+formatter's settings, this repository's own `testbed.toml`, and `CLAUDE.md`.
 
 ## Version
 

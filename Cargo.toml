@@ -1,0 +1,69 @@
+# The testbed's Cargo workspace, the only manifest at the root. Every member is listed one line each,
+# a crate by its folder; each declares only what it uses from here.
+
+[workspace]
+resolver = "3"
+members = [
+  "core",
+]
+
+# One version for the whole repository, over the boundary docs/boundary.md states.
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace.dependencies]
+# The shell line a heavy-command classification reads, split the way the shell splits it.
+brush-parser = "0.4.0"
+chrono = { version = "0.4.41", default-features = false, features = ["std"] }
+# A verb's words, read into its flags and arguments.
+clap = { version = "4.5.40", features = ["derive", "env", "string"] }
+# The terminal's colours taken off a check's log before the warnings in it are read.
+console = { version = "0.16.6", default-features = false, features = ["ansi-parsing", "std"] }
+glob = "0.3.4"
+# Process groups, signals and file locks.
+libc = "0.2.177"
+# The README's folder table, read by the layout check.
+markdown = "1.0.0"
+# TypeScript read by its parser, for imports, test titles and the quick checks.
+oxc_allocator = "=0.153.0"
+oxc_ast = "=0.153.0"
+oxc_ast_visit = "=0.153.0"
+oxc_parser = "=0.153.0"
+oxc_span = "=0.153.0"
+percent-encoding = "2.3.2"
+regex = "1.11.1"
+# The placement endpoint, asked over HTTP.
+reqwest = { version = "0.13.5", features = ["json"] }
+scraper = "0.25.0"
+# The per-test databases and the migrator a consumer hands in.
+sea-orm = { version = "1.1.17", default-features = false, features = ["macros", "runtime-tokio-rustls", "sqlx-postgres"] }
+sea-orm-migration = { version = "1.1.17", default-features = false, features = ["runtime-tokio-rustls", "sqlx-postgres"] }
+serde = { version = "1.0.219", features = ["derive"] }
+serde-saphyr = { version = "1.3.0", default-features = false, features = ["deserialize"] }
+serde_json = "1.0.138"
+sha2 = "0.10.9"
+shlex = "2.0.1"
+sqlx = { version = "0.8.6", default-features = false, features = ["any", "postgres", "sqlite", "runtime-tokio"] }
+tempfile = "3.20.0"
+tokio = { version = "1.47.0", features = ["macros", "rt", "rt-multi-thread", "net", "time", "signal", "io-util", "process"] }
+# The policy's files and a repository's declaration, read into their types.
+toml = { version = "0.8.23", default-features = false, features = ["parse"] }
+# A Rust file's comments, strings and test modules, and a screen's template, read by the quick checks.
+tree-sitter = "0.27.1"
+tree-sitter-html = "0.23.2"
+tree-sitter-rust = "0.24.2"
+url = "2.5.8"
+
+# Debug information is kept down to line numbers: a backtrace still reads in full, and every test
+# binary stays small enough to link quickly. Incremental state is not kept, since every checkout's
+# crates build under names of their own in the one shared build directory.
+[profile.dev]
+debug = "line-tables-only"
+split-debuginfo = "unpacked"
+incremental = false
+
+[profile.release]
+debug = false
+strip = "debuginfo"

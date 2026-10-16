@@ -1,0 +1,12 @@
+# What the `backups` verb says (docs/deploy.md, 「Sending backups away」): its usage, and the note a
+# failed upload's event carries. A job and the event's reader read them, so they are English. Each
+# `{name}` is filled in with what it names.
+
+# Under `usage: bmo-testbed backups`, one line to an entry: {remote} where the backups stand remotely, and
+# {keep} how many are kept there.
+upload_usage = [
+  "Uploads every backup not yet confirmed to {remote}, reads each back to match its size and checksum,",
+  "then keeps the newest {keep} remotely and the newest one locally (docs/deploy.md, 「Sending backups away」).",
+]
+# The note a failed upload's event carries.
+upload_failed_note = "The deployment had already ended and was not held up. A backup not confirmed stays on the local disk, and the next run of the upload sends it again."

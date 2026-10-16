@@ -1,0 +1,22 @@
+# What the test count says (docs/checks.md, 「The test count」): the tests the checkout holds, and with
+# `--since` the tests the range removed, each accounted for or not, and its refusal. A job reads them, so
+# they are English. Each `{name}` is filled in with what it names.
+
+usage = "usage: bmo-testbed count [--since <commit>]"
+
+# The tests the checkout holds, by language.
+tree = "{typescript} TypeScript tests, {rust} Rust tests"
+# The range from {since}: the changed test files' tests {before} and {after}, and the {removed} it removed.
+range = "test files changed since {since}: {before} tests → {after}, {removed} removed"
+# One test removed, by its {file} and {title}.
+removed = "  removed: {file} · {title}"
+# One test removed that nothing accounts for.
+open = "removed with no replacement and no retirement reason: {file} · {title}"
+
+failed = "test count: {why}"
+unaccounted = "test count: removed with no replacement and no retirement reason — {tests}. A Rust test replacing one names its title; a commit retiring one carries a line `Retired-test: <title> — <reason>` (docs/checks.md, 「The test count」)"
+test = "{file}: {title}"
+joiner = "; "
+unreadable = "{file} at {end} could not be read: {why}"
+start = "the range's start"
+head = "HEAD"

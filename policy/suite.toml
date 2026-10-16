@@ -1,0 +1,107 @@
+# What a run of the suite says (docs/suite.md): the selection it opens with (docs/checks.md, 「Which
+# tests a change runs」), the lines it writes about itself, each unit's result and the verdict it ends on.
+# A job and the readers of a suite's log read them, so they are English, and the lines a reader parses —
+# each unit's mark, the summary of what failed, would not end or never started, and the verdict — keep
+# their shape. Each `{name}` is filled in with what it names.
+
+# What a run is named in the machine's line.
+[run]
+whole = "the whole suite"
+selected = "the selected suite"
+
+# Why a package or a crate was marked.
+[reasons]
+owner = "holds {path}"
+root = "root configuration {path}"
+reads = "reads {path} ({glob})"
+unclaimed = "{path} is in no package and read by none"
+runs = "runs {launched}"
+runs_loading = "runs {launched}, which loads {path}"
+dependent = "depends on {on}"
+always = "always"
+
+# What a selected run says first: {marked} of {packages}, then a line for every package, project of its
+# own, tool checked by its manifest and crate, marked or not, with the first reason and how many {more}
+# there were.
+[selection]
+heading = "selected {marked} of {packages} packages:"
+unmarked = "  -  {name}"
+marked = "  +  {name}: {reason}{more}"
+more = " (+{count} more)"
+project_unmarked = "  -  {dir}/ (its own project)"
+project_marked = "  +  {dir}/ (its own project): holds {path}"
+tool_unmarked = "  -  {dir}/ (its manifest's check)"
+tool_marked = "  +  {dir}/ (its manifest's check): holds {path}"
+crate_unmarked = "  -  {dir}/ (crate)"
+crate_marked = "  +  {dir}/ (crate): {reason}"
+changed = "{count} paths changed since {since}"
+no_packages = "this checkout declares no workspace packages, so there is nothing to select among and every file runs"
+not_a_range = "--since {since} is not a commit this checkout can read a range from: {why}"
+no_crates = "the Rust workspace's crates could not be read, so none of them is tested: {why}"
+
+# The words a run takes, refused as they are misgiven.
+[arguments]
+no_value = "{name} takes a value"
+not_seconds = "{name} takes a positive number of seconds"
+
+# The lines a run writes about itself, each opening with {mark}, the word a caller finds them by.
+[lines]
+mark = "suite:"
+turn = "{mark} turn — {words}"
+guards = "{mark} guards — {whole}s to start files, {file}s per file"
+cargo_jobs = "{mark} cargo — {jobs} jobs, what the fence holds"
+fence_none = "{mark} fence — none, running where it stands: {why}"
+fence_held = "{mark} fence — {unit}: memory {memory} GB, swap {swap} GB, {tasks} tasks"
+fence_refused = "the service manager refused the scope: {said}"
+fence_not_moved = "{unit} was started but the run was not moved into it"
+# Processes the files left in the run's scope, {count} of them, each {pid} and its {command} or `gone`.
+fence_killed = "{mark} fence — killed {count} {processes} the files left in {unit}: {named}"
+process = "process"
+processes = "processes"
+gone = "(gone)"
+no_runtime = "no runtime directory is named, so the user's service manager cannot be reached"
+no_socket = "the runtime directory {runtime} holds no socket of the user's service manager"
+# The test database (docs/suite.md, 「The test database」).
+server_down = "database: the test server is not up: {why}"
+on_postgres = "database: the database tests run on PostgreSQL, each file on a clone of {template}"
+template_stands = "database: the template stands"
+template_failed = "database: the template could not be made: {why}"
+# A Cargo build ahead of the guards, of the {what} — `tests`, `library_tests` or `binaries` — of a {crate}.
+building = "building {what} of {crate}: exit {code}"
+tests = "the tests"
+library_tests = "the library's own tests"
+binaries = "the binaries"
+plan = "{count} files, {width} at a time, the ones under {browser} one at a time beside them, and the projects of their own, the tools checked by their manifest and the crates one at a time in a lane of their own"
+
+# One unit's result, written whole as it ends: its mark, its seconds and its name, then what it printed.
+[file]
+cut = "CUT "
+ok = "ok  "
+failed = "fail"
+heading = "{mark} {seconds}s  {file}"
+# A project whose manifest names no {script} script, and a tool whose {manifest} names no {key}.
+no_check = "its manifest names no {script} script, so nothing of it could be checked"
+no_tool_check = "its {manifest} names no {key} command, so nothing of it could be checked"
+unread_manifest = "its {manifest} does not read, so nothing of it could be checked: {why}"
+held = "(a process this file started outside its own group still held its output; the rest was not read)"
+
+# What the sweep came to, and the verdict the run ends on.
+[ending]
+summary = "{files} files: {passed} ok, {failed} failed, {cut} cut, {unstarted} never started"
+cut_files = "did not end within {guard}s: {files}"
+failed_files = "failed: {files}"
+unstarted_files = "never started within {guard}s: {files}"
+verdict = "{mark} {outcome} in {seconds}s — {note}"
+ok = "ok"
+failed = "FAILED"
+not_run = "not run: the machine's turn for heavy commands did not come, so nothing was tested; run it again at once to wait on from its place"
+all_passed = "{files} of {files} files passed"
+passed = "{passed} of {files} files passed"
+failed_count = "{count} failed"
+cut_count = "{count} did not end within {guard}s"
+unstarted_count = "{count} never started within {guard}s"
+joiner = ", "
+only_unstarted = "{note}; none failed, so run it again for the ones that never started"
+# A checkout of the testbed whose own binary did not build, by the {code} its build ended with
+# (docs/boundary.md, 「The binary」).
+unbuilt = "this checkout's bmo-testbed did not build (exit {code}), so nothing was tested"
