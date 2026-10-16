@@ -1,0 +1,4 @@
+# What every verb's answer is held to (docs/boundary.md): the most characters it says before it cuts to
+# whole items and says what it left out.
+
+ceiling_chars = 30000

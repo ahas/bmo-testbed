@@ -3,6 +3,7 @@
 
 use serde::de::DeserializeOwned;
 
+pub mod answer;
 pub mod backups;
 pub mod close_line;
 pub mod count;
@@ -11,6 +12,7 @@ pub mod declaration;
 pub mod deploy;
 pub mod deploy_steps;
 pub mod lanes;
+pub mod quick_checks;
 pub mod static_check;
 pub mod suite;
 

@@ -1,0 +1,92 @@
+# What the quick checks say (docs/checks.md, 「The quick checks」), and the fixed words they read the
+# tree by. A job reads the lines, so they are English. Each `{name}` is filled in with what it names.
+
+# A check's line: {name} is the check, {said} what it found; {count} faults are said as `to_fix`.
+head = "quick check: {name}: {said}"
+to_fix = "{count} to fix"
+# A check named with the declared path it reads.
+named = "{name} ({input})"
+# A check the declaration enables without the input it reads.
+no_input = "the declaration names no {input}"
+# A file a check cannot read: {path} and {why} it could not.
+unreadable = "{path}: {why}"
+
+[wording]
+clean = "clean over {count} files"
+hit = "{path}:{line}: \"{term}\" → {instead}"
+stale = "{path}: allowed \"{term}\" matches nothing"
+not_markdown = "{document} does not read as markdown: {why}"
+unknown_language = "{document}: unknown language code \"{lang}\" in: {item}"
+own_sense = "{document}: a phrase of a word's own sense must hold a banned term listed above it: {item}"
+# The document's sections, by their level-two headings.
+banned_section = "Banned terms"
+own_sense_section = "Uses in the word's own sense"
+allowed_section = "Allowed uses"
+
+[dashes]
+clean = "none over {count} files"
+hit = "{path}:{line}: {excerpt}"
+# How many characters of a piece its excerpt keeps either side of the first dash.
+excerpt_reach = 40
+
+[korean]
+clean = "{count} files within the ledger"
+below = "{count} files within the ledger, {below} below it: bmo-testbed check korean --settle lowers it"
+over = "{path}: {count} lines hold Korean where the ledger allows {allowed}: write it in English, or move it out of the code"
+not_ledger = "{ledger} does not read as a ledger: {why}"
+# The report by kind: its head over {count} areas or files, a row, one kind's count, and the cut.
+areas = "{count} areas"
+files = "{count} files"
+row = "{name}  {total}  {kinds}"
+kind = "{kind} {count}"
+cut = "cut at {shown} of {rows} rows; name a narrower prefix for the rest"
+# The extensions of a code file.
+code = ["ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs", "vue", "rs", "py", "sh", "kt", "cs"]
+
+[layout]
+clean = "none over {count} files"
+readme = "README.md"
+# The first header cell of the README's folder table.
+table_head = "Folder"
+not_markdown = "{readme} does not read as markdown: {why}"
+no_table = "{readme}: no table opens with a {head} column"
+unnamed = "{folder}/: a top-level folder the {readme} folder table does not name"
+gone = "{readme}: the folder table names {folder}/, which the tree does not hold"
+language = "{folder}/: a folder named for a language"
+not_member = "{folder}/{file}: its folder is no member of the {workspace} workspace"
+no_manifest = "{member}/: a member of the {workspace} workspace holding no {file}"
+# The names of languages as a folder would be named for one: no folder of the top two levels is named
+# any of these, since a folder is named for its role.
+languages = [
+  "bash",
+  "c",
+  "cpp",
+  "cs",
+  "csharp",
+  "go",
+  "golang",
+  "java",
+  "javascript",
+  "js",
+  "kotlin",
+  "kt",
+  "lua",
+  "py",
+  "python",
+  "rb",
+  "ruby",
+  "rs",
+  "rust",
+  "sh",
+  "shell",
+  "swift",
+  "ts",
+  "typescript",
+]
+
+[dependencies]
+clean = "{count} dependencies, each allowed"
+foreign = "{manifest}: {name} comes from another repository ({source}) and is no declared base library"
+foreign_dev = "{manifest}: {name} comes from another repository ({source}) and is neither a declared base library nor the test kit"
+# The testbed's test kit, which a consumer may take as a dev-dependency (docs/boundary.md, 「The crates」).
+test_kit = ["@bmo-testbed/testkit", "bmo-testbed-test-support", "bmo-testbed-scratch-database"]

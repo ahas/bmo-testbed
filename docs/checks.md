@@ -69,21 +69,43 @@
 - **They read the tree without running any of it,** take seconds together, and are the failures a
   check meets most, so they run first. Each runs only where the repository's declaration enables it,
   and reads the paths the declaration names; the testbed ships no word list and no ledger.
-- **`wording`:** no tracked or new file the check covers uses a term the repository's wording document
-  bans, and no allowed use in it has gone stale.
+- **Recorded input and installed packages are never read:** a file under a `fixtures/` or a
+  `node_modules/` folder holds words somebody else wrote. `wording` and `dashes` also pass over a test
+  file, a `.test.` file, a file under a `tests/` or `test/` folder or a `tests.rs`, whose words are made
+  up; `korean` counts its lines as test input.
+- **`wording`:** no tracked or new file the declaration's `wording_files` reach, the wording document
+  itself aside, uses a term the document bans, and no allowed use in it has gone stale; a file that is
+  not UTF-8 text holds no words to read. The document is markdown, and its sections are its level-two
+  headings: `Banned terms`, each item `<language> · <term> → <what to write>`, optionally followed by
+  ` — <when>`; `Uses in the word's own sense`, each item `<language> · <term> · <phrase holding it> —
+  <why>`, the term passing inside that phrase; and `Allowed uses`, each item `<language> · <term> ·
+  <path> · <excerpt> — <why>`. A term is found a line at a time, on lines of its own language, told by
+  the script the line is written in (`ko`, `ja` or `en`); a Korean term another syllable runs into
+  from the left is part of a longer word. A use is allowed in the file it names, on a line holding its
+  excerpt.
 - **`dashes`:** no text the code writes for a person holds a dash between words. People's text is
   every literal in the files the declaration names as people's text. Comments, regular expressions,
-  test files and a literal that is one dash and nothing else pass. Each language is read by its own
-  parser: TypeScript by oxc, a single-file component by the tree-sitter HTML grammar with oxc for its
-  scripts, Rust by the tree-sitter Rust grammar, YAML and TOML by their serde readers.
+  a Rust test module and a literal that is one dash and nothing else pass. Each language is read by
+  its own parser: TypeScript by oxc, a single-file component by the tree-sitter HTML grammar with oxc
+  for its scripts, Rust by the tree-sitter Rust grammar, YAML and TOML by their serde readers.
 - **`korean`:** no code file holds more lines with Korean in them than the repository's ledger allows
-  it, and a file the ledger does not name is allowed none. `--settle` lowers the ledger to what each
-  file holds now and never raises it; `--kinds` reads each area's Korean lines by what holds them.
-- **`layout`:** the README's folder table names every top-level folder, no folder of the top two levels
-  is named for a language, and every manifest's folder is a member of its workspace or a project of
-  its own.
-- **`dependencies`:** every dependency a manifest names is one the declaration allows: a registry crate
-  or package, or one of the declared base libraries, and a dev-dependency on the test kit.
+  it, and a file the ledger does not name is allowed none; a ledger file not yet written allows none
+  anywhere. The ledger is a JSON object from each file's path to its count. `--settle` lowers the
+  ledger to what each file holds now and never raises it; `--kinds` reads each area's Korean lines by
+  what holds them: a comment, test input, people's text, another literal, or a line of a language no
+  parser here reads.
+- **`layout`:** the README's folder table, the table whose first header cell is `Folder`, names every
+  top-level folder and no other; no folder of the top two levels is named for a language outside a
+  project of its own; and every folder holding a `Cargo.toml` or a `package.json` is a member of its
+  workspace or a project of its own, and every member holds one.
+- **`dependencies`:** every dependency a manifest names is one the declaration allows. A crate's
+  manifest is read in every dependency table, a target's included, and a package's in every
+  dependency list. A registry crate or package passes, and so does one inside the repository. One
+  from another repository, named by a path outside the root, by git, or by a package spec naming no
+  registry, passes only where the crate or package it names, a renamed one by its own name, is among
+  the declared base libraries, or where it is a dev-dependency on the testbed's test kit: the
+  package `@bmo-testbed/testkit`, or the crates `bmo-testbed-test-support` and
+  `bmo-testbed-scratch-database` (`docs/boundary.md`, 「The crates」).
 - **`quick` runs every enabled one** and prints a line for each, ending non-zero where any failed.
 
 ## The change check

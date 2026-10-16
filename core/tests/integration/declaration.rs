@@ -70,6 +70,7 @@ fn a_checkout_with_no_declaration_has_every_default_and_its_directorys_name() {
   );
   assert!(declaration.check.quick.is_empty() && declaration.check.steps.is_empty());
   assert_eq!(declaration.check.main, "main");
+  assert_eq!(declaration.check.wording_files, None);
   assert_eq!(declaration.build.binaries, None);
   assert_eq!(declaration.build.cargo_profile, "release");
   assert_eq!(declaration.deploy.root, None);
@@ -152,6 +153,7 @@ check_key = "build.check"
 [check]
 quick = ["wording", "dashes", "korean", "layout", "dependencies"]
 wording_document = "docs/wording.md"
+wording_files = ["src/**"]
 people_text = ["src/**/*.ts"]
 korean_ledger = "docs/ledger.json"
 base_libraries = ["shared-library"]
@@ -242,6 +244,7 @@ timeout_seconds = 5
       QuickCheck::Dependencies
     ]
   );
+  assert_eq!(declaration.check.wording_files.as_deref(), Some(&["src/**".to_owned()][..]));
   assert_eq!(declaration.check.steps.len(), 2);
   assert_eq!(declaration.check.steps[0].lane, Some(Lane::Narrow));
   assert_eq!(declaration.check.steps[0].when.as_deref(), Some(&["site/**".to_owned()][..]));
@@ -289,6 +292,16 @@ fn a_key_the_schema_does_not_name_is_refused_naming_the_key_and_its_table() {
 
   let refusal = refused(&declared("colour = \"blue\"\n"));
   assert!(refusal.contains("colour"), "{refusal}");
+}
+
+// "a quick check enabled without the input it reads is refused, naming the check and the input"
+#[test]
+fn a_quick_check_enabled_without_the_input_it_reads_is_refused_naming_the_check_and_the_input() {
+  let refusal = refused(&declared("[check]\nquick = [\"korean\"]\n"));
+  assert!(refusal.contains("the quick check korean reads korean_ledger"), "{refusal}");
+
+  let refusal = refused(&declared("[check]\nquick = [\"dashes\", \"wording\"]\n"));
+  assert!(refusal.contains("the quick check wording reads wording_document"), "{refusal}");
 }
 
 // "a value of the wrong kind is refused where it stands"

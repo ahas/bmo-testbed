@@ -254,6 +254,8 @@ pub struct Check {
   #[serde(default)]
   pub quick: Vec<QuickCheck>,
   pub wording_document: Option<PathBuf>,
+  /// The files `wording` holds to the document; none is every file.
+  pub wording_files: Option<Vec<String>>,
   #[serde(default)]
   pub people_text: Vec<String>,
   pub korean_ledger: Option<PathBuf>,

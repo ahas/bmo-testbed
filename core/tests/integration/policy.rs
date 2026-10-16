@@ -1,5 +1,6 @@
 use std::sync::LazyLock;
 
+use bmo_testbed_core::policy::answer::ANSWER;
 use bmo_testbed_core::policy::backups::BACKUPS;
 use bmo_testbed_core::policy::close_line::CLOSE_LINE;
 use bmo_testbed_core::policy::count::COUNT;
@@ -9,6 +10,7 @@ use bmo_testbed_core::policy::deploy::DEPLOY;
 use bmo_testbed_core::policy::deploy_steps::{DEPLOY_STEPS, DeployStep};
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
+use bmo_testbed_core::policy::quick_checks::QUICK_CHECKS;
 use bmo_testbed_core::policy::static_check::STATIC_CHECK;
 use bmo_testbed_core::policy::suite::SUITE;
 
@@ -26,7 +28,9 @@ fn every_part_reads_as_its_type() {
   LazyLock::force(&DEPLOY_STEPS);
   LazyLock::force(&BACKUPS);
   LazyLock::force(&DECLARATION);
+  LazyLock::force(&QUICK_CHECKS);
 
+  assert_eq!(ANSWER.ceiling_chars, 30_000);
   assert_eq!(SUITE.lines.mark, "suite:");
   assert_eq!(BACKUPS.upload_usage.len(), 2);
 }
