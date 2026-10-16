@@ -8,8 +8,6 @@
 restart_refused = "deployment failed: the service could not be restarted on {commit}."
 not_answering = "deployment failed: the service on {commit} did not answer within {seconds}s of its restart."
 died_after_start = "deployment failed: the service on {commit} answered and then did not stay up {seconds}s."
-# Before the deploy tree was flipped: nothing changed, so nothing is rolled back.
-untouched = "The deploy tree was not flipped, so neither the services nor the deploy tree changed; the service still runs the earlier release."
 answers = "Rolled back to the earlier release {to}, and the service answers again."
 silent = "Rolled back to the earlier release {to}, but the service still does not answer; it is down."
 # Why nothing was rolled back, followed by the line after them.
@@ -17,10 +15,9 @@ first = "No release was live before, so nothing was rolled back."
 before_start = "A deployment with --before-start is not rolled back by itself; a rollback by hand is an ordinary deployment of the older commit (docs/deploy.md, 「Rollback」)."
 tree = "The deploy tree could not be rolled back: {detail}"
 bot_down = "The service is down."
-# Where the cause is read: {cause} is a journal command, or `output`.
+# Where the cause is read: {cause} is the journal command of the unit that did not come up.
 cause = "Cause: {cause}"
-output = "the deploy output"
-# The restart reason the service that comes back is handed.
+# The reason the `deploy-rolled-back` event carries.
 reason = "rolled back after a failed deployment: the service on {commit} did not come up, so it is back on the earlier release {back}"
 
 # A deployment that put nothing live, {main} the main branch with its short commit.
@@ -32,3 +29,24 @@ files = " Failing files: {files}."
 failed = "the deployment of {main} did not finish (exit {code}), so nothing went live; what stopped where is in the deploy unit's journal."
 # A deployment refused while another holds the lock.
 locked = "the deployment was refused, so nothing went live: another deployment is running; start it again once that one ends."
+
+# The deployment's fixed counts and limits.
+[numbers]
+# How many dirty files a refusal of an unclean tree names before it says how many more there are.
+dirty_shown = 10
+# How many characters of what a failed command printed a line quotes.
+quoted_chars = 300
+# How many characters of a live process's command line a pinned release's account carries.
+command_chars = 200
+# How many releases may stand before a prune sends `releases-pinned`.
+releases_told_above = 12
+# The longest one ask of the declared health may take before it counts as no answer, in milliseconds.
+health_ask_ms = 5000
+# How long a wait for the health rests between asks, in milliseconds.
+health_poll_ms = 500
+# How often a wait for the health asks systemd whether the unit gave up starting, in milliseconds.
+unit_check_ms = 5000
+# How often the watch of the service staying up reads the unit, in milliseconds.
+stay_poll_ms = 1000
+# How many lines of a failing service's journal the deploy output keeps.
+journal_lines = 40

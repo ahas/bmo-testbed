@@ -1,0 +1,21 @@
+[package]
+name = "bmo-testbed-deploy"
+description = "A repository's releases on the machine it runs on: the link flip, unit links, the deploy run's record, rollback and backups."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+bmo-testbed-core = { path = "../core" }
+chrono = { workspace = true, features = ["clock"] }
+libc.workspace = true
+regex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tokio.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio = { workspace = true, features = ["test-util"] }

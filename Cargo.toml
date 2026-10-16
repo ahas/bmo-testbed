@@ -5,6 +5,7 @@
 resolver = "3"
 members = [
   "core",
+  "deploy",
   "scratch-database",
   "suite",
   "test-support",

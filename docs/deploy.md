@@ -219,8 +219,9 @@
 - **The backup is taken by the deployment, before anything changes,** into the backup directory:
   `<name>-<date>-<time>.tar.zst`, the name declared, a two-digit ordinal added where two are taken in
   one second.
-- **What goes in:** the declared snapshot command's output first, written into a scratch directory with
-  a manifest beside it, then the data root packed as it is, the declared exclusions left out.
+- **What goes in:** the declared snapshot command's output first, the copy and its manifest the command
+  writes into a scratch directory, held in the archive as `.backup-snapshot/`; then the data root packed
+  as it is, the declared exclusions and a backup directory inside it left out.
 - **How it is compressed:** one tar stream through `zstd -T0` at level 3. A file that changes while tar
   reads it goes in as it stood, which tar ends with exit code 1, a backup taken; any other tar failure
   fails the deployment with nothing changed.

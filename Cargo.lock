@@ -148,6 +148,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "bmo-testbed-deploy"
+version = "0.1.0"
+dependencies = [
+ "bmo-testbed-core",
+ "chrono",
+ "libc",
+ "regex",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "tokio",
+ "url",
+]
+
+[[package]]
 name = "bmo-testbed-scratch-database"
 version = "0.1.0"
 dependencies = [
