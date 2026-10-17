@@ -14,7 +14,8 @@ release. The version rules at the end are over this document.
 - **A verb handed the wrong thing** names that one thing in a line, points at `--help`, and exits 2.
 - **A checkout of the testbed runs its own.** Run inside a checkout of this repository, `suite`,
   `check` and `template` build that checkout's own binary through the Cargo verb, in the wide lane,
-  and hand it the same words, so the code that checks a change is the code the change carries. A
+  and hand it the same words in the checkout's root, the directory they were given in named in
+  `BMO_TESTBED_CALLED_FROM`, so the code that checks a change is the code the change carries. A
   checkout whose binary does not build ends with a failed verdict saying nothing was tested.
 - **The ceiling is 30,000 characters.** A verb that would answer with more cuts to whole items and says
   in one line how many of the things asked for are in the answer, how many are not, and how to ask for
@@ -106,7 +107,11 @@ bmo-testbed suite [--since <commit>] [--again] [--guard <seconds>] [--file-guard
   reaches. A word naming a path narrows the files; a word that is a unit's name exactly picks that
   unit; every other word goes to each file's runner. `--again` runs what failed or never started once
   more.
-- Writes its `suite:` lines and each unit's output to standard output, to be redirected to a file.
+- Writes its `suite:` lines and each unit's output to standard error, to be redirected to a file.
+- **With `--again`,** a first run that failed or left units unstarted says `suite: once more`, naming
+  them, runs them once more by name and ends as that second run ends; the tests that passed only the
+  second time are written down and sent as a `suite-flaky` event (`docs/suite.md`, 「What failed runs
+  once more」). The suite's own flags come before its words.
 - Exits 0 where it passed, 1 where anything failed or was cut, 75 where it was not run or left units
   unstarted and failed nothing, 2 where its words or the declaration do not read.
 
@@ -128,8 +133,8 @@ bmo-testbed log <log file> [--json]
 
 - Reads a suite's or a single run's log: totals, verdict, the units that failed and never started, and
   each failing test with the unit it stands in. **`--json`:** `passed`, `failed`, `skipped`,
-  `verdict`, `failed_units`, `unstarted_units`, and `failures`, each with `test` and `unit`. Exits 1
-  where the log holds a failure.
+  `verdict`, `failed_units`, `unstarted_units`, and `failures`, each with `test` and `unit`, the unit
+  null where the log names none for it. Exits 1 where the log holds a failure.
 
 ### `template`
 
@@ -240,6 +245,7 @@ bmo-testbed backups
 | `BMO_TEST_HOME` | a consumer's code under test | Set by the test kit's test home: the file's home. A process that carries it is a test |
 | `BMO_FULL_CHECK_DIR` | `full` | The daily whole run's tree |
 | `BMO_DEPLOY_DIR` | `deploy`, every process of a release | The release a process reads; handed on to what it starts |
+| `BMO_TESTBED_CALLED_FROM` | every verb a checkout runs its own of | Set by the hand-over to a checkout's own binary: the directory the words were given in, which a path among them is read from |
 | `BMO_DEPLOY_UNIT` | `deploy`, `full` | Set inside a deployment's or a whole run's unit: its name. A run finding it runs where it is |
 | `BMO_DEPLOY_PROGRESS` | `deploy` | Another progress record file |
 | `BMO_UNIT` | `deploy` | Another `bot` service unit name, for a rehearsal |
@@ -273,7 +279,8 @@ keep (`docs/deploy.md`, 「The unit links」).
   consumer's.
 - **The hook** is the command `BMO_TESTBED_EVENT_HOOK` or the declaration's `[events] hook` names, run
   through `sh -c` with the event's name as its first argument and the payload as one JSON object on
-  standard input. With no hook, the event is written on the verb's own output and nothing more.
+  standard input. With no hook, the event is written on the verb's standard error as one line, its
+  name and its payload, and nothing more.
 - **The hook never changes a verb's outcome.** One that fails or overruns its time, thirty seconds
   unless declared, is said on a line and the verb goes on.
 - **The payload:**

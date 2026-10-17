@@ -1,4 +1,7 @@
-# What every verb's answer is held to (docs/boundary.md): the most characters it says before it cuts to
-# whole items and says what it left out.
+# What every verb's answer is held to (docs/boundary.md, 「The binary」): the most characters it says
+# before it cuts to whole items, and the one line saying what it left out, {limit} the ceiling, {unit} the
+# things the verb counts, {kept}, {all} and {left} how many, and {how} how to ask for the rest.
 
 ceiling_chars = 30000
+cut = "-- cut at the {limit}-character ceiling: {kept} of {all} {unit}. For the other {left}: {how}"
+alone = "-- one of the {unit} alone is over the {limit}-character ceiling, so nothing was given. {how}"

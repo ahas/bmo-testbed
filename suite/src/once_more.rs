@@ -4,12 +4,19 @@
 
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
+use bmo_testbed_core::declaration::Repository;
+use bmo_testbed_core::events::{Event, Hook};
+use bmo_testbed_core::policy::fill_marks;
+use bmo_testbed_core::policy::suite::SUITE;
 use serde_json::json;
 
 use crate::log::{
   FailedTest, failed_files_of, failed_tests_of, failures_of, unstarted_of, verdict_of, warnings_of,
 };
+use crate::run::{SuiteAsk, run_saying};
+use crate::workspace::git_lines;
 
 /// A suite's run: its exit code, and what its log says of it.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -147,14 +154,14 @@ impl Flaky {
 /// the files and units it is handed, alone and by name, in the same tree and over the same range as the
 /// first. It runs once more at most, and not at all where there is nothing to name — a first run that
 /// passed, or one whose turn never came and started nothing.
-pub async fn run_once_more(first: SuiteRun, again: impl AsyncFnOnce(&[String]) -> SuiteRun) -> SuiteRuns {
+pub fn run_once_more(first: SuiteRun, again: impl FnOnce(&[String]) -> SuiteRun) -> SuiteRuns {
   let named = first.again();
 
   if first.passed() || named.is_empty() {
     return SuiteRuns { first, again: None };
   }
 
-  let second = again(&named).await;
+  let second = again(&named);
 
   SuiteRuns {
     first,
@@ -199,4 +206,106 @@ pub fn write_flaky(data_root: &Path, seen: &FlakySeen<'_>) -> std::io::Result<()
   let mut file = std::fs::OpenOptions::new().create(true).append(true).open(&path)?;
 
   writeln!(file, "{line}")
+}
+
+/// Where the suite's own lines go: the file standard error is, where it is one, as the record names a log.
+fn own_log() -> String {
+  std::fs::read_link("/proc/self/fd/2")
+    .ok()
+    .filter(|path| path.is_file())
+    .map(|path| path.to_string_lossy().into_owned())
+    .unwrap_or_default()
+}
+
+/// The suite run with `--again` (docs/suite.md, 「What failed runs once more」): run once, and where it failed
+/// or left units unstarted, run once more over what it named, judged on that second run. What passed only
+/// the second time is written down under the data root and sent to the hook as `suite-flaky`. Every line
+/// both runs write goes to standard error as it comes; the exit code the judgement ends with.
+pub fn run_judged(repo: &Repository, ask: &SuiteAsk, data_root: &Path, hook: &Hook) -> u8 {
+  let said = &SUITE.again;
+  let heard = Mutex::new(String::new());
+  let say = |line: &str| {
+    eprintln!("{line}");
+
+    if let Ok(mut heard) = heard.lock() {
+      heard.push_str(line);
+      heard.push('\n');
+    }
+  };
+  let taken = || heard.lock().map(|mut heard| std::mem::take(&mut *heard)).unwrap_or_default();
+  let code = run_saying(repo, ask, &say);
+  let first = SuiteRun::of_log(i64::from(code), &taken());
+  let mut last = code;
+  let runs = run_once_more(first, |named| {
+    say(&format!(
+      "\n{}",
+      fill_marks(
+        &said.once_more,
+        &[
+          ("mark", &SUITE.lines.mark),
+          ("count", &named.len().to_string()),
+          ("names", &named.join(&said.joiner)),
+        ],
+      )
+    ));
+
+    let again = SuiteAsk {
+      picked: named.to_vec(),
+      ..ask.clone()
+    };
+
+    last = run_saying(repo, &again, &say);
+    SuiteRun::of_log(i64::from(last), &taken())
+  });
+
+  if runs.again.is_none() {
+    return code;
+  }
+
+  if !runs.passed() {
+    eprintln!(
+      "{}",
+      fill_marks(
+        &said.either,
+        &[("mark", &SUITE.lines.mark), ("names", &runs.failures().join(&said.joiner))]
+      )
+    );
+    return last;
+  }
+
+  let flaky = runs.flaky();
+
+  if !flaky.is_empty() {
+    let head = git_lines(&repo.root, &["rev-parse", "HEAD"])
+      .ok()
+      .and_then(|lines| lines.into_iter().next());
+    let log = own_log();
+    let seen = FlakySeen {
+      flaky: &flaky,
+      head: head.as_deref().unwrap_or_default(),
+      log: &log,
+    };
+
+    if let Err(why) = write_flaky(data_root, &seen) {
+      eprintln!(
+        "{}",
+        fill_marks(&said.unrecorded, &[("mark", &SUITE.lines.mark), ("why", &why.to_string())])
+      );
+    }
+
+    let tests: Vec<_> =
+      flaky.tests.iter().map(|one| json!({ "test": one.test, "unit": one.file })).collect();
+
+    hook.send(&Event {
+      name: "suite-flaky",
+      commit: head,
+      summary: fill_marks(
+        &said.flaky_summary,
+        &[("count", &flaky.names().len().to_string()), ("repository", &repo.name())],
+      ),
+      detail: json!({ "tests": tests, "units": flaky.files, "log": log }),
+    });
+  }
+
+  last
 }

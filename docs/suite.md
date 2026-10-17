@@ -149,6 +149,11 @@
     makes it before its first file starts where it does not stand yet; otherwise the first file to ask
     makes it, under a lock the others wait on. The `template` verb is behind both
     (`docs/boundary.md`).
+  - It is made under another name it takes only once whole, so a making cut short is never taken for
+    it, and noted with the time it was made, which the sweep reads.
+  - It carries two functions a clone is reused with: `bmo_test_reset()` empties every table a test
+    wrote and drops every schema named `t_…`, and `bmo_test_count_on()` sets every identity counting
+    on past the largest key its table holds.
 - **The pool is the template's clones,** `bmo_test_<hash>_s<n>`, kept from run to run.
   - A file's process claims the first slot no living process holds, by a claim file in the temporary
     directory naming its process, written whole and linked into place. A claim whose process is gone
@@ -156,7 +161,8 @@
   - A slot that stands is emptied as it is claimed; one that does not is cloned from the template.
   - Nothing is dropped as a file ends: dropping or making a database waits on a checkpoint.
 - **The sweep:** every run starts the `template sweep` with its own template's name. It drops every
-  other template made more than a day ago whose pool no living process holds, with that pool.
+  other template made more than a day ago whose pool no living process holds, with that pool, and
+  every scratch database whose process, the one its name carries, is gone.
 - **A Rust test's own database** comes from the `scratch-database` crate, handed the migrator of the
   crate under test:
   - The first test of a binary to ask makes the binary's template, `bmo_rs_tmpl_<process>_<n>`, one

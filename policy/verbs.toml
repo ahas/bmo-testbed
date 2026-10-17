@@ -1,5 +1,5 @@
 # The binary's own words (docs/boundary.md, 「The binary」 and 「The verbs」): the usage `--help` prints,
-# for the binary and for each verb, and what `classify` answers. A job reads the words, so they are
+# for the binary and for each verb, and what each verb says of itself. A job reads the words, so they are
 # English. {verb} is the binary's name, and {guard}, {job_wait}, {unit_wait} and {kept} are the `lanes`
 # numbers they stand for.
 
@@ -11,6 +11,13 @@ run       a heavy test or build command, run in the machine's turn
 status    each lane and the repository's close line: who holds it, and who waits behind
 classify  whether a shell line holds a heavy command started outside the testbed
 suite     the repository's units, every one or those a change reaches
+count     the tests a range removed, each accounted for or not, and the tests the tree holds
+log       what a suite's or a single run's log came to
+template  the suite's template database made, dropped or swept
+check     the check of a change, or one of the quick checks
+imports   the relative imports a move left broken, and where they go
+cargo     Cargo over the shared build directory, in the machine's turn where it compiles
+prune     what no build reads any more, removed from the shared Cargo build directory
 
 {verb} <verb> --help prints that verb's own usage (docs/boundary.md)."""
 run = """
@@ -47,16 +54,90 @@ light line and 1 for a heavy one.
 --takes-turn  a command that takes the turn itself, its program and the words it opens with
 --json        the answer as one JSON object (docs/boundary.md)"""
 suite = """
-usage: {verb} suite [--since <commit>] [--guard <seconds>] [--file-guard <seconds>] [--turn-wait <seconds>] [<word>…]
+usage: {verb} suite [--since <commit>] [--again] [--guard <seconds>] [--file-guard <seconds>] [--turn-wait <seconds>] [<word>…]
 
 Runs the repository's units in the machine's turn (docs/suite.md): every one, or those the change
 since a commit reaches. A word naming a path narrows the files, a word naming a unit exactly picks
-it, and every other word goes to each file's runner.
+it, and every other word goes to each file's runner. The verb's own flags come before its words.
 
 --since       the commit the change is read from
+--again       what failed or never started, run once more by name and judged on that run
 --guard       seconds the whole run may take (default the declaration's)
 --file-guard  seconds one unit may take (default the declaration's)
 --turn-wait   seconds to wait for the turn"""
+count = """
+usage: {verb} count [--since <commit>]
+
+Prints the TypeScript and Rust tests the tree holds, and with --since the tests the range removed
+from the test files it changed, each accounted for by a Rust test naming its title or a commit's
+Retired-test line, or not (docs/checks.md). Exits 1 where a removal nothing accounts for stands."""
+log = """
+usage: {verb} log <log file> [--json]
+
+Reads a suite's log, a bun test log or a cargo test log alike: the verdict, the counts summed over
+every summary block, what failed, and the units a suite never started, named apart. Exits 1 where
+anything failed or never started, or where the log holds no summary.
+
+--json  passed, failed, skipped, verdict, failed_units, unstarted_units and failures, each with its
+        test and unit (docs/boundary.md)"""
+template = """
+usage: {verb} template make|drop|sweep <name>
+
+make   the template made where it does not stand, by the declared migrate command; every other
+       caller waits on the one making it, then finds it
+drop   the template and its pool of clones
+sweep  every other template made more than a day ago whose pool no living process holds, with its
+       pool, and every scratch database whose process is gone"""
+check = """
+usage: {verb} check [--since <commit> | <file…>] [--log <path>]
+       {verb} check quick | wording | layout | dependencies
+       {verb} check korean [--kinds] [--settle] [<prefix>]
+       {verb} check dashes <file…> [--write]
+
+With no part named, the check a change owes, every step to its end: the enabled quick checks, the
+declared static steps the change reaches, cargo check on every crate it marks, the test files it
+touches, cargo test on the crates it touches itself, and the check of every tool and project it
+reaches (docs/checks.md). The change is the files given, or every path changed since --since, by
+default the commit the branch was made from. The output goes to one log, under the data root's
+testbed/ unless --log names another. Exits 1 where a step failed and 2 where the change could
+not be read.
+
+quick         every quick check the declaration enables
+wording, layout, dependencies, korean  that check alone
+korean        --settle lowers the ledger; --kinds, or a prefix, prints the Korean lines by what
+              holds them
+dashes        each line of the markdown files named where a dash between words would change;
+              --write writes them"""
+imports = """
+usage: {verb} imports [<file…>] [--fix]
+
+Finds the relative imports that resolve to nothing, in the files named or in every code file of
+the checkout, and names for each the one file whose path ends the way the import's does, spelled
+relative within its workspace package and by the package's name from another (docs/checks.md).
+Where several files end that way, or none, it chooses none and names them. Without --fix it only
+says, and exits 1 while anything is left; --fix writes every rewrite or none."""
+cargo = """
+usage: {verb} cargo <cargo arguments…>
+
+Runs Cargo over the Rust workspace of the checkout it is run in, through the build directory every
+checkout shares with this checkout's own crates apart in it. A command that compiles waits its
+turn behind the other heavy commands on this machine, runs again where the kernel killed it for
+want of memory, and once it has passed removes what this checkout's earlier build of its shape
+left. Exits with Cargo's own code, 75 where the turn did not come."""
+prune = """
+usage: {verb} prune [--dry-run] [--older-than <days>] [--incremental-older-than <hours>]
+       {verb} prune --all
+
+Removes from the shared Cargo build directory what no build stands on any more: a checkout's own
+units no live checkout's record names, other units no build read for the span, incremental state
+unchanged for its span, and the target directories of checkouts that are gone, holding Cargo's
+build lock in every profile directory at the front of its line (docs/deploy.md).
+
+--dry-run                 says what it would remove and removes nothing
+--older-than              days a unit no build read is kept, more than one (default {days})
+--incremental-older-than  hours unchanged incremental state is kept (default {hours})
+--all                     clears the whole directory but its lock files; every checkout then
+                          builds afresh"""
 
 # What `classify` answers: `light`, or `heavy` with {language} the language that claims the command
 # and, on the line after it, `instead` with {testbed} the running binary and {words} the command's words.
@@ -66,3 +147,83 @@ heavy = "heavy {language}"
 instead = "{testbed} run -- {words}"
 # A `--takes-turn` value that holds no command the shell reads, {command} as given.
 unread = "classify: --takes-turn {command} holds no command the shell reads"
+
+# A checkout of the testbed running its own binary (docs/boundary.md, 「The binary」): {code} its build
+# ended with, and {binary} and {why} where the built one could not be started.
+[own]
+unchecked = "check: this checkout's bmo-testbed did not build (exit {code}), so nothing was checked"
+untouched = "template: this checkout's bmo-testbed did not build (exit {code}), so no template was touched"
+unstarted = "bmo-testbed: {binary} could not be run: {why}"
+
+# What `log` says: {path} the log, {count} how many, and the counts by name joined by `joiner`.
+[log]
+missing = "{path} does not exist"
+no_summary = "{path} has no summary: the run is still going, or the log was cut short"
+failures = "{count} failure(s) the log names:"
+unstarted = "{count} unit(s) the run never started, so nothing of them was tested:"
+item = "  {name}"
+count = "{name} {count}"
+joiner = " · "
+unit = "names"
+how = "read the log itself for the rest."
+
+# What `check` and its parts say: {why} what a change or a part came to, {part} a quick check the
+# declaration does not enable, {ledger} the ledger settled, {lowered} and {kept} its files.
+[check]
+unread = "check: the change could not be read: {why}"
+server_down = "check: the test database server is not up, so the crates' tests will fail on it: {why}"
+not_enabled = "check: the declaration does not enable {part} ([check] quick)"
+settled = "settled {ledger}: {lowered} files lowered, {kept} still hold Korean"
+unsettled = "korean: {why}"
+
+# What `check dashes` says: {path} a file, {count} lines, {line} a line's number and {text} it before
+# and after.
+[dashes]
+file = "{path}: {count} line(s)"
+before = "  {line}- {text}"
+after = "  {line}+ {text}"
+none = "no dash to change"
+written = "{count} line(s) written"
+can = "{count} line(s) can change; --write writes them"
+missing = "no such file: {paths}"
+unreadable = "{path}: {why}"
+
+# What `imports` says: {file}, {line} and {spec} where an import stands, {to} what it becomes, {tail}
+# the end of its path, {count} and {candidates} the files that end that way, and {files} how many files.
+[imports]
+to = "{file}:{line}  \"{spec}\" → \"{to}\""
+missing = "{file}:{line}  \"{spec}\": no file ends in {tail}"
+ambiguous = "{file}:{line}  \"{spec}\": {count} files end in {tail}, so none was chosen: {candidates}"
+clean = "no relative import is left unresolved"
+not_files = "not files of this checkout: {paths}; give paths from the checkout's root"
+not_checkout = "{root} is not a git checkout: {why}"
+refused = "{count} import(s) could not be chosen for{nothing}; fix them by hand, or ask again without those files"
+nothing_written = ", so nothing was written"
+to_fix = "{count} import(s) to fix ({files} file(s)); write them with --fix"
+fixed = "{count} import(s) fixed ({files} file(s))"
+unit = "imports"
+how = "ask again over fewer files."
+
+# What `prune` says (docs/deploy.md, 「The Cargo build directory」): {root} the build directory, {what}
+# what it takes, {verb} whether it was removed, the counts of what it took, {checkouts} the checkouts'
+# target directories, the disk's {before} and {after}, and the directory against its ceiling.
+[prune]
+lock_wait_seconds = 600
+gone = "prune: {root} does not exist, so there is nothing to remove"
+noatime = "prune: the disk {root} stands on keeps no access times (noatime), so what no build read cannot be told"
+too_short = "prune: --older-than takes a number of days above {days}, since the disk moves a read's time only once it is a day old"
+no_hours = "prune: --incremental-older-than takes a number of hours above 0"
+locked = "prune: nothing removed: Cargo's build lock in {profile} did not come within {seconds} seconds"
+everything = "everything but its lock files"
+spans = "own units no live checkout's record names, other units unread for {days} days, incremental state unchanged for {hours} hours"
+heading = "prune: {root}, {what} {verb}"
+removed = "removed"
+dry = "(nothing removed)"
+counts = "  {units} units, {incremental} incremental directories, {loose} loose files, {checkouts} checkout target directories{named}{cleared}, {hand_built} work directories of hand-built checkouts' target/"
+named = " ({names})"
+cleared = ", {count} other entries"
+bytes = "  about {size} of disk"
+free = "  disk free {before} → {after}"
+held = "  holds {held} of its ceiling {ceiling} ({checkouts} live checkouts)"
+gigabytes = "{size} GB"
+over = "The shared Cargo build directory {root} holds {held} after its prune, over its ceiling of {ceiling}: {shared} shared and {each} for each of its {checkouts} live checkouts."

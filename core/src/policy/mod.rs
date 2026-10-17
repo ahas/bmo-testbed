@@ -11,6 +11,7 @@ pub mod daily;
 pub mod declaration;
 pub mod deploy;
 pub mod deploy_steps;
+pub mod events;
 pub mod lanes;
 pub mod quick_checks;
 pub mod static_check;

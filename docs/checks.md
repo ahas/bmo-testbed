@@ -88,6 +88,12 @@
   a Rust test module and a literal that is one dash and nothing else pass. Each language is read by
   its own parser: TypeScript by oxc, a single-file component by the tree-sitter HTML grammar with oxc
   for its scripts, Rust by the tree-sitter Rust grammar, YAML and TOML by their serde readers.
+  - **`check dashes <file…>`** rewrites a markdown file's dashes between words the way a person types
+    the same sentence: a name and its explanation get a colon, an aside between two dashes gets commas,
+    or brackets where it holds commas of its own, any further dash in the sentence a comma, and a dash
+    between two digits is a range, `~`. The file is read by the markdown parser, and only its
+    paragraphs, headings and table cells are prose: code, quotations, links, web addresses, words in
+    double quotes and a dash standing alone at either end of a piece keep theirs.
 - **`korean`:** no code file holds more lines with Korean in them than the repository's ledger allows
   it, and a file the ledger does not name is allowed none; a ledger file not yet written allows none
   anywhere. The ledger is a JSON object from each file's path to its count. `--settle` lowers the

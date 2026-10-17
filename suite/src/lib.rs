@@ -20,6 +20,7 @@ pub mod selection;
 pub mod static_check;
 pub mod superseded;
 pub mod sweep;
+pub mod template;
 pub mod test_server;
 pub mod titles;
 pub mod tool_checks;

@@ -214,6 +214,68 @@ fn two_runs_started_at_once_run_one_after_the_other() {
   assert!(done[second].err.lines().any(|line| line.starts_with(&mark("turn"))));
 }
 
+// A test that fails the first time it runs in a directory and passes every time after.
+const FLAKY: &str = r#"import { expect, test } from "bun:test";
+import { existsSync, writeFileSync } from "node:fs";
+
+test("passes the second time", () => {
+  const seen = process.env.SUITE_FLAKY_MARK ?? "";
+  if (!existsSync(seen)) {
+    writeFileSync(seen, "");
+    expect(1).toBe(2);
+  }
+});
+"#;
+
+// "with --again what failed runs once more, and what passed only then is written down and sent as an event"
+#[test]
+fn a_run_once_more_passes_on_its_second_run_and_tells_of_the_flaky_test() {
+  let dir = tempfile::tempdir().unwrap();
+  let repo = repository(dir.path());
+  let data = dir.path().join("data");
+  let event = dir.path().join("event");
+
+  std::fs::write(repo.join("flaky.test.ts"), FLAKY).unwrap();
+  std::fs::create_dir_all(&data).unwrap();
+
+  let mut command = testbed(&repo, &data, &["suite", "--again", "flaky.test.ts"]);
+
+  command
+    .env("SUITE_FLAKY_MARK", dir.path().join("seen"))
+    .env("BMO_TESTBED_EVENT_HOOK", format!("f() {{ cat > {}; }}; f", event.display()));
+  std::os::unix::process::CommandExt::process_group(&mut command, 0);
+
+  let done = ended(command.spawn().unwrap());
+  let once_more = opening(&SUITE.again.once_more, &[("count", "1")]);
+  let record = std::fs::read_to_string(data.join("testbed/suite-flaky.jsonl")).unwrap();
+  let payload: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&event).unwrap()).unwrap();
+
+  assert_eq!(done.code, 0, "{}", done.err);
+  assert!(done.err.contains(&once_more), "{}", done.err);
+  assert!(record.contains("passes the second time"), "{record}");
+  assert_eq!(payload["event"], "suite-flaky");
+  assert_eq!(
+    payload["detail"]["tests"],
+    serde_json::json!([{ "test": "passes the second time", "unit": "flaky.test.ts" }])
+  );
+}
+
+// "count prints the tests the tree holds"
+#[test]
+fn the_count_prints_the_tests_the_tree_holds() {
+  let dir = tempfile::tempdir().unwrap();
+  let repo = repository(dir.path());
+
+  crate::stand::git(&repo, &["add", "probe.test.ts"]);
+  crate::stand::git(&repo, &["commit", "-q", "-m", "probe"]);
+
+  let done = crate::stand::ran(&mut testbed(&repo, dir.path(), &["count"]));
+  let tree =
+    fill_marks(&bmo_testbed_core::policy::count::COUNT.tree, &[("typescript", "1"), ("rust", "0")]);
+
+  assert_eq!((done.code, done.out.trim()), (0, tree.as_str()), "{}", done.err);
+}
+
 // "the suite refuses a range that is no commit before it runs anything"
 #[test]
 fn the_suite_refuses_a_range_that_is_no_commit_before_it_runs_anything() {

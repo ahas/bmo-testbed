@@ -18,7 +18,7 @@ use bmo_testbed_suite::fence::{
   fenced_build_jobs,
 };
 use bmo_testbed_suite::run::{
-  SweepCount, guard_seconds, guards_line, passed_through, sweep_ending, verdict_line, with_test_timeout,
+  SuiteWords, SweepCount, ask_of, guards_line, sweep_ending, verdict_line, with_test_timeout,
 };
 use bmo_testbed_suite::sweep::{SweepPlan, largest_first, sweep};
 
@@ -60,43 +60,38 @@ mod guards {
 mod asked {
   use super::*;
 
-  // "is the fallback where no guard was given"
+  // "a guard is the declared one where none was given, and the number where one was"
   #[test]
-  fn is_the_fallback_where_no_guard_was_given() {
-    assert_eq!(guard_seconds(&[], "--guard", 420).ok(), Some(420));
-  }
-
-  // "is the number where one was"
-  #[test]
-  fn is_the_number_where_one_was() {
-    assert_eq!(
-      guard_seconds(&words(&["--guard", "30", "server/a.test.ts"]), "--guard", 420).ok(),
-      Some(30)
+  fn a_guard_is_the_declared_one_unless_the_caller_names_one() {
+    let test = Test::default();
+    let declared = ask_of(&SuiteWords::default(), &test);
+    let named = ask_of(
+      &SuiteWords {
+        guard: Some(30),
+        file_guard: Some(10),
+        turn_wait: Some(5),
+        ..SuiteWords::default()
+      },
+      &test,
     );
+
+    assert_eq!((declared.whole_guard, declared.file_guard, declared.turn_wait), (240, 90, None));
+    assert_eq!((named.whole_guard, named.file_guard, named.turn_wait), (30, 10, Some(5.0)));
   }
 
-  // "is refused where the word after it is not a positive number of seconds"
+  // "a word naming a path picks the units, and the runner is handed every other word but a width"
   #[test]
-  fn is_refused_where_the_word_after_it_is_not_a_positive_number() {
-    let refusal = fill_marks(&SUITE.arguments.not_seconds, &[("name", "--guard")]);
-
-    for given in [&["--guard", "nought"][..], &["--guard", "0"], &["--guard"]] {
-      match guard_seconds(&words(given), "--guard", 420) {
-        Err(refused) => assert_eq!(refused.0, refusal),
-        Ok(seconds) => panic!("{given:?} read as {seconds}"),
-      }
-    }
-  }
-
-  // "hands bun everything that was not a guard, a guard's own value with its name"
-  #[test]
-  fn hands_bun_everything_that_was_not_a_guard() {
-    let given = words(&["--guard", "30", "--file-guard", "10", "--bail", "server/a.test.ts"]);
-
-    assert_eq!(
-      passed_through(&given, &["--guard", "--file-guard"]),
-      words(&["--bail", "server/a.test.ts"])
+  fn a_path_picks_the_units_and_the_runner_is_handed_the_rest() {
+    let ask = ask_of(
+      &SuiteWords {
+        words: words(&["--bail", "server/a.test.ts", "--parallel=4", "core/"]),
+        ..SuiteWords::default()
+      },
+      &Test::default(),
     );
+
+    assert_eq!(ask.picked, words(&["server/a.test.ts", "core/"]));
+    assert_eq!(ask.extra, words(&["--bail", "--timeout", "30000"]));
   }
 
   // "gives each test thirty seconds where it names no limit of its own, and keeps a limit the caller names"

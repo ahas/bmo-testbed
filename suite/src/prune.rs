@@ -662,3 +662,19 @@ pub fn take_prune_locks(root: &Path, wait_seconds: f64) -> Result<Vec<HeldLock>,
 
   Ok(held)
 }
+
+/// What the disk a path stands on has free for this account, in bytes; nought where it cannot be read.
+pub fn disk_free_bytes(path: &Path) -> u64 {
+  let Ok(named) = std::ffi::CString::new(path.as_os_str().as_encoded_bytes()) else {
+    return 0;
+  };
+  // SAFETY: an all-zero `statvfs` is a valid value of the plain C struct the call writes into.
+  let mut read: libc::statvfs = unsafe { std::mem::zeroed() };
+
+  // SAFETY: the path is a NUL-terminated string that lives through the call, and the struct is ours.
+  if unsafe { libc::statvfs(named.as_ptr(), &raw mut read) } != 0 {
+    return 0;
+  }
+
+  read.f_bavail.saturating_mul(read.f_frsize)
+}

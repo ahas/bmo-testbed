@@ -28,17 +28,12 @@ use crate::tool_checks::{CheckedTool, package_check};
 use crate::unit::{UnitCommand, run_unit};
 use crate::workspace::{OwnProject, git_lines, own_projects, repository_paths};
 
-// The words this verb takes for itself, each with a value; nothing of them goes to the runner.
-const OWN_WORDS: [&str; 4] = ["--guard", "--file-guard", "--turn-wait", "--since"];
 // The test files of a repository declaring none, the runner's own naming, as git's pathspecs.
 const DEFAULT_TEST_FILES: [&str; 2] = ["*.test.ts", "**/*.test.ts"];
 
-fn say(line: &str) {
+fn stderr(line: &str) {
   eprintln!("{line}");
 }
-
-/// A run refused before it started, said in its own sentence, with the exit code of a misgiven word.
-pub struct Refused(pub String);
 
 /// What the caller asked of the run.
 #[derive(Clone, Debug, Default)]
@@ -53,43 +48,15 @@ pub struct SuiteAsk {
   pub extra: Vec<String>,
 }
 
-/// A number of seconds the caller gave under that name, or the fallback where it gave none; a word that is
-/// not a positive number of seconds is refused, since a mistyped guard would cut a run never in trouble.
-pub fn guard_seconds(words: &[String], name: &str, fallback: u64) -> Result<u64, Refused> {
-  let Some(at) = words.iter().position(|word| word == name) else { return Ok(fallback) };
-
-  match words.get(at + 1).and_then(|value| turn::leading_number(value)) {
-    Some(value) if value > 0 => Ok(value as u64),
-    _ => Err(Refused(fill_marks(&SUITE.arguments.not_seconds, &[("name", name)]))),
-  }
-}
-
-fn value_of(words: &[String], name: &str) -> Result<Option<String>, Refused> {
-  let Some(at) = words.iter().position(|word| word == name) else { return Ok(None) };
-
-  match words.get(at + 1) {
-    Some(value) if !value.starts_with("--") => Ok(Some(value.clone())),
-    _ => Err(Refused(fill_marks(&SUITE.arguments.no_value, &[("name", name)]))),
-  }
-}
-
-/// Whatever the caller wants handed through to the runner: everything it did not address to the verb, a word of
-/// its own taken with its value.
-pub fn passed_through(words: &[String], mine: &[&str]) -> Vec<String> {
-  let mut rest = Vec::new();
-  let mut at = 0;
-
-  while at < words.len() {
-    if mine.contains(&words[at].as_str()) {
-      at += 2;
-      continue;
-    }
-
-    rest.push(words[at].clone());
-    at += 1;
-  }
-
-  rest
+/// The run's words as the binary read them: its own flags, each a positive number of seconds where it is
+/// one, and every other word as given.
+#[derive(Clone, Debug, Default)]
+pub struct SuiteWords {
+  pub since: Option<String>,
+  pub guard: Option<u64>,
+  pub file_guard: Option<u64>,
+  pub turn_wait: Option<u64>,
+  pub words: Vec<String>,
 }
 
 fn names_path(word: &str) -> bool {
@@ -109,33 +76,24 @@ pub fn with_test_timeout(words: Vec<String>, seconds: u64) -> Vec<String> {
   words
 }
 
-/// The words of a run read, as the caller gave them, over what the repository declares for its tests.
-pub fn read_ask(words: &[String], test: &Test) -> Result<SuiteAsk, Refused> {
-  let whole_guard = guard_seconds(words, "--guard", test.guard_seconds)?;
-  let file_guard = guard_seconds(words, "--file-guard", test.file_guard_seconds)?;
-  let turn_wait = if words.iter().any(|word| word == "--turn-wait") {
-    Some(guard_seconds(words, "--turn-wait", 0)? as f64)
-  } else {
-    None
-  };
-  let since = value_of(words, "--since")?;
+/// The run asked for, the caller's words over what the repository declares for its tests: a guard it names
+/// over the declared one, a word naming a path picking the units, and every other word for the runner.
+pub fn ask_of(given: &SuiteWords, test: &Test) -> SuiteAsk {
   // A width for the runner's own pool means nothing to a run of one file, so it is not handed through.
-  let for_bun: Vec<String> = passed_through(words, &OWN_WORDS)
-    .into_iter()
-    .filter(|word| !word.starts_with("--parallel"))
-    .collect();
+  let for_runner: Vec<&String> =
+    given.words.iter().filter(|word| !word.starts_with("--parallel")).collect();
 
-  Ok(SuiteAsk {
-    whole_guard,
-    file_guard,
-    turn_wait,
-    since,
-    picked: for_bun.iter().filter(|word| names_path(word)).cloned().collect(),
+  SuiteAsk {
+    whole_guard: given.guard.unwrap_or(test.guard_seconds),
+    file_guard: given.file_guard.unwrap_or(test.file_guard_seconds),
+    turn_wait: given.turn_wait.map(|seconds| seconds as f64),
+    since: given.since.clone(),
+    picked: for_runner.iter().filter(|word| names_path(word)).map(|word| (*word).clone()).collect(),
     extra: with_test_timeout(
-      for_bun.into_iter().filter(|word| !names_path(word)).collect(),
+      for_runner.iter().filter(|word| !names_path(word)).map(|word| (*word).clone()).collect(),
       test.test_timeout_seconds,
     ),
-  })
+  }
 }
 
 /// What the run says before it starts: how long it will let the work take, so a log cut off still says at
@@ -269,6 +227,12 @@ fn picked_units<T: Clone>(units: &[T], dir: impl Fn(&T) -> &str, picked: &[Strin
 
 /// The suite run in the repository's checkout, its lines on standard error; the exit code it ends with.
 pub fn run(repo: &Repository, ask: &SuiteAsk) -> u8 {
+  run_saying(repo, ask, &stderr)
+}
+
+/// The suite run in the repository's checkout, every line it writes about itself and each unit's output
+/// handed to `say`; the exit code it ends with.
+pub fn run_saying(repo: &Repository, ask: &SuiteAsk, say: &(dyn Fn(&str) + Sync)) -> u8 {
   let root = repo.root.as_path();
   // The packages a selected run keeps, worked out before the turn is taken so a range that is not a commit
   // is refused at once.
@@ -315,7 +279,7 @@ pub fn run(repo: &Repository, ask: &SuiteAsk) -> u8 {
     command: turn_command.clone(),
     lane: Lane::Wide,
     wait_seconds: ask.turn_wait,
-    say: &say,
+    say,
     path: None,
     env: env.clone(),
     checkout: root.to_string_lossy().into_owned(),
@@ -331,7 +295,7 @@ pub fn run(repo: &Repository, ask: &SuiteAsk) -> u8 {
     return NOT_RUN_EXIT_CODE;
   }
 
-  run_held(repo, ask, selected, &turn, turn_command, &env)
+  run_held(repo, ask, selected, &turn, turn_command, &env, say)
 }
 
 fn run_held(
@@ -341,6 +305,7 @@ fn run_held(
   turn: &TestbedTurn,
   turn_command: &str,
   env: &HashMap<String, String>,
+  say: &(dyn Fn(&str) + Sync),
 ) -> u8 {
   let root = repo.root.as_path();
   let test = &repo.declaration.test;

@@ -39,10 +39,25 @@ no_packages = "this checkout declares no workspace packages, so there is nothing
 not_a_range = "--since {since} is not a commit this checkout can read a range from: {why}"
 no_crates = "the Rust workspace's crates could not be read, so none of them is tested: {why}"
 
-# The words a run takes, refused as they are misgiven.
-[arguments]
-no_value = "{name} takes a value"
-not_seconds = "{name} takes a positive number of seconds"
+# The test database's template (docs/suite.md, 「The test database」): how long a template another has
+# taken the place of is kept for the runs still on it, and what the `template` verb says where it cannot
+# do what it was asked, {name} the name given, {code} and {said} how the migrate command ended.
+[template]
+superseded_kept_seconds = 86400
+bad_name = "template: {name} is not a database name this verb writes: lower-case letters, digits and underscores, not opening with a digit"
+no_migrate = "the declaration names no migrate command to make the template with ([test.database] migrate)"
+migrate_failed = "the migrate command ended with {code}: {said}"
+failed = "template: {why}"
+
+# A run judged once more (docs/suite.md, 「What failed runs once more」): {count} files and units and
+# {names} them, what failed in either run where the second failed too, the event's summary of {count}
+# flaky tests in {repository}, and a record that could not be written, {why} what it came to.
+[again]
+once_more = "{mark} once more, {count} that failed or never started: {names}"
+either = "{mark} failed in either run: {names}"
+joiner = ", "
+flaky_summary = "{count} tests of {repository} passed only when run once more"
+unrecorded = "{mark} the flaky tests could not be written down: {why}"
 
 # The lines a run writes about itself, each opening with {mark}, the word a caller finds them by.
 [lines]

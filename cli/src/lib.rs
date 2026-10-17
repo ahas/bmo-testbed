@@ -1,30 +1,35 @@
 //! The `bmo-testbed` binary (docs/boundary.md, 「The binary」): each verb's words read, and handed to the
-//! crates that do the work; the classification of a shell line; and the placement endpoint asked over HTTP.
+//! crates that do the work; the classification of a shell line; the placement endpoint asked over HTTP; and a
+//! checkout of the testbed running its own binary.
 
+pub mod cargo;
+pub mod check;
 pub mod classify;
+pub mod imports;
+pub mod own;
 pub mod placement;
+pub mod said;
 pub mod shell;
+pub mod suite;
 pub mod words;
 
 use std::ffi::OsString;
 use std::path::Path;
 
 use bmo_testbed_core::close_line::close_line_path;
-use bmo_testbed_core::declaration::Repository;
 use bmo_testbed_core::languages::LANGUAGES;
-use bmo_testbed_core::placement::{Local, PlaceAsk, Placement, runs_here};
+use bmo_testbed_core::placement::{Local, Placement};
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::verbs::VERBS;
-use bmo_testbed_core::turn::{Env, Lane, process_env};
+use bmo_testbed_core::turn::{Env, process_env};
 use bmo_testbed_core::verb::{self, REFUSED_EXIT_CODE, RunWords, VerbGround, data_root};
-use bmo_testbed_suite::run::{Refused, read_ask};
 
 use crate::classify::{TakesTurn, answer, heavy_command};
 use crate::placement::HttpPlacement;
-use crate::words::{BINARY, ClassifyArgs, RunArgs, SuiteArgs, Verb};
+use crate::words::{ClassifyArgs, RunArgs, Verb};
 
-// The placement a run started in a directory asks: the endpoint named for it, or the local one.
-fn placement_of(env: &Env, dir: &Path) -> Box<dyn Placement> {
+/// The placement a run started in a directory asks: the endpoint named for it, or the local one.
+pub fn placement_of(env: &Env, dir: &Path) -> Box<dyn Placement> {
   match HttpPlacement::named(env, dir) {
     Some(http) => Box::new(http),
     None => Box::new(Local),
@@ -87,45 +92,6 @@ fn classify(args: ClassifyArgs) -> u8 {
   code
 }
 
-fn suite(args: SuiteArgs) -> u8 {
-  let cwd = std::env::current_dir().unwrap_or_default();
-  let repo = match Repository::read(&cwd) {
-    Ok(repo) => repo,
-    Err(refusal) => {
-      eprintln!("{refusal}");
-      return REFUSED_EXIT_CODE;
-    }
-  };
-  let ask = match read_ask(&args.words, &repo.declaration.test) {
-    Ok(ask) => ask,
-    Err(Refused(said)) => {
-      eprintln!("{said}");
-      return REFUSED_EXIT_CODE;
-    }
-  };
-  let env = process_env();
-
-  // A placed suite runs on the other machine as this same verb of the testbed there.
-  if !runs_here(&env) {
-    let command: Vec<String> =
-      [BINARY.to_owned(), "suite".to_owned()].into_iter().chain(args.words).collect();
-    let placed = placement_of(&env, &repo.root).place(&PlaceAsk {
-      command: &command,
-      lane: Lane::Wide,
-      wait_seconds: PlaceAsk::wait_of(ask.turn_wait, &env),
-      guard_seconds: ask.whole_guard,
-      cwd,
-      env: &env,
-    });
-
-    if let Some(code) = placed {
-      return code;
-    }
-  }
-
-  bmo_testbed_suite::run::run(&repo, &ask)
-}
-
 /// The binary over its words; the code it ends with.
 pub fn main(args: impl IntoIterator<Item = OsString>) -> u8 {
   let words = match words::read(args) {
@@ -140,6 +106,16 @@ pub fn main(args: impl IntoIterator<Item = OsString>) -> u8 {
     Verb::Run(args) => run(args),
     Verb::Status(args) => status(args.json),
     Verb::Classify(args) => classify(args),
-    Verb::Suite(args) => suite(args),
+    Verb::Suite(args) => suite::suite(args),
+    Verb::Count(args) => suite::count(&args, &std::env::current_dir().unwrap_or_default()).print(),
+    Verb::Log(args) => suite::log(&args, &own::called_from()).print(),
+    Verb::Template(args) => suite::template(&args),
+    Verb::Check(args) => check::check(args),
+    Verb::Imports(args) => match suite::repository() {
+      Ok(repo) => imports::imports_in(&args.files, args.fix, &repo, &own::called_from()).print(),
+      Err(code) => code,
+    },
+    Verb::Cargo(args) => cargo::cargo(&args.words),
+    Verb::Prune(args) => cargo::prune(&args),
   }
 }

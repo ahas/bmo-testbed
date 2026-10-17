@@ -42,14 +42,13 @@ fn flake() -> FailedTest {
 }
 
 // "a test that fails and then passes when run once more passes, written down by its name"
-#[tokio::test]
-async fn a_test_that_fails_and_then_passes_when_run_once_more_passes_written_down_by_its_name() {
+#[test]
+fn a_test_that_fails_and_then_passes_when_run_once_more_passes_written_down_by_its_name() {
   let asked = RefCell::new(Vec::new());
-  let runs = run_once_more(SuiteRun::of_log(1, &one_failed()), async |named: &[String]| {
+  let runs = run_once_more(SuiteRun::of_log(1, &one_failed()), |named: &[String]| {
     asked.borrow_mut().push(named.to_vec());
     SuiteRun::of_log(0, &passed("1 of 1 files passed"))
-  })
-  .await;
+  });
   let flaky = runs.flaky();
 
   assert_eq!(asked.into_inner(), [vec![FLAKE.to_owned()]]);
@@ -90,8 +89,8 @@ async fn a_test_that_fails_and_then_passes_when_run_once_more_passes_written_dow
 }
 
 // "a test that fails twice is refused, naming what failed in either run, and nothing is flaky"
-#[tokio::test]
-async fn a_test_that_fails_twice_is_refused_and_nothing_is_flaky() {
+#[test]
+fn a_test_that_fails_twice_is_refused_and_nothing_is_flaky() {
   let again = [
     heading(&SUITE.file.failed, FLAKE),
     "(fail) another wait ran out [30001.00ms]".to_owned(),
@@ -99,9 +98,7 @@ async fn a_test_that_fails_twice_is_refused_and_nothing_is_flaky() {
     verdict_line(false, 31.0, "0 of 1 files passed"),
   ]
   .join("\n");
-  let runs =
-    run_once_more(SuiteRun::of_log(1, &one_failed()), async |_: &[String]| SuiteRun::of_log(1, &again))
-      .await;
+  let runs = run_once_more(SuiteRun::of_log(1, &one_failed()), |_: &[String]| SuiteRun::of_log(1, &again));
 
   assert!(!runs.passed());
   assert!(runs.flaky().is_empty());
@@ -113,17 +110,16 @@ async fn a_test_that_fails_twice_is_refused_and_nothing_is_flaky() {
 }
 
 // "a run that passed, or one whose turn never came and started nothing, runs nothing once more"
-#[tokio::test]
-async fn a_run_that_passed_or_started_nothing_runs_nothing_once_more() {
+#[test]
+fn a_run_that_passed_or_started_nothing_runs_nothing_once_more() {
   let ran = RefCell::new(0);
   let not_run = verdict_line(false, 0.0, &SUITE.ending.not_run);
 
   for first in [SuiteRun::of_log(0, &passed("2 of 2 files passed")), SuiteRun::of_log(75, &not_run)] {
-    let runs = run_once_more(first.clone(), async |_: &[String]| {
+    let runs = run_once_more(first.clone(), |_: &[String]| {
       *ran.borrow_mut() += 1;
       SuiteRun::default()
-    })
-    .await;
+    });
 
     assert_eq!(runs.again, None);
     assert_eq!(runs.passed(), first.passed());
@@ -134,19 +130,18 @@ async fn a_run_that_passed_or_started_nothing_runs_nothing_once_more() {
 }
 
 // "what never started runs once more beside what failed, and only what failed is flaky"
-#[tokio::test]
-async fn what_never_started_runs_once_more_beside_what_failed_and_only_what_failed_is_flaky() {
+#[test]
+fn what_never_started_runs_once_more_beside_what_failed_and_only_what_failed_is_flaky() {
   let first = format!(
     "{}\n{}",
     one_failed(),
     fill_marks(&SUITE.ending.unstarted_files, &[("guard", "240"), ("files", STEADY)])
   );
   let asked = RefCell::new(Vec::new());
-  let runs = run_once_more(SuiteRun::of_log(1, &first), async |named: &[String]| {
+  let runs = run_once_more(SuiteRun::of_log(1, &first), |named: &[String]| {
     asked.borrow_mut().push(named.to_vec());
     SuiteRun::of_log(0, &passed("2 of 2 files passed"))
-  })
-  .await;
+  });
 
   assert_eq!(asked.into_inner(), [vec![FLAKE.to_owned(), STEADY.to_owned()]]);
   assert_eq!(runs.flaky().files, [FLAKE]);

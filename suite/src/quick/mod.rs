@@ -16,6 +16,7 @@ pub mod dependencies;
 pub mod files;
 pub mod korean;
 pub mod layout;
+pub mod rewrite;
 pub mod source;
 pub mod wording;
 

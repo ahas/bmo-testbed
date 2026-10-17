@@ -3,8 +3,10 @@
 //! languages a command is run and read by, one run and its result, where a run is placed, the memory a run
 //! is given again for, the verb over them, and the policy every number and word of theirs is read from.
 
+pub mod answer;
 pub mod close_line;
 pub mod declaration;
+pub mod events;
 pub mod languages;
 pub mod memory;
 pub mod placement;

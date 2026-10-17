@@ -1,5 +1,10 @@
+mod check;
 mod classify;
+mod imports;
+mod log;
+mod own;
 mod placement;
+mod prune;
 mod shell;
 mod stand;
 mod suite_verb;

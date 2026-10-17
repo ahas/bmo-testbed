@@ -1,0 +1,14 @@
+# What the testbed says of the events it sends (docs/boundary.md, 「Events」): the payload's shape, how
+# often a hook still running is looked at, and the lines a verb writes where the hook did not take an
+# event, {event} its name. A job reads the words, so they are English.
+
+version = 1
+poll_milliseconds = 50
+
+[lines]
+# No hook is named, so the event is written here, {payload} as one line of JSON.
+unhooked = "event: {event} {payload}"
+# The hook could not be started, or ended on its own code, {why} what it came to.
+failed = "event: the hook for {event} failed: {why}"
+# The hook ran past its time, {seconds} of it, and was stopped.
+overran = "event: the hook for {event} did not end within {seconds}s and was stopped"

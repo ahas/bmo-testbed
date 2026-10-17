@@ -43,9 +43,22 @@ pub struct SelectionWords {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct ArgumentWords {
-  pub no_value: String,
-  pub not_seconds: String,
+pub struct TemplateWords {
+  pub superseded_kept_seconds: u64,
+  pub bad_name: String,
+  pub no_migrate: String,
+  pub migrate_failed: String,
+  pub failed: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AgainWords {
+  pub once_more: String,
+  pub either: String,
+  pub joiner: String,
+  pub flaky_summary: String,
+  pub unrecorded: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -117,7 +130,8 @@ pub struct Suite {
   pub run: RunWords,
   pub reasons: ReasonWords,
   pub selection: SelectionWords,
-  pub arguments: ArgumentWords,
+  pub template: TemplateWords,
+  pub again: AgainWords,
   pub lines: LineWords,
   pub file: FileWords,
   pub ending: EndingWords,

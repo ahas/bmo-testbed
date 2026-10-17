@@ -8,6 +8,7 @@ use bmo_testbed_core::policy::daily::DAILY;
 use bmo_testbed_core::policy::declaration::DECLARATION;
 use bmo_testbed_core::policy::deploy::DEPLOY;
 use bmo_testbed_core::policy::deploy_steps::{DEPLOY_STEPS, DeployStep};
+use bmo_testbed_core::policy::events::EVENTS;
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::policy::quick_checks::QUICK_CHECKS;
@@ -31,6 +32,7 @@ fn every_part_reads_as_its_type() {
   LazyLock::force(&DECLARATION);
   LazyLock::force(&QUICK_CHECKS);
   LazyLock::force(&VERBS);
+  LazyLock::force(&EVENTS);
 
   assert_eq!(ANSWER.ceiling_chars, 30_000);
   assert_eq!(SUITE.lines.mark, "suite:");
