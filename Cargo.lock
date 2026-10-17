@@ -324,6 +324,7 @@ version = "0.1.0"
 dependencies = [
  "bmo-testbed-core",
  "chrono",
+ "glob",
  "libc",
  "regex",
  "serde",

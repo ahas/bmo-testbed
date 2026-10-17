@@ -4,6 +4,7 @@
 mod adopt;
 mod backup;
 mod boot;
+mod deployment;
 mod progress;
 mod release;
 mod rollback;

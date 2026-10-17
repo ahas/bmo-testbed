@@ -18,7 +18,7 @@
 | Releases | `deploy-releases/` beside the link, one release per deployed commit, named by its first twelve hex digits |
 | Build tree | `deploy-expand` beside the link, a detached worktree moved to each commit, where the release build runs, its target directory kept warm between deployments |
 | Data root | The repository's runtime data, inside no checkout and inside no release |
-| Backup directory | Where the deployment's backup is written, readable by the user alone |
+| Backup directory | Where the deployment's backup is written, readable by the user alone, inside neither the data root nor a git work tree |
 
 - **The data root is never inside a git work tree.** A deployment finding it there does not start.
 - **Every place can be moved** by the variables `docs/boundary.md` lists.
@@ -112,13 +112,16 @@
 
 ## What the deploy run does, in order
 
-1. **Check the data root,** and stop where it is inside a git work tree.
+1. **Check the data root and the backup directory,** and stop where either stands where it may not
+   (「What it refuses」), or a declared env file is missing.
 2. **Pick the commit.** After `git fetch`, take the commit `--commit` names, or the checkout's `HEAD`,
    and check it is on the remote. Adopt a deploy tree that is still a directory. Check every unit link
    will still find its unit file.
 3. **Pass the gate:** the declared static check and the suite over the range from the deployed commit,
    holding every lane at the front (`docs/testbed.md`), with what failed run once more. `--no-check`
-   leaves it out where the caller already ran it.
+   leaves it out where the caller already ran it, and so does a declaration with `gate = false`. The
+   deployment asks the gate through a hand of its own, which the binary answers with the suite's
+   static check and run, so a test stands in for it.
 4. **Take the backup,** before anything changes (「Backups」).
 5. **Prepare the release,** pruning the releases first. A release of that commit still standing whose
    `bin/built-from` names it is taken as it stands; otherwise it is made afresh.
@@ -136,6 +139,7 @@
     - With `--before-start <command>`, stop the `bot` service, run the command, then start it.
     - Wait until the declared health answers, at most five minutes, then watch the `bot` service stay
       up thirty seconds: active and running throughout, the same main process, no automatic restart.
+      A `bot` service with no health declared is only watched staying up.
     - A unit that will not restart, a health that does not answer, or a service that does not stay up
       is rolled back (「Rollback」).
     - Then the `retire` units go.
@@ -143,8 +147,8 @@
     time is a warning in the deploy output and never fails the deployment; the next deployment runs it
     again, so a step is written to do only what is due.
 12. **Prune the releases.** A release that cannot be removed is a warning.
-13. **Start the backup upload** as a transient user unit of its own, `bmo-backup-upload-<stamp>`,
-    running the `backups` verb, and end without waiting for it.
+13. **Start the backup upload,** where the declaration names a remote, as a transient user unit of its
+    own, `bmo-backup-upload-<stamp>`, running the `backups` verb, and end without waiting for it.
 
 - **The deployment ends** with a `deployed` event naming the commit, the flaky tests its gate found, and
   the warnings.
@@ -211,6 +215,9 @@
   the disk dies.
 - **A unit link the commit would leave dangling** with no single file of its name to relink to.
 - **A data root inside a git work tree,** and **a missing env file.**
+- **A backup directory inside the data root or inside a git work tree.** Every file the backup writes
+  and takes away again, its staging, its scratch, a part file and a backup that failed, goes through
+  the guarded removal, which nothing inside the data root passes.
 - **Any deletion inside or above the data root.** Every deletion the deployment makes goes through one
   guarded removal that refuses both directions.
 
@@ -221,7 +228,7 @@
   one second.
 - **What goes in:** the declared snapshot command's output first, the copy and its manifest the command
   writes into a scratch directory, held in the archive as `.backup-snapshot/`; then the data root packed
-  as it is, the declared exclusions and a backup directory inside it left out.
+  as it is, the declared exclusions left out.
 - **How it is compressed:** one tar stream through `zstd -T0` at level 3. A file that changes while tar
   reads it goes in as it stood, which tar ends with exit code 1, a backup taken; any other tar failure
   fails the deployment with nothing changed.

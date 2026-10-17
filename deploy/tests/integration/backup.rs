@@ -150,9 +150,9 @@ fn a_data_root_nobody_wrote_to_packs_whole_read_back_into_the_scratch_folder_and
 #[test]
 fn what_the_plan_leaves_out_is_left_out_of_the_pack() {
   let root = live_root();
-  let backups = root.data.join("backups");
+  let backups = root.data.parent().unwrap().join("backups");
 
-  for folder in ["cache", "tmp", "backups", "kept"] {
+  for folder in ["cache", "tmp", "kept"] {
     std::fs::create_dir_all(root.data.join(folder)).unwrap();
     std::fs::write(root.data.join(folder).join("file"), folder).unwrap();
   }
@@ -169,7 +169,7 @@ fn what_the_plan_leaves_out_is_left_out_of_the_pack() {
   };
   let leaving = left_out(&plan);
 
-  assert_eq!(leaving, ["cache", "tmp", "backups"]);
+  assert_eq!(leaving, ["cache", "tmp"]);
 
   let packed = pack(&root, &["tar"], &leaving);
 
@@ -182,20 +182,9 @@ fn what_the_plan_leaves_out_is_left_out_of_the_pack() {
   assert_eq!(
     listed
       .iter()
-      .filter(|one| ["cache", "tmp", "backups"].iter().any(|word| one.contains(word)))
+      .filter(|one| ["cache", "tmp"].iter().any(|word| one.contains(word)))
       .collect::<Vec<_>>(),
     Vec::<&String>::new()
-  );
-
-  let outside = root.data.parent().unwrap().join("backups");
-
-  assert_eq!(
-    left_out(&BackupPlan {
-      backup_dir: &outside,
-      exclude: &[],
-      ..plan
-    }),
-    Vec::<String>::new()
   );
 }
 

@@ -8,6 +8,7 @@ publish.workspace = true
 [dependencies]
 bmo-testbed-core = { path = "../core" }
 chrono = { workspace = true, features = ["clock"] }
+glob.workspace = true
 libc.workspace = true
 regex.workspace = true
 serde.workspace = true

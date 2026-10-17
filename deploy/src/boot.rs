@@ -29,7 +29,7 @@ pub struct HealthWait {
 }
 
 /// Whether the unit has given up starting.
-pub type GaveUp<'a> = Box<dyn Fn() -> bool + Send + Sync + 'a>;
+pub type GaveUp<'a> = Box<dyn Fn() -> bool + 'a>;
 
 /// What a wait asks and how often.
 pub struct HealthWatch<'a> {

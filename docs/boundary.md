@@ -372,7 +372,9 @@ keep (`docs/deploy.md`, 「The unit links」).
 - **`suite`:** the whole-suite run, change selection, the static and quick checks, the Cargo verb, the
   superseded removal and the prune.
 - **`deploy`:** releases, the link flip, unit links, the deploy run, the progress record, rollback
-  through the tree's and the services' hands, backups.
+  through the tree's and the services' hands, backups. The run asks its gate through a trait of its
+  own, which the binary answers with the suite crate's static check and suite, so `deploy` depends on
+  no other crate of the testbed but `core`.
 - **`scratch-database`:** per-test databases copied from a template the migrator a test hands in
   makes (`docs/suite.md`, 「The test database」): a scratch database dropped with its guard, its
   address and connection, and the test server's address; a consumer's crate may take it as a

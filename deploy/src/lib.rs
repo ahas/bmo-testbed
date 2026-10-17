@@ -7,6 +7,7 @@
 pub mod adopt;
 pub mod backup;
 pub mod boot;
+pub mod deployment;
 pub mod expansion;
 pub mod progress;
 pub mod release;

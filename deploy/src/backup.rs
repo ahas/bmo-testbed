@@ -265,7 +265,8 @@ pub enum BackupTaken {
 }
 
 /// What the pack leaves out, as paths under the data root: the declared exclusions, an absolute one taken
-/// as its part under the data root, and the backup directory where it stands inside the data root.
+/// as its part under the data root. A backup directory never stands inside the data root, which the
+/// deployment refuses before it takes a backup.
 pub fn left_out(plan: &BackupPlan<'_>) -> Vec<String> {
   let under = |path: &Path| {
     let path = if path.is_absolute() { path.strip_prefix(plan.data_root).ok()? } else { path };
@@ -274,12 +275,7 @@ pub fn left_out(plan: &BackupPlan<'_>) -> Vec<String> {
     (!path.is_empty()).then_some(path)
   };
 
-  plan
-    .exclude
-    .iter()
-    .filter_map(|path| under(path))
-    .chain(plan.backup_dir.is_absolute().then(|| under(plan.backup_dir)).flatten())
-    .collect()
+  plan.exclude.iter().filter_map(|path| under(path)).collect()
 }
 
 // A declared command run to its end in the plan's place with the snapshot folder named; what it said
