@@ -350,6 +350,18 @@ fn an_open_change_an_unpushed_commit_and_a_backup_inside_the_data_root_are_refus
   assert!(read_deploy_record(&scene.at("data")).is_none());
 }
 
+// "the deploy tree is the declaration's alone, whatever release the caller stands in"
+#[test]
+fn the_deploy_tree_is_the_declarations_whatever_release_the_caller_stands_in() {
+  let scene = Scene::new();
+  let repo = Repository::read(&scene.source).unwrap();
+  let mut env = scene.env();
+
+  env.insert("BMO_DEPLOY_DIR".to_owned(), "/another/release".to_owned());
+
+  assert_eq!(DeployPlaces::of(&repo, &env).unwrap().deploy_dir, scene.deploy_dir());
+}
+
 // "a dry run says what it would do and changes nothing"
 #[test]
 fn a_dry_run_changes_nothing() {

@@ -68,6 +68,7 @@ pub struct RunWords {
   pub adopt_failed: String,
   pub gate_left_out: String,
   pub gate_failed: String,
+  pub gate_suite: String,
   pub flaky: String,
   pub backup_none: String,
   pub backup_unnamed: String,

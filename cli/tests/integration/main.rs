@@ -1,5 +1,7 @@
 mod check;
 mod classify;
+mod deploy_verbs;
+mod full;
 mod imports;
 mod log;
 mod own;

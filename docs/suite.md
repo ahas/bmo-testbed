@@ -235,15 +235,18 @@
   it up with the repository's declared setup, runs the static check, and runs every unit through the
   suite, waiting its turn like any other run.
   - The tree is `full-check` beside the repository's deploy tree, or wherever `BMO_FULL_CHECK_DIR`
-    names.
-  - Its log is kept under `suite-full/` in the data root's `testbed/`, one file per run.
-  - One run at a time per repository: a run holds a lock under the data root's locks, and a second
-    meeting it is refused.
+    names; a repository that declares no deploy root keeps it as `tree` in its own folder below.
+  - Its log is kept in the repository's own folder, `suite-full/<repository>/` in the data root's
+    `testbed/`, one file per run, the repository named as its declaration names it.
+  - One run at a time per repository: a run holds the repository's lock under the data root's locks,
+    and a second meeting it is refused.
+  - The main branch is the one the declaration's `[check] main` names.
 - **Where it runs:** never in its caller's process. Called from anywhere but its own unit, it starts a
   transient unit, `bmo-full-suite-<stamp>`, and ends.
-- **When:** whenever the consumer's scheduler starts it. A run writes its start time into
-  `suite-full/started` before anything else, and `full --due <HH:MM>` starts one only where none
-  started since the latest such time of day, so a scheduler that asks every minute runs it once.
+- **When:** whenever the consumer's scheduler starts it. A run writes its start time into `started`
+  in its repository's folder before anything else, and `full --due <HH:MM>` starts one only where none
+  started since the latest such time of day, local time, so a scheduler that asks every minute runs it
+  once.
 - **Files that never started run again.** Where a pass leaves files unstarted, it runs again over those
   files alone, and again while each round starts more of them than the one before. The pass stands on
   what every round came to.

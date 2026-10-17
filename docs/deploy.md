@@ -21,7 +21,10 @@
 | Backup directory | Where the deployment's backup is written, readable by the user alone, inside neither the data root nor a git work tree |
 
 - **The data root is never inside a git work tree.** A deployment finding it there does not start.
-- **Every place can be moved** by the variables `docs/boundary.md` lists.
+- **Every place but the deploy tree can be moved** by the variables `docs/boundary.md` lists. The
+  deploy tree is the declaration's alone: every process a release starts carries `BMO_DEPLOY_DIR`
+  naming its own release, so a deployment started from any of them would otherwise aim at that
+  release's repository rather than its own.
 
 ## The releases
 
@@ -108,7 +111,10 @@
 - **What runs inside a deployment's unit runs where it is:** the unit is started with
   `BMO_DEPLOY_UNIT` naming it, and every process in it inherits the variable.
 - **The unit is handed `PATH` and the roots the caller resolved,** so the run aims at exactly what the
-  caller aimed at.
+  caller aimed at, and `BMO_TESTBED_FRONT=1`, so every heavy command of the run stands at the front of
+  its lane.
+- **A dry run and a refusal stay in the caller's process:** a refusal exits 2 there, and `--dry-run`
+  says there what the run would do, changing nothing and starting no unit.
 
 ## What the deploy run does, in order
 

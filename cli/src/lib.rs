@@ -5,6 +5,8 @@
 pub mod cargo;
 pub mod check;
 pub mod classify;
+pub mod deploy;
+pub mod full;
 pub mod imports;
 pub mod own;
 pub mod placement;
@@ -117,5 +119,8 @@ pub fn main(args: impl IntoIterator<Item = OsString>) -> u8 {
     },
     Verb::Cargo(args) => cargo::cargo(&args.words),
     Verb::Prune(args) => cargo::prune(&args),
+    Verb::Full(args) => full::full(&args),
+    Verb::Deploy(args) => deploy::deploy(&args),
+    Verb::Backups => deploy::backups(),
   }
 }

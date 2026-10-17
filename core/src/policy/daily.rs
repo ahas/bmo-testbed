@@ -8,6 +8,7 @@ use serde::Deserialize;
 pub struct TreeWords {
   pub not_moved: String,
   pub not_made: String,
+  pub setup_failed: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -23,6 +24,8 @@ pub struct RunWords {
   pub failed: String,
   pub again: String,
   pub no_verdict: String,
+  pub pass: String,
+  pub setup_step: String,
   pub joiner: String,
 }
 

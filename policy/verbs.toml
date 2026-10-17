@@ -18,6 +18,9 @@ check     the check of a change, or one of the quick checks
 imports   the relative imports a move left broken, and where they go
 cargo     Cargo over the shared build directory, in the machine's turn where it compiles
 prune     what no build reads any more, removed from the shared Cargo build directory
+full      the daily whole run of the repository's suite, in a unit of its own
+deploy    a commit of the repository put live, in a unit of its own
+backups   the backups a deployment took, sent away and rotated
 
 {verb} <verb> --help prints that verb's own usage (docs/boundary.md)."""
 run = """
@@ -139,6 +142,34 @@ build lock in every profile directory at the front of its line (docs/deploy.md).
 --all                     clears the whole directory but its lock files; every checkout then
                           builds afresh"""
 
+full = """
+usage: {verb} full [--due <HH:MM>]
+
+Starts the daily whole run of the repository in a unit of its own and ends (docs/suite.md): the main
+branch's head in a tree of its own, set up, the static check, then every unit, what never started run
+again by name. A run that fails sends a full-suite-failed event. Inside its unit it runs to its end
+and exits 1 where it failed; a second run meeting one at work is refused with 2.
+
+--due  start only where no run started since that time of day, local time"""
+deploy = """
+usage: {verb} deploy [--commit <sha>] [--dry-run] [--no-check] [--before-start <command>]
+
+Puts a commit of the repository live (docs/deploy.md): the checkout's HEAD, or the commit named,
+gated by the static check and the suite, backed up, built into a release of its own, flipped onto,
+its services restarted and watched, and rolled back where they do not stay up. Outside a
+deployment's unit it starts one, prints its name and how to read its journal, and exits 0.
+
+--commit        the commit to put live, which the remote must hold
+--dry-run       say what would be done, here, and change nothing
+--no-check      leave the gate out, where the caller already ran it
+--before-start  a command run between the bot service's stop and its start"""
+backups = """
+usage: {verb} backups
+
+Sends every backup a deployment took and the remote does not yet hold, reads each back to match its
+size and checksum, and rotates them there and here (docs/deploy.md). Exits 1 where any failed to
+send, the rest sent all the same."""
+
 # What `classify` answers: `light`, or `heavy` with {language} the language that claims the command
 # and, on the line after it, `instead` with {testbed} the running binary and {words} the command's words.
 [classify]
@@ -203,6 +234,19 @@ to_fix = "{count} import(s) to fix ({files} file(s)); write them with --fix"
 fixed = "{count} import(s) fixed ({files} file(s))"
 unit = "imports"
 how = "ask again over fewer files."
+
+# What a value clap reads for a verb is refused with where it does not read.
+[words]
+not_named = "it names nothing: give a value that is neither empty nor a flag"
+not_a_time = "it is no time of day: give it as HH:MM"
+
+# What `backups` says: {dir} the backup directory, {seconds} how long it waits for another run.
+[backups]
+none_declared = "the declaration names no [deploy.backup], so there are no backups to send"
+local_only = "the declaration names no remote, so the backups in {dir} stay on this machine"
+holder = "backups"
+wait_seconds = 10800
+locked = "backups: another run held the upload for {seconds}s, so nothing was sent; run it again"
 
 # What `prune` says (docs/deploy.md, 「The Cargo build directory」): {root} the build directory, {what}
 # what it takes, {verb} whether it was removed, the counts of what it took, {checkouts} the checkouts'

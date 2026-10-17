@@ -55,7 +55,8 @@ pub const BACKUP_DIR_VARIABLE: &str = "BMO_BACKUP_DIR";
 pub const BOT_UNIT_VARIABLE: &str = "BMO_UNIT";
 
 /// Where a deployment lays its commit down, each place the declaration's unless the environment names
-/// another (docs/boundary.md, 「The environment」).
+/// another (docs/boundary.md, 「The environment」); the deploy tree is the declaration's alone, since every
+/// process a release starts carries `BMO_DEPLOY_DIR` naming its own release.
 #[derive(Debug, Clone)]
 pub struct DeployPlaces {
   /// The checkout the commit is taken from.
@@ -79,7 +80,7 @@ impl DeployPlaces {
     let (Some(root), Some(data)) = (&deploy.root, &deploy.data_root) else {
       return Err(said.no_deploy.clone());
     };
-    let deploy_dir = named("BMO_DEPLOY_DIR").unwrap_or_else(|| repo.path(root, env).join(&deploy.link));
+    let deploy_dir = repo.path(root, env).join(&deploy.link);
     let data_root = repo.path(data, env);
     let home = PathBuf::from(env.get("HOME").map_or("/", String::as_str));
 
@@ -109,7 +110,8 @@ pub struct DeployAsk {
   pub before_start: Option<String>,
   /// The deployment's own unit, which its progress record names.
   pub unit: Option<String>,
-  /// The command the backup upload's unit runs: the binary's `backups` verb.
+  /// What the backup upload's unit is started with after `systemd-run`'s own words: its options, then the
+  /// binary's `backups` verb.
   pub upload: Option<Vec<String>>,
 }
 

@@ -77,7 +77,7 @@ pub fn suite(args: SuiteArgs) -> u8 {
   }
 
   if args.again {
-    run_judged(&repo, &ask, &data_root(), &Hook::of(Some(&repo), &env))
+    run_judged(&repo, &ask, &data_root(), &Hook::of(Some(&repo), &env)).0
   } else {
     run(&repo, &ask)
   }

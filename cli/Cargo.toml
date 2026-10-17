@@ -15,8 +15,10 @@ path = "src/main.rs"
 
 [dependencies]
 bmo-testbed-core = { path = "../core" }
+bmo-testbed-deploy = { path = "../deploy" }
 bmo-testbed-suite = { path = "../suite" }
 brush-parser.workspace = true
+chrono = { workspace = true, features = ["clock"] }
 clap.workspace = true
 futures-util.workspace = true
 reqwest = { workspace = true, features = ["stream"] }

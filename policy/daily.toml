@@ -7,6 +7,8 @@
 # A tree that was there could not be moved to {commit}, or one that was not could not be made at it.
 not_moved = "the check tree {tree} could not be moved to {commit}: {said}"
 not_made = "the check tree {tree} could not be made at {commit}: {said}"
+# A declared setup step that failed in the tree.
+setup_failed = "the tree's setup `{command}` failed: {said}"
 
 [run]
 # Where it went, since it never runs in its caller's process.
@@ -27,6 +29,10 @@ failed = "full-suite: FAILED — {why}"
 again = "full-suite: {count} never started; running them again: {files}"
 # A round that wrote no verdict.
 no_verdict = "suite: no verdict was written (exit {code})"
+# What the run's rounds came to, {line} each round's verdict joined.
+pass = "full-suite: {line}"
+# The step the event names where the tree could not be put on the head or set up.
+setup_step = "setup"
 # Between the verdicts of a pass's rounds.
 joiner = "; run again: "
 

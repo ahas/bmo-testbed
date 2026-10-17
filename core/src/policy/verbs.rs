@@ -18,6 +18,26 @@ pub struct UsageWords {
   pub imports: String,
   pub cargo: String,
   pub prune: String,
+  pub full: String,
+  pub deploy: String,
+  pub backups: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ValueWords {
+  pub not_named: String,
+  pub not_a_time: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BackupsWords {
+  pub none_declared: String,
+  pub local_only: String,
+  pub holder: String,
+  pub wait_seconds: u64,
+  pub locked: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -125,6 +145,8 @@ pub struct Verbs {
   pub check: CheckWords,
   pub dashes: DashesWords,
   pub imports: ImportsWords,
+  pub words: ValueWords,
+  pub backups: BackupsWords,
   pub prune: PruneWords,
 }
 

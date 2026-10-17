@@ -211,7 +211,7 @@ bmo-testbed deploy [--commit <sha>] [--dry-run] [--no-check] [--before-start <co
 - Puts the commit live (`docs/deploy.md`). Outside a deployment's unit it starts one, prints its name
   and the command that reads its journal, and exits 0; inside it, it runs and exits 0 where the commit
   went live, 1 where it failed or was rolled back. Its refusals exit 2 in the caller's own process.
-  `--dry-run` says what it would do and changes nothing.
+  `--dry-run` says in the caller's own process what it would do, changes nothing and starts no unit.
 
 ### `backups`
 
@@ -244,7 +244,7 @@ bmo-testbed backups
 | `BMO_TEST_TEMPLATE_URL` | the declared migrate command | Set by `template make`: the database to migrate |
 | `BMO_TEST_HOME` | a consumer's code under test | Set by the test kit's test home: the file's home. A process that carries it is a test |
 | `BMO_FULL_CHECK_DIR` | `full` | The daily whole run's tree |
-| `BMO_DEPLOY_DIR` | `deploy`, every process of a release | The release a process reads; handed on to what it starts |
+| `BMO_DEPLOY_DIR` | every process of a release | The release a process reads; handed on to what it starts. `deploy` never takes its deploy tree from it |
 | `BMO_TESTBED_CALLED_FROM` | every verb a checkout runs its own of | Set by the hand-over to a checkout's own binary: the directory the words were given in, which a path among them is read from |
 | `BMO_DEPLOY_UNIT` | `deploy`, `full` | Set inside a deployment's or a whole run's unit: its name. A run finding it runs where it is |
 | `BMO_DEPLOY_PROGRESS` | `deploy` | Another progress record file |

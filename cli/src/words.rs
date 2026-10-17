@@ -37,6 +37,41 @@ pub enum Verb {
   Imports(ImportsArgs),
   Cargo(CargoArgs),
   Prune(PruneArgs),
+  Full(FullArgs),
+  Deploy(DeployArgs),
+  Backups,
+}
+
+// A word that names something: not empty, and not a flag.
+fn named(word: &str) -> Result<String, String> {
+  if word.trim().is_empty() || word.starts_with('-') {
+    Err(VERBS.words.not_named.clone())
+  } else {
+    Ok(word.to_owned())
+  }
+}
+
+// A time of day, as a clock shows it.
+fn time_of_day(word: &str) -> Result<chrono::NaiveTime, String> {
+  chrono::NaiveTime::parse_from_str(word, "%H:%M").map_err(|_| VERBS.words.not_a_time.clone())
+}
+
+#[derive(Debug, Args)]
+pub struct FullArgs {
+  #[arg(long, value_parser = time_of_day)]
+  pub due: Option<chrono::NaiveTime>,
+}
+
+#[derive(Debug, Args)]
+pub struct DeployArgs {
+  #[arg(long, value_parser = named)]
+  pub commit: Option<String>,
+  #[arg(long)]
+  pub dry_run: bool,
+  #[arg(long)]
+  pub no_check: bool,
+  #[arg(long, value_parser = named)]
+  pub before_start: Option<String>,
 }
 
 // A positive whole number of seconds.
@@ -230,7 +265,10 @@ pub fn read(args: impl IntoIterator<Item = OsString>) -> Result<Words, clap::Err
     })
     .mut_subcommand("imports", |verb| verb.override_help(usage(&said.imports)))
     .mut_subcommand("cargo", |verb| verb.override_help(usage(&said.cargo)))
-    .mut_subcommand("prune", |verb| verb.override_help(usage(&said.prune)));
+    .mut_subcommand("prune", |verb| verb.override_help(usage(&said.prune)))
+    .mut_subcommand("full", |verb| verb.override_help(usage(&said.full)))
+    .mut_subcommand("deploy", |verb| verb.override_help(usage(&said.deploy)))
+    .mut_subcommand("backups", |verb| verb.override_help(usage(&said.backups)));
   let matches = command.try_get_matches_from(args)?;
 
   Words::from_arg_matches(&matches)

@@ -220,8 +220,9 @@ fn own_log() -> String {
 /// The suite run with `--again` (docs/suite.md, 「What failed runs once more」): run once, and where it failed
 /// or left units unstarted, run once more over what it named, judged on that second run. What passed only
 /// the second time is written down under the data root and sent to the hook as `suite-flaky`. Every line
-/// both runs write goes to standard error as it comes; the exit code the judgement ends with.
-pub fn run_judged(repo: &Repository, ask: &SuiteAsk, data_root: &Path, hook: &Hook) -> u8 {
+/// both runs write goes to standard error as it comes. The exit code the judgement ends with, and what was
+/// flaky.
+pub fn run_judged(repo: &Repository, ask: &SuiteAsk, data_root: &Path, hook: &Hook) -> (u8, Flaky) {
   let said = &SUITE.again;
   let heard = Mutex::new(String::new());
   let say = |line: &str| {
@@ -259,7 +260,7 @@ pub fn run_judged(repo: &Repository, ask: &SuiteAsk, data_root: &Path, hook: &Ho
   });
 
   if runs.again.is_none() {
-    return code;
+    return (code, Flaky::default());
   }
 
   if !runs.passed() {
@@ -270,7 +271,7 @@ pub fn run_judged(repo: &Repository, ask: &SuiteAsk, data_root: &Path, hook: &Ho
         &[("mark", &SUITE.lines.mark), ("names", &runs.failures().join(&said.joiner))]
       )
     );
-    return last;
+    return (last, Flaky::default());
   }
 
   let flaky = runs.flaky();
@@ -307,5 +308,5 @@ pub fn run_judged(repo: &Repository, ask: &SuiteAsk, data_root: &Path, hook: &Ho
     });
   }
 
-  last
+  (last, flaky)
 }
