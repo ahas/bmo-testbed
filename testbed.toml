@@ -5,9 +5,9 @@ testbed = 0
 name = "bmo-testbed"
 
 [test]
-# The Cargo workspace's crates, and the test kit's own tests run by `bun test`.
+# The Cargo workspace's crates, and the test kit: a project of its own, whose check script bun runs,
+# its type check and then its own tests.
 languages = ["cargo", "bun"]
-files = ["testkit/tests/**/*.test.ts"]
 setup = ["cd testkit && bun install --frozen-lockfile"]
 
 # The scratch database's tests make their own databases on the server, so no template is named.
