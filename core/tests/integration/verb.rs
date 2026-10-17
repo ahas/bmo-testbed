@@ -1,94 +1,181 @@
-//! The testbed's `run` and `status` verbs (docs/boundary.md, 「The verbs」): the words they read, and the
-//! words they refuse, with the code they end on and nothing placed or run.
+//! The testbed's `run` and `status` verbs over their words (docs/boundary.md, 「The verbs」): what they
+//! refuse, with the code they end on and nothing placed or run; where a run is asked to be placed; and the
+//! close line `status` reads.
 
-use bmo_testbed_core::policy::fill_marks;
+use std::cell::Cell;
+use std::process::Command;
+
+use bmo_testbed_core::close_line::{close_line_path, lock_file_name};
+use bmo_testbed_core::placement::{DEPLOY_UNIT_VARIABLE, Local, PlaceAsk, Placement, runs_here};
 use bmo_testbed_core::policy::lanes::LANES;
-use bmo_testbed_core::verb::{Asked, REFUSED_EXIT_CODE, Refused, RunWords, VerbGround, main, read_words};
+use bmo_testbed_core::turn::{Env, HELD_VARIABLE, Lane};
+use bmo_testbed_core::verb::{REFUSED_EXIT_CODE, RunWords, VerbGround, run, status_json};
 
 fn words(line: &[&str]) -> Vec<String> {
   line.iter().map(|word| (*word).to_owned()).collect()
 }
 
-// The verb run over the words where nothing may be placed, its code and whether it went to place a run.
-fn refused_code(line: &[&str]) -> (u8, bool) {
-  let dir = tempfile::tempdir().unwrap();
-  let mut placed = false;
-  let code = main(
-    &words(line),
-    &mut VerbGround {
-      verb: "bmo-testbed",
-      data_root: dir.path().to_path_buf(),
-      close_line: None,
-      place: &mut |_| {
-        placed = true;
-        Some(0)
-      },
-    },
-  );
-
-  (code, placed)
+// A placement that answers with a code of its own, and says what it was asked.
+struct Elsewhere {
+  asked: Cell<Option<(Vec<String>, Lane, u64)>>,
 }
 
-// "reads its own words before the command and the command after them"
-#[test]
-fn the_verb_reads_its_own_words_before_the_command_and_the_command_after_them() {
-  assert_eq!(
-    read_words(&words(&["--narrow", "--guard", "60", "--adapter", "cargo", "--", "cargo", "test"])),
-    Ok(Asked::Run(RunWords {
-      command: words(&["cargo", "test"]),
-      narrow: true,
-      adapter: Some("cargo".to_owned()),
-      guard_seconds: Some(60.0),
-      wait_seconds: None,
-    }))
-  );
-  assert_eq!(
-    read_words(&words(&["cargo", "test", "--", "--nocapture"])),
-    Ok(Asked::Run(RunWords {
-      command: words(&["cargo", "test", "--", "--nocapture"]),
-      ..RunWords::default()
-    }))
-  );
-  assert_eq!(read_words(&words(&["status", "--json"])), Ok(Asked::Status { json: true }));
-  assert_eq!(read_words(&words(&["--help"])), Ok(Asked::Usage));
-}
-
-// "refuses a line with no command, or with a flag it does not read"
-#[test]
-fn a_line_with_no_command_or_a_flag_it_does_not_read_is_refused() {
-  let said = &LANES.verb;
-
-  assert_eq!(
-    read_words(&[]),
-    Err(Refused {
-      said: said.no_command.clone(),
-      hint: true
-    })
-  );
-  assert_eq!(
-    read_words(&words(&["--fast", "--", "true"])),
-    Err(Refused {
-      said: fill_marks(&said.flag_as_command, &[("word", "--fast")]),
-      hint: true
-    })
-  );
-  assert_eq!(
-    read_words(&words(&["--wait", "0", "--", "true"])),
-    Err(Refused {
-      said: fill_marks(&said.seconds, &[("flag", "--wait")]),
-      hint: false
-    })
-  );
-
-  for line in [&[][..], &["--fast", "--", "true"], &["--adapter", "cobol", "--", "true"]] {
-    assert_eq!(refused_code(line), (REFUSED_EXIT_CODE, false), "{line:?}");
+impl Placement for Elsewhere {
+  fn place(&self, ask: &PlaceAsk<'_>) -> Option<u8> {
+    self.asked.set(Some((ask.command.to_vec(), ask.lane, ask.guard_seconds)));
+    Some(9)
   }
 }
 
-// The usage's defaults are the policy's own numbers, each a mark the verb fills.
+// "refuses a language it does not know, naming the ones there are, and places nothing"
 #[test]
-fn the_usage_names_the_verb_and_the_policys_numbers_by_their_marks() {
+fn a_language_it_does_not_know_is_refused_and_nothing_is_placed() {
+  let dir = tempfile::tempdir().unwrap();
+  let elsewhere = Elsewhere {
+    asked: Cell::new(None),
+  };
+  let code = run(
+    &RunWords {
+      command: words(&["true"]),
+      adapter: Some("cobol".to_owned()),
+      ..RunWords::default()
+    },
+    &VerbGround {
+      data_root: dir.path().to_path_buf(),
+      env: Env::new(),
+      place: &elsewhere,
+    },
+  );
+
+  assert_eq!(code, REFUSED_EXIT_CODE);
+  assert_eq!(elsewhere.asked.take(), None);
+}
+
+// "a run is placed before its turn, and ends with the code the placement answers"
+#[test]
+fn a_run_ends_with_the_code_its_placement_answers() {
+  let dir = tempfile::tempdir().unwrap();
+  let elsewhere = Elsewhere {
+    asked: Cell::new(None),
+  };
+  let asked = RunWords {
+    command: words(&["cargo", "test"]),
+    narrow: true,
+    guard_seconds: Some(60.0),
+    ..RunWords::default()
+  };
+  // Started outside any turn and any unit, whatever turn the test itself runs in.
+  let ground = VerbGround {
+    data_root: dir.path().to_path_buf(),
+    env: Env::new(),
+    place: &elsewhere,
+  };
+
+  assert_eq!(run(&asked, &ground), 9);
+  assert_eq!(elsewhere.asked.take(), Some((words(&["cargo", "test"]), Lane::Narrow, 60)));
+}
+
+// "a run inside a held turn or a deployment's unit runs where it stands"
+#[test]
+fn a_run_inside_a_held_turn_or_a_unit_is_never_placed() {
+  let with = |name: &str, value: &str| Env::from([(name.to_owned(), value.to_owned())]);
+
+  assert!(runs_here(&with(HELD_VARIABLE, "4242")));
+  assert!(runs_here(&with(DEPLOY_UNIT_VARIABLE, "bmo-deploy-1")));
+  assert!(!runs_here(&with(HELD_VARIABLE, "")));
+  assert!(!runs_here(&Env::new()));
+  assert_eq!(Local.place(&placed(&Env::new())), None);
+}
+
+fn placed(env: &Env) -> PlaceAsk<'_> {
+  PlaceAsk {
+    command: &[],
+    lane: Lane::Wide,
+    wait_seconds: 1,
+    guard_seconds: 1,
+    cwd: std::env::temp_dir(),
+    env,
+  }
+}
+
+// "a caller's wait is a job's call's or a unit's where it names none, and its guard the run's own"
+#[test]
+fn the_wait_and_guard_a_placement_is_handed() {
+  let numbers = &LANES.numbers;
+  let job = Env::from([("CLAUDE_PID".to_owned(), "4242".to_owned())]);
+
+  assert_eq!(PlaceAsk::wait_of(None, &job), numbers.job_wait_seconds);
+  assert_eq!(PlaceAsk::wait_of(None, &Env::new()), numbers.unit_wait_seconds);
+  assert_eq!(PlaceAsk::wait_of(Some(7.0), &job), 7);
+  assert_eq!(PlaceAsk::guard_of(None), numbers.guard_seconds);
+  assert_eq!(PlaceAsk::guard_of(Some(60.0)), 60);
+}
+
+// "every worktree of one repository shares its close line, and outside a repository there is none"
+#[test]
+fn every_worktree_of_a_repository_shares_one_close_line() {
+  let dir = tempfile::tempdir().unwrap();
+  let repo = dir.path().join("repo");
+  let git = |args: &[&str]| {
+    assert!(
+      Command::new("git").args(args).current_dir(&repo).output().unwrap().status.success(),
+      "{args:?}"
+    );
+  };
+
+  std::fs::create_dir_all(repo.join("sub")).unwrap();
+  git(&["init", "-q"]);
+  git(&[
+    "-c",
+    "user.name=t",
+    "-c",
+    "user.email=t@example.com",
+    "commit",
+    "-q",
+    "--allow-empty",
+    "-m",
+    "start",
+  ]);
+  git(&["worktree", "add", "-q", "../other"]);
+
+  let data = dir.path().join("data");
+  let main = close_line_path(&data, &repo.join("sub")).unwrap();
+
+  assert_eq!(close_line_path(&data, &dir.path().join("other")), Some(main.clone()));
+  assert!(main.starts_with(data.join("locks")));
+  assert_eq!(close_line_path(&data, &data), None);
+}
+
+// "a lock's file name keeps the tail of a long name, and the digest of the whole tells two apart"
+#[test]
+fn a_lock_file_name_is_safe_short_and_apart() {
+  let long = format!("close:/{}/repo/.git", "deep".repeat(30));
+  let name = lock_file_name(&long);
+
+  assert!(name.ends_with(".lock"));
+  assert!(name.starts_with("repo-.git-") || name.contains("-repo-.git-"), "{name}");
+  assert!(name.chars().all(|char| char.is_ascii_alphanumeric() || matches!(char, '.' | '_' | '-')));
+  assert_ne!(lock_file_name("close:/a/b"), lock_file_name("close:/a-b"));
+  assert!(lock_file_name("::").starts_with("root-"));
+}
+
+// "status as JSON carries both lanes and the close line, null where none is named"
+#[test]
+fn the_status_json_carries_the_lanes_and_the_close_line() {
+  let dir = tempfile::tempdir().unwrap();
+  let none: serde_json::Value = serde_json::from_str(&status_json(None)).unwrap();
+  let named: serde_json::Value =
+    serde_json::from_str(&status_json(Some(&dir.path().join("close.lock")))).unwrap();
+
+  assert!(none["wide"].is_object() && none["narrow"].is_object());
+  assert!(none["close_line"].is_null());
+  assert_eq!(named["close_line"], serde_json::json!({ "holder": null, "waiting": [] }));
+}
+
+// The usage's defaults are the policy's own numbers, each a mark the binary fills.
+#[test]
+fn the_run_usage_names_the_policys_numbers_by_their_marks() {
   for mark in ["{verb}", "{guard}", "{job_wait}", "{unit_wait}", "{kept}"] {
-    assert!(LANES.verb.usage.contains(mark), "{mark}");
+    assert!(bmo_testbed_core::policy::verbs::VERBS.usage.run.contains(mark), "{mark}");
   }
 }

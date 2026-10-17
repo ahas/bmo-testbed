@@ -5,11 +5,13 @@
 //! check.
 
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 use crate::policy::close_line::CLOSE_LINE;
 use crate::policy::fill_marks;
@@ -46,7 +48,7 @@ impl CloseEntry {
 }
 
 /// The line as it stands: the close holding it, and the closes waiting behind it in order.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
 pub struct CloseLine {
   pub holder: Option<CloseEntry>,
   pub waiting: Vec<CloseEntry>,
@@ -64,6 +66,55 @@ fn read_holder(path: &Path) -> Option<CloseEntry> {
     serde_json::from_str(&std::fs::read_to_string(holder_record_path(path)).ok()?).ok()?;
 
   process_alive(record.pid).then_some(record)
+}
+
+/// Where the close line of the repository a directory stands in is kept under a data root: one lock to a
+/// repository under the data root's `locks/`, named by its common git directory so every worktree of it
+/// shares the one line; none outside a repository.
+pub fn close_line_path(data_root: &Path, from: &Path) -> Option<PathBuf> {
+  let done = Command::new("git")
+    .args(["rev-parse", "--path-format=absolute", "--git-common-dir"])
+    .current_dir(from)
+    .stdin(Stdio::null())
+    .stderr(Stdio::null())
+    .output()
+    .ok()?;
+  let common = String::from_utf8_lossy(&done.stdout).trim().to_owned();
+
+  (done.status.success() && !common.is_empty())
+    .then(|| data_root.join("locks").join(lock_file_name(&format!("close:{common}"))))
+}
+
+/// The file a lock of this name stands in: the name made safe for a file, cut from the front where it is
+/// long, since the tail names the repository, with the digest of the whole name carrying what the cut threw
+/// away.
+pub fn lock_file_name(name: &str) -> String {
+  let numbers = &CLOSE_LINE.numbers;
+  let mut slug = String::new();
+  let mut replacing = false;
+
+  // Each run of characters a file name does not take becomes one dash.
+  for char in name.chars() {
+    let kept = char.is_ascii_alphanumeric() || matches!(char, '.' | '_' | '-');
+
+    if kept {
+      slug.push(char);
+    } else if !replacing {
+      slug.push('-');
+    }
+
+    replacing = !kept;
+  }
+
+  let slug = slug.trim_matches('-');
+  let kept = slug[slug.len().saturating_sub(numbers.lock_name_chars)..].trim_start_matches('-');
+  let digest = format!("{:x}", Sha256::digest(name.as_bytes()));
+
+  format!(
+    "{}-{}.lock",
+    if kept.is_empty() { "root" } else { kept },
+    &digest[..numbers.lock_digest_chars]
+  )
 }
 
 /// The line read now. A holder record whose process is gone is nobody's.

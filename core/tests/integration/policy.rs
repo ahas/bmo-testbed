@@ -13,6 +13,7 @@ use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::policy::quick_checks::QUICK_CHECKS;
 use bmo_testbed_core::policy::static_check::STATIC_CHECK;
 use bmo_testbed_core::policy::suite::SUITE;
+use bmo_testbed_core::policy::verbs::VERBS;
 
 // "every part of the policy reads as its type": each file met once, so one that does not read fails here
 // before anything runs on it.
@@ -29,6 +30,7 @@ fn every_part_reads_as_its_type() {
   LazyLock::force(&BACKUPS);
   LazyLock::force(&DECLARATION);
   LazyLock::force(&QUICK_CHECKS);
+  LazyLock::force(&VERBS);
 
   assert_eq!(ANSWER.ceiling_chars, 30_000);
   assert_eq!(SUITE.lines.mark, "suite:");

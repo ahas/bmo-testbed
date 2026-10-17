@@ -24,6 +24,7 @@ pub struct Numbers {
   pub guard_seconds: u64,
   pub failure_lines: usize,
   pub log_keep_days: u64,
+  pub placement_answer_seconds: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -68,6 +69,8 @@ pub struct PlacedWords {
   pub failed: String,
   pub unpushed: String,
   pub uncopied: String,
+  pub unread: String,
+  pub no_result: String,
   pub running: String,
 }
 
@@ -113,19 +116,7 @@ pub struct StatusWords {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct VerbWords {
-  pub usage: String,
-  pub hint: String,
-  pub takes_value: String,
-  pub seconds: String,
-  pub flag_as_command: String,
-  pub no_command: String,
   pub no_language: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct RefusalWords {
-  pub heavy: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -159,7 +150,6 @@ pub struct Lanes {
   pub run: RunWords,
   pub status: StatusWords,
   pub verb: VerbWords,
-  pub refusal: RefusalWords,
   pub memory: MemoryWords,
 }
 

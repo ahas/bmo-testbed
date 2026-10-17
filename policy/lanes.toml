@@ -28,6 +28,8 @@ stop_grace_seconds = 5
 guard_seconds = 1800
 failure_lines = 60
 log_keep_days = 7
+# How long a run waits for the placement endpoint's answer before it runs here.
+placement_answer_seconds = 5
 
 # How a command killed for want of memory is run again (docs/testbed.md, 「Memory」): how long it waits
 # before it looks at the memory at all, how many gigabytes have to be available, how often and how long
@@ -67,9 +69,14 @@ kept = "; its place is kept for {seconds}s, so run the same command again now to
 [placed]
 # The endpoint gave no answer that reads, {endpoint} where it was asked and {why} what it came to.
 local = "testbed: the placement endpoint {endpoint} gave no answer ({why}); running here"
-failed = "{machine}: {said}"
-unpushed = "{machine}: the checkout's commit could not reach the bench: {said}"
-uncopied = "{machine}: the checkout's open files could not be copied: {said}"
+# What dropped a run before it ended, each the {said} of `run.dropped`: a step making the bench ready,
+# with {said} what the step said; a run whose stream could not be read, {why} what it came to; and a
+# stream that ended with no result.
+failed = "the bench could not be made ready: {said}"
+unpushed = "the checkout's commit could not reach the bench: {said}"
+uncopied = "the checkout's open files could not be copied: {said}"
+unread = "its run could not be read: {why}"
+no_result = "its run ended with no result"
 running = "testbed: running on {machine} in {bench}"
 
 # A command's wait and run, as every step of a check says them.
@@ -113,41 +120,10 @@ next = " — next after the front"
 kept = " — place kept for a job coming back"
 close_line = "the close line:"
 
-# The `run` and `status` verbs' own words: their usage, {verb} the binary's name and {guard},
-# {job_wait}, {unit_wait} and {kept} the `numbers` they stand for, and their refusals.
+# The `run` verb's refusal of a language it does not know, {name} the name given and {names} the ones
+# there are.
 [verb]
-usage = """
-usage: {verb} run [--narrow] [--adapter <name>] [--guard <seconds>] [--wait <seconds>] -- <command…>
-       {verb} status [--json]
-
-Runs a heavy test or build command in the machine's turn: it waits behind every other such
-command of its lane on this machine, then runs alone there, handed the lane's width, and ends on
-one line — passed or not, how many tests passed, failed and were skipped, how long it ran and
-waited, and the log holding its whole output — with what failed under it.
-
---narrow   the narrow lane: beside the wide lane's holder, on a quarter of the machine, for a
-           command that needs only a few threads — one file run again and again, a script of
-           its own over one test
---adapter  the language that runs it, instead of the one that claims the command
---guard    seconds the command may hold the machine before it is cut (default {guard})
---wait     seconds to wait for the turn (default {job_wait} in a job's call, {unit_wait} elsewhere)
-
-Where the turn does not come within the wait, nothing runs, it ends with exit code 75, and a job's
-place in the line is kept for {kept} seconds: run the same command again at once.
-
-status  each lane: who holds the turn, since when, and who waits behind it in order, then the close
-        line of the repository it is run in (docs/testbed.md)"""
-hint = "Run {verb} --help for the whole usage."
-takes_value = "testbed: {flag} takes a value"
-seconds = "testbed: {flag} takes a positive number of seconds"
-flag_as_command = "testbed: {word} is not a flag this command reads, and a command does not begin with one"
-no_command = "testbed: name the command after --, or ask for status"
 no_language = "testbed: no language is named {name}; there are {names}"
-
-# The refusal of a heavy command started outside the testbed (docs/testbed.md, 「A shell hook sends a
-# job's heavy command to it」), {words} the command and {testbed} the line that runs it there.
-[refusal]
-heavy = "refused: `{words}` is a heavy test or build command, and one such command runs at a time on this machine, in the testbed's turn, whichever repository it runs in. Run it there in its place — {testbed} -- {words} — with the call's timeout set to 600000. It waits its turn, saying where it stands, runs alone and wide, and ends on one result line with the log's path; where the turn does not come in time it ends with exit 75 and keeps the job's place, so run the same line again (docs/testbed.md)."
 
 # A heavy command run in its turn and run again where the kernel killed it for want of the machine's
 # memory rather than at the ceiling of a fence it stands in (docs/testbed.md, 「Memory」). Every line

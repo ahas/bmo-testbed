@@ -15,6 +15,7 @@ pub mod lanes;
 pub mod quick_checks;
 pub mod static_check;
 pub mod suite;
+pub mod verbs;
 
 /// A line of the policy with each `{name}` it holds filled in, every one at once so a value that itself
 /// holds a mark is left as it is; a mark nothing names stays.

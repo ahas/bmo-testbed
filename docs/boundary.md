@@ -81,13 +81,17 @@ bmo-testbed status [--json]
 ### `classify`
 
 ```
-bmo-testbed classify [--json] <shell line>
+bmo-testbed classify [--json] [--takes-turn <command>]… <shell line>
 ```
 
 - Reads one shell line, given whole as one word, as the shell splits it (`docs/testbed.md`, 「A shell
   hook sends a job's heavy command to it」), and answers whether it holds a heavy command started
   outside the testbed.
-- Thin: `light`, or `heavy <language>` followed by the line to run instead.
+- **`--takes-turn`** names a command that takes the turn itself, as its program and the words it opens
+  with, one shell line, say `"tool cargo"`; a command opening that way is let through, with
+  everything after it in the same command. It may be given again.
+- Thin: `light`; or `heavy <language>` and, on the next line, the line to run instead: the running
+  binary's `run --` followed by the heavy command's words, quoted as the shell reads them.
 - **`--json`:** `heavy` (boolean), `language` (string or null), `command` (the heavy command's words, or
   null), `instead` (the line to run instead, or null).
 - Exits 0 for light, 1 for heavy, 2 where its words do not read. A line the parser cannot read is light.
@@ -317,26 +321,47 @@ keep (`docs/deploy.md`, 「The unit links」).
   | `wait_seconds`, `guard_seconds` | integers | The caller's wait and guard |
 
 - **The answer** is one JSON object. Its `place` is `local`, and the command runs here; or `remote`,
-  with `machine`, the placed machine's label, and `run`, the address of the run there. The caller then reads the run address as an
-  event stream: `output` events carry the run's output lines, and one `result` event carries the
-  result as the testbed's result line and the exit code.
+  with `machine`, the placed machine's label, `bench`, where the caller's copy of its checkout stands
+  there, and `run`, the address of the run there:
+
+  | Field of `bench` | Type | Meaning |
+  |---|---|---|
+  | `destination` | string | The machine as the caller's `ssh` reaches it |
+  | `path` | string | The bench directory on that machine |
+  | `ssh` | list of strings, optional | The `ssh` program and its options; `["ssh"]` where absent |
+
+- **The caller makes the bench ready** before it reads the run: where `path` holds no repository it
+  clones the checkout's remote there, or makes an empty repository where the checkout has none; it
+  pushes its `HEAD` there as the branch `bmo-bench` and checks it out detached; and it copies its open
+  files over with `rsync`, the files git ignores and the `.git` directory left out. A step that fails
+  ends the run as not run, exit code 75, with a line naming the step and what it said.
+- **The run address is an event stream,** asked once the bench is ready, which runs the bench's
+  declared setup and the command in that machine's own turn. Each `output` event's data is one line of
+  the run's output, which the caller writes to its standard error; one `result` event's data is one
+  JSON object with `line`, the testbed's result line, which the caller writes to its standard output,
+  and `code`, the exit code it ends with.
 - **Anything else is local:** no endpoint, one that does not answer within five seconds, an error, or an
   answer that does not read. The caller says so on a line and runs here.
 - **A stream that ends with no `result`** ends the run as not run, exit code 75.
 - **A run started on a placed machine is never placed again:** the remote side runs it inside a held
   turn of its own.
-- **In the crates the placement is a trait** with one method, asked with the run's words and answering
-  here or elsewhere with an exit code; the local placement, always here, is the default, and the HTTP
-  placement is a member of it.
+- **A run inside a held turn, or inside a deployment's or a whole run's unit, is never placed.**
+- **In the crates the placement is a trait** in `core` with one method, asked with the run's words and
+  answering here or elsewhere with an exit code; the local placement, always here, is the default, and
+  the HTTP placement in `cli` is a member of it.
 
 ## The crates
 
 - **Each crate's package is named for its folder** after `bmo-testbed-`: `bmo-testbed-core`,
   `bmo-testbed-scratch-database` and so on.
 - **`core`:** the lanes, the turn, the queue, the close line, the run and its result, the languages,
-  memory limits, the declaration reader and the policy loader. Its public types are the ones the status
-  fields above serialise: the lane, the queue, the entry, the close line and its entry; the turn's ask
-  and the turn held; the run's result; the language type every language is a member of.
+  memory limits, the placement, the declaration reader and the policy loader. Its public types are the
+  ones the status fields above serialise: the lane, the queue, the entry, the close line and its entry;
+  the turn's ask and the turn held; the run's result; the language type every language is a member of.
+  The close line of a repository stands where `core` names it from a data root and any directory of a
+  checkout, so a consumer holding the line and `status` reading it meet in one file.
+- **`cli`:** the `bmo-testbed` binary: each verb's words read and handed to the crates, the
+  classification of a shell line, and the HTTP placement.
 - **`suite`:** the whole-suite run, change selection, the static and quick checks, the Cargo verb, the
   superseded removal and the prune.
 - **`deploy`:** releases, the link flip, unit links, the deploy run, the progress record, rollback

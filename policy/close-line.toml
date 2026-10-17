@@ -10,9 +10,13 @@ held_by = "held by {who}"
 joiner = " · "
 pid = "pid {pid}"
 
-# How often a close waiting for the line says where it stands.
+# How often a close waiting for the line says where it stands; and the line's lock file name, its
+# repository's name made safe for a file and cut to `lock_name_chars` from the front, then that many hex
+# digits of the whole name's digest.
 [numbers]
 notice_seconds = 30
+lock_name_chars = 64
+lock_digest_chars = 12
 
 # The wide lane a close holds through each part of its check, {words} how its turn was settled.
 [stretch]

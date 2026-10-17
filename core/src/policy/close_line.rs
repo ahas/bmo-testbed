@@ -17,6 +17,8 @@ pub struct LineWords {
 #[serde(deny_unknown_fields)]
 pub struct LineNumbers {
   pub notice_seconds: u64,
+  pub lock_name_chars: usize,
+  pub lock_digest_chars: usize,
 }
 
 #[derive(Debug, Deserialize)]

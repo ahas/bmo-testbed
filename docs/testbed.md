@@ -79,7 +79,7 @@ flowchart TD
 - **A heavy command started outside the testbed is refused by the hook,** and the answer names the
   line to run instead: the same command after the testbed's `run` and `--`.
 - **What is let through:** a light command no language claims, a run of the testbed itself, and a
-  command the hook's own consumer names as one that takes the turn itself.
+  command the hook's own consumer names as one that takes the turn itself (`--takes-turn`).
 
 ## The lanes
 
@@ -219,13 +219,14 @@ flowchart TD
 ## A run on another machine
 
 - **A heavy run may be placed on another machine** before it asks for its turn, unless it was started
-  inside a turn already held. Where it goes is the placement endpoint's answer
+  inside a turn already held or inside a deployment's or a whole run's unit. Where it goes is the placement endpoint's answer
   (`docs/boundary.md`, 「Placement」); with no endpoint, or one that does not answer, the run stays
   on the machine it was started on.
 - **There it runs in a bench copy of the caller's checkout under that machine's own testbed:** the
-  caller's commit is pushed into a clone of the checkout's remote, its open files copied over,
-  ignored ones left out, the checkout's setup run, and the command run in that machine's own turn.
-  Its output and its one result line come back to the caller.
+  caller pushes its commit into a clone of the checkout's remote where the endpoint's answer names the
+  bench, and copies its open files over, ignored ones left out; the checkout's setup then runs there,
+  and the command in that machine's own turn. Its output and its one result line come back to the
+  caller.
 - **A run started on a placed machine stays there.**
 - **A machine that drops it** ends the run as not run, exit code 75, and the same command run again
   goes where the endpoint sends it next.

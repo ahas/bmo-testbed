@@ -37,7 +37,7 @@ pub fn process_env() -> Env {
 }
 
 /// The lanes, named in a declaration by their own lowercase names.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Lane {
   /// The machine's whole width.

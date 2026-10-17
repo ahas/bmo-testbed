@@ -1,0 +1,68 @@
+# The binary's own words (docs/boundary.md, 「The binary」 and 「The verbs」): the usage `--help` prints,
+# for the binary and for each verb, and what `classify` answers. A job reads the words, so they are
+# English. {verb} is the binary's name, and {guard}, {job_wait}, {unit_wait} and {kept} are the `lanes`
+# numbers they stand for.
+
+[usage]
+binary = """
+usage: {verb} <verb> [<words>…]
+
+run       a heavy test or build command, run in the machine's turn
+status    each lane and the repository's close line: who holds it, and who waits behind
+classify  whether a shell line holds a heavy command started outside the testbed
+suite     the repository's units, every one or those a change reaches
+
+{verb} <verb> --help prints that verb's own usage (docs/boundary.md)."""
+run = """
+usage: {verb} run [--narrow] [--adapter <name>] [--guard <seconds>] [--wait <seconds>] -- <command…>
+
+Runs a heavy test or build command in the machine's turn: it waits behind every other such
+command of its lane on this machine, then runs alone there, handed the lane's width, and ends on
+one line: passed or not, how many tests passed, failed and were skipped, how long it ran and
+waited, and the log holding its whole output, with what failed under it.
+
+--narrow   the narrow lane, beside the wide lane's holder on a quarter of the machine, for a
+           command that needs only a few threads: one file run again and again, a script of its
+           own over one test
+--adapter  the language that runs it, instead of the one that claims the command
+--guard    seconds the command may hold the machine before it is cut (default {guard})
+--wait     seconds to wait for the turn (default {job_wait} in a job's call, {unit_wait} elsewhere)
+
+Where the turn does not come within the wait, nothing runs, it ends with exit code 75, and a job's
+place in the line is kept for {kept} seconds: run the same command again at once."""
+status = """
+usage: {verb} status [--json]
+
+Each lane: its width, who holds the turn and since when, and who waits behind it in order; then the
+close line of the repository it is run in (docs/testbed.md).
+
+--json  the same as one JSON object (docs/boundary.md)"""
+classify = """
+usage: {verb} classify [--json] [--takes-turn <command>]… <shell line>
+
+Reads the shell line, given as one word, the way the shell splits it, and answers `light`, or
+`heavy` with the language claiming the command and the line to run in its place. Exits 0 for a
+light line and 1 for a heavy one.
+
+--takes-turn  a command that takes the turn itself, its program and the words it opens with
+--json        the answer as one JSON object (docs/boundary.md)"""
+suite = """
+usage: {verb} suite [--since <commit>] [--guard <seconds>] [--file-guard <seconds>] [--turn-wait <seconds>] [<word>…]
+
+Runs the repository's units in the machine's turn (docs/suite.md): every one, or those the change
+since a commit reaches. A word naming a path narrows the files, a word naming a unit exactly picks
+it, and every other word goes to each file's runner.
+
+--since       the commit the change is read from
+--guard       seconds the whole run may take (default the declaration's)
+--file-guard  seconds one unit may take (default the declaration's)
+--turn-wait   seconds to wait for the turn"""
+
+# What `classify` answers: `light`, or `heavy` with {language} the language that claims the command
+# and, on the line after it, `instead` with {testbed} the running binary and {words} the command's words.
+[classify]
+light = "light"
+heavy = "heavy {language}"
+instead = "{testbed} run -- {words}"
+# A `--takes-turn` value that holds no command the shell reads, {command} as given.
+unread = "classify: --takes-turn {command} holds no command the shell reads"
