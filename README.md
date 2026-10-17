@@ -35,6 +35,7 @@ and a release-based deployment of a repository onto the machine it runs on.
 | `test-support/` | The fixed ids a Rust test names its people, rooms and units by, the same as the test kit's |
 | `scratch-database/` | Per-test PostgreSQL databases cloned from a template a consumer's migrator makes |
 | `testkit/` | The TypeScript test kit a consumer preloads: the test home and the stand-ins |
+| `units/` | The user units this repository's deployment keeps: the Cargo build directory's prune and its timer |
 | `policy/` | The testbed's own fixed numbers and words, read by `core`'s policy loader |
 | `docs/` | The documents above |
 

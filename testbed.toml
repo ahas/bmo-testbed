@@ -25,3 +25,5 @@ binaries = ["bmo-testbed"]
 [deploy]
 root = "~/.local/share/bmo-testbed"
 data_root = "~/.local/share/bmo-testbed/data"
+# The prune of the shared Cargo build directory and its timer, kept by every deployment by their marks.
+units = ["units/*.service", "units/*.timer"]

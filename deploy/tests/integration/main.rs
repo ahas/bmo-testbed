@@ -5,6 +5,7 @@ mod adopt;
 mod backup;
 mod boot;
 mod deployment;
+mod own_units;
 mod progress;
 mod release;
 mod rollback;

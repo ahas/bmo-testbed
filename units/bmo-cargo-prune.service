@@ -1,0 +1,16 @@
+[Unit]
+Description=Prune of the shared Cargo build directory: what no live checkout's build stands on, and gone checkouts' target directories
+# docs/deploy.md, 「The Cargo build directory」. Started by its timer, which every deployment of this
+# repository links with this unit and starts (docs/deploy.md, 「The unit links」). It waits at the front of
+# Cargo's own build locks, never in the testbed's line, so it never removes anything under a build and
+# never waits out a queue of heavy commands while the disk fills. Where the directory stays over its
+# ceiling it sends an event to the hook its environment or the declaration names.
+
+[Service]
+Type=oneshot
+# The deploy tree, whose binary it runs and whose declaration names the hook.
+WorkingDirectory=%h/.local/share/bmo-testbed/deploy
+ExecStart=%h/.local/share/bmo-testbed/deploy/bin/bmo-testbed prune
+Environment=PATH=%h/.local/bin:%h/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Nice=10
+IOSchedulingClass=idle
