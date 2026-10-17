@@ -1,0 +1,231 @@
+[
+  {
+    "id": "suite/cargo-verb-and-prune",
+    "title": "Cargo verb and prune",
+    "what": "The cargo verb, Cargo run over the shared build directory and removing what a build superseded, and the prune verb with its timer, removing what no build reads any more and telling the event hook when the directory stays over its ceiling.",
+    "files": [
+      "suite/src/cargo.rs",
+      "suite/src/superseded.rs",
+      "suite/src/prune.rs",
+      "cli/src/cargo.rs",
+      "units/bmo-cargo-prune.service",
+      "units/bmo-cargo-prune.timer",
+      "docs/deploy.md",
+      "suite/tests/integration/prune.rs",
+      "suite/tests/integration/superseded.rs"
+    ],
+    "symbols": [],
+    "aliases": [],
+    "needs": [
+      "core/lanes-and-turn",
+      "core/event-hook",
+      "core/declaration",
+      "suite/change-selection",
+      "core/policy-loader"
+    ],
+    "base": "a77b4bf9e85365752d6413c539955efad43fc51c"
+  },
+  {
+    "id": "suite/change-check",
+    "title": "Change check",
+    "what": "The check verb a job runs on its change: the quick checks, the declared static steps and cargo check it owes, then the tests it touches, one step per language and folder, and each reached project's and tool's check, all into one log.",
+    "files": [
+      "suite/src/check.rs",
+      "cli/src/check.rs",
+      "docs/checks.md",
+      "suite/tests/integration/check.rs",
+      "cli/tests/integration/check.rs"
+    ],
+    "symbols": [],
+    "aliases": [],
+    "needs": [
+      "suite/change-selection",
+      "suite/static-check",
+      "suite/quick-checks",
+      "suite/suite-run",
+      "suite/test-log",
+      "core/declaration",
+      "core/lanes-and-turn",
+      "core/policy-loader"
+    ],
+    "base": "a77b4bf9e85365752d6413c539955efad43fc51c"
+  },
+  {
+    "id": "suite/change-selection",
+    "title": "Change selection",
+    "what": "Which packages, crates, projects of their own and tools a set of changed paths reaches, read from the repository's own manifests, cargo metadata and the declared languages' root files and lockfiles.",
+    "files": [
+      "suite/src/selection.rs",
+      "suite/src/workspace.rs",
+      "suite/src/crates.rs",
+      "suite/src/imports.rs",
+      "suite/src/touched.rs",
+      "suite/src/tool_checks.rs",
+      "suite/src/files.rs",
+      "docs/checks.md",
+      "suite/tests/integration/selection.rs",
+      "suite/tests/integration/workspace.rs"
+    ],
+    "symbols": [],
+    "aliases": [],
+    "needs": [
+      "core/declaration",
+      "core/languages",
+      "core/policy-loader"
+    ],
+    "base": "a77b4bf9e85365752d6413c539955efad43fc51c"
+  },
+  {
+    "id": "suite/moved-imports",
+    "title": "Moved imports",
+    "what": "The imports verb: finds the TypeScript imports a moved file left pointing at its old place and rewrites them to the new one.",
+    "files": [
+      "suite/src/moved_imports.rs",
+      "cli/src/imports.rs",
+      "docs/checks.md",
+      "suite/tests/integration/moved_imports.rs",
+      "cli/tests/integration/imports.rs"
+    ],
+    "symbols": [],
+    "aliases": [],
+    "needs": [
+      "suite/change-selection",
+      "core/policy-loader"
+    ],
+    "base": "a77b4bf9e85365752d6413c539955efad43fc51c"
+  },
+  {
+    "id": "suite/quick-checks",
+    "title": "Quick checks",
+    "what": "The quick checks a repository enables: wording against its glossary, dashes in people's text, Korean in code against its ledger, the layout of folders and manifests, and the dependency check, run by check quick and its parts.",
+    "files": [
+      "suite/src/quick/mod.rs",
+      "suite/src/quick/wording.rs",
+      "suite/src/quick/dashes.rs",
+      "suite/src/quick/korean.rs",
+      "suite/src/quick/layout.rs",
+      "suite/src/quick/dependencies.rs",
+      "suite/src/quick/rewrite.rs",
+      "suite/src/quick/source.rs",
+      "suite/src/quick/files.rs",
+      "cli/src/check.rs",
+      "docs/checks.md",
+      "suite/tests/integration/quick.rs"
+    ],
+    "symbols": [],
+    "aliases": [],
+    "needs": [
+      "core/declaration",
+      "suite/change-selection",
+      "core/answer-ceiling",
+      "core/policy-loader"
+    ],
+    "base": "a77b4bf9e85365752d6413c539955efad43fc51c"
+  },
+  {
+    "id": "suite/static-check",
+    "title": "Static check",
+    "what": "The static check: the enabled quick checks, then the repository's declared steps a change reaches, each in its directory and lane, then cargo fmt and clippy where a crate is marked.",
+    "files": [
+      "suite/src/static_check.rs",
+      "docs/checks.md",
+      "suite/tests/integration/static_check.rs"
+    ],
+    "symbols": [],
+    "aliases": [],
+    "needs": [
+      "core/declaration",
+      "suite/quick-checks",
+      "suite/change-selection",
+      "suite/cargo-verb-and-prune",
+      "core/lanes-and-turn",
+      "core/policy-loader"
+    ],
+    "base": "a77b4bf9e85365752d6413c539955efad43fc51c"
+  },
+  {
+    "id": "suite/suite-run",
+    "title": "Suite run",
+    "what": "The suite verb: every test file, crate, project and tool as one unit in a process of its own, a sweep's width at a time inside the machine's turn and a fence, each file run from its runner's configuration folder; --again runs failures once more.",
+    "files": [
+      "suite/src/run.rs",
+      "suite/src/sweep.rs",
+      "suite/src/unit.rs",
+      "suite/src/fence.rs",
+      "suite/src/once_more.rs",
+      "cli/src/suite.rs",
+      "docs/suite.md",
+      "suite/tests/integration/suite.rs",
+      "suite/tests/integration/once_more.rs",
+      "cli/tests/integration/suite_verb.rs"
+    ],
+    "symbols": [],
+    "aliases": [],
+    "needs": [
+      "core/declaration",
+      "core/languages",
+      "core/lanes-and-turn",
+      "suite/change-selection",
+      "suite/test-template",
+      "suite/test-log",
+      "core/event-hook",
+      "core/policy-loader"
+    ],
+    "base": "a77b4bf9e85365752d6413c539955efad43fc51c"
+  },
+  {
+    "id": "suite/test-count",
+    "title": "Test count",
+    "what": "The count verb: the tests the checkout holds by language, and with --since the tests a range removed, each accounted for by a Retired-test trailer or named as unaccounted.",
+    "files": [
+      "suite/src/count.rs",
+      "suite/src/titles.rs",
+      "cli/src/suite.rs",
+      "docs/checks.md",
+      "suite/tests/integration/count.rs"
+    ],
+    "symbols": [],
+    "aliases": [],
+    "needs": [
+      "core/policy-loader"
+    ],
+    "base": "a77b4bf9e85365752d6413c539955efad43fc51c"
+  },
+  {
+    "id": "suite/test-log",
+    "title": "Test log",
+    "what": "Reads a run's log back: its tally, verdict, failed tests and the units that never started; the log verb answers it thin or as JSON under the answer ceiling.",
+    "files": [
+      "suite/src/log.rs",
+      "cli/src/suite.rs",
+      "cli/tests/integration/log.rs",
+      "suite/tests/integration/log.rs"
+    ],
+    "symbols": [],
+    "aliases": [],
+    "needs": [
+      "core/answer-ceiling",
+      "core/policy-loader"
+    ],
+    "base": "a77b4bf9e85365752d6413c539955efad43fc51c"
+  },
+  {
+    "id": "suite/test-template",
+    "title": "Test template",
+    "what": "The suite's own PostgreSQL server and the template database a repository's declared migrate command makes, with its pool of clones; the template verb makes, drops and sweeps them.",
+    "files": [
+      "suite/src/template.rs",
+      "suite/src/test_server.rs",
+      "cli/src/suite.rs",
+      "docs/suite.md",
+      "suite/tests/integration/template.rs"
+    ],
+    "symbols": [],
+    "aliases": [],
+    "needs": [
+      "core/declaration",
+      "core/policy-loader"
+    ],
+    "base": "a77b4bf9e85365752d6413c539955efad43fc51c"
+  }
+]

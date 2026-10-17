@@ -1,0 +1,43 @@
+[
+  {
+    "id": "kit/scratch-database",
+    "title": "Scratch database",
+    "what": "A Rust test's own PostgreSQL database, cloned from a template made once per migrator the test hands in, and dropped with its guard.",
+    "files": [
+      "scratch-database/src/lib.rs",
+      "policy/scratch-database.toml",
+      "docs/suite.md"
+    ],
+    "symbols": [],
+    "aliases": [],
+    "needs": [
+      "core/policy-loader"
+    ],
+    "base": "a77b4bf9e85365752d6413c539955efad43fc51c"
+  },
+  {
+    "id": "kit/test-kit",
+    "title": "Test kit",
+    "what": "What a consumer's tests stand on: the bun test kit's isolated test home, scratch directories and module stand-ins under testkit/, and the fixed test ids shared by Rust and TypeScript tests.",
+    "files": [
+      "testkit/test-home.ts",
+      "testkit/scratch.ts",
+      "testkit/test-stand-ins.ts",
+      "testkit/ids.ts",
+      "testkit/package.json",
+      "testkit/bunfig.toml",
+      "test-support/src/lib.rs",
+      "docs/suite.md"
+    ],
+    "symbols": [
+      "setUpTestHome",
+      "scratchDir",
+      "standInModule",
+      "refused",
+      "OWNER_ID"
+    ],
+    "aliases": [],
+    "needs": [],
+    "base": "a77b4bf9e85365752d6413c539955efad43fc51c"
+  }
+]
