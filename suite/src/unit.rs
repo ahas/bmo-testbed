@@ -11,13 +11,12 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-// How long a unit's output is still read after its processes were taken down: a process that left the
-// group on its own can still hold the output open, and the run does not wait on it.
-const OUTPUT_GRACE: Duration = Duration::from_secs(2);
-/// How long a cut unit's processes are given to go after they are asked to, before they are killed.
-pub const KILL_AFTER: Duration = Duration::from_secs(5);
+use bmo_testbed_core::policy::suite::SUITE;
+
 // How often a running unit is looked at.
-const LOOK_EVERY: Duration = Duration::from_millis(50);
+fn look_every() -> Duration {
+  Duration::from_millis(SUITE.numbers.unit_poll_ms)
+}
 
 /// How a unit is started.
 pub struct UnitCommand {
@@ -86,7 +85,7 @@ fn gather(mut stream: impl Read + Send + 'static) -> Gathered {
 // ended.
 fn gathered(stream: Gathered, until: Instant) -> (String, bool) {
   while !stream.reader.is_finished() && Instant::now() < until {
-    std::thread::sleep(LOOK_EVERY);
+    std::thread::sleep(look_every());
   }
 
   let ended = stream.reader.is_finished();
@@ -154,16 +153,19 @@ pub fn run_unit(unit: &UnitCommand, guard: Duration) -> UnitRun {
       signal_group(leader, libc::SIGTERM);
     }
 
-    if asked_at.is_some_and(|asked| asked.elapsed() >= KILL_AFTER) {
+    if asked_at
+      .is_some_and(|asked| asked.elapsed() >= Duration::from_secs(SUITE.numbers.unit_kill_after_seconds))
+    {
       signal_group(leader, libc::SIGKILL);
     }
 
-    std::thread::sleep(LOOK_EVERY);
+    std::thread::sleep(look_every());
   };
 
   signal_group(leader, libc::SIGKILL);
 
-  let until = Instant::now() + OUTPUT_GRACE;
+  // A process that left the group on its own can still hold the output open, and the run does not wait on it.
+  let until = Instant::now() + Duration::from_secs(SUITE.numbers.unit_output_grace_seconds);
   let (said, said_whole) = gathered(out, until);
   let (warned, warned_whole) = gathered(err, until);
 

@@ -1,6 +1,7 @@
 //! The layout check (docs/checks.md, 「The quick checks」): the README's folder table against the tree's
 //! top-level folders, folders named for a language, and manifests against their workspace's members.
 
+use bmo_testbed_core::policy::quick_checks::QUICK_CHECKS;
 use bmo_testbed_suite::quick::layout::{
   checkout_layout, language_faults, manifest_faults, readme_folders, table_faults, top_folders,
 };
@@ -34,15 +35,22 @@ fn the_folder_table_names_every_top_level_folder_and_no_other() {
   );
 }
 
-// "a top-level folder, or a folder directly under one, is named for a language"
+// "a top-level folder, or a folder directly under one, is named for a language": the policy's two levels,
+// and a third where the levels named are three
 #[test]
 fn a_top_level_folder_or_one_directly_under_it_is_named_for_no_language() {
   let files = owned(&["rust/a.rs", "app/typescript/a.ts", "app/core/python/a.py", "client/python/a.py"]);
   let languages = owned(&["rust", "typescript", "python"]);
+  let levels = QUICK_CHECKS.layout.levels;
 
+  assert_eq!(levels, 2);
   assert_eq!(
-    language_faults(&files, &owned(&["client"]), &languages),
+    language_faults(&files, &owned(&["client"]), &languages, levels),
     ["app/typescript/: a folder named for a language", "rust/: a folder named for a language"]
+  );
+  assert!(
+    language_faults(&files, &owned(&["client"]), &languages, levels + 1)
+      .contains(&"app/core/python/: a folder named for a language".to_owned())
   );
 }
 

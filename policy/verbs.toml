@@ -178,6 +178,8 @@ heavy = "heavy {language}"
 instead = "{testbed} run -- {words}"
 # A `--takes-turn` value that holds no command the shell reads, {command} as given.
 unread = "classify: --takes-turn {command} holds no command the shell reads"
+# How deep text run as commands inside text run as commands is read; deeper text is no command.
+depth_most = 3
 
 # A checkout of the testbed running its own binary (docs/boundary.md, 「The binary」): {code} its build
 # ended with, and {binary} and {why} where the built one could not be started.
@@ -188,6 +190,9 @@ unstarted = "bmo-testbed: {binary} could not be run: {why}"
 
 # What `log` says: {path} the log, {count} how many, and the counts by name joined by `joiner`.
 [log]
+# The thin answer keeps back this share of the answer's ceiling, as its divisor, for the units never
+# started; the failures take what is left past the head.
+unstarted_divisor = 4
 missing = "{path} does not exist"
 no_summary = "{path} has no summary: the run is still going, or the log was cut short"
 failures = "{count} failure(s) the log names:"

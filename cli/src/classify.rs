@@ -15,8 +15,6 @@ use crate::shell::{basename, expanded, is_assignment, program_of, script_of, spl
 
 // The testbed's own binary, whose run holds whatever follows it.
 const TESTBED_BINARY: &str = "bmo-testbed";
-// How deep text run as commands inside text run as commands is read.
-const DEPTH_MOST: usize = 3;
 
 /// A command the caller names as one that takes the turn itself: its program and the words it opens with.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -73,7 +71,7 @@ fn heavy_within(
   takes_turn: &[TakesTurn],
   depth: usize,
 ) -> Option<Heavy> {
-  if depth > DEPTH_MOST {
+  if depth > VERBS.classify.depth_most {
     return None;
   }
 

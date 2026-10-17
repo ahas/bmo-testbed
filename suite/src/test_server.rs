@@ -6,6 +6,7 @@
 use std::path::{Path, PathBuf};
 
 use bmo_testbed_core::declaration::Repository;
+use bmo_testbed_core::policy::suite::SUITE;
 use bmo_testbed_core::queue::{LockWait, take_lock};
 
 use crate::files::checkout_files;
@@ -193,12 +194,12 @@ pub fn test_server_up() -> Result<(), String> {
   // A unit that already stands is one still coming up, which the wait below waits for as well.
   let started = start.stdin(Stdio::null()).output();
 
-  for _ in 0..60 {
+  for _ in 0..SUITE.numbers.server_start_tries {
     if answers(&bin, &socket) {
       break;
     }
 
-    std::thread::sleep(Duration::from_millis(500));
+    std::thread::sleep(Duration::from_millis(SUITE.numbers.server_start_poll_ms));
   }
 
   if !answers(&bin, &socket) {

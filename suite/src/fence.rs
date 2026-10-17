@@ -13,10 +13,6 @@ use bmo_testbed_core::turn::leading_number;
 
 const GIB: u64 = 1024 * 1024 * 1024;
 
-// What one Cargo job of the workspace takes at its peak: the largest crate compiled, or one of a crate's
-// test binaries linked with every dependency whole, in tenths of a gigabyte.
-const BUILD_JOB_TENTHS_GB: u64 = 15;
-
 /// What the scope holds the run to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FenceLimits {
@@ -32,15 +28,16 @@ pub fn fence_limits(declared_gb: u64, memory: Option<&str>) -> FenceLimits {
 
   FenceLimits {
     memory_gb: named.map_or(declared_gb, |given| given as u64),
-    swap_gb: 1,
-    tasks: 8192,
+    swap_gb: SUITE.numbers.fence_swap_gb,
+    tasks: SUITE.numbers.fence_tasks,
   }
 }
 
 /// Cargo's jobs inside the fence: as many as its memory holds at a build job's peak, never more than the
 /// run's width nor fewer than one. A caller's own smaller number stands.
 pub fn fenced_build_jobs(limits: FenceLimits, width: usize, given: Option<&str>) -> usize {
-  let held = (limits.memory_gb * 10 / BUILD_JOB_TENTHS_GB).clamp(1, width.max(1) as u64) as usize;
+  let held =
+    (limits.memory_gb * 10 / SUITE.numbers.build_job_tenths_gb).clamp(1, width.max(1) as u64) as usize;
 
   match given.and_then(leading_number).filter(|named| *named > 0) {
     Some(named) => (named as usize).min(held),
@@ -180,7 +177,7 @@ impl FenceSeams for LiveFence {
   }
 
   fn pause(&mut self) {
-    std::thread::sleep(Duration::from_millis(50));
+    std::thread::sleep(Duration::from_millis(SUITE.numbers.fence_move_poll_ms));
   }
 
   fn offer_first(&mut self) {
@@ -212,7 +209,7 @@ pub fn fence_suite(limits: FenceLimits, seams: &mut dyn FenceSeams) -> String {
   let scope = format!("/{unit}");
   let mut inside = seams.cgroup().contains(&scope);
 
-  for _ in 0..40 {
+  for _ in 0..SUITE.numbers.fence_move_tries {
     if inside {
       break;
     }

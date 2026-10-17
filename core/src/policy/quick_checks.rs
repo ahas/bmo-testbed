@@ -68,6 +68,7 @@ pub struct Layout {
   pub language: String,
   pub not_member: String,
   pub no_manifest: String,
+  pub levels: usize,
   pub languages: Vec<String>,
 }
 

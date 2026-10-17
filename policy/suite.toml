@@ -2,7 +2,39 @@
 # tests a change runs」), the lines it writes about itself, each unit's result and the verdict it ends on.
 # A job and the readers of a suite's log read them, so they are English, and the lines a reader parses —
 # each unit's mark, the summary of what failed, would not end or never started, and the verdict — keep
-# their shape. Each `{name}` is filled in with what it names.
+# their shape. Each `{name}` is filled in with what it names. Its numbers, the fence's, each unit's, the
+# test server's, the superseded removal's and the change check's, stand under `[numbers]`.
+
+# The numbers a run and the change check hold to. Each key names its unit.
+[numbers]
+# What one Cargo job of the workspace takes at its peak, in tenths of a gigabyte: the largest crate
+# compiled, or one of a crate's test binaries linked with every dependency whole. The fence's memory over
+# it is how many Cargo jobs a run builds at.
+build_job_tenths_gb = 15
+# The fence's ceilings beside its memory (docs/suite.md, 「The fence」): the swap beyond it and the tasks.
+fence_swap_gb = 1
+fence_tasks = 8192
+# How the run waits for its own control group to name the scope it was moved into, since the manager
+# answers before the move is carried out: how far apart it looks, and how many looks it takes before it
+# runs where it is.
+fence_move_poll_ms = 50
+fence_move_tries = 40
+# One unit (docs/suite.md, 「One sweep, a process per file」): how often a running unit is looked at; how
+# long a cut unit's processes are given to go once asked, before they are killed; and how long its output
+# is still read after they were taken down, since a process that left the group can still hold it open.
+unit_poll_ms = 50
+unit_kill_after_seconds = 5
+unit_output_grace_seconds = 2
+# The suite's own test server once started: how many times, and how far apart, it is asked whether it
+# answers before it is taken for one that did not come up.
+server_start_tries = 60
+server_start_poll_ms = 500
+# The removal of what a build superseded: how long it waits on Cargo's build lock before it leaves what it
+# found to the next one, and how far apart it tries.
+superseded_lock_wait_seconds = 5
+superseded_lock_poll_ms = 200
+# How many lines of a failing static step's output the change check prints; the rest is in its log.
+check_shown_lines = 40
 
 # What a run is named in the machine's line.
 [run]

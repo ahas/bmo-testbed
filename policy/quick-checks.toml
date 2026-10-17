@@ -55,8 +55,10 @@ gone = "{readme}: the folder table names {folder}/, which the tree does not hold
 language = "{folder}/: a folder named for a language"
 not_member = "{folder}/{file}: its folder is no member of the {workspace} workspace"
 no_manifest = "{member}/: a member of the {workspace} workspace holding no {file}"
-# The names of languages as a folder would be named for one: no folder of the top two levels is named
-# any of these, since a folder is named for its role.
+# How many levels from the top a folder named for a language is looked for in.
+levels = 2
+# The names of languages as a folder would be named for one: no folder of the top `levels` levels is
+# named any of these, since a folder is named for its role.
 languages = [
   "bash",
   "c",

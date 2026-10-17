@@ -5,6 +5,7 @@
 
 use bmo_testbed_cli::classify::{Heavy, TakesTurn, heavy_command, instead};
 use bmo_testbed_core::languages::LANGUAGES;
+use bmo_testbed_core::policy::verbs::VERBS;
 
 use crate::stand::{ran, testbed};
 
@@ -14,6 +15,19 @@ fn heavy(line: &str) -> Option<Heavy> {
 
 fn words_of(line: &str) -> Option<String> {
   heavy(line).map(|heavy| heavy.command.join(" "))
+}
+
+// "text run as a command is read as a command too", as deep as the policy names and no deeper
+#[test]
+fn text_run_as_a_command_is_read_as_deep_as_the_policy_names() {
+  // Each level handed to `eval` in single quotes, a quote inside it closed, escaped and opened again.
+  let nested = |depth: usize| {
+    (0..depth).fold("cargo build".to_owned(), |line, _| format!("eval '{}'", line.replace('\'', r"'\''")))
+  };
+  let most = VERBS.classify.depth_most;
+
+  assert_eq!(words_of(&nested(most)).as_deref(), Some("cargo build"));
+  assert_eq!(words_of(&nested(most + 1)), None);
 }
 
 // "is refused with the line that runs it there, wherever the shell puts it"

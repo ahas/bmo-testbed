@@ -1,6 +1,26 @@
-//! What a run of the suite says (docs/suite.md), each line with the `{name}` marks its file names.
+//! What a run of the suite says (docs/suite.md), each line with the `{name}` marks its file names, and the
+//! numbers it and the change check hold to.
 
 use serde::Deserialize;
+
+/// The numbers a run and the change check hold to.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Numbers {
+  pub build_job_tenths_gb: u64,
+  pub fence_swap_gb: u64,
+  pub fence_tasks: u64,
+  pub fence_move_poll_ms: u64,
+  pub fence_move_tries: u32,
+  pub unit_poll_ms: u64,
+  pub unit_kill_after_seconds: u64,
+  pub unit_output_grace_seconds: u64,
+  pub server_start_tries: u32,
+  pub server_start_poll_ms: u64,
+  pub superseded_lock_wait_seconds: u64,
+  pub superseded_lock_poll_ms: u64,
+  pub check_shown_lines: usize,
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -129,6 +149,7 @@ pub struct EndingWords {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Suite {
+  pub numbers: Numbers,
   pub run: RunWords,
   pub reasons: ReasonWords,
   pub selection: SelectionWords,

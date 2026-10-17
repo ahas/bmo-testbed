@@ -251,6 +251,35 @@ fn a_passing_run_says_each_step_went_through_and_what_the_log_verb_read_of_the_t
   assert!(std::fs::read_to_string(&log).unwrap().contains("==> bun test"));
 }
 
+// "the first lines a failing static step printed": as many as the policy names, the rest left to the log
+#[test]
+fn a_failing_static_step_shows_as_many_of_its_lines_as_the_policy_names() {
+  let (dir, base) = checkout();
+  let log = dir.path().join("check.log");
+  let shown = SUITE.numbers.check_shown_lines;
+  let output: String = (1..=shown + 5).map(|at| format!("fault {at}\n")).collect();
+  let planned = plan(
+    &repo(dir.path()),
+    &CheckAsk {
+      since: Some(base),
+      files: vec![],
+    },
+  )
+  .unwrap();
+  let checked = run_check(dir.path(), &planned, &log, &|_, step| {
+    if step.step.command.iter().any(|word| word.contains("tsc")) {
+      ran(2, &output)
+    } else {
+      ran(0, "fine\n")
+    }
+  });
+  let faults: Vec<&String> = checked.lines.iter().filter(|line| line.starts_with("  fault ")).collect();
+
+  assert_eq!(faults.len(), shown, "{:?}", checked.lines);
+  assert_eq!(faults.last().map(|line| line.as_str()), Some(format!("  fault {shown}").as_str()));
+  assert!(std::fs::read_to_string(&log).unwrap().contains(&format!("fault {}", shown + 5)));
+}
+
 #[test]
 fn a_failing_run_runs_every_step_to_its_end_and_names_what_failed_without_the_tests_own_output() {
   let (dir, base) = checkout();

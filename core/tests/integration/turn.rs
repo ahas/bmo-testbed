@@ -9,8 +9,8 @@ use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::queue::{LockKeep, LockWait, Rank, queue_tickets, take_lock};
 use bmo_testbed_core::turn::{
-  Env, HELD_VARIABLE, Lane, TestbedTurn, TurnAsk, TurnEntry, inside_held_turn, lock_path, read_queue,
-  take_turn,
+  Env, HELD_VARIABLE, Lane, TestbedTurn, TurnAsk, TurnEntry, inside_held_turn, lane_width, lock_path,
+  read_queue, take_turn,
 };
 
 fn lock_in(dir: &Path) -> PathBuf {
@@ -172,4 +172,16 @@ fn a_turn_not_had_within_its_wait_says_who_holds_it() {
       .words()
       .contains(&fill_marks(&LANES.waiting.held_by, &[("who", &holder.words())]))
   );
+}
+
+// "the narrow lane runs beside it on a quarter of the width": the machine's width over the policy's
+// divisor, never less than one
+#[test]
+fn the_narrow_lane_s_width_is_the_machine_s_over_the_policy_s_divisor_and_never_less_than_one() {
+  let env = Env::new();
+  let divisor = LANES.numbers.narrow_divisor;
+
+  assert_eq!(lane_width(Lane::Wide, &env, 32), 32);
+  assert_eq!(lane_width(Lane::Narrow, &env, 32), 32 / divisor);
+  assert_eq!(lane_width(Lane::Narrow, &env, 1), 1);
 }

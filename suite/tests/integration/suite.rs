@@ -613,6 +613,10 @@ mod fence {
   // "holds a run to eight gigabytes unless the environment names another number"
   #[test]
   fn holds_a_run_to_eight_gigabytes_unless_named() {
+    let numbers = &SUITE.numbers;
+
+    // The swap and the tasks are the policy's, which the scope's call below spells out.
+    assert_eq!((LIMITS.swap_gb, LIMITS.tasks), (numbers.fence_swap_gb, numbers.fence_tasks));
     assert_eq!(fence_limits(8, None), LIMITS);
     assert_eq!(fence_limits(8, Some("12")).memory_gb, 12);
     assert_eq!(fence_limits(8, Some("lots")).memory_gb, 8);
@@ -622,6 +626,8 @@ mod fence {
   // "builds at as many Cargo jobs as its memory holds, within the width, keeping a caller's smaller number"
   #[test]
   fn builds_at_as_many_cargo_jobs_as_its_memory_holds() {
+    // Eight gigabytes over the policy's build job, in tenths of a gigabyte.
+    assert_eq!(fenced_build_jobs(LIMITS, 24, None) as u64, 8 * 10 / SUITE.numbers.build_job_tenths_gb);
     assert_eq!(fenced_build_jobs(LIMITS, 24, None), 5);
     assert_eq!(
       fenced_build_jobs(
@@ -726,7 +732,7 @@ mod fence {
     let line = fence_suite(LIMITS, &mut run);
 
     assert!(line.ends_with(&fill_marks(&SUITE.lines.fence_not_moved, &[("unit", "bmo-suite-4242.scope")])));
-    assert_eq!(run.paused, 40);
+    assert_eq!(run.paused, SUITE.numbers.fence_move_tries as usize);
   }
 
   // A run standing in `group`, beside the processes `members` names; what it kills is kept.

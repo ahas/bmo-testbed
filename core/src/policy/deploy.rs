@@ -42,6 +42,7 @@ pub struct Numbers {
   pub stay_poll_ms: u64,
   pub journal_lines: usize,
   pub step_poll_ms: u64,
+  pub step_stop_grace_seconds: u64,
 }
 
 #[derive(Debug, Deserialize)]

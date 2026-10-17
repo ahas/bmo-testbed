@@ -30,6 +30,8 @@ failure_lines = 60
 log_keep_days = 7
 # How long a run waits for the placement endpoint's answer before it runs here.
 placement_answer_seconds = 5
+# The narrow lane's width: the machine's width divided by this, never less than one.
+narrow_divisor = 4
 
 # How a command killed for want of memory is run again (docs/testbed.md, 「Memory」): how long it waits
 # before it looks at the memory at all, how many gigabytes have to be available, how often and how long

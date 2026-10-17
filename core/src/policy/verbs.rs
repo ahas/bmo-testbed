@@ -47,6 +47,7 @@ pub struct ClassifyWords {
   pub heavy: String,
   pub instead: String,
   pub unread: String,
+  pub depth_most: usize,
 }
 
 #[derive(Debug, Deserialize)]
@@ -60,6 +61,7 @@ pub struct OwnWords {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LogWords {
+  pub unstarted_divisor: usize,
   pub missing: String,
   pub no_summary: String,
   pub failures: String,

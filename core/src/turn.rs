@@ -117,7 +117,7 @@ pub fn lane_width(lane: Lane, env: &Env, threads: usize) -> usize {
 
   match lane {
     Lane::Wide => width,
-    Lane::Narrow => (width / 4).max(1),
+    Lane::Narrow => (width / LANES.numbers.narrow_divisor).max(1),
   }
 }
 

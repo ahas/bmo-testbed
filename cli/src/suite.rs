@@ -227,15 +227,15 @@ pub fn log(args: &LogArgs, base: &Path) -> Said {
 
   out.push(counted.join(&said.joiner));
 
-  // The failures take what the ceiling leaves past the head and a quarter kept back for the units never
+  // The failures take what the ceiling leaves past the head and the share kept back for the units never
   // started, which take whatever is left after the failures.
   let used = |lines: &[String]| lines.iter().map(|line| line.chars().count() + 1).sum::<usize>();
-  let quarter = bmo_testbed_core::policy::answer::ANSWER.ceiling_chars / 4;
+  let kept_back = bmo_testbed_core::policy::answer::ANSWER.ceiling_chars / said.unstarted_divisor;
 
   if !failures.is_empty() {
     let heading = format!("\n{}", fill_marks(&said.failures, &[("count", &failures.len().to_string())]));
 
-    out.extend(named_list(&heading, &failures, used(&out) + quarter));
+    out.extend(named_list(&heading, &failures, used(&out) + kept_back));
   }
 
   // Nothing of a unit the run never started was tested, so it is no failure, and the run still has no result

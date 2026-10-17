@@ -25,6 +25,7 @@ pub struct Numbers {
   pub failure_lines: usize,
   pub log_keep_days: u64,
   pub placement_answer_seconds: u64,
+  pub narrow_divisor: usize,
 }
 
 #[derive(Debug, Deserialize)]

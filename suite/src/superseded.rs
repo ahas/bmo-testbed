@@ -14,6 +14,7 @@ use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
 use bmo_testbed_core::policy::prune::PRUNE;
+use bmo_testbed_core::policy::suite::SUITE;
 use regex::Regex;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -34,9 +35,6 @@ pub const CARGO_BUILD_LOCK_NAME: &str = ".cargo-build-lock";
 pub const UNIT_DIRS: [&str; 3] = [".fingerprint", "deps", "build"];
 
 const DAY_MS: i64 = 24 * 60 * 60 * 1000;
-
-// How long a removal waits on Cargo's build lock before it leaves what it found to the next one.
-const LOCK_WAIT: Duration = Duration::from_secs(5);
 
 // The option naming how Cargo reports, which the report a removal asks for stands in place of.
 const FORMAT_OPTION: &str = "--message-format";
@@ -526,8 +524,10 @@ fn try_flock(path: &Path) -> Option<HeldBuildLock> {
 }
 
 // Cargo's build lock of every profile directory the units stand in, and of the host's profile directory a
-// cross build's stands beside, taken in one order; none where one is not had in time.
+// cross build's stands beside, taken in one order; none where one is not had in time, the removal then leaving
+// what it found to the next one.
 fn take_build_locks(build_root: &Path, units: &[String]) -> Option<Vec<HeldBuildLock>> {
+  let numbers = &SUITE.numbers;
   let profiles: BTreeSet<&str> = units
     .iter()
     .flat_map(|unit| {
@@ -540,7 +540,7 @@ fn take_build_locks(build_root: &Path, units: &[String]) -> Option<Vec<HeldBuild
 
   for profile in profiles {
     let path = build_root.join(profile).join(CARGO_BUILD_LOCK_NAME);
-    let until = Instant::now() + LOCK_WAIT;
+    let until = Instant::now() + Duration::from_secs(numbers.superseded_lock_wait_seconds);
 
     loop {
       if let Some(lock) = try_flock(&path) {
@@ -552,7 +552,7 @@ fn take_build_locks(build_root: &Path, units: &[String]) -> Option<Vec<HeldBuild
         return None;
       }
 
-      std::thread::sleep(Duration::from_millis(200));
+      std::thread::sleep(Duration::from_millis(numbers.superseded_lock_poll_ms));
     }
   }
 

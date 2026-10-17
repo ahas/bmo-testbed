@@ -90,16 +90,21 @@ pub fn table_faults(named: &[String], tree: &BTreeSet<String>) -> Vec<String> {
   missing.chain(gone).collect()
 }
 
-/// Every folder of the top two levels named for a language, a folder directly under one of the folders
+/// Every folder of the top `levels` levels named for a language, a folder directly under one of the folders
 /// passed aside.
-pub fn language_faults(files: &[String], passed: &[String], languages: &[String]) -> Vec<String> {
+pub fn language_faults(
+  files: &[String],
+  passed: &[String],
+  languages: &[String],
+  levels: usize,
+) -> Vec<String> {
   let named_for_one = |name: &str| languages.iter().any(|language| language.eq_ignore_ascii_case(name));
   let mut folders = BTreeSet::new();
 
   for file in files {
     let parts: Vec<&str> = file.split('/').collect();
 
-    for depth in 1..parts.len().min(3) {
+    for depth in 1..parts.len().min(levels + 1) {
       folders.insert(parts[..depth].join("/"));
     }
   }
@@ -163,7 +168,7 @@ pub fn checkout_layout(repo: &Repository) -> Findings {
     Err(why) => vec![why],
   };
 
-  findings.extend(language_faults(&files, &projects, &words.languages));
+  findings.extend(language_faults(&files, &projects, &words.languages, words.levels));
 
   // The Cargo workspace: its members as the root's manifest lists them.
   let cargo: toml::Table = read_text(root, "Cargo.toml").parse().unwrap_or_default();

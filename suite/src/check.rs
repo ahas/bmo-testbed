@@ -49,9 +49,6 @@ pub struct CheckPlan {
   pub steps: Vec<Step>,
 }
 
-// How many lines of a failing static step's output the call prints; the rest is in the log.
-const SHOWN_LINES: usize = 40;
-
 fn git(root: &Path, args: &[&str]) -> Option<String> {
   let done = Command::new("git").args(args).current_dir(root).stdin(Stdio::null()).output().ok()?;
 
@@ -268,7 +265,13 @@ pub fn run_check(
 
       // The tests' failures are the log verb's to name; a static step's own lines are what tell its fault.
       if !step.tests {
-        lines.extend(done.output.lines().take(SHOWN_LINES).map(|line| format!("  {line}")));
+        lines.extend(
+          done
+            .output
+            .lines()
+            .take(SUITE.numbers.check_shown_lines)
+            .map(|line| format!("  {line}")),
+        );
       }
     }
   }

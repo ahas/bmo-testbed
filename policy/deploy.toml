@@ -52,6 +52,8 @@ stay_poll_ms = 1000
 journal_lines = 40
 # How often a step under way is looked at for its end and its time, in milliseconds.
 step_poll_ms = 100
+# How long a step that overran its time, and what it started, are given to go once asked, in seconds.
+step_stop_grace_seconds = 1
 
 # What the deploy run says as it goes (docs/deploy.md, 「What the deploy run does, in order」): {commit} a
 # short commit, {release}, {path}, {dir} and {data} places, {unit} and {name} units, {said} and {why}

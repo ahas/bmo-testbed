@@ -281,7 +281,7 @@ impl DeployHands for Machine {
         Ok(Some(status)) => break Some(status),
         Ok(None) if ask.timeout.is_some_and(|limit| started.elapsed() >= limit) => {
           overran = true;
-          stop_tree(i64::from(child.id()), Duration::from_secs(1));
+          stop_tree(i64::from(child.id()), Duration::from_secs(DEPLOY.numbers.step_stop_grace_seconds));
           break child.wait().ok();
         }
         Ok(None) => std::thread::sleep(Duration::from_millis(DEPLOY.numbers.step_poll_ms)),
