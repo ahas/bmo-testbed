@@ -13,6 +13,7 @@ use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
+use bmo_testbed_core::policy::prune::PRUNE;
 use regex::Regex;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -31,9 +32,6 @@ pub const CARGO_BUILD_LOCK_NAME: &str = ".cargo-build-lock";
 
 /// The directories of a profile directory whose entries Cargo names by a unit's hash.
 pub const UNIT_DIRS: [&str; 3] = [".fingerprint", "deps", "build"];
-
-/// The span a prune leaves alone when none is named, in days, past which an entry no build has swept goes.
-pub const PRUNE_DAYS: i64 = 2;
 
 const DAY_MS: i64 = 24 * 60 * 60 * 1000;
 
@@ -388,7 +386,7 @@ pub fn plan_superseded(
   let current = read_record(&own);
   let standing: BTreeMap<String, String> =
     units.iter().map(|one| (one.place.clone(), one.unit.clone())).collect();
-  let cutoff = now_ms - PRUNE_DAYS * DAY_MS;
+  let cutoff = now_ms - PRUNE.older_than_days * DAY_MS;
   let mut candidates: BTreeSet<String> = current.stale.iter().cloned().collect();
   let mut record = BuiltRecord::new();
 

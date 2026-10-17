@@ -9,6 +9,7 @@ use std::path::Path;
 use bmo_testbed_core::declaration::{Repository, root_of};
 use bmo_testbed_core::events::{Event, Hook};
 use bmo_testbed_core::policy::fill_marks;
+use bmo_testbed_core::policy::prune::PRUNE;
 use bmo_testbed_core::policy::verbs::VERBS;
 use bmo_testbed_core::queue::now_ms;
 use bmo_testbed_core::turn::{NOT_RUN_EXIT_CODE, process_env};
@@ -16,11 +17,9 @@ use bmo_testbed_core::verb::REFUSED_EXIT_CODE;
 use bmo_testbed_suite::cargo::run_cargo;
 use bmo_testbed_suite::crates::cargo_target_root;
 use bmo_testbed_suite::prune::{
-  CHECKOUT_CEILING_BYTES, DAY_MS, HOUR_MS, INCREMENTAL_HOURS, PrunePlan, RELATIME_DAYS,
-  SHARED_CEILING_BYTES, ceiling, directory_bytes, disk_free_bytes, keeps_access_times, plan_clear,
+  DAY_MS, HOUR_MS, PrunePlan, ceiling, directory_bytes, disk_free_bytes, keeps_access_times, plan_clear,
   plan_prune, take_prune_locks,
 };
-use bmo_testbed_suite::superseded::PRUNE_DAYS;
 use serde_json::json;
 
 use crate::said::Said;
@@ -116,8 +115,8 @@ fn hold_to_ceiling(root: &Path, hook: &Hook, answer: &mut Said) {
         ("root", &root.to_string_lossy()),
         ("held", &gigabytes(held)),
         ("ceiling", &gigabytes(ceiling.bytes)),
-        ("shared", &gigabytes(SHARED_CEILING_BYTES)),
-        ("each", &gigabytes(CHECKOUT_CEILING_BYTES)),
+        ("shared", &gigabytes(PRUNE.shared_ceiling_bytes)),
+        ("each", &gigabytes(PRUNE.checkout_ceiling_bytes)),
         ("checkouts", &checkouts),
       ],
     ),
@@ -133,16 +132,16 @@ pub fn prune_in(args: &PruneArgs, root: &Path, hook: &Hook) -> Said {
     code: REFUSED_EXIT_CODE,
     ..Said::default()
   };
-  let days = args.older_than.unwrap_or(PRUNE_DAYS as f64);
-  let hours = args.incremental_older_than.unwrap_or(INCREMENTAL_HOURS as f64);
+  let days = args.older_than.unwrap_or(PRUNE.older_than_days as f64);
+  let hours = args.incremental_older_than.unwrap_or(PRUNE.incremental_hours as f64);
   let shown = root.to_string_lossy();
 
   if !hours.is_finite() || hours <= 0.0 {
     return refused(said.no_hours.clone());
   }
 
-  if !days.is_finite() || days <= RELATIME_DAYS as f64 {
-    return refused(fill_marks(&said.too_short, &[("days", &RELATIME_DAYS.to_string())]));
+  if !days.is_finite() || days <= PRUNE.relatime_days as f64 {
+    return refused(fill_marks(&said.too_short, &[("days", &PRUNE.relatime_days.to_string())]));
   }
 
   if !root.exists() {
@@ -171,7 +170,7 @@ pub fn prune_in(args: &PruneArgs, root: &Path, hook: &Hook) -> Said {
     };
   }
 
-  let locks = match take_prune_locks(root, said.lock_wait_seconds as f64) {
+  let locks = match take_prune_locks(root, PRUNE.lock_wait_seconds as f64) {
     Ok(locks) => locks,
     Err(profile) => {
       return Said {
@@ -179,7 +178,7 @@ pub fn prune_in(args: &PruneArgs, root: &Path, hook: &Hook) -> Said {
           &said.locked,
           &[
             ("profile", &profile.to_string_lossy()),
-            ("seconds", &said.lock_wait_seconds.to_string()),
+            ("seconds", &PRUNE.lock_wait_seconds.to_string()),
           ],
         )],
         code: NOT_RUN_EXIT_CODE,

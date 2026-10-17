@@ -1,0 +1,30 @@
+# The numbers of the prune of the shared Cargo build directory (docs/deploy.md, 「The Cargo build
+# directory」). Each key names its unit.
+
+# The span a unit no build has read is left alone for where `--older-than` names none, in days; an entry
+# of a build's own record no build has swept for as long goes too, and a checkout whose record is older is
+# taken for one gone.
+older_than_days = 2
+
+# The span `--older-than` must exceed, in days: a relatime disk moves a file's access time on a read only
+# once it is a day old, so a shorter span would take a unit read hours ago for one unread.
+relatime_days = 1
+
+# The span incremental state is left alone for where `--incremental-older-than` names none, in hours: a
+# session is written as its build ends and never again, so its modification time says when it was made.
+incremental_hours = 3
+
+# How long a unit of a checkout's own crates that no record names is left alone after it was built, in
+# hours: a build that failed leaves such units, and its job mends it and builds again within that.
+own_grace_hours = 12
+
+# What the build directory holds in its normal standing apart from the checkouts, in bytes: every
+# dependency compiled once in each profile, the deployment's release build, and the projects of their own.
+shared_ceiling_bytes = 40_000_000_000
+
+# What one live checkout's own crates hold in the build directory in their normal standing, in bytes: one
+# generation, its builds, tests and lints.
+checkout_ceiling_bytes = 8_000_000_000
+
+# How long the prune waits for each of Cargo's build locks, standing at the front of its line, in seconds.
+lock_wait_seconds = 600

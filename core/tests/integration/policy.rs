@@ -11,6 +11,7 @@ use bmo_testbed_core::policy::deploy_steps::{DEPLOY_STEPS, DeployStep};
 use bmo_testbed_core::policy::events::EVENTS;
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
+use bmo_testbed_core::policy::prune::PRUNE;
 use bmo_testbed_core::policy::quick_checks::QUICK_CHECKS;
 use bmo_testbed_core::policy::static_check::STATIC_CHECK;
 use bmo_testbed_core::policy::suite::SUITE;
@@ -33,6 +34,7 @@ fn every_part_reads_as_its_type() {
   LazyLock::force(&QUICK_CHECKS);
   LazyLock::force(&VERBS);
   LazyLock::force(&EVENTS);
+  LazyLock::force(&PRUNE);
 
   assert_eq!(ANSWER.ceiling_chars, 30_000);
   assert_eq!(SUITE.lines.mark, "suite:");

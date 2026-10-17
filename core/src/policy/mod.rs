@@ -13,6 +13,7 @@ pub mod deploy;
 pub mod deploy_steps;
 pub mod events;
 pub mod lanes;
+pub mod prune;
 pub mod quick_checks;
 pub mod static_check;
 pub mod suite;

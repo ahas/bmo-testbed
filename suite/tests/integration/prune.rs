@@ -8,11 +8,11 @@ use std::os::unix::fs::MetadataExt as _;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use bmo_testbed_core::policy::prune::PRUNE;
 use bmo_testbed_suite::crates::{CHECKOUT_RECORD_NAME, checkout_target_name};
 use bmo_testbed_suite::prune::{
-  CARGO_LOCK_NAME, CHECKOUT_CEILING_BYTES, Ceiling, DAY_MS, HOUR_MS, INCREMENTAL_HOURS,
-  SHARED_CEILING_BYTES, UnitFingerprint, ceiling, hand_profile_dirs, plan_clear, plan_prune,
-  read_fingerprint, take_prune_locks,
+  CARGO_LOCK_NAME, Ceiling, DAY_MS, HOUR_MS, PrunePlan, UnitFingerprint, ceiling, hand_profile_dirs,
+  plan_clear, read_fingerprint, take_prune_locks,
 };
 use bmo_testbed_suite::superseded::{BUILT_UNITS_NAME, CARGO_BUILD_LOCK_NAME};
 
@@ -49,6 +49,16 @@ fn date_as(path: &Path, accessed: i64, modified: i64) {
   let times = FileTimes::new().set_accessed(time_of(accessed)).set_modified(time_of(modified));
 
   File::open(path).unwrap().set_times(times).unwrap();
+}
+
+// The prune over the build directory at `root` with the policy's spans, as the verb runs it unless told others.
+fn plan_prune(root: &Path, now: i64) -> PrunePlan {
+  bmo_testbed_suite::prune::plan_prune(
+    root,
+    PRUNE.older_than_days * DAY_MS,
+    now,
+    PRUNE.incremental_hours * HOUR_MS,
+  )
 }
 
 // The file or directory at `path` dated `at`, read and changed alike.
@@ -160,7 +170,7 @@ fn a_prune_removes_what_nobody_read_within_the_span_and_keeps_what_a_live_checko
  {
   let scratch = tempfile::tempdir().unwrap();
   let now = now();
-  let old = now - 3 * DAY_MS;
+  let old = now - (PRUNE.older_than_days + 1) * DAY_MS;
   let recent = now - HOUR_MS;
   let root = scratch.path().join("one");
   let profile = root.join("debug");
@@ -186,13 +196,13 @@ fn a_prune_removes_what_nobody_read_within_the_span_and_keeps_what_a_live_checko
   date_dirs(&profile.join("incremental/alone-0abc"), old);
   write(&profile.join("incremental/recent_top-0def/s-new/dep-graph.bin"), "", recent);
 
-  // Judged by modification time alone, in hours: a session made four hours ago and read since goes, the one
-  // beside it made an hour ago stays.
-  let four_hours = now - 4 * HOUR_MS;
+  // Judged by modification time alone, in hours: a session made an hour past the policy's span and read since
+  // goes, the one beside it made an hour ago stays.
+  let past_span = now - (PRUNE.incremental_hours + 1) * HOUR_MS;
 
-  write(&profile.join("incremental/mixed-0fed/s-old/dep-graph.bin"), "", four_hours);
-  date_as(&profile.join("incremental/mixed-0fed/s-old/dep-graph.bin"), recent, four_hours);
-  date_dirs(&profile.join("incremental/mixed-0fed/s-old"), four_hours);
+  write(&profile.join("incremental/mixed-0fed/s-old/dep-graph.bin"), "", past_span);
+  date_as(&profile.join("incremental/mixed-0fed/s-old/dep-graph.bin"), recent, past_span);
+  date_dirs(&profile.join("incremental/mixed-0fed/s-old"), past_span);
   write(&profile.join("incremental/mixed-0fed/s-new/dep-graph.bin"), "", recent);
   write(&profile.join("old-bin"), "", old);
   write(&profile.join("new-bin"), "", recent);
@@ -210,7 +220,7 @@ fn a_prune_removes_what_nobody_read_within_the_span_and_keeps_what_a_live_checko
   );
   let idle_dir = checkout_dir(&root, "idle-0123456789ab", &profile, &alone, None, old);
   let busy_dir = checkout_dir(&root, "busy-0123456789ab", &profile, &under_recent, None, recent);
-  let plan = plan_prune(&root, 2 * DAY_MS, now, INCREMENTAL_HOURS * HOUR_MS);
+  let plan = plan_prune(&root, now);
   let mut gone: Vec<&str> = plan.units.iter().map(|one| one.hash.as_str()).collect();
   let mut expected: Vec<&str> =
     [&alone, &under_old, &old_top, &gone_top].iter().map(|one| one.hash.as_str()).collect();
@@ -285,7 +295,7 @@ fn a_live_checkouts_own_target_loses_the_work_a_build_typed_by_hand_left_there_o
  {
   let scratch = tempfile::tempdir().unwrap();
   let now = now();
-  let old = now - 3 * DAY_MS;
+  let old = now - (PRUNE.older_than_days + 1) * DAY_MS;
   let recent = now - HOUR_MS;
   let root = scratch.path().join("hand");
   let checkout = scratch.path().join("hand-checkout");
@@ -309,7 +319,7 @@ fn a_live_checkouts_own_target_loses_the_work_a_build_typed_by_hand_left_there_o
   write(&hand_profile.join(CARGO_LOCK_NAME), "", old);
   write(&hand_profile.join("build/script-0000000000000000/output"), "", recent);
 
-  let plan = plan_prune(&root, 2 * DAY_MS, now, INCREMENTAL_HOURS * HOUR_MS);
+  let plan = plan_prune(&root, now);
 
   assert_eq!(
     sorted(plan.hand_built.clone()),
@@ -329,7 +339,7 @@ fn a_live_checkouts_own_target_loses_the_work_a_build_typed_by_hand_left_there_o
 #[test]
 fn reading_a_fingerprint_leaves_its_access_time_where_it_was() {
   let scratch = tempfile::tempdir().unwrap();
-  let old = now() - 3 * DAY_MS;
+  let old = now() - (PRUNE.older_than_days + 1) * DAY_MS;
   let profile = scratch.path().join("quiet").join("debug");
   let other = Unit {
     name: "other".to_owned(),
@@ -364,11 +374,11 @@ fn a_checkout_is_pruned_once_the_directory_its_target_directory_records_is_gone(
   std::fs::create_dir_all(root.join("debug").join(".fingerprint")).unwrap();
   write(&dir.join(CHECKOUT_RECORD_NAME), &checkout.to_string_lossy(), now);
 
-  assert!(plan_prune(&root, 2 * DAY_MS, now, INCREMENTAL_HOURS * HOUR_MS).checkouts.is_empty());
+  assert!(plan_prune(&root, now).checkouts.is_empty());
 
   std::fs::remove_dir_all(&checkout).unwrap();
 
-  assert_eq!(plan_prune(&root, 2 * DAY_MS, now, INCREMENTAL_HOURS * HOUR_MS).checkouts, vec![dir]);
+  assert_eq!(plan_prune(&root, now).checkouts, vec![dir]);
 }
 
 #[test]
@@ -376,9 +386,10 @@ fn a_checkouts_own_unit_goes_once_no_record_names_it_however_lately_it_was_read_
  {
   let scratch = tempfile::tempdir().unwrap();
   let now = now();
-  let old = now - 3 * DAY_MS;
+  let old = now - (PRUNE.older_than_days + 1) * DAY_MS;
   let recent = now - HOUR_MS;
-  let before_grace = now - 13 * HOUR_MS;
+  let before_grace = now - (PRUNE.own_grace_hours + 1) * HOUR_MS;
+  let within_grace = now - (PRUNE.own_grace_hours - 1) * HOUR_MS;
   let root = scratch.path().join("own");
   let profile = root.join("debug");
   let checkout = scratch.path().join("own-checkout");
@@ -406,7 +417,7 @@ fn a_checkouts_own_unit_goes_once_no_record_names_it_however_lately_it_was_read_
   let named = unit(&profile, 22, "own_crate", before_grace, &[&under]);
   let earlier = unit(&profile, 23, "own_crate", before_grace, &[]);
 
-  unit(&profile, 24, "own_crate", recent, &[]);
+  unit(&profile, 24, "own_crate", within_grace, &[]);
 
   let handed = unit(&profile, 25, "own_crate", before_grace, &[]);
 
@@ -427,11 +438,7 @@ fn a_checkouts_own_unit_goes_once_no_record_names_it_however_lately_it_was_read_
   std::fs::create_dir_all(checkout.join("target").join("debug")).unwrap();
   std::fs::hard_link(library(&profile, &handed), checkout.join("target/debug/libown_crate.rlib")).unwrap();
 
-  let gone: Vec<String> = plan_prune(&root, 2 * DAY_MS, now, INCREMENTAL_HOURS * HOUR_MS)
-    .units
-    .into_iter()
-    .map(|one| one.hash)
-    .collect();
+  let gone: Vec<String> = plan_prune(&root, now).units.into_iter().map(|one| one.hash).collect();
 
   assert_eq!(gone, [earlier.hash]);
 }
@@ -459,11 +466,25 @@ fn the_ceiling_counts_the_live_checkouts_that_record_their_builds_and_no_other()
     }
   }
 
+  // Target directories that record no checkout count while they were used within the policy's span.
+  let span = PRUNE.older_than_days * DAY_MS;
+
+  for (name, used) in [
+    ("used-0123456789ab", now - span + HOUR_MS),
+    ("unused-0123456789ab", now - span - HOUR_MS),
+  ] {
+    let dir = root.join("checkouts").join(name);
+
+    write(&dir.join(BUILT_UNITS_NAME), "{}", used);
+    date_dirs(&dir, used);
+  }
+
+  // The ceiling is the policy's: the shared part, and a checkout's part for each one counted.
   assert_eq!(
     ceiling(&root, now),
     Ceiling {
-      bytes: SHARED_CEILING_BYTES + CHECKOUT_CEILING_BYTES,
-      checkouts: 1,
+      bytes: PRUNE.shared_ceiling_bytes + 2 * PRUNE.checkout_ceiling_bytes,
+      checkouts: 2,
     }
   );
 }

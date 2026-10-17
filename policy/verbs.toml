@@ -252,7 +252,6 @@ locked = "backups: another run held the upload for {seconds}s, so nothing was se
 # what it takes, {verb} whether it was removed, the counts of what it took, {checkouts} the checkouts'
 # target directories, the disk's {before} and {after}, and the directory against its ceiling.
 [prune]
-lock_wait_seconds = 600
 gone = "prune: {root} does not exist, so there is nothing to remove"
 noatime = "prune: the disk {root} stands on keeps no access times (noatime), so what no build read cannot be told"
 too_short = "prune: --older-than takes a number of days above {days}, since the disk moves a read's time only once it is a day old"

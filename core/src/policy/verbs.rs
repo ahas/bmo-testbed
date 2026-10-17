@@ -114,7 +114,6 @@ pub struct ImportsWords {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PruneWords {
-  pub lock_wait_seconds: u64,
   pub gone: String,
   pub noatime: String,
   pub too_short: String,

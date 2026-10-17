@@ -7,10 +7,9 @@ use std::path::PathBuf;
 
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
+use bmo_testbed_core::policy::prune::PRUNE;
 use bmo_testbed_core::policy::suite::SUITE;
 use bmo_testbed_core::policy::verbs::VERBS;
-use bmo_testbed_suite::prune::INCREMENTAL_HOURS;
-use bmo_testbed_suite::superseded::PRUNE_DAYS;
 use bmo_testbed_suite::template::is_database_name;
 use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
 
@@ -238,8 +237,8 @@ fn usage(text: &str) -> String {
       ("job_wait", &numbers.job_wait_seconds.to_string()),
       ("unit_wait", &numbers.unit_wait_seconds.to_string()),
       ("kept", &numbers.kept_place_seconds.to_string()),
-      ("days", &PRUNE_DAYS.to_string()),
-      ("hours", &INCREMENTAL_HOURS.to_string()),
+      ("days", &PRUNE.older_than_days.to_string()),
+      ("hours", &PRUNE.incremental_hours.to_string()),
     ],
   )
 }

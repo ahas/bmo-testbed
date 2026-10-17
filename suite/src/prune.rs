@@ -13,42 +13,22 @@ use std::os::unix::fs::{MetadataExt as _, OpenOptionsExt as _};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
+use bmo_testbed_core::policy::prune::PRUNE;
 use bmo_testbed_core::queue::{HeldLock, LockWait, Rank, take_lock};
 use serde_json::Value;
 
 use crate::crates::{CHECKOUT_RECORD_NAME, checkout_target_name};
 use crate::superseded::{
-  BUILT_UNITS_NAME, CARGO_BUILD_LOCK_NAME, PRUNE_DAYS, UNIT_DIRS, read_record, recorded_units, unit_hash,
+  BUILT_UNITS_NAME, CARGO_BUILD_LOCK_NAME, UNIT_DIRS, read_record, recorded_units, unit_hash,
 };
-
-/// The span a prune must exceed, in days: a relatime disk moves a file's access time on a read only once it is
-/// a day old, so a shorter span would take a unit read hours ago for one unread.
-pub const RELATIME_DAYS: i64 = 1;
 
 pub const HOUR_MS: i64 = 60 * 60 * 1000;
 
 pub const DAY_MS: i64 = 24 * HOUR_MS;
 
-/// The span incremental state is left alone for when none is named, in hours: a session is written as its build
-/// ends and never again, so its modification time says when it was made, and no access time is needed to judge
-/// it.
-pub const INCREMENTAL_HOURS: i64 = 3;
-
-/// How long a unit of a checkout's own crates that no record names is left alone after it was built: a build
-/// that failed leaves such units, and its job mends it and builds again within that.
-pub const OWN_GRACE_MS: i64 = 12 * HOUR_MS;
-
 /// The lock a Cargo run holds in a profile directory of its target directory for its whole build, where it has
 /// no build directory apart from it.
 pub const CARGO_LOCK_NAME: &str = ".cargo-lock";
-
-/// What the build directory holds in its normal standing, apart from the checkouts: every dependency compiled
-/// once in each profile, the deployment's release build, and the projects of their own.
-pub const SHARED_CEILING_BYTES: u64 = 40_000_000_000;
-
-/// What one live checkout's own crates hold in the build directory in their normal standing: one generation,
-/// its builds, tests and lints.
-pub const CHECKOUT_CEILING_BYTES: u64 = 8_000_000_000;
 
 // The directories of a profile directory a build hands nothing back into, only works in.
 const WORK_DIRS: [&str; 4] = [".fingerprint", "deps", "build", "incremental"];
@@ -529,7 +509,7 @@ pub fn plan_prune(root: &Path, older_than_ms: i64, now: i64, incremental_older_t
   let standing = Standing {
     live_inodes,
     recorded,
-    own_cutoff: now - OWN_GRACE_MS,
+    own_cutoff: now - PRUNE.own_grace_hours * HOUR_MS,
   };
 
   for profile in profile_dirs(root) {
@@ -612,12 +592,12 @@ pub fn ceiling(root: &Path, now: i64) -> Ceiling {
 
       is_dir(entry)
         && dir.join(BUILT_UNITS_NAME).exists()
-        && !checkout_gone(&dir, now - PRUNE_DAYS * DAY_MS)
+        && !checkout_gone(&dir, now - PRUNE.older_than_days * DAY_MS)
     })
     .count() as u64;
 
   Ceiling {
-    bytes: SHARED_CEILING_BYTES + CHECKOUT_CEILING_BYTES * checkouts,
+    bytes: PRUNE.shared_ceiling_bytes + PRUNE.checkout_ceiling_bytes * checkouts,
     checkouts,
   }
 }
