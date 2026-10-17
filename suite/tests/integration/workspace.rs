@@ -14,6 +14,7 @@ fn checkout() -> tempfile::TempDir {
   let root = dir.path();
 
   for (path, text) in [
+    ("testbed.toml", "testbed = 0\n\n[test]\nlanguages = [\"bun\"]\n"),
     ("package.json", r#"{ "name": "root", "workspaces": ["server", "tools/bench/verbs"] }"#),
     ("bun.lock", ""),
     ("server/package.json", r#"{ "name": "@sample/server" }"#),

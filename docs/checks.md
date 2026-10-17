@@ -15,8 +15,10 @@
   - `check`: a command checking a part of the package that is not covered by its runner, run inside the
     package's folder through `sh`, as one unit of the suite where the package is marked and as one step
     of the change check where a changed path is the package's or matches its `reads`.
-- **A project of its own** is a directory carrying its own package manifest and lockfile that the root
-  workspace does not list. The directory declares itself by its two files, unless the declaration
+- **A project of its own** is a directory carrying its own package manifest and the lockfile a declared
+  language names (`docs/testbed.md`, 「Languages」) that the root workspace does not list; a
+  repository declaring no such language has none to find. The directory declares itself by its two
+  files, unless the declaration
   turns discovery off or names its projects (`docs/declaration.md`). It names its own check: the
   `check` script of its manifest, run inside it, its static check and its tests together. A project
   whose manifest gives none fails every run that selects it.
@@ -25,8 +27,9 @@
   A manifest that does not read, or names no check, fails the unit.
 - **The rule, over a set of changed paths:**
   1. **Owner:** a path inside a package's directory marks that package; the longest directory wins.
-  2. **Root configuration:** the root workspace manifest, the lockfile and the root runner and
-     compiler configuration mark every package.
+  2. **Root configuration:** a file at the root that a declared language names as its root
+     configuration, such as the workspace manifest, the lockfile and the runner's and compiler's
+     configuration, marks every package.
   3. **Reads:** a path matching a package's `reads` marks that package. A path outside every package,
      project and tool that no `reads` matches marks every package, so a file nobody claims is never
      skipped.

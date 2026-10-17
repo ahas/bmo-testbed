@@ -17,9 +17,6 @@ use crate::workspace::{
   workspace_declarations,
 };
 
-/// The root's own configuration, which every package stands on.
-pub const ROOT_CONFIGURATION: [&str; 4] = ["package.json", "bun.lock", "bunfig.toml", "tsconfig.json"];
-
 /// The packages a run chooses among, the projects of their own beside them, the workspace's crates and the
 /// tools checked by their manifest.
 #[derive(Clone, Debug, Default)]
@@ -28,6 +25,8 @@ pub struct Layout {
   pub projects: Vec<OwnProject>,
   pub crates: Vec<CrateDeclaration>,
   pub tools: Vec<CheckedTool>,
+  /// The root's own configuration, which every package stands on: the files each declared language names.
+  pub root_configuration: Vec<&'static str>,
 }
 
 impl Layout {
@@ -42,12 +41,23 @@ impl Layout {
     let packages = workspace_declarations(&repo.root);
     let projects = own_projects(repo);
     let tools = checked_tools(repo, &packages, &projects, &crates);
+    let mut root_configuration: Vec<&'static str> = repo
+      .declaration
+      .test
+      .languages()
+      .into_iter()
+      .flat_map(|language| language.root_configuration().iter().copied())
+      .collect();
+
+    root_configuration.sort_unstable();
+    root_configuration.dedup();
 
     Self {
       packages,
       projects,
       crates,
       tools,
+      root_configuration,
     }
   }
 
@@ -303,7 +313,7 @@ pub fn select_packages(root: &Path, layout: &Layout, changed: &[String]) -> Sele
       continue;
     }
 
-    if ROOT_CONFIGURATION.contains(&path.as_str()) {
+    if layout.root_configuration.contains(&path.as_str()) {
       for one in &layout.packages {
         mark(
           &mut selection.marked,

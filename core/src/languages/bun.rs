@@ -146,4 +146,12 @@ impl Language for Bun {
   fn script_command(&self, script: &str) -> Option<Vec<String>> {
     Some(vec!["bun".to_owned(), "run".to_owned(), script.to_owned()])
   }
+
+  fn root_configuration(&self) -> &'static [&'static str] {
+    &["package.json", "bun.lock", "bunfig.toml", "tsconfig.json"]
+  }
+
+  fn lockfile(&self) -> Option<&'static str> {
+    Some("bun.lock")
+  }
 }

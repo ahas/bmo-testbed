@@ -124,7 +124,9 @@ fn a_glob_keeps_a_star_inside_one_directory_and_lets_two_cross_them() {
 // over everything. The agent launches `scripts/task.ts`; the bot launches the console's browser driver and
 // the task runner. The repository tooling reads the graph, the bot reads the prompts and `checks` reads the
 // documents. Beside them, `lab` is a project of its own: its own manifest and lockfile, listed by no
-// workspace.
+// workspace. The workspace is bun's, as its declaration says.
+const BUN: &str = "testbed = 0\n\n[test]\nlanguages = [\"bun\"]\n";
+
 const MANIFESTS: [(&str, &str); 11] = [
   (
     "package.json",
@@ -241,7 +243,8 @@ struct Fixture {
 
 impl Fixture {
   fn new() -> Self {
-    let files: Vec<(&str, &str)> = MANIFESTS.iter().chain(&SOURCES).copied().collect();
+    let files: Vec<(&str, &str)> =
+      MANIFESTS.iter().chain(&SOURCES).chain(&[("testbed.toml", BUN)]).copied().collect();
     let dir = scratch(&files);
     let layout = Layout::of_checkout(&repo(dir.path())).unwrap();
 
@@ -402,6 +405,28 @@ mod the_rule {
 
     assert_eq!(names(&all), PACKAGES);
     assert_eq!(all["@sample/util"], root_file("bun.lock"));
+  }
+
+  // "root configuration is what the declared languages name": node's lockfile is root configuration where
+  // node is declared and an unclaimed path where bun is, and bun's runner configuration the other way round.
+  #[test]
+  fn root_configuration_is_what_the_declared_languages_name() {
+    let bun = Fixture::new();
+    let node = Fixture::new();
+
+    write(node.root(), "testbed.toml", "testbed = 0\n\n[test]\nlanguages = [\"node\"]\n");
+
+    let node_layout = Layout::of_checkout(&node.repo()).unwrap();
+    let by_node =
+      |path: &str| first_reasons(select_packages(node.root(), &node_layout, &strings(&[path])).marked);
+    let unclaimed = |path: &str| MarkReason::Unclaimed {
+      path: path.to_owned(),
+    };
+
+    assert_eq!(by_node("package-lock.json")["@sample/util"], root_file("package-lock.json"));
+    assert_eq!(by_node("bunfig.toml")["@sample/util"], unclaimed("bunfig.toml"));
+    assert_eq!(bun.marked(&["bunfig.toml"])["@sample/util"], root_file("bunfig.toml"));
+    assert_eq!(bun.marked(&["package-lock.json"])["@sample/util"], unclaimed("package-lock.json"));
   }
 
   // "reads: a path a package reads marks that package, and the mark stops there"
@@ -765,6 +790,7 @@ mod a_project_of_its_own {
   #[test]
   fn a_tool_folder_carrying_its_own_manifest_and_lockfile_is_one_and_its_check_is_its_project_s() {
     let dir = scratch(&[
+      ("testbed.toml", BUN),
       ("package.json", r#"{ "name": "fixture", "workspaces": ["packages/*"] }"#),
       ("packages/util/package.json", r#"{ "name": "@sample/util" }"#),
       ("tools/bench/package.json", r#"{ "name": "bench", "scripts": { "check": "bun test" } }"#),
@@ -783,10 +809,42 @@ mod a_project_of_its_own {
     );
   }
 
+  // "its lockfile is the one a declared language names": a node-declared repository finds the folder carrying
+  // `package-lock.json` and not the one carrying `bun.lock`, and one declaring no such language finds none
+  #[test]
+  fn its_lockfile_is_the_one_a_declared_language_names() {
+    let files = |declared: &'static str| {
+      scratch(&[
+        ("testbed.toml", declared),
+        ("package.json", r#"{ "name": "fixture", "workspaces": ["packages/*"] }"#),
+        ("package-lock.json", "{}"),
+        ("packages/util/package.json", r#"{ "name": "@sample/util" }"#),
+        ("site/package.json", r#"{ "name": "site", "scripts": { "check": "npm test" } }"#),
+        ("site/package-lock.json", "{}"),
+        ("lab/package.json", r#"{ "name": "lab" }"#),
+        ("lab/bun.lock", "{}"),
+      ])
+    };
+    let dirs = |declared: &'static str| {
+      let dir = files(declared);
+
+      own_projects(&repo(dir.path())).into_iter().map(|one| one.dir).collect::<Vec<_>>()
+    };
+
+    assert_eq!(dirs("testbed = 0\n\n[test]\nlanguages = [\"node\"]\n"), ["site"]);
+    assert_eq!(dirs(BUN), ["lab"]);
+    assert_eq!(
+      dirs("testbed = 0\n\n[test]\nlanguages = [\"cargo\", \"bun\", \"node\"]\n"),
+      ["lab", "site"]
+    );
+    assert!(dirs("testbed = 0\n\n[test]\nlanguages = [\"cargo\"]\n").is_empty());
+  }
+
   // "a workspace package standing inside it is the workspace's, not the project's"
   #[test]
   fn a_workspace_package_standing_inside_it_is_the_workspace_s_not_the_project_s() {
     let dir = scratch(&[
+      ("testbed.toml", BUN),
       (
         "package.json",
         r#"{ "name": "fixture", "workspaces": ["packages/*", "tools/bench/verbs"] }"#,
@@ -871,8 +929,8 @@ mod a_project_of_its_own {
 
     write(fixture.root(), "site/package.json", r#"{ "name": "site" }"#);
 
-    assert_eq!(dirs("testbed = 0\n\n[projects]\npaths = [\"site\"]\n"), ["lab", "site"]);
-    assert_eq!(dirs("testbed = 0\n\n[projects]\ndiscover = false\npaths = [\"site\"]\n"), ["site"]);
+    assert_eq!(dirs(&format!("{BUN}\n[projects]\npaths = [\"site\"]\n")), ["lab", "site"]);
+    assert_eq!(dirs(&format!("{BUN}\n[projects]\ndiscover = false\npaths = [\"site\"]\n")), ["site"]);
   }
 }
 
@@ -889,7 +947,7 @@ mod a_tool_checked_by_its_manifest {
       )
     };
 
-    write(fixture.root(), "testbed.toml", "testbed = 0\n\n[tools]\ndir = \"tools\"\n");
+    write(fixture.root(), "testbed.toml", &format!("{BUN}\n[tools]\ndir = \"tools\"\n"));
     write(
       fixture.root(),
       "tools/scan/tool.toml",

@@ -256,20 +256,27 @@ flowchart TD
   - for a language whose runner reads a configuration file of its own from the folder it starts in,
     that file's name, which decides the folder its test files run from (`docs/suite.md`, 「Which
     files run」);
-  - for a language that runs package scripts, the command that runs a project's script.
+  - for a language that runs package scripts, the command that runs a project's script;
+  - for a language of a package workspace, its root configuration, the files at the repository's root
+    a change to which reaches every package, and the name of its lockfile, which marks a folder
+    carrying it beside a package manifest as a project of its own (`docs/checks.md`, 「Which tests a
+    change runs」).
 - **The ones there are:**
   - `bun`: `bun test` over anything but one test file; its test files are named `*.test.ts`, run by
     `bun test` handed each file as a path from where it runs (a word that is not written as a path
     is a filter bun matches within every test file's path), its configuration is `bunfig.toml`, and
-    it runs a project's script with `bun run`;
+    it runs a project's script with `bun run`. Its root configuration is `package.json`, `bun.lock`,
+    `bunfig.toml` and `tsconfig.json`, and its lockfile `bun.lock`;
   - `cargo`: build, check, clippy, test, bench, doc and nextest;
   - `node`: package scripts that test, check or build under npm, pnpm, yarn or bun; `node --test`;
     Vitest; Jest. Its test files are named `*.test.js`, `*.test.mjs` and `*.test.cjs`, run by
-    `node --test`, and it runs a project's script with `npm run`;
+    `node --test`, and it runs a project's script with `npm run`. Its root configuration is
+    `package.json`, `package-lock.json` and `tsconfig.json`, and its lockfile `package-lock.json`;
   - `browser`: Playwright, and a `bun test` file under a `browser` directory, which it runs as bun
     does, by bun's configuration;
   - `cargo` and `node` read no configuration file of their own, so their test files run from the
-    repository's root.
+    repository's root; `cargo` and `browser` name no root configuration and no lockfile, since a
+    Cargo workspace is read through `cargo metadata` and a browser file stands in bun's workspace.
 - **A command no language claims** still runs through the testbed when it is started there, read by
   the plain language, `plain`: its exit code, its time, and the last lines of its output on a
   failure.
@@ -284,8 +291,9 @@ flowchart TD
 4. Read counts from the runner's own summary lines and sum every block, since many runners print one
    per file or binary.
 5. Where it runs test files or package scripts, answer its naming and its commands for them, and
-   where its runner reads a configuration file of its own, that file's name.
+   where its runner reads a configuration file of its own, that file's name; for a package
+   workspace, its root configuration and its lockfile.
 6. Put a test in `core`'s tests that holds a claimed command, an unclaimed one, the widening, a
-   summary read back, and its naming, commands and configuration where it has them.
+   summary read back, and its naming, commands, configuration and workspace files where it has them.
 7. Nothing else changes: `classify`, the run, its result, the suite and the check read the list.
    Adding a language is a minor version (`docs/boundary.md`, 「Versions」).

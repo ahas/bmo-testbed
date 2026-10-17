@@ -12,9 +12,6 @@ use serde_json::Value;
 
 use crate::files::checkout_files;
 
-// The lockfile a project of its own carries beside its manifest.
-const LOCKFILE: &str = "bun.lock";
-
 /// A workspace package as its own `package.json` declares it.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct PackageDeclaration {
@@ -33,8 +30,9 @@ pub struct PackageDeclaration {
   pub check: Option<String>,
 }
 
-/// A project of its own: a directory carrying its own `package.json` and `bun.lock` that the root's
-/// workspaces do not list, or one the declaration names (docs/checks.md, 「Which tests a change runs」).
+/// A project of its own: a directory carrying its own `package.json` and a declared language's lockfile that
+/// the root's workspaces do not list, or one the declaration names (docs/checks.md, 「Which tests a change
+/// runs」).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OwnProject {
   pub dir: String,
@@ -141,18 +139,39 @@ pub fn workspace_declarations(root: &Path) -> Vec<PackageDeclaration> {
   packages
 }
 
-// The directories of the checkout holding a lockfile, from the root, the root's own left out.
-fn lockfile_dirs(root: &Path) -> Vec<String> {
-  checkout_files(root)
+// The directories of the checkout holding the lockfile a declared language names, from the root, the root's
+// own left out, each once.
+fn lockfile_dirs(repo: &Repository) -> Vec<String> {
+  let lockfiles: Vec<String> = repo
+    .declaration
+    .test
+    .languages()
+    .into_iter()
+    .filter_map(|language| language.lockfile())
+    .map(|name| format!("/{name}"))
+    .collect();
+
+  if lockfiles.is_empty() {
+    return Vec::new();
+  }
+
+  let mut dirs: Vec<String> = checkout_files(&repo.root)
     .into_iter()
     .filter(|path| !path.starts_with("node_modules/") && !path.contains("/node_modules/"))
-    .filter_map(|path| path.strip_suffix(&format!("/{LOCKFILE}")).map(str::to_owned))
-    .collect()
+    .filter_map(|path| {
+      lockfiles.iter().find_map(|name| path.strip_suffix(name.as_str()).map(str::to_owned))
+    })
+    .collect();
+
+  dirs.sort();
+  dirs.dedup();
+  dirs
 }
 
 /// Every project of its own the checkout holds, by directory: where the declaration leaves discovery on,
-/// each directory carrying its own `package.json` and `bun.lock` that the root's workspaces do not list
-/// and no such directory above it holds; then each directory the declaration names outright.
+/// each directory carrying its own `package.json` and the lockfile a declared language names that the root's
+/// workspaces do not list and no such directory above it holds; then each directory the declaration names
+/// outright.
 pub fn own_projects(repo: &Repository) -> Vec<OwnProject> {
   let root = repo.root.as_path();
   let declared = &repo.declaration.projects;
@@ -160,7 +179,7 @@ pub fn own_projects(repo: &Repository) -> Vec<OwnProject> {
   let mut dirs: Vec<String> = Vec::new();
 
   if declared.discover {
-    let mut found: Vec<String> = lockfile_dirs(root)
+    let mut found: Vec<String> = lockfile_dirs(repo)
       .into_iter()
       .filter(|dir| !listed.contains(dir) && root.join(dir).join("package.json").is_file())
       .collect();
@@ -200,10 +219,11 @@ pub fn own_projects(repo: &Repository) -> Vec<OwnProject> {
     .collect()
 }
 
-/// Every directory a project of its own installs in, from the root: each one inside it that holds a
-/// `bun.lock`, the project's own directory first (docs/checks.md, 「Which tests a change runs」).
+/// Every directory a project of its own installs in, from the root: each one inside it that holds the
+/// lockfile a declared language names, the project's own directory first (docs/checks.md, 「Which tests a
+/// change runs」).
 pub fn own_project_install_dirs(repo: &Repository) -> Vec<String> {
-  let lockfiles = lockfile_dirs(&repo.root);
+  let lockfiles = lockfile_dirs(repo);
 
   own_projects(repo)
     .into_iter()

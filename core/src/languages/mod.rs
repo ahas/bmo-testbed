@@ -73,6 +73,16 @@ pub trait Language: Sync {
   fn script_command(&self, _script: &str) -> Option<Vec<String>> {
     None
   }
+  /// The files at the repository's root that every package of its workspace stands on, so a change to one
+  /// reaches them all; none for a language with no package workspace.
+  fn root_configuration(&self) -> &'static [&'static str] {
+    &[]
+  }
+  /// The name of its lockfile, which beside a package manifest marks a folder as a project of its own; none
+  /// for a language with no package workspace.
+  fn lockfile(&self) -> Option<&'static str> {
+    None
+  }
 }
 
 /// Whether the words already name a flag, alone or with its value after `=`.

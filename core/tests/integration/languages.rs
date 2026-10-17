@@ -349,6 +349,20 @@ fn bun_and_the_browser_name_bun_s_configuration_and_the_others_none() {
   }
 }
 
+// "a language of a package workspace names its root configuration and its lockfile; the others name none"
+#[test]
+fn a_package_workspace_s_language_names_its_root_configuration_and_its_lockfile() {
+  assert_eq!(Bun.root_configuration(), ["package.json", "bun.lock", "bunfig.toml", "tsconfig.json"]);
+  assert_eq!(Bun.lockfile(), Some("bun.lock"));
+  assert_eq!(Node.root_configuration(), ["package.json", "package-lock.json", "tsconfig.json"]);
+  assert_eq!(Node.lockfile(), Some("package-lock.json"));
+
+  for language in [&Browser as &dyn Language, &Cargo, PLAIN] {
+    assert!(language.root_configuration().is_empty(), "{}", language.name());
+    assert_eq!(language.lockfile(), None, "{}", language.name());
+  }
+}
+
 // "a test file runs from the nearest folder at or above it inside the repository holding its language's
 // configuration, else from the root"
 #[test]
