@@ -8,6 +8,7 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 use bmo_testbed_core::declaration::{Repository, Test};
+use bmo_testbed_core::languages::Language;
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::suite::SUITE;
 use bmo_testbed_core::turn::{self, Lane, NOT_RUN_EXIT_CODE, TestbedTurn, TurnAsk};
@@ -27,9 +28,6 @@ use crate::test_server::{template_name, test_postgres, test_server_up};
 use crate::tool_checks::{CheckedTool, package_check};
 use crate::unit::{UnitCommand, run_unit};
 use crate::workspace::{OwnProject, git_lines, own_projects, repository_paths};
-
-// The test files of a repository declaring none, the runner's own naming, as git's pathspecs.
-const DEFAULT_TEST_FILES: [&str; 2] = ["*.test.ts", "**/*.test.ts"];
 
 fn stderr(line: &str) {
   eprintln!("{line}");
@@ -59,21 +57,44 @@ pub struct SuiteWords {
   pub words: Vec<String>,
 }
 
-fn names_path(word: &str) -> bool {
-  !word.starts_with('-') && (word.contains('/') || word.ends_with(".ts"))
+/// The declared languages that run test files, in the order the declaration names them.
+pub fn file_languages(test: &Test) -> Vec<&'static dyn Language> {
+  test
+    .languages()
+    .into_iter()
+    .filter(|language| language.test_command(&[], &[], None).is_some())
+    .collect()
 }
 
-/// What each file's run hands its runner: the caller's own words, and the declared per-test limit of `seconds`
-/// unless they name one.
-pub fn with_test_timeout(words: Vec<String>, seconds: u64) -> Vec<String> {
-  if words.iter().any(|word| word == "--timeout" || word.starts_with("--timeout=")) {
-    return words;
-  }
+/// The language that runs a test file: the first declared one whose own naming the file carries, or else
+/// the first declared one that runs test files.
+pub fn runner_of(test: &Test, file: &str) -> Option<&'static dyn Language> {
+  let languages = file_languages(test);
 
-  let mut words = words;
+  languages
+    .iter()
+    .copied()
+    .find(|language| language.test_naming().iter().any(|naming| glob_matches(naming, file)))
+    .or_else(|| languages.first().copied())
+}
 
-  words.extend(["--timeout".to_owned(), (seconds * 1000).to_string()]);
-  words
+/// The language that runs a project's script: the first declared one that runs package scripts.
+pub fn script_runner(test: &Test) -> Option<&'static dyn Language> {
+  test.languages().into_iter().find(|language| language.script_command("").is_some())
+}
+
+// Whether a word names a path: one holding a separator, or a file named as a declared language names its
+// test files, by its extension.
+fn names_path(word: &str, test: &Test) -> bool {
+  let extensions: Vec<&str> = file_languages(test)
+    .iter()
+    .flat_map(|language| language.test_naming().iter().filter_map(|naming| naming.rsplit_once('.')))
+    .map(|(_, extension)| extension)
+    .collect();
+
+  !word.starts_with('-')
+    && (word.contains('/')
+      || word.rsplit_once('.').is_some_and(|(_, extension)| extensions.contains(&extension)))
 }
 
 /// The run asked for, the caller's words over what the repository declares for its tests: a guard it names
@@ -88,11 +109,16 @@ pub fn ask_of(given: &SuiteWords, test: &Test) -> SuiteAsk {
     file_guard: given.file_guard.unwrap_or(test.file_guard_seconds),
     turn_wait: given.turn_wait.map(|seconds| seconds as f64),
     since: given.since.clone(),
-    picked: for_runner.iter().filter(|word| names_path(word)).map(|word| (*word).clone()).collect(),
-    extra: with_test_timeout(
-      for_runner.iter().filter(|word| !names_path(word)).map(|word| (*word).clone()).collect(),
-      test.test_timeout_seconds,
-    ),
+    picked: for_runner
+      .iter()
+      .filter(|word| names_path(word, test))
+      .map(|word| (*word).clone())
+      .collect(),
+    extra: for_runner
+      .iter()
+      .filter(|word| !names_path(word, test))
+      .map(|word| (*word).clone())
+      .collect(),
   }
 }
 
@@ -177,14 +203,21 @@ pub fn sweep_ending(count: SweepCount, whole_guard: u64, file_guard: u64) -> (bo
 }
 
 /// Every test file of this repository, the ones git has never seen included, matching the declared test
-/// file globs, outside every project of its own: a test written and not yet committed is the likeliest one
-/// to hold the suite.
+/// file globs, or where none are declared the declared languages' own naming, outside every project of its
+/// own: a test written and not yet committed is the likeliest one to hold the suite. A repository declaring
+/// no language that runs test files has none.
 pub fn test_files(repo: &Repository) -> Vec<String> {
-  let declared = repo.declaration.test.files.as_deref();
+  let test = &repo.declaration.test;
+  let languages = file_languages(test);
+  let declared = test.files.as_deref();
   let mut asked = vec!["ls-files", "--cached", "--others", "--exclude-standard"];
 
+  if languages.is_empty() {
+    return Vec::new();
+  }
+
   if declared.is_none() {
-    asked.extend(DEFAULT_TEST_FILES);
+    asked.extend(languages.iter().flat_map(|language| language.test_naming().iter().copied()));
   }
 
   let mut found: Vec<String> = git_lines(&repo.root, &asked)
@@ -362,8 +395,6 @@ fn run_held(
 
     say(&fill_marks(&SUITE.lines.on_postgres, &[("template", template)]));
   }
-
-  let bun = "bun".to_owned();
 
   // The crates, the projects of their own and the tools checked by their manifest this run checks, each one
   // unit named by its directory and a slash: every one on a whole run, the ones the change marked on a selected
@@ -576,13 +607,12 @@ fn run_held(
       .collect();
 
     if let Some(project) = project_units.get(file) {
-      return UnitCommand {
-        program: bun.clone(),
-        args: vec!["run".to_owned(), repo.declaration.projects.check_script.clone()],
-        cwd: root.join(&project.dir),
-        env: base,
-        home: None,
-      };
+      // A project with no runner of its script is said before its run is asked for.
+      let line = script_runner(test)
+        .and_then(|runner| runner.script_command(&repo.declaration.projects.check_script))
+        .unwrap_or_default();
+
+      return UnitCommand::of(line, root.join(&project.dir), base, None);
     }
 
     if let Some(tool) = tool_units.get(file)
@@ -622,22 +652,24 @@ fn run_held(
       };
     }
 
-    UnitCommand {
-      program: bun.clone(),
-      args: std::iter::once("test".to_owned())
-        .chain(ask.extra.iter().cloned())
-        .chain([file.clone()])
-        .collect(),
-      cwd: root.to_path_buf(),
-      env: base,
-      home: None,
-    }
+    // A test file listed has a runner, since a repository with none lists no test file.
+    let line = runner_of(test, file)
+      .and_then(|runner| {
+        runner.test_command(std::slice::from_ref(file), &ask.extra, Some(test.test_timeout_seconds))
+      })
+      .unwrap_or_default();
+
+    UnitCommand::of(line, root.to_path_buf(), base, None)
   };
   let file_run = |file: &String| -> (i32, bool) {
     let no_check = match (project_units.get(file), tool_units.get(file)) {
       (Some(project), _) if !project.check => {
         Some(fill_marks(&SUITE.file.no_check, &[("script", &repo.declaration.projects.check_script)]))
       }
+      (Some(_), _) if script_runner(test).is_none() => Some(fill_marks(
+        &SUITE.file.no_runner,
+        &[("script", &repo.declaration.projects.check_script)],
+      )),
       (_, Some(tool)) => tool.check.clone().err(),
       _ => None,
     };

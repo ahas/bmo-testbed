@@ -30,7 +30,7 @@
 | Key | Type | Default | Meaning |
 |---|---|---|---|
 | `languages` | list of strings | `[]` | The kinds of unit the suite gathers: `bun` (test files run by `bun test`), `node` (test files run by `node --test`), `cargo` (crates of the Cargo workspace), `browser` (test files in the browser lane) |
-| `files` | list of globs | the runner's own naming | The test files of the file languages |
+| `files` | list of globs | each declared language's own naming | The test files of the file languages |
 | `browser` | list of globs | `[]` | Test files run one at a time in the browser lane |
 | `guard_seconds` | integer | 240 | The whole-run guard |
 | `file_guard_seconds` | integer | 90 | The per-file guard |
@@ -56,7 +56,7 @@ make their own databases names neither, and its tests are handed the server alon
 |---|---|---|---|
 | `discover` | boolean | `true` | Find every directory carrying its own package manifest and lockfile that the root workspace does not list |
 | `paths` | list of paths | `[]` | Projects named outright, beside or instead of the ones found |
-| `check_script` | string | `check` | The manifest script that is a project's check |
+| `check_script` | string | `check` | The manifest script that is a project's check, run by the first declared language that runs package scripts |
 
 ## `[tools]`: tools checked by their manifest
 

@@ -1,5 +1,5 @@
 //! The languages a command is run and read by (docs/testbed.md, 「Languages」): what each claims, how it
-//! widens a command, and what it reads out of a log.
+//! widens a command, what it reads out of a log, and how it names, runs and checks what the suite hands it.
 
 use std::collections::BTreeMap;
 
@@ -268,4 +268,50 @@ fn node_reads_node_s_vitest_s_and_jest_s_summaries_and_failures() {
     ["reads a line", "src/a.test.ts > adds", "sums > two"]
   );
   assert_eq!(Node.tally("built in 3s"), None);
+}
+
+// "a file language names its test files, runs them handed the per-test limit its own way unless the caller
+// names one, and runs a project's script"
+#[test]
+fn a_file_language_names_runs_and_checks_its_own() {
+  let one = words(&["a.test.ts"]);
+  let two = words(&["a.test.ts", "b.test.ts"]);
+
+  assert_eq!(Bun.test_naming(), ["*.test.ts", "**/*.test.ts"]);
+  assert_eq!(
+    Bun.test_command(&one, &words(&["--bail"]), Some(30)),
+    Some(words(&["bun", "test", "--bail", "--timeout", "30000", "a.test.ts"]))
+  );
+  assert_eq!(
+    Bun.test_command(&one, &words(&["--timeout=5000"]), Some(30)),
+    Some(words(&["bun", "test", "--timeout=5000", "a.test.ts"]))
+  );
+  assert_eq!(
+    Bun.test_command(&two, &[], None),
+    Some(words(&["bun", "test", "--parallel", "a.test.ts", "b.test.ts"]))
+  );
+  assert_eq!(Bun.script_command("check"), Some(words(&["bun", "run", "check"])));
+
+  let js = words(&["a.test.mjs"]);
+
+  assert!(Node.test_naming().contains(&"**/*.test.mjs"));
+  assert_eq!(
+    Node.test_command(&js, &[], Some(30)),
+    Some(words(&["node", "--test", "--test-timeout=30000", "a.test.mjs"]))
+  );
+  assert_eq!(
+    Node.test_command(&js, &words(&["--test-timeout", "100"]), Some(30)),
+    Some(words(&["node", "--test", "--test-timeout", "100", "a.test.mjs"]))
+  );
+  assert_eq!(Node.script_command("check"), Some(words(&["npm", "run", "check"])));
+
+  // A browser file is a bun file, its files declared rather than named; Cargo and the plain language run none.
+  assert_eq!(Browser.test_command(&one, &[], Some(30)), Bun.test_command(&one, &[], Some(30)));
+  assert!(Browser.test_naming().is_empty() && Browser.script_command("check").is_none());
+
+  for language in [&Cargo as &dyn Language, PLAIN] {
+    assert!(language.test_naming().is_empty(), "{}", language.name());
+    assert_eq!(language.test_command(&one, &[], None), None, "{}", language.name());
+    assert_eq!(language.script_command("check"), None, "{}", language.name());
+  }
 }

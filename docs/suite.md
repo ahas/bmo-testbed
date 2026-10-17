@@ -118,8 +118,14 @@
 ## Which files run
 
 - **Git answers:** tracked test files and test files not yet committed, matching the declared test
-  file globs, outside every project of its own. Uncommitted files matter most: a newly written test
-  is the usual cause of a stalled suite.
+  file globs, or where none are declared each declared language's own naming, outside every project
+  of its own. Uncommitted files matter most: a newly written test is the usual cause of a stalled
+  suite.
+- **The declared languages run them** (`docs/testbed.md`, 「Languages」): each file by the first
+  declared language whose naming it carries, or else the first that runs test files, handed the
+  caller's words and the declared per-test timeout. A repository declaring no language that runs
+  test files has none; a project's check script is run by the first declared language that runs
+  package scripts.
 - **A word naming a path narrows the run** to the test files whose path holds it, and runs no heavy
   unit, except a word that is a crate's or a project's unit name exactly, its directory and a slash,
   which picks that unit and no test file.

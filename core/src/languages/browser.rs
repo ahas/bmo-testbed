@@ -7,7 +7,7 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
-use super::bun::{browser_path, test_paths};
+use super::bun::{Bun, browser_path, test_paths};
 use super::{Language, Tally, Widened, names_option, pattern, sum_of};
 
 pub struct Browser;
@@ -70,5 +70,15 @@ impl Language for Browser {
       .split('\n')
       .filter_map(|line| FAILED.captures(line).map(|found| found[1].to_owned()))
       .collect()
+  }
+
+  // A browser test file is a `bun test` file, run as bun runs it.
+  fn test_command(
+    &self,
+    files: &[String],
+    words: &[String],
+    timeout_seconds: Option<u64>,
+  ) -> Option<Vec<String>> {
+    Bun.test_command(files, words, timeout_seconds)
   }
 }

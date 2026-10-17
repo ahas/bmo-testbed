@@ -30,6 +30,21 @@ pub struct UnitCommand {
   pub home: Option<PathBuf>,
 }
 
+impl UnitCommand {
+  /// A unit running a command line, its program first.
+  pub fn of(line: Vec<String>, cwd: PathBuf, env: Vec<(String, String)>, home: Option<PathBuf>) -> Self {
+    let mut words = line.into_iter();
+
+    Self {
+      program: words.next().unwrap_or_default(),
+      args: words.collect(),
+      cwd,
+      env,
+      home,
+    }
+  }
+}
+
 /// What one unit came to.
 #[derive(Clone, Debug)]
 pub struct UnitRun {

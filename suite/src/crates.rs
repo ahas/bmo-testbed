@@ -42,13 +42,20 @@ pub fn is_workspace_path(crates: &[CrateDeclaration], path: &str) -> bool {
 
 /// The account's own home, which a test's `HOME` does not move: the toolchain stands there.
 pub fn account_home() -> PathBuf {
-  // SAFETY: getpwuid answers a static record of the user's own entry, read before anything else asks.
-  let from_passwd = unsafe {
-    let entry = libc::getpwuid(libc::getuid());
-
-    (!entry.is_null() && !(*entry).pw_dir.is_null())
-      .then(|| std::ffi::CStr::from_ptr((*entry).pw_dir).to_string_lossy().into_owned())
+  // The reentrant lookup, into a record and a buffer of this call's own: the plain one answers a record every
+  // other thread's lookup writes over.
+  // SAFETY: an all-zero `passwd` is a valid value of the plain C struct the lookup writes into.
+  let mut record: libc::passwd = unsafe { std::mem::zeroed() };
+  let mut buffer = vec![0 as libc::c_char; 16 * 1024];
+  let mut found: *mut libc::passwd = std::ptr::null_mut();
+  // SAFETY: the record, the buffer and the answer pointer are this call's own and outlive the call; the
+  // buffer's length is the one handed.
+  let read = unsafe {
+    libc::getpwuid_r(libc::getuid(), &raw mut record, buffer.as_mut_ptr(), buffer.len(), &raw mut found)
   };
+  let from_passwd = (read == 0 && !found.is_null() && !record.pw_dir.is_null())
+    // SAFETY: a record found points its home into the buffer, which still stands.
+    .then(|| unsafe { std::ffi::CStr::from_ptr(record.pw_dir) }.to_string_lossy().into_owned());
 
   from_passwd
     .or_else(|| std::env::var("HOME").ok())

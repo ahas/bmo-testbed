@@ -6,7 +6,7 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-use bmo_testbed_core::declaration::Repository;
+use bmo_testbed_core::declaration::{Repository, Test};
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::suite::SUITE;
 use bmo_testbed_core::turn::{Lane, NOT_RUN_EXIT_CODE, TurnAsk, process_env, take_turn};
@@ -14,6 +14,7 @@ use sha2::{Digest, Sha256};
 
 use crate::cargo::cargo_verb_line;
 use crate::own_binary::testbed_line;
+use crate::run::{file_languages, runner_of, script_runner};
 use crate::selection::changed_paths;
 use crate::static_check::{CheckStep, TimedRun, declared_steps, run_timed, spawn_step};
 use crate::test_server::test_postgres;
@@ -131,13 +132,13 @@ fn tool_step(tool: &CheckedTool) -> Step {
   }
 }
 
-// A project's own check in its folder, through the declared script; where it names none, a step failing with
-// the reason.
-fn project_step(project: &OwnProject, script: &str) -> Step {
-  let command = if project.check {
-    ["bun", "run", script].map(str::to_owned).to_vec()
-  } else {
-    refusal(fill_marks(&SUITE.file.no_check, &[("script", script)]))
+// A project's own check in its folder, through the declared script run by the declared language that runs
+// scripts; where it names none, or no language runs it, a step failing with the reason.
+fn project_step(project: &OwnProject, script: &str, test: &Test) -> Step {
+  let command = match script_runner(test).and_then(|runner| runner.script_command(script)) {
+    _ if !project.check => refusal(fill_marks(&SUITE.file.no_check, &[("script", script)])),
+    Some(command) => command,
+    None => refusal(fill_marks(&SUITE.file.no_runner, &[("script", script)])),
   };
 
   Step {
@@ -170,15 +171,24 @@ pub fn plan(repo: &Repository, ask: &CheckAsk) -> Result<CheckPlan, String> {
     steps.push(cargo("check", &touched.checked_crates, vec![]));
   }
 
-  if !touched.tests.is_empty() {
-    let mut command: Vec<String> = ["bun", "test", "--parallel"].map(str::to_owned).to_vec();
+  // The touched test files, one step to each declared language that runs some of them.
+  let test = &repo.declaration.test;
 
-    command.extend(touched.tests.iter().cloned());
-    steps.push(Step {
-      name: "bun test".to_owned(),
-      step: plain(".", command, database.clone()),
-      tests: true,
-    });
+  for language in file_languages(test) {
+    let files: Vec<String> = touched
+      .tests
+      .iter()
+      .filter(|file| runner_of(test, file).is_some_and(|runner| runner.name() == language.name()))
+      .cloned()
+      .collect();
+
+    if let Some(command) = language.test_command(&files, &[], None).filter(|_| !files.is_empty()) {
+      steps.push(Step {
+        name: fill_marks(&SUITE.file.tests_step, &[("language", language.name())]),
+        step: plain(".", command, database.clone()),
+        tests: true,
+      });
+    }
   }
 
   if !touched.tested_crates.is_empty() {
@@ -186,7 +196,7 @@ pub fn plan(repo: &Repository, ask: &CheckAsk) -> Result<CheckPlan, String> {
   }
 
   for project in &touched.projects {
-    steps.push(project_step(project, &repo.declaration.projects.check_script));
+    steps.push(project_step(project, &repo.declaration.projects.check_script, test));
   }
 
   for tool in &touched.tools {

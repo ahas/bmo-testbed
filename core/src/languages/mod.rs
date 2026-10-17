@@ -49,6 +49,30 @@ pub trait Language: Sync {
   fn tally(&self, log: &str) -> Option<Tally>;
   /// What failed, as short lines out of the log, in the order written.
   fn failures(&self, log: &str) -> Vec<String>;
+  /// Its own naming of a test file, as git's pathspecs; none for a language that runs no test files.
+  fn test_naming(&self) -> &'static [&'static str] {
+    &[]
+  }
+  /// The command that runs these test files, handed the caller's words and, where one is given, the
+  /// per-test limit in seconds its own way unless the words name one; none for a language that runs no
+  /// test files.
+  fn test_command(
+    &self,
+    _files: &[String],
+    _words: &[String],
+    _timeout_seconds: Option<u64>,
+  ) -> Option<Vec<String>> {
+    None
+  }
+  /// The command that runs a project's package script; none for a language that runs no scripts.
+  fn script_command(&self, _script: &str) -> Option<Vec<String>> {
+    None
+  }
+}
+
+/// Whether the words already name a flag, alone or with its value after `=`.
+pub fn names_flag(words: &[String], flag: &str) -> bool {
+  words.iter().any(|word| word == flag || word.starts_with(&format!("{flag}=")))
 }
 
 /// Every language there is, in the order of their names.

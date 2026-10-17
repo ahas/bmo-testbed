@@ -98,6 +98,8 @@ pub struct FileWords {
   pub failed: String,
   pub heading: String,
   pub no_check: String,
+  pub no_runner: String,
+  pub tests_step: String,
   pub no_tool_check: String,
   pub unread_manifest: String,
   pub held: String,

@@ -18,7 +18,7 @@ use bmo_testbed_suite::fence::{
   fenced_build_jobs,
 };
 use bmo_testbed_suite::run::{
-  SuiteWords, SweepCount, ask_of, guards_line, sweep_ending, verdict_line, with_test_timeout,
+  SuiteWords, SweepCount, ask_of, guards_line, runner_of, script_runner, sweep_ending, verdict_line,
 };
 use bmo_testbed_suite::sweep::{SweepPlan, largest_first, sweep};
 
@@ -91,15 +91,41 @@ mod asked {
     );
 
     assert_eq!(ask.picked, words(&["server/a.test.ts", "core/"]));
-    assert_eq!(ask.extra, words(&["--bail", "--timeout", "30000"]));
+    assert_eq!(ask.extra, words(&["--bail"]));
   }
 
-  // "gives each test thirty seconds where it names no limit of its own, and keeps a limit the caller names"
+  fn declared(languages: &[&str]) -> Test {
+    Test {
+      languages: languages.iter().map(|one| (*one).to_owned()).collect(),
+      ..Test::default()
+    }
+  }
+
+  // "a file named as a declared language names its test files is a path, by its extension"
   #[test]
-  fn gives_each_test_thirty_seconds_unless_it_names_its_own() {
-    assert_eq!(with_test_timeout(words(&["--bail"]), 30), words(&["--bail", "--timeout", "30000"]));
-    assert_eq!(with_test_timeout(words(&["--timeout", "5000"]), 30), words(&["--timeout", "5000"]));
-    assert_eq!(with_test_timeout(words(&["--timeout=5000"]), 30), words(&["--timeout=5000"]));
+  fn a_file_named_as_a_declared_language_names_its_tests_is_a_path() {
+    let given = SuiteWords {
+      words: words(&["a.test.mjs", "b.ts", "-t", "name"]),
+      ..SuiteWords::default()
+    };
+
+    assert_eq!(ask_of(&given, &declared(&["node"])).picked, words(&["a.test.mjs"]));
+    assert_eq!(ask_of(&given, &declared(&["bun"])).picked, words(&["b.ts"]));
+  }
+
+  // "each file is run by the first declared language whose naming it carries, else the first that runs files"
+  #[test]
+  fn each_file_is_run_by_the_declared_language_whose_naming_it_carries() {
+    let both = declared(&["cargo", "bun", "node"]);
+    let name = |file: &str| runner_of(&both, file).map(|language| language.name());
+
+    assert_eq!(name("server/a.test.ts"), Some("bun"));
+    assert_eq!(name("tools/b.test.mjs"), Some("node"));
+    assert_eq!(name("checks/c.spec.ts"), Some("bun"));
+    assert_eq!(runner_of(&declared(&["cargo"]), "a.test.ts").map(|language| language.name()), None);
+    assert_eq!(script_runner(&both).map(|language| language.name()), Some("bun"));
+    assert_eq!(script_runner(&declared(&["node"])).map(|language| language.name()), Some("node"));
+    assert!(script_runner(&declared(&["cargo"])).is_none());
   }
 }
 

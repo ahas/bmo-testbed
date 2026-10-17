@@ -51,6 +51,9 @@ fn git(at: &Path, args: &[&str]) -> String {
 const DECLARED: &str = r#"
 testbed = 0
 
+[test]
+languages = ["bun"]
+
 [check]
 quick = ["layout"]
 
@@ -145,7 +148,7 @@ fn a_change_read_since_the_commit_its_branch_was_made_from_selects_the_tests_tha
   assert_eq!(names(&named), [DeployStep::Quick.name(), "types", "bun test"]);
   assert_eq!(
     named.steps.iter().find(|step| step.tests).unwrap().step.command,
-    ["bun", "test", "--parallel", "packages/util/numbers.test.ts"]
+    ["bun", "test", "packages/util/numbers.test.ts"]
   );
 
   // Read since HEAD on the branch, nothing is changed and no test is owed.

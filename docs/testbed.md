@@ -249,13 +249,19 @@ flowchart TD
   - the command as it runs holding the lane alone: the width handed to the runner, through an argument
     or the environment;
   - what a run's output adds up to: how many tests passed, failed and were skipped;
-  - what failed, as short lines out of the output.
+  - what failed, as short lines out of the output;
+  - for a language that runs test files, its own naming of a test file, and the command that runs
+    test files, handed the caller's words and the per-test timeout its own way;
+  - for a language that runs package scripts, the command that runs a project's script.
 - **The ones there are:**
-  - `bun`: `bun test` over anything but one test file;
+  - `bun`: `bun test` over anything but one test file; its test files are named `*.test.ts`, run by
+    `bun test`, and it runs a project's script with `bun run`;
   - `cargo`: build, check, clippy, test, bench, doc and nextest;
   - `node`: package scripts that test, check or build under npm, pnpm, yarn or bun; `node --test`;
-    Vitest; Jest;
-  - `browser`: Playwright, and a `bun test` file under a `browser` directory.
+    Vitest; Jest. Its test files are named `*.test.js`, `*.test.mjs` and `*.test.cjs`, run by
+    `node --test`, and it runs a project's script with `npm run`;
+  - `browser`: Playwright, and a `bun test` file under a `browser` directory, which it runs as bun
+    does.
 - **A command no language claims** still runs through the testbed when it is started there, read by
   the plain language, `plain`: its exit code, its time, and the last lines of its output on a
   failure.
@@ -269,7 +275,8 @@ flowchart TD
 3. Widen through the runner's own handle and leave a number the command already names alone.
 4. Read counts from the runner's own summary lines and sum every block, since many runners print one
    per file or binary.
-5. Put a test in `core`'s tests that holds a claimed command, an unclaimed one, the widening and a
-   summary read back.
-6. Nothing else changes: `classify`, the run and its result read the list. Adding a language is a
-   minor version (`docs/boundary.md`, 「Versions」).
+5. Where it runs test files or package scripts, answer its naming and its commands for them.
+6. Put a test in `core`'s tests that holds a claimed command, an unclaimed one, the widening, a
+   summary read back, and its naming and commands where it has them.
+7. Nothing else changes: `classify`, the run, its result, the suite and the check read the list.
+   Adding a language is a minor version (`docs/boundary.md`, 「Versions」).

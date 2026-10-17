@@ -7,7 +7,7 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
-use super::{Language, Tally, Widened, pattern, sum_of};
+use super::{Language, Tally, Widened, names_flag, pattern, sum_of};
 
 pub struct Bun;
 
@@ -100,5 +100,38 @@ impl Language for Bun {
       .split('\n')
       .filter_map(|line| FAILED.captures(line).map(|found| found[1].to_owned()))
       .collect()
+  }
+
+  fn test_naming(&self) -> &'static [&'static str] {
+    &["*.test.ts", "**/*.test.ts"]
+  }
+
+  // Several files run side by side in bun's own pool; the per-test limit is bun's `--timeout`, in milliseconds.
+  fn test_command(
+    &self,
+    files: &[String],
+    words: &[String],
+    timeout_seconds: Option<u64>,
+  ) -> Option<Vec<String>> {
+    let mut command = vec!["bun".to_owned(), "test".to_owned()];
+
+    if files.len() > 1 {
+      command.push("--parallel".to_owned());
+    }
+
+    command.extend(words.iter().cloned());
+
+    if let Some(seconds) = timeout_seconds
+      && !names_flag(words, "--timeout")
+    {
+      command.extend(["--timeout".to_owned(), (seconds * 1000).to_string()]);
+    }
+
+    command.extend(files.iter().cloned());
+    Some(command)
+  }
+
+  fn script_command(&self, script: &str) -> Option<Vec<String>> {
+    Some(vec!["bun".to_owned(), "run".to_owned(), script.to_owned()])
   }
 }
