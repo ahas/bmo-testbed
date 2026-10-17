@@ -6,6 +6,7 @@
 use std::path::{Path, PathBuf};
 
 use bmo_testbed_core::declaration::Repository;
+use bmo_testbed_core::policy::fill_shown;
 use bmo_testbed_core::policy::suite::SUITE;
 use bmo_testbed_core::queue::{LockWait, take_lock};
 
@@ -150,7 +151,7 @@ pub fn test_server_up() -> Result<(), String> {
   std::fs::create_dir_all(&dir).map_err(|why| why.to_string())?;
 
   let lock = take_lock(&dir.join("stand.lock"), 120.0, LockWait::default())
-    .ok_or_else(|| format!("{} was being stood up by another run for two minutes", dir.display()))?;
+    .ok_or_else(|| fill_shown(&SUITE.cargo.stood_up_elsewhere, &[("dir", &dir.display())]))?;
 
   if answers(&bin, &socket) {
     drop(lock);

@@ -4,6 +4,8 @@
 
 use std::path::{Path, PathBuf};
 
+use bmo_testbed_core::policy::deploy::DEPLOY;
+use bmo_testbed_core::policy::fill_shown;
 use bmo_testbed_deploy::remove::{git_tree_above, removal_fault, remove_tree};
 use bmo_testbed_deploy::run::{run_quiet, shell_words, stamp_for_name, words};
 use bmo_testbed_deploy::unit::{
@@ -27,8 +29,17 @@ fn a_declared_command_line_runs_through_the_shell_as_it_is_written() {
 
 #[test]
 fn nothing_inside_the_data_root_or_above_it_is_removed() {
-  assert!(removal_fault(Path::new("/srv/data"), Path::new("/srv/data/locks")).is_some());
-  assert!(removal_fault(Path::new("/srv/data"), Path::new("/srv")).is_some());
+  assert_eq!(
+    removal_fault(Path::new("/srv/data"), Path::new("/srv/data/locks")),
+    Some(fill_shown(
+      &DEPLOY.remove.inside,
+      &[("path", &"/srv/data/locks"), ("data", &"/srv/data")]
+    ))
+  );
+  assert_eq!(
+    removal_fault(Path::new("/srv/data"), Path::new("/srv")),
+    Some(fill_shown(&DEPLOY.remove.holds, &[("path", &"/srv"), ("data", &"/srv/data")]))
+  );
   assert!(removal_fault(Path::new("/srv/data"), Path::new("/srv/backups/x")).is_none());
 }
 
@@ -85,6 +96,10 @@ fn the_unit_line_hands_over_the_marker_the_path_the_roots_and_the_working_tree_t
 fn a_unit_is_named_for_what_it_runs_and_its_notice_names_its_journal() {
   assert_eq!(deploy_unit_name(5), "bmo-deploy-5");
   assert_eq!(upload_unit_name(5), "bmo-backup-upload-5");
+  assert_eq!(
+    deploy_unit_notice("bmo-deploy-5"),
+    fill_shown(&DEPLOY.unit.notice, &[("unit", &"bmo-deploy-5")])
+  );
   assert!(deploy_unit_notice("bmo-deploy-5").contains("journalctl --user -u bmo-deploy-5 --no-pager"));
   assert_eq!(first_chars("abcdef", 3), "abc");
 }

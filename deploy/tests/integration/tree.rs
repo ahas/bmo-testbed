@@ -5,6 +5,8 @@ use std::collections::HashMap;
 use std::os::unix::fs::symlink;
 use std::path::{Path, PathBuf};
 
+use bmo_testbed_core::policy::deploy::DEPLOY;
+use bmo_testbed_core::policy::fill_shown;
 use bmo_testbed_deploy::tree::{
   DeployRecord, UnitInstall, UnitLink, UnitMark, UnitRelink, backup_name, backup_stamp, base_name,
   binary_restarts, bot_unit, link_units, mark_built_from, marked_units, outside_relinks,
@@ -34,14 +36,16 @@ fn the_record_is_written_whole_and_read_back_and_none_stands_for_no_record() {
 
 #[test]
 fn a_checkout_is_refused_for_this_runs_changes_for_no_commit_and_for_an_unpushed_one() {
-  assert!(tree_fault(&names(&["a.ts"]), "c", true, "origin/main").unwrap().contains("a.ts"));
+  let words = &DEPLOY.tree;
+
   assert_eq!(
-    tree_fault(&[], "", true, "origin/main").as_deref(),
-    Some("the working tree is on no commit at all")
+    tree_fault(&names(&["a.ts"]), "c", true, "origin/main"),
+    Some(fill_shown(&words.dirty, &[("named", &"a.ts"), ("rest", &"")]))
   );
+  assert_eq!(tree_fault(&[], "", true, "origin/main").as_ref(), Some(&words.no_commit));
   assert_eq!(
-    tree_fault(&[], &"c".repeat(40), false, "origin/main").as_deref(),
-    Some("cccccccccccc is not on origin/main; an unpushed commit is not deployable")
+    tree_fault(&[], &"c".repeat(40), false, "origin/main"),
+    Some(fill_shown(&words.unpushed, &[("commit", &"cccccccccccc"), ("branch", &"origin/main")]))
   );
   assert_eq!(tree_fault(&[], &"c".repeat(40), true, "origin/main"), None);
 }
@@ -53,7 +57,7 @@ fn a_refusal_names_the_first_ten_changed_files_and_counts_the_rest() {
 
   assert!(said.contains("f9.rs"));
   assert!(!said.contains("f10.rs"));
-  assert!(said.ends_with(", and 2 more"));
+  assert!(said.ends_with(&fill_shown(&DEPLOY.tree.more, &[("count", &2)])));
 }
 
 fn local(year: i32, month: u32, day: u32, hour: u32, minute: u32, second: u32) -> String {
@@ -147,9 +151,13 @@ fn a_dangling_link_with_no_file_of_its_name_is_a_fault_named() {
   let (relinks, faults) = plan(&[link("app-gone.service", "/d/deploy/web/app-gone.service")], None, &[]);
 
   assert!(relinks.is_empty());
-  assert_eq!(faults.len(), 1);
-  assert!(faults[0].contains("app-gone.service"));
-  assert!(faults[0].contains("web/app-gone.service"));
+  assert_eq!(
+    faults,
+    [fill_shown(
+      &DEPLOY.tree.link_gone,
+      &[("unit", &"app-gone.service"), ("path", &"web/app-gone.service")]
+    )]
+  );
 }
 
 // "and so is one with several files of its name to choose between"
@@ -162,7 +170,18 @@ fn a_dangling_link_with_several_files_of_its_name_is_a_fault() {
   );
 
   assert!(relinks.is_empty());
-  assert!(faults[0].contains("2 files of that name"));
+  assert_eq!(
+    faults,
+    [fill_shown(
+      &DEPLOY.tree.link_several,
+      &[
+        ("unit", &"app-web.service"),
+        ("path", &"web/app-web.service"),
+        ("count", &2),
+        ("files", &"site/app-web.service, services/app-web.service"),
+      ],
+    )]
+  );
 }
 
 // "an untracked file standing there now is still there after the checkout"

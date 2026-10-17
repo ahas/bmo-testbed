@@ -8,8 +8,8 @@ use std::path::{Path, PathBuf};
 use bmo_testbed_cli::full::{read_start, runs_folder, write_start};
 use bmo_testbed_core::policy::daily::DAILY;
 use bmo_testbed_core::policy::deploy::DEPLOY;
-use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::verbs::VERBS;
+use bmo_testbed_core::policy::{fill_marks, fill_shown};
 use bmo_testbed_core::queue::{LockWait, now_ms, take_lock};
 
 use crate::stand::{Ran, git, install, ran, testbed};
@@ -139,8 +139,7 @@ fn the_deployment_goes_to_a_unit_of_its_own_and_ends_at_once() {
       "--no-check".to_owned()
     ]
   );
-  assert!(done.out.contains(&format!("running as {unit}")), "{}", done.out);
-  assert!(done.out.contains(&format!("journalctl --user -u {unit}")), "{}", done.out);
+  assert!(done.out.contains(&fill_shown(&DEPLOY.unit.notice, &[("unit", &unit)])), "{}", done.out);
 }
 
 // "a unit that cannot be started is a refusal, and nothing runs in the caller's place"
@@ -151,11 +150,10 @@ fn a_deployment_whose_unit_cannot_be_started_is_refused() {
   let done = scene.run(&["deploy"], &[], Some(&bin));
 
   assert_eq!(done.code, 2, "{}", done.out);
-  assert!(
-    done.out.contains("could not be started, and it does not run in this shell instead"),
-    "{}",
-    done.out
-  );
+  // What systemd-run's stand-in printed follows the policy's line, so the line is matched up to it.
+  let refused = DEPLOY.unit.not_started.split("{unit}").nth(1).unwrap().split("{said}").next().unwrap();
+
+  assert!(done.out.contains(refused), "{}", done.out);
   assert!(!scene.dir.path().join("live").exists());
 }
 

@@ -3,6 +3,9 @@
 
 use std::path::{Path, PathBuf};
 
+use bmo_testbed_core::policy::deploy::DEPLOY;
+use bmo_testbed_core::policy::fill_shown;
+
 // A path made absolute against the working directory.
 fn absolute(path: &Path) -> PathBuf {
   if path.is_absolute() {
@@ -23,21 +26,13 @@ pub fn removal_fault(root: &Path, path: &Path) -> Option<String> {
   let target = absolute(path);
   let data = absolute(root);
 
+  let marks: [(&str, &dyn std::fmt::Display); 2] = [("path", &target.display()), ("data", &data.display())];
+
   if target.starts_with(&data) {
-    return Some(format!(
-      "refusing to remove {}: it is inside the runtime data root {}",
-      target.display(),
-      data.display()
-    ));
+    return Some(fill_shown(&DEPLOY.remove.inside, &marks));
   }
 
-  data.starts_with(&target).then(|| {
-    format!(
-      "refusing to remove {}: the runtime data root {} is inside it",
-      target.display(),
-      data.display()
-    )
-  })
+  data.starts_with(&target).then(|| fill_shown(&DEPLOY.remove.holds, &marks))
 }
 
 /// The only deletion a deployment makes: refused rather than made where the guard above says no.

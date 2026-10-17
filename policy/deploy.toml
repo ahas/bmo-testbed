@@ -136,3 +136,116 @@ upload_failed = "the backup upload could not be started: {said}"
 live = "{commit} is live, with {backup} behind it"
 live_alone = "{commit} is live"
 deployed_summary = "{commit} of {repository} is live"
+
+# What the adoption of a deploy tree that is still a directory says (docs/deploy.md, 「A deploy tree that
+# is still a directory」): {dir} a directory, {release} a release, {commit} a short commit, {path} a
+# submodule's path, {said} and {why} what a command or a call came to.
+[adopt]
+retired_earlier = "an earlier adoption's directory retired to {dir}"
+a_file = "{dir} stands as a file, which no deploy tree is"
+no_worktree = "the directory {dir} is no git worktree at a commit: {said}"
+not_built_from = "the directory {dir}'s bin/built-from does not name the commit it stands on, {commit}"
+adopting = "adopting the directory {dir} at {commit} into a release"
+elsewhere = "the release of {commit} was prepared somewhere else: {release}"
+not_exchanged = "the directory and the link onto {release} could not be exchanged: {why}"
+linked = "the deploy tree is now a link onto {release}"
+retired = "the directory it was retired to {dir}"
+bin_not_taken = "the directory's bin/ could not be taken into {release}: {why}"
+not_retired = "the exchanged directory {dir} could not be retired: {why}"
+not_repaired = "the retired tree {dir} could not be repaired: {said}"
+submodule_not_pointed = "the retired tree's submodule {path} could not be pointed at {dir}: {said}"
+not_removed = "the retired tree {dir} could not be removed: {why}"
+
+# What the watch of the `bot` service coming up and staying up says (docs/deploy.md, 「Rollback」):
+# {seconds} a time, {code} an exit, {said} and {why} what came of it, {active} and {sub} the unit's states,
+# {unit} the unit.
+[boot]
+# What one ask of the health heard.
+no_answer = "no answer within {seconds}s"
+not_run = "could not be run: {why}"
+exit = "exit {code}"
+exit_said = "exit {code}: {said}"
+# The code of an ask ended by a signal.
+a_signal = "a signal"
+# Why the service did not stay up.
+unasked = "systemd could not be asked for the unit"
+unit_is = "the unit is {active}/{sub}"
+unit_went = "the unit went {active}/{sub}"
+pid_changed = "its main process changed from {from} to {to}"
+restarted = "systemd restarted it {count} time(s)"
+unasked_hold = "systemd could not be asked for the unit during the hold"
+# The machine's strain: {load} its load, {io} and {memory} the share of the last minute stalled on each.
+strain = "load {load}, stalled on I/O {io} and on memory {memory} of the last minute"
+unknown = "unknown"
+# The lines the deploy output keeps of a service that did not come up or stay up.
+waited = "waited {waited}s of {limit}s for the health `{command}`: {asks} asks, the last heard {last}{gave_up}"
+gave_up = "; {unit} gave up starting"
+unit_unasked = "{unit}: systemd could not be asked"
+unit = "{unit}: {active}/{sub}, main process {pid}{process}, {restarts} automatic restarts, last exit status {status}"
+process = " ({process})"
+machine = "machine: {strain}"
+journal = "{unit}'s journal since the restart, its last {lines} lines at most:"
+journal_unread = "journalctl could not be read: {said}"
+fell = "{unit} answered and did not stay up for {seconds}s: {why}"
+
+# What making a fresh build tree and bringing its submodules says: {tree} and {at} places, {commit} a
+# short commit, {what} the step, {said} and {why} what a command or a call came to.
+[expansion]
+not_placed = "the build tree {tree} could not be put at {commit}: {said}"
+not_emptied = "could not empty {at} for its submodule: {why}"
+# A git step that failed, followed by what it said.
+failed = "{what}: {said}"
+no_addresses = "could not read the submodules' addresses"
+not_pinned = "could not bring the submodules of {tree} to their pins"
+
+# What a rollback says as it goes (docs/deploy.md, 「Rollback」): {commit} a short commit, {release} a
+# release, {names} units, {why} what a call came to.
+[rolling]
+# Why nothing was rolled back, as the account's detail.
+before_start = "the command run before the start may have reshaped the data for the new code"
+first = "no commit was live before this one"
+back_to = "rolling back to {commit}, which was live before"
+would_not_stop = "the service that did not come up would not stop; the rollback goes on and restarts it"
+# {links} is `links_one` or `links_many`, as many units as {names} holds.
+dangling = "{names} still {links} to nothing in the deploy tree; the service is started all the same"
+links_one = "links"
+links_many = "link"
+answers = "the service answers again on {commit}"
+silent = "the service does not answer on {commit} either"
+not_built = "the release of {commit} no longer stands built at {release}"
+flip_failed = "the deploy tree could not be flipped onto {release}: {why}"
+flipped = "deploy tree flipped back onto {release}"
+unrecorded = "the deployment record could not be written back: {why}"
+unlogged = "the deployment log could not be appended to: {why}"
+
+# What preparing and pruning the releases says (docs/deploy.md, 「The releases」): {release} a release,
+# {commit} a short commit, {name} a release's name, {said} and {why} what a command or a call came to.
+[release]
+live_unbuilt = "the live release {release} does not stand built for {commit}, and it is not made again under what runs"
+leftover = "taking away what an unfinished run left at {release}"
+not_added = "the release {release} could not be added at {commit}: {said}"
+unread_processes = "the live processes could not be read, so no release was pruned"
+not_removed = "the release {name} could not be removed: {why}"
+
+# Why a checkout or its unit links cannot be deployed (docs/deploy.md, 「What it refuses」): {named} the dirty
+# files shown and {rest} `more` or nothing, {commit} a short commit, {branch} where it must stand, {unit} a
+# unit link, {path} what it links to, {count} and {files} the files of its name the release holds.
+[tree]
+dirty = "this run left uncommitted changes to tracked files, so the commit would go live without them: {named}{rest}"
+more = ", and {count} more"
+no_commit = "the working tree is on no commit at all"
+unpushed = "{commit} is not on {branch}; an unpushed commit is not deployable"
+link_gone = "{unit} links to {path} in the deploy tree, which the commit no longer has, and no file of that name stands in it"
+link_several = "{unit} links to {path} in the deploy tree, which the commit no longer has, and {count} files of that name stand in it ({files})"
+
+# What handing a run to a transient unit says (docs/boundary.md, 「The verbs」): {unit} the unit, {said}
+# what starting it came to.
+[unit]
+notice = "running as {unit}, which outlives this call; read it with: journalctl --user -u {unit} --no-pager"
+not_started = "refused: its unit {unit} could not be started, and it does not run in this shell instead: {said}"
+
+# Why the guarded removal takes nothing away (docs/deploy.md, 「What it refuses」): {path} what was to go, {data}
+# the data root.
+[remove]
+inside = "refusing to remove {path}: it is inside the runtime data root {data}"
+holds = "refusing to remove {path}: the runtime data root {data} is inside it"

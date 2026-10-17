@@ -235,6 +235,8 @@ not_files = "not files of this checkout: {paths}; give paths from the checkout's
 not_checkout = "{root} is not a git checkout: {why}"
 refused = "{count} import(s) could not be chosen for{nothing}; fix them by hand, or ask again without those files"
 nothing_written = ", so nothing was written"
+# Why a fix wrote nothing where any repair was refused.
+none_written = "a repair was refused, so nothing is written"
 to_fix = "{count} import(s) to fix ({files} file(s)); write them with --fix"
 fixed = "{count} import(s) fixed ({files} file(s))"
 unit = "imports"

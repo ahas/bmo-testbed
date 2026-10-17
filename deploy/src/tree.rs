@@ -9,6 +9,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
 use bmo_testbed_core::policy::deploy::DEPLOY;
+use bmo_testbed_core::policy::fill_shown;
 use serde::{Deserialize, Serialize};
 
 /// The deployment that is running, as `deployed.json` records it.
@@ -69,22 +70,20 @@ pub fn tree_fault(dirty: &[String], head: &str, on_remote: bool, remote_branch: 
   if !dirty.is_empty() {
     let named = dirty.iter().take(shown).cloned().collect::<Vec<_>>().join(", ");
     let rest = if dirty.len() > shown {
-      format!(", and {} more", dirty.len() - shown)
+      fill_shown(&DEPLOY.tree.more, &[("count", &(dirty.len() - shown))])
     } else {
       String::new()
     };
 
-    return Some(format!(
-      "this run left uncommitted changes to tracked files, so the commit would go live without them: {named}{rest}"
-    ));
+    return Some(fill_shown(&DEPLOY.tree.dirty, &[("named", &named), ("rest", &rest)]));
   }
 
   if head.is_empty() {
-    return Some("the working tree is on no commit at all".to_owned());
+    return Some(DEPLOY.tree.no_commit.clone());
   }
 
   (!on_remote)
-    .then(|| format!("{} is not on {remote_branch}; an unpushed commit is not deployable", short(head)))
+    .then(|| fill_shown(&DEPLOY.tree.unpushed, &[("commit", &short(head)), ("branch", &remote_branch)]))
 }
 
 /// The first twelve characters of a commit, as every line names one.
@@ -211,15 +210,15 @@ pub fn unit_link_plan(
         from: link.target.clone(),
         to: tree.join(one),
       }),
-      [] => faults.push(format!(
-        "{} links to {path} in the deploy tree, which the commit no longer has, and no file of that name stands in it",
-        link.name
-      )),
-      several => faults.push(format!(
-        "{} links to {path} in the deploy tree, which the commit no longer has, and {} files of that name stand in it ({})",
-        link.name,
-        several.len(),
-        several.iter().map(|one| one.as_str()).collect::<Vec<_>>().join(", ")
+      [] => faults.push(fill_shown(&DEPLOY.tree.link_gone, &[("unit", &link.name), ("path", &path)])),
+      several => faults.push(fill_shown(
+        &DEPLOY.tree.link_several,
+        &[
+          ("unit", &link.name),
+          ("path", &path),
+          ("count", &several.len()),
+          ("files", &several.iter().map(|one| one.as_str()).collect::<Vec<_>>().join(", ")),
+        ],
       )),
     }
   }

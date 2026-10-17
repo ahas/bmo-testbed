@@ -21,6 +21,7 @@ use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::turn::{
   Env, FRONT_VARIABLE, Lane, NOT_RUN_EXIT_CODE, TurnAsk, job_pid, process_env, stop_tree, take_turn,
 };
+use bmo_testbed_core::verb::REFUSED_EXIT_CODE;
 use serde_json::{Value, json};
 
 use crate::adopt::{Adopting, adopt, prune_retired};
@@ -487,7 +488,7 @@ impl<'a> Laying<'a> {
       progress.end(Outcome::Stopped, Some(&line));
     }
 
-    2
+    REFUSED_EXIT_CODE
   }
 
   // The deployment ended before anything went live: said, sent as `deploy-failed`, and written as its ending.

@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use bmo_testbed_core::policy::deploy::DEPLOY;
+use bmo_testbed_core::policy::fill_shown;
 use tokio::time::Instant;
 
 use crate::run::{Ran, command, shell_words, words};
@@ -69,17 +70,20 @@ async fn ask_health(watch: &HealthWatch<'_>) -> (bool, String) {
   ask.kill_on_drop(true);
 
   match tokio::time::timeout(Duration::from_millis(watch.ask_limit_ms), ask.output()).await {
-    Err(_) => (false, format!("no answer within {}s", seconds(watch.ask_limit_ms))),
-    Ok(Err(why)) => (false, format!("could not be run: {why}")),
+    Err(_) => (false, fill_shown(&DEPLOY.boot.no_answer, &[("seconds", &seconds(watch.ask_limit_ms))])),
+    Ok(Err(why)) => (false, fill_shown(&DEPLOY.boot.not_run, &[("why", &why)])),
     Ok(Ok(done)) => {
-      let code = done.status.code().map_or_else(|| "a signal".to_owned(), |code| code.to_string());
+      let code = done.status.code().map_or_else(|| DEPLOY.boot.a_signal.clone(), |code| code.to_string());
       let said =
         format!("{}{}", String::from_utf8_lossy(&done.stdout), String::from_utf8_lossy(&done.stderr));
       let said = said.trim().lines().next().unwrap_or_default();
       let last = if said.is_empty() {
-        format!("exit {code}")
+        fill_shown(&DEPLOY.boot.exit, &[("code", &code)])
       } else {
-        format!("exit {code}: {}", first_chars(said, DEPLOY.numbers.quoted_chars))
+        fill_shown(
+          &DEPLOY.boot.exit_said,
+          &[("code", &code), ("said", &first_chars(said, DEPLOY.numbers.quoted_chars))],
+        )
       };
 
       (done.status.success(), last)
@@ -205,14 +209,14 @@ fn number(text: &str) -> i64 {
 pub async fn stays_up(hold_ms: u64, poll_ms: u64, status: &dyn Fn() -> Option<UnitStatus>) -> StayUp {
   let Some(first) = status() else {
     return StayUp::Fell {
-      why: "systemd could not be asked for the unit".to_owned(),
+      why: DEPLOY.boot.unasked.clone(),
       status: None,
     };
   };
 
   if !is_running(&first) {
     return StayUp::Fell {
-      why: format!("the unit is {}/{}", first.active, first.sub),
+      why: fill_shown(&DEPLOY.boot.unit_is, &[("active", &first.active), ("sub", &first.sub)]),
       status: Some(first),
     };
   }
@@ -233,21 +237,24 @@ pub async fn stays_up(hold_ms: u64, poll_ms: u64, status: &dyn Fn() -> Option<Un
 
     if !is_running(&now) {
       return StayUp::Fell {
-        why: format!("the unit went {}/{}", now.active, now.sub),
+        why: fill_shown(&DEPLOY.boot.unit_went, &[("active", &now.active), ("sub", &now.sub)]),
         status: Some(now),
       };
     }
 
     if now.pid != first.pid {
       return StayUp::Fell {
-        why: format!("its main process changed from {} to {}", first.pid, now.pid),
+        why: fill_shown(&DEPLOY.boot.pid_changed, &[("from", &first.pid), ("to", &now.pid)]),
         status: Some(now),
       };
     }
 
     if number(&now.restarts) > number(&first.restarts) {
       return StayUp::Fell {
-        why: format!("systemd restarted it {} time(s)", number(&now.restarts) - number(&first.restarts)),
+        why: fill_shown(
+          &DEPLOY.boot.restarted,
+          &[("count", &(number(&now.restarts) - number(&first.restarts)))],
+        ),
         status: Some(now),
       };
     }
@@ -255,7 +262,7 @@ pub async fn stays_up(hold_ms: u64, poll_ms: u64, status: &dyn Fn() -> Option<Un
 
   if !read && hold_ms > 0 {
     return StayUp::Fell {
-      why: "systemd could not be asked for the unit during the hold".to_owned(),
+      why: DEPLOY.boot.unasked_hold.clone(),
       status: None,
     };
   }
@@ -291,16 +298,15 @@ fn machine_strain() -> String {
             .map(|value| format!("{value}%"))
         })
       })
-      .unwrap_or_else(|| "unknown".to_owned())
+      .unwrap_or_else(|| DEPLOY.boot.unknown.clone())
   };
   let load = std::fs::read_to_string("/proc/loadavg")
     .map(|text| text.split(' ').take(3).collect::<Vec<_>>().join(" "))
-    .unwrap_or_else(|_| "unknown".to_owned());
+    .unwrap_or_else(|_| DEPLOY.boot.unknown.clone());
 
-  format!(
-    "load {load}, stalled on I/O {} and on memory {} of the last minute",
-    stalled("io"),
-    stalled("memory")
+  fill_shown(
+    &DEPLOY.boot.strain,
+    &[("load", &load), ("io", &stalled("io")), ("memory", &stalled("memory"))],
   )
 }
 
@@ -333,9 +339,9 @@ fn journal_since(run: &dyn Fn(&[String]) -> Ran, unit: &str, restarted_at_ms: i6
   if journal.ok {
     journal.out.lines().filter(|line| !line.trim().is_empty()).map(str::to_owned).collect()
   } else {
-    vec![format!(
-      "journalctl could not be read: {}",
-      first_chars(journal.out.trim(), DEPLOY.numbers.command_chars)
+    vec![fill_shown(
+      &DEPLOY.boot.journal_unread,
+      &[("said", &first_chars(journal.out.trim(), DEPLOY.numbers.command_chars))],
     )]
   }
 }
@@ -365,23 +371,31 @@ fn seconds(ms: u64) -> u64 {
 
 fn unit_line(unit: &str, status: Option<&UnitStatus>, process: Option<&str>) -> String {
   match status {
-    None => format!("{unit}: systemd could not be asked"),
-    Some(status) => format!(
-      "{unit}: {}/{}, main process {}{}, {} automatic restarts, last exit status {}",
-      status.active,
-      status.sub,
-      status.pid,
-      process.map(|process| format!(" ({process})")).unwrap_or_default(),
-      status.restarts,
-      status.exit_status
+    None => fill_shown(&DEPLOY.boot.unit_unasked, &[("unit", &unit)]),
+    Some(status) => fill_shown(
+      &DEPLOY.boot.unit,
+      &[
+        ("unit", &unit),
+        ("active", &status.active),
+        ("sub", &status.sub),
+        ("pid", &status.pid),
+        (
+          "process",
+          &process
+            .map(|process| fill_shown(&DEPLOY.boot.process, &[("process", &process)]))
+            .unwrap_or_default(),
+        ),
+        ("restarts", &status.restarts),
+        ("status", &status.exit_status),
+      ],
     ),
   }
 }
 
 fn journal_report(unit: &str, journal: &[String]) -> Vec<String> {
-  std::iter::once(format!(
-    "{unit}'s journal since the restart, its last {} lines at most:",
-    DEPLOY.numbers.journal_lines
+  std::iter::once(fill_shown(
+    &DEPLOY.boot.journal,
+    &[("unit", &unit), ("lines", &DEPLOY.numbers.journal_lines)],
   ))
   .chain(journal.iter().map(|line| format!("  {line}")))
   .collect()
@@ -391,17 +405,26 @@ fn journal_report(unit: &str, journal: &[String]) -> Vec<String> {
 pub fn boot_report(scene: &BootScene) -> Vec<String> {
   let wait = &scene.wait;
   let mut lines = vec![
-    format!(
-      "waited {}s of {}s for the health `{}`: {} asks, the last heard {}{}",
-      seconds(wait.waited_ms),
-      seconds(wait.limit_ms),
-      wait.command,
-      wait.asks,
-      wait.last,
-      if wait.gave_up { format!("; {} gave up starting", scene.unit) } else { String::new() }
+    fill_shown(
+      &DEPLOY.boot.waited,
+      &[
+        ("waited", &seconds(wait.waited_ms)),
+        ("limit", &seconds(wait.limit_ms)),
+        ("command", &wait.command),
+        ("asks", &wait.asks),
+        ("last", &wait.last),
+        (
+          "gave_up",
+          &if wait.gave_up {
+            fill_shown(&DEPLOY.boot.gave_up, &[("unit", &scene.unit)])
+          } else {
+            String::new()
+          },
+        ),
+      ],
     ),
     unit_line(&scene.unit, scene.status.as_ref(), scene.process.as_deref()),
-    format!("machine: {}", scene.strain),
+    fill_shown(&DEPLOY.boot.machine, &[("strain", &scene.strain)]),
   ];
 
   lines.extend(journal_report(&scene.unit, &scene.journal));
@@ -421,7 +444,7 @@ pub fn stay_report(
   let status = unit_status(run, unit).or(fell);
   let process = status.as_ref().and_then(|status| process_state(&status.pid));
   let mut lines = vec![
-    format!("{unit} answered and did not stay up for {}s: {why}", seconds(hold_ms)),
+    fill_shown(&DEPLOY.boot.fell, &[("unit", &unit), ("seconds", &seconds(hold_ms)), ("why", &why)]),
     unit_line(unit, status.as_ref(), process.as_deref()),
   ];
 

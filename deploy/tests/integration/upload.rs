@@ -3,6 +3,8 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use bmo_testbed_core::policy::backups::BACKUPS;
+use bmo_testbed_core::policy::fill_shown;
 use bmo_testbed_deploy::upload::{
   BackupNames, Digest, Remote, UploadFailure, UploadHands, UploadOutcome, UploadStep, receipt_name,
   send_backups, upload_failed_detail, upload_failed_summary, upload_usage,
@@ -127,13 +129,15 @@ fn the_new_one_is_sent_read_back_and_the_one_before_it_leaves_the_disk() {
   assert_eq!(
     world.said,
     [
-      format!(
-        "{} stands remotely, {} bytes, sha256 sha-body of {}",
-        backup(2),
-        format!("body of {}", backup(2)).len(),
-        backup(2)
+      fill_shown(
+        &BACKUPS.upload.stands,
+        &[
+          ("backup", &backup(2)),
+          ("size", &format!("body of {}", backup(2)).len()),
+          ("sha256", &format!("sha-body of {}", backup(2))),
+        ],
       ),
-      format!("{} removed from the local disk", backup(1)),
+      fill_shown(&BACKUPS.upload.removed_locally, &[("backup", &backup(1))]),
     ]
   );
 }
@@ -346,7 +350,7 @@ fn the_event_carries_each_failure_with_its_backup_and_step() {
 fn the_usage_names_the_remote_and_the_number_kept() {
   let usage = upload_usage("s3://backups/app/", 5);
 
-  assert_eq!(usage[0], "usage: bmo-testbed backups");
+  assert_eq!(usage[0], BACKUPS.upload_heading);
   assert_eq!(usage[1], "");
   assert!(usage[2].contains("s3://backups/app/"), "{usage:?}");
   assert!(usage[3].contains("the newest 5 remotely"), "{usage:?}");
@@ -375,6 +379,15 @@ fn a_remote_is_an_s3_bucket_with_a_prefix_under_it() {
       prefix: String::new(),
     })
   );
-  assert!(Remote::parse("https://backups/app").is_err());
-  assert!(Remote::parse("backups/app").is_err());
+  assert_eq!(
+    Remote::parse("https://backups/app"),
+    Err(fill_shown(&BACKUPS.upload.not_s3, &[("address", &"https://backups/app")]))
+  );
+  assert_eq!(
+    Remote::parse("backups/app"),
+    Err(fill_shown(
+      &BACKUPS.upload.remote_unread,
+      &[("address", &"backups/app"), ("why", &"relative URL without a base")]
+    ))
+  );
 }

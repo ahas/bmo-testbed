@@ -158,3 +158,37 @@ only_unstarted = "{note}; none failed, so run it again for the ones that never s
 # A checkout of the testbed whose own binary did not build, by the {code} its build ended with
 # (docs/boundary.md, 「The binary」).
 unbuilt = "this checkout's bmo-testbed did not build (exit {code}), so nothing was tested"
+
+# What the change check says (docs/checks.md, 「The change check」). The step lines open with `ok` or
+# `FAILED`, which the readers of the check's output match, so those two words keep their shape.
+[check]
+# The heading: {changed} paths changed {from} `since` or `given`, then what the change touched.
+heading = "check: {changed} path(s) changed ({from}); {tests} test file(s), {tested} crate(s) tested, {checked} checked, {projects} project check(s), {tools} tool check(s)"
+since = "since {since}"
+given = "{count} file(s) given"
+# Where a step runs where it is not the root, after its name.
+where = " in {dir}"
+# A step as it ends: {outcome} `ok` or `failed`, {name} the step, {code} its exit, {ran} and {waited} its
+# seconds.
+step = "{outcome} {name} · exit {code} · ran {ran}s, waited {waited}s"
+ok = "ok"
+failed = "FAILED"
+# The heading of a step's output in the log: {command} what it ran.
+logged = "==> {name} ({command}): exit {code}"
+log = "log: {path}"
+# Why the touched test files did not run: {words} what the turn came to.
+no_turn = "the machine's turn did not come: {words}"
+
+# What the cargo verb says of the units a passed build superseded (docs/deploy.md, 「The Cargo build
+# directory」): {why} what a call came to, {code} and {said} Cargo's exit and its last line, {count} units of
+# {target} the target folder, {megabytes} what their removal freed, {command} the program.
+[cargo]
+not_removed = "cargo: superseded units not removed: {why}"
+unasked = "asking Cargo what the build stood on ended with exit {code}: {said}"
+# The exit of a Cargo that ended on a signal.
+no_code = "none"
+locked = "cargo: another build holds the build lock; {count} superseded units of {target} are left to the prune"
+removed = "cargo: removed {count} superseded units of {target}, {megabytes} MB"
+unstarted = "cargo: {command} could not be started: {why}"
+# The test server's stand lock not had: {dir} the server's folder.
+stood_up_elsewhere = "{dir} was being stood up by another run for two minutes"

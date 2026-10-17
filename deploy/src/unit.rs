@@ -10,6 +10,7 @@
 use std::path::PathBuf;
 
 use bmo_testbed_core::policy::deploy::DEPLOY;
+use bmo_testbed_core::policy::fill_shown;
 use bmo_testbed_core::verb::REFUSED_EXIT_CODE;
 
 use crate::run::{Ran, run_quiet};
@@ -72,9 +73,7 @@ pub fn deploy_unit_line(start: &DeployUnitStart, path: &str) -> Vec<String> {
 
 /// How a caller is told where its run went.
 pub fn deploy_unit_notice(unit: &str) -> String {
-  format!(
-    "running as {unit}, which outlives this call; read it with: journalctl --user -u {unit} --no-pager"
-  )
+  fill_shown(&DEPLOY.unit.notice, &[("unit", &unit)])
 }
 
 /// Starts the unit with the `PATH` it is handed, reaching the user bus from whatever line the caller was
@@ -90,10 +89,9 @@ pub fn hand_off(start: &DeployUnitStart, path: &str, say: &dyn Fn(&str)) -> u8 {
   let started = start_deploy_unit(start, path);
 
   if !started.ok {
-    say(&format!(
-      "refused: its unit {} could not be started, and it does not run in this shell instead: {}",
-      start.unit,
-      first_chars(&started.out, DEPLOY.numbers.quoted_chars)
+    say(&fill_shown(
+      &DEPLOY.unit.not_started,
+      &[("unit", &start.unit), ("said", &first_chars(&started.out, DEPLOY.numbers.quoted_chars))],
     ));
 
     return REFUSED_EXIT_CODE;

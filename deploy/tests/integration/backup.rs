@@ -6,6 +6,8 @@ use std::os::unix::fs::PermissionsExt as _;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use bmo_testbed_core::policy::backups::BACKUPS;
+use bmo_testbed_core::policy::fill_shown;
 use bmo_testbed_deploy::backup::{
   BackupPack, BackupPlan, BackupTaken, Left, Packed, PackedBackup, SNAPSHOT_DIR, file_sha256, left_out,
   pack_backup, take_backup,
@@ -302,33 +304,40 @@ fn a_backup_with_no_snapshot_declared_packs_the_data_root_alone() {
 #[test]
 fn a_snapshot_that_fails_changes_nothing() {
   let stand = stand();
-  let (taken, parts) = taken(&stand, Some("echo 'no database' >&2; exit 4"), Some(VERIFY));
+  let snapshot = "echo 'no database' >&2; exit 4";
+  let (taken, parts) = taken(&stand, Some(snapshot), Some(VERIFY));
+  let words = &BACKUPS.backup;
+  let exited = fill_shown(&words.exited, &[("line", &snapshot), ("code", &4), ("said", &"no database")]);
 
   assert_eq!(
     taken,
     BackupTaken::Failed {
-      failure: "the snapshot could not be taken: `echo 'no database' >&2; exit 4` exited 4: no database"
-        .to_owned(),
+      failure: fill_shown(&words.no_snapshot, &[("why", &exited)]),
       left: Left::NothingChanged,
       warnings: String::new(),
     }
   );
   assert_eq!(parts, [(Part::Snapshot, false)]);
   assert_eq!(names_in(&stand.backups), Vec::<String>::new());
-  assert_eq!(Left::NothingChanged.said(), "nothing was changed.");
+  assert_eq!(Left::NothingChanged.said(), words.nothing_changed);
+  assert_eq!(Left::BackupRemoved.said(), words.backup_removed);
 }
 
 #[test]
 fn a_backup_that_does_not_restore_is_removed() {
   let stand = stand();
-  let (taken, parts) = taken(&stand, Some(SNAPSHOT), Some("echo 'manifest does not match'; exit 1"));
+  let verify = "echo 'manifest does not match'; exit 1";
+  let (taken, parts) = taken(&stand, Some(SNAPSHOT), Some(verify));
   let BackupTaken::Failed { failure, left, .. } = taken else {
     panic!("{taken:?}");
   };
+  let exited = fill_shown(
+    &BACKUPS.backup.exited,
+    &[("line", &verify), ("code", &1), ("said", &"manifest does not match")],
+  );
 
   assert_eq!(left, Left::BackupRemoved);
-  assert!(failure.starts_with("the backup did not restore: `echo"), "{failure}");
-  assert!(failure.ends_with("exited 1: manifest does not match"), "{failure}");
+  assert_eq!(failure, fill_shown(&BACKUPS.backup.not_restored, &[("why", &exited)]));
   assert_eq!(parts, [(Part::Snapshot, true), (Part::Pack, true), (Part::Check, false)]);
   assert_eq!(names_in(&stand.backups), Vec::<String>::new());
 }

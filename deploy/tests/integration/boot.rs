@@ -6,6 +6,8 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::path::Path;
 
+use bmo_testbed_core::policy::deploy::DEPLOY;
+use bmo_testbed_core::policy::fill_shown;
 use bmo_testbed_deploy::boot::{
   BootScene, HealthWait, HealthWatch, StayUp, UnitStatus, boot_report, boot_scene, stay_report, stays_up,
   unit_gave_up, unit_status, wait_for_health,
@@ -93,7 +95,7 @@ async fn an_ask_that_does_not_answer_in_time_counts_as_no_answer() {
 
   assert!(!waited.answered);
   assert_eq!(waited.asks, 1);
-  assert_eq!(waited.last, "no answer within 1s");
+  assert_eq!(waited.last, fill_shown(&DEPLOY.boot.no_answer, &[("seconds", &1)]));
 }
 
 #[tokio::test]
@@ -161,47 +163,51 @@ async fn a_service_running_throughout_on_one_process_stayed_up() {
 async fn a_service_that_stops_changes_process_or_restarts_fell() {
   let went = readings(vec![running("41", "0"), Some(status("activating", "auto-restart", "0", "1"))]);
 
+  let words = &DEPLOY.boot;
+
   assert!(matches!(
     stays_up(3_000, 1_000, &went).await,
-    StayUp::Fell { why, .. } if why == "the unit went activating/auto-restart"
+    StayUp::Fell { why, .. }
+      if why == fill_shown(&words.unit_went, &[("active", &"activating"), ("sub", &"auto-restart")])
   ));
 
   let changed = readings(vec![running("41", "0"), running("42", "0")]);
 
   assert!(matches!(
     stays_up(3_000, 1_000, &changed).await,
-    StayUp::Fell { why, .. } if why == "its main process changed from 41 to 42"
+    StayUp::Fell { why, .. } if why == fill_shown(&words.pid_changed, &[("from", &41), ("to", &42)])
   ));
 
   let restarted = readings(vec![running("41", "1"), running("41", "3")]);
 
   assert!(matches!(
     stays_up(3_000, 1_000, &restarted).await,
-    StayUp::Fell { why, .. } if why == "systemd restarted it 2 time(s)"
+    StayUp::Fell { why, .. } if why == fill_shown(&words.restarted, &[("count", &2)])
   ));
 }
 
 #[tokio::test(start_paused = true)]
 async fn a_hold_with_no_reading_is_no_stay() {
+  let words = &DEPLOY.boot;
   let not_running = readings(vec![Some(status("failed", "failed", "0", "0"))]);
 
   assert!(matches!(
     stays_up(3_000, 1_000, &not_running).await,
-    StayUp::Fell { why, .. } if why == "the unit is failed/failed"
+    StayUp::Fell { why, .. } if why == fill_shown(&words.unit_is, &[("active", &"failed"), ("sub", &"failed")])
   ));
 
   let silent = readings(vec![None]);
 
   assert!(matches!(
     stays_up(3_000, 1_000, &silent).await,
-    StayUp::Fell { why, status: None } if why == "systemd could not be asked for the unit"
+    StayUp::Fell { why, status: None } if why == words.unasked
   ));
 
   let quiet_after = readings(vec![running("41", "0"), None]);
 
   assert!(matches!(
     stays_up(3_000, 1_000, &quiet_after).await,
-    StayUp::Fell { why, .. } if why == "systemd could not be asked for the unit during the hold"
+    StayUp::Fell { why, .. } if why == words.unasked_hold
   ));
 }
 
@@ -232,30 +238,57 @@ fn a_health_that_did_not_answer_is_told_with_the_unit_and_its_journal() {
   };
   let scene: BootScene = boot_scene(&machine, "app.service", 1_760_418_900_000, wait);
   let lines = boot_report(&scene);
+  let words = &DEPLOY.boot;
 
   assert_eq!(
     lines[0],
-    "waited 12s of 300s for the health `curl -fs localhost:8080/health`: 7 asks, the last heard exit 7; \
-     app.service gave up starting"
+    fill_shown(
+      &words.waited,
+      &[
+        ("waited", &12),
+        ("limit", &300),
+        ("command", &"curl -fs localhost:8080/health"),
+        ("asks", &7),
+        ("last", &"exit 7"),
+        ("gave_up", &fill_shown(&words.gave_up, &[("unit", &"app.service")])),
+      ],
+    )
   );
+  assert_eq!(lines[1], failed_unit_line());
+  assert_eq!(lines[2], fill_shown(&words.machine, &[("strain", &scene.strain)]));
   assert_eq!(
-    lines[1],
-    "app.service: failed/failed, main process 0, 5 automatic restarts, last exit status 101"
+    lines[3],
+    fill_shown(&words.journal, &[("unit", &"app.service"), ("lines", &DEPLOY.numbers.journal_lines)])
   );
-  assert!(lines[2].starts_with("machine: load "), "{}", lines[2]);
-  assert_eq!(lines[3], "app.service's journal since the restart, its last 40 lines at most:");
   assert_eq!(lines[4], "  2026-10-14T05:15:00+0000 host app[41]: panicked at the start");
   assert_eq!(lines.len(), 5);
 }
 
+// The unit line the stand-in systemd's failed unit is told by.
+fn failed_unit_line() -> String {
+  fill_shown(
+    &DEPLOY.boot.unit,
+    &[
+      ("unit", &"app.service"),
+      ("active", &"failed"),
+      ("sub", &"failed"),
+      ("pid", &0),
+      ("process", &""),
+      ("restarts", &5),
+      ("status", &101),
+    ],
+  )
+}
+
 #[test]
 fn a_service_that_did_not_stay_up_is_told_with_why() {
-  let lines = stay_report(&machine, "app.service", 0, 30_000, "systemd restarted it 1 time(s)", None);
+  let why = fill_shown(&DEPLOY.boot.restarted, &[("count", &1)]);
+  let lines = stay_report(&machine, "app.service", 0, 30_000, &why, None);
 
   assert_eq!(
     lines[0],
-    "app.service answered and did not stay up for 30s: systemd restarted it 1 time(s)"
+    fill_shown(&DEPLOY.boot.fell, &[("unit", &"app.service"), ("seconds", &30), ("why", &why)])
   );
-  assert!(lines[1].starts_with("app.service: failed/failed"), "{}", lines[1]);
+  assert_eq!(lines[1], failed_unit_line());
   assert_eq!(lines.len(), 4);
 }

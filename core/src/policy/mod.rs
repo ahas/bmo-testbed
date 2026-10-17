@@ -51,6 +51,14 @@ pub fn fill_marks(line: &str, values: &[(&str, &str)]) -> String {
   out + rest
 }
 
+/// A line of the policy filled as `fill_marks` fills it, each value written out as it displays.
+pub fn fill_shown(line: &str, values: &[(&str, &dyn std::fmt::Display)]) -> String {
+  let shown: Vec<(&str, String)> = values.iter().map(|(name, value)| (*name, value.to_string())).collect();
+  let pairs: Vec<(&str, &str)> = shown.iter().map(|(name, value)| (*name, value.as_str())).collect();
+
+  fill_marks(line, &pairs)
+}
+
 /// One part read from its file's text. A file that does not read as its type is a fault of the
 /// build, which every part's own test meets before anything runs on it.
 pub fn read<T: DeserializeOwned>(file: &str, text: &str) -> T {

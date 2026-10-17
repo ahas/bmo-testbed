@@ -8,8 +8,8 @@ use std::process::{Command, Stdio};
 
 use bmo_testbed_core::declaration::Repository;
 use bmo_testbed_core::policy::deploy_steps::DeployStep;
-use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::suite::SUITE;
+use bmo_testbed_core::policy::{fill_marks, fill_shown};
 use bmo_testbed_suite::check::{
   CheckAsk, CheckPlan, default_log, default_since, plan, run_check, run_step,
 };
@@ -243,12 +243,47 @@ fn a_passing_run_says_each_step_went_through_and_what_the_log_verb_read_of_the_t
     }
   });
 
+  let words = &SUITE.check;
+  let tests = planned.steps.iter().find(|step| step.tests).unwrap();
+
   assert_eq!(checked.code, 0, "{:?}", checked.lines);
+  assert_eq!(
+    checked.lines[0],
+    fill_shown(
+      &words.heading,
+      &[
+        ("changed", &planned.changed.len()),
+        ("from", &planned.from),
+        ("tests", &planned.touched.tests.len()),
+        ("tested", &planned.touched.tested_crates.len()),
+        ("checked", &planned.touched.checked_crates.len()),
+        ("projects", &planned.touched.projects.len()),
+        ("tools", &planned.touched.tools.len()),
+      ],
+    )
+  );
+  assert!(
+    planned.from.starts_with(&fill_shown(&words.since, &[("since", &"")])),
+    "{}",
+    planned.from
+  );
+  assert!(
+    checked.lines.contains(&fill_shown(
+      &words.step,
+      &[("outcome", &words.ok), ("name", &tests.name), ("code", &0), ("ran", &1), ("waited", &0)],
+    )),
+    "{:?}",
+    checked.lines
+  );
+  // The readers of the check's output match a step's line by these openings.
   assert!(checked.lines.iter().any(|line| line.starts_with("ok bun test")), "{:?}", checked.lines);
   assert!(checked.lines.iter().all(|line| !line.starts_with("FAILED")), "{:?}", checked.lines);
   assert!(checked.lines.contains(&"pass 3 · fail 0 · files 1".to_owned()), "{:?}", checked.lines);
-  assert_eq!(checked.lines.last().unwrap(), &format!("log: {}", log.display()));
-  assert!(std::fs::read_to_string(&log).unwrap().contains("==> bun test"));
+  assert_eq!(checked.lines.last().unwrap(), &fill_shown(&words.log, &[("path", &log.display())]));
+  assert!(std::fs::read_to_string(&log).unwrap().contains(&fill_shown(
+    &words.logged,
+    &[("name", &tests.name), ("command", &tests.step.command.join(" ")), ("code", &0)],
+  )));
 }
 
 // "the first lines a failing static step printed": as many as the policy names, the rest left to the log
@@ -312,6 +347,20 @@ fn a_failing_run_runs_every_step_to_its_end_and_names_what_failed_without_the_te
       .lines
       .iter()
       .any(|line| line.starts_with("FAILED types") && line.contains("exit 2")),
+    "{:?}",
+    checked.lines
+  );
+  assert!(
+    checked.lines.contains(&fill_shown(
+      &SUITE.check.step,
+      &[
+        ("outcome", &SUITE.check.failed),
+        ("name", &"types"),
+        ("code", &2),
+        ("ran", &1),
+        ("waited", &0)
+      ],
+    )),
     "{:?}",
     checked.lines
   );

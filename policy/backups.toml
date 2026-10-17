@@ -3,8 +3,9 @@
 # job and the event's reader read the lines, so they are English. Each `{name}` is filled in with what it
 # names.
 
-# Under `usage: bmo-testbed backups`, one line to an entry: {remote} where the backups stand remotely, and
-# {keep} how many are kept there.
+# The usage of the `backups` verb: its heading, then a blank line, then one line to an entry, {remote}
+# where the backups stand remotely, and {keep} how many are kept there.
+upload_heading = "usage: bmo-testbed backups"
 upload_usage = [
   "Uploads every backup not yet confirmed to {remote}, reads each back to match its size and checksum,",
   "then keeps the newest {keep} remotely and the newest one locally (docs/deploy.md, 「Sending backups away」).",
@@ -22,3 +23,43 @@ pack_level = 3
 # How many backups the local directory keeps once their copies are confirmed: the newest, to undo the
 # deployment before with no network.
 kept_locally = 1
+
+# What taking a backup says where it does not end well (docs/deploy.md, 「Backups」): {dir}, {stream} and
+# {name} places and the backup, {line} a declared command, {code} its exit, {said} and {why} what a
+# command or a call came to, {decompress} and {extract} the exits of the read back's two commands.
+[backup]
+not_made = "{dir} could not be made: {why}"
+no_fifo = "mkfifo {stream} failed"
+no_hash = "sha256sum could not be started"
+no_pipeline = "the pack's pipeline could not be started"
+read_back_exits = "zstd -d exit {decompress}, tar -x exit {extract}"
+unstarted = "`{line}` could not be started: {why}"
+exited = "`{line}` exited {code}: {said}"
+no_snapshot = "the snapshot could not be taken: {why}"
+unwritten = "tar could not write the backup"
+not_whole = "the backup {name} did not read back whole: {said}"
+not_placed = "the backup could not be put in place: {why}"
+not_the_stream = "the file on disk is not the stream that read back"
+not_restored = "the backup did not restore: {why}"
+# What a failed backup left, after its reason.
+nothing_changed = "nothing was changed."
+backup_removed = "the backup was removed and nothing else was changed."
+
+# What the `backups` verb says as it sends and rotates (docs/deploy.md, 「Sending backups away」): {backup}
+# a backup's name, {size} and {sha256} what the local file holds, {back_size} and {back_sha256} what read
+# back, {step} the step that failed, {address} the declared remote, {what} the command, {object} the
+# remote object, {code} an exit, {said} and {why} what a command or a call came to.
+[upload]
+stands = "{backup} stands remotely, {size} bytes, sha256 {sha256}"
+unconfirmed = "{backup} was not confirmed remotely ({step}): {why}"
+rotated = "{backup} rotated off the remote"
+removed_locally = "{backup} removed from the local disk"
+mismatch = "read back {back_size} bytes, sha256 {back_sha256}, where the local file has {size} bytes, sha256 {sha256}"
+remote_unread = "the remote {address} does not read: {why}"
+not_s3 = "the remote {address} is no s3://bucket address"
+unstarted = "{what} could not be started: {why}"
+exited = "{what} exited {code}: {said}"
+changed = "the file changed while it was read"
+listing_unread = "the listing could not be read: {why}"
+back_exited = "reading {object} back exited {code}: {said}"
+back_empty = "reading {object} back gave no output"

@@ -7,7 +7,7 @@ use std::future::Future;
 use std::path::PathBuf;
 
 use bmo_testbed_core::policy::deploy::DEPLOY;
-use bmo_testbed_core::policy::fill_marks;
+use bmo_testbed_core::policy::{fill_marks, fill_shown};
 use serde_json::{Value, json};
 
 use crate::release::{GitRun, flip, release_dir, stands_built};
@@ -92,7 +92,7 @@ pub async fn roll_back(
   if failed.before_start {
     return Rollback::NotRolled {
       why: NotRolled::BeforeStart,
-      detail: "the command run before the start may have reshaped the data for the new code".to_owned(),
+      detail: DEPLOY.rolling.before_start.clone(),
     };
   }
 
@@ -101,16 +101,16 @@ pub async fn roll_back(
     _ => {
       return Rollback::NotRolled {
         why: NotRolled::First,
-        detail: "no commit was live before this one".to_owned(),
+        detail: DEPLOY.rolling.first.clone(),
       };
     }
   };
 
-  services.say(&format!("rolling back to {}, which was live before", short(&previous.commit)));
+  services.say(&fill_shown(&DEPLOY.rolling.back_to, &[("commit", &short(&previous.commit))]));
 
   // The service that did not come up goes first, before the tree is flipped under it.
   if !services.stop() {
-    services.say("the service that did not come up would not stop; the rollback goes on and restarts it");
+    services.say(&DEPLOY.rolling.would_not_stop);
   }
 
   // The release before still holds its own setup and its own `bin/`, so the flip is the whole move.
@@ -124,10 +124,14 @@ pub async fn roll_back(
   let dangling = tree.relink(&previous.commit);
 
   if !dangling.is_empty() {
-    services.say(&format!(
-      "{} still {} to nothing in the deploy tree; the service is started all the same",
-      dangling.join(", "),
-      if dangling.len() == 1 { "links" } else { "link" },
+    let words = &DEPLOY.rolling;
+
+    services.say(&fill_shown(
+      &words.dangling,
+      &[
+        ("names", &dangling.join(", ")),
+        ("links", if dangling.len() == 1 { &words.links_one } else { &words.links_many }),
+      ],
     ));
   }
 
@@ -149,11 +153,10 @@ pub async fn roll_back(
 
   let answers = services.answers().await;
 
-  services.say(&if answers {
-    format!("the service answers again on {}", short(&previous.commit))
-  } else {
-    format!("the service does not answer on {} either", short(&previous.commit))
-  });
+  services.say(&fill_shown(
+    if answers { &DEPLOY.rolling.answers } else { &DEPLOY.rolling.silent },
+    &[("commit", &short(&previous.commit))],
+  ));
 
   Rollback::RolledBack {
     to: previous.commit.clone(),
@@ -243,16 +246,16 @@ impl TreeHands for DeployTree<'_> {
     let release = release_dir(&self.deploy_dir, commit);
 
     if !stands_built(&release, commit, self.git) {
-      return Err(format!(
-        "the release of {} no longer stands built at {}",
-        short(commit),
-        release.display()
+      return Err(fill_shown(
+        &DEPLOY.rolling.not_built,
+        &[("commit", &short(commit)), ("release", &release.display())],
       ));
     }
 
-    flip(&self.deploy_dir, &release)
-      .map_err(|why| format!("the deploy tree could not be flipped onto {}: {why}", release.display()))?;
-    (self.say)(&format!("deploy tree flipped back onto {}", release.display()));
+    flip(&self.deploy_dir, &release).map_err(|why| {
+      fill_shown(&DEPLOY.rolling.flip_failed, &[("release", &release.display()), ("why", &why)])
+    })?;
+    (self.say)(&fill_shown(&DEPLOY.rolling.flipped, &[("release", &release.display())]));
 
     Ok(())
   }
@@ -272,7 +275,7 @@ impl TreeHands for DeployTree<'_> {
     });
 
     for one in &relinks {
-      (self.say)(&format!("relinked {} to {}", one.name, one.to.display()));
+      (self.say)(&fill_shown(&DEPLOY.run.relinked, &[("name", &one.name), ("to", &one.to.display())]));
     }
 
     for fault in &faults {
@@ -284,7 +287,7 @@ impl TreeHands for DeployTree<'_> {
 
   fn record(&mut self, record: &DeployRecord, of: &str) {
     if let Err(why) = write_deploy_record(&self.record_path, record) {
-      (self.say)(&format!("the deployment record could not be written back: {why}"));
+      (self.say)(&fill_shown(&DEPLOY.rolling.unrecorded, &[("why", &why)]));
     }
 
     let line = format!(
@@ -302,7 +305,7 @@ impl TreeHands for DeployTree<'_> {
       .and_then(|mut log| std::io::Write::write_all(&mut log, line.as_bytes()));
 
     if let Err(why) = appended {
-      (self.say)(&format!("the deployment log could not be appended to: {why}"));
+      (self.say)(&fill_shown(&DEPLOY.rolling.unlogged, &[("why", &why)]));
     }
   }
 }

@@ -11,6 +11,7 @@ use std::time::Instant;
 
 use bmo_testbed_core::policy::backups::BACKUPS;
 use bmo_testbed_core::policy::deploy::DEPLOY;
+use bmo_testbed_core::policy::fill_shown;
 
 use crate::progress::Part;
 use crate::run::{command, shell_words};
@@ -103,7 +104,7 @@ pub fn pack_backup(pack: &BackupPack<'_>) -> PackedBackup {
     .status()
     .is_ok_and(|status| status.success())
   {
-    return failed(format!("mkfifo {} failed", stream.display()));
+    return failed(fill_shown(&BACKUPS.backup.no_fifo, &[("stream", &stream.display())]));
   }
 
   let hashing = Command::new("sha256sum")
@@ -115,7 +116,7 @@ pub fn pack_backup(pack: &BackupPack<'_>) -> PackedBackup {
   let Ok(hashing) = hashing else {
     let _ = std::fs::remove_file(&stream);
 
-    return failed("sha256sum could not be started".to_owned());
+    return failed(BACKUPS.backup.no_hash.clone());
   };
   let mut tar: Vec<String> = pack.tar.iter().map(|word| (*word).to_owned()).collect();
 
@@ -157,7 +158,7 @@ pub fn pack_backup(pack: &BackupPack<'_>) -> PackedBackup {
   let _ = std::fs::remove_file(&stream);
 
   let Ok(piped) = piped else {
-    return failed("the pack's pipeline could not be started".to_owned());
+    return failed(BACKUPS.backup.no_pipeline.clone());
   };
   let out = String::from_utf8_lossy(&piped.stdout);
   // The pipeline's last line is the exit codes the shell gathered, one space between each.
@@ -194,7 +195,10 @@ pub fn pack_backup(pack: &BackupPack<'_>) -> PackedBackup {
   let read_back = if decompress == 0 && extract == 0 {
     Ok(())
   } else if warnings.is_empty() {
-    Err(format!("zstd -d exit {decompress}, tar -x exit {extract}"))
+    Err(fill_shown(
+      &BACKUPS.backup.read_back_exits,
+      &[("decompress", &decompress), ("extract", &extract)],
+    ))
   } else {
     Err(warnings.clone())
   };
@@ -242,8 +246,8 @@ impl Left {
   /// What was left, as the deploy output says it.
   pub fn said(self) -> &'static str {
     match self {
-      Self::NothingChanged => "nothing was changed.",
-      Self::BackupRemoved => "the backup was removed and nothing else was changed.",
+      Self::NothingChanged => &BACKUPS.backup.nothing_changed,
+      Self::BackupRemoved => &BACKUPS.backup.backup_removed,
     }
   }
 }
@@ -284,7 +288,7 @@ fn declared(line: &str, cwd: &Path, folder: &Path) -> Result<(), String> {
   let done = command(&shell_words(line), Some(cwd))
     .env(SNAPSHOT_VARIABLE, folder)
     .output()
-    .map_err(|why| format!("`{line}` could not be started: {why}"))?;
+    .map_err(|why| fill_shown(&BACKUPS.backup.unstarted, &[("line", &line), ("why", &why)]))?;
 
   if done.status.success() {
     return Ok(());
@@ -292,10 +296,13 @@ fn declared(line: &str, cwd: &Path, folder: &Path) -> Result<(), String> {
 
   let said = format!("{}{}", String::from_utf8_lossy(&done.stdout), String::from_utf8_lossy(&done.stderr));
 
-  Err(format!(
-    "`{line}` exited {}: {}",
-    done.status.code().unwrap_or(-1),
-    first_chars(said.trim(), DEPLOY.numbers.quoted_chars)
+  Err(fill_shown(
+    &BACKUPS.backup.exited,
+    &[
+      ("line", &line),
+      ("code", &done.status.code().unwrap_or(-1)),
+      ("said", &first_chars(said.trim(), DEPLOY.numbers.quoted_chars)),
+    ],
   ))
 }
 
@@ -335,7 +342,7 @@ pub fn take_backup(
   // The backup directory holds the env files the data root carries, so it is the user's alone.
   if let Err(why) = private(plan.backup_dir) {
     return failed(
-      format!("{} could not be made: {why}", plan.backup_dir.display()),
+      fill_shown(&BACKUPS.backup.not_made, &[("dir", &plan.backup_dir.display()), ("why", &why)]),
       Left::NothingChanged,
       String::new(),
     );
@@ -347,7 +354,7 @@ pub fn take_backup(
   for folder in [&stage.join(SNAPSHOT_DIR), &scratch] {
     if let Err(why) = private(folder) {
       return failed(
-        format!("{} could not be made: {why}", folder.display()),
+        fill_shown(&BACKUPS.backup.not_made, &[("dir", &folder.display()), ("why", &why)]),
         Left::NothingChanged,
         String::new(),
       );
@@ -361,7 +368,11 @@ pub fn take_backup(
   {
     timed(Part::Snapshot, started.elapsed().as_secs_f64(), false);
 
-    return failed(format!("the snapshot could not be taken: {why}"), Left::NothingChanged, String::new());
+    return failed(
+      fill_shown(&BACKUPS.backup.no_snapshot, &[("why", &why)]),
+      Left::NothingChanged,
+      String::new(),
+    );
   }
 
   timed(Part::Snapshot, started.elapsed().as_secs_f64(), true);
@@ -386,15 +397,14 @@ pub fn take_backup(
   );
 
   if packed.packed == Packed::Failed {
-    return failed("tar could not write the backup".to_owned(), Left::NothingChanged, packed.warnings);
+    return failed(BACKUPS.backup.unwritten.clone(), Left::NothingChanged, packed.warnings);
   }
 
   if let Err(said) = &packed.read_back {
     return failed(
-      format!(
-        "the backup {} did not read back whole: {}",
-        plan.name,
-        first_chars(said, DEPLOY.numbers.quoted_chars)
+      fill_shown(
+        &BACKUPS.backup.not_whole,
+        &[("name", &plan.name), ("said", &first_chars(said, DEPLOY.numbers.quoted_chars))],
       ),
       Left::BackupRemoved,
       packed.warnings,
@@ -403,7 +413,7 @@ pub fn take_backup(
 
   if let Err(why) = std::fs::rename(&part, &finished) {
     return failed(
-      format!("the backup could not be put in place: {why}"),
+      fill_shown(&BACKUPS.backup.not_placed, &[("why", &why)]),
       Left::BackupRemoved,
       packed.warnings,
     );
@@ -411,7 +421,7 @@ pub fn take_backup(
 
   let started = Instant::now();
   let checked = if file_sha256(&finished) != packed.sha256 {
-    Err("the file on disk is not the stream that read back".to_owned())
+    Err(BACKUPS.backup.not_the_stream.clone())
   } else if let Some(line) = plan.verify {
     declared(line, plan.cwd, &scratch.join(SNAPSHOT_DIR))
   } else {
@@ -421,7 +431,11 @@ pub fn take_backup(
   if let Err(why) = checked {
     timed(Part::Check, started.elapsed().as_secs_f64(), false);
 
-    return failed(format!("the backup did not restore: {why}"), Left::BackupRemoved, packed.warnings);
+    return failed(
+      fill_shown(&BACKUPS.backup.not_restored, &[("why", &why)]),
+      Left::BackupRemoved,
+      packed.warnings,
+    );
   }
 
   remove(&scratch);

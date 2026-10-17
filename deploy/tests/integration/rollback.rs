@@ -5,6 +5,8 @@
 use std::cell::{Cell, RefCell};
 use std::path::{Path, PathBuf};
 
+use bmo_testbed_core::policy::deploy::DEPLOY;
+use bmo_testbed_core::policy::fill_shown;
 use bmo_testbed_deploy::release::{flip, release_dir};
 use bmo_testbed_deploy::rollback::{
   BootFailure, DeployTree, FailedDeploy, NotRolled, Rollback, ServiceHands, deploy_failure_notice,
@@ -178,6 +180,13 @@ async fn a_failed_deployment_is_flipped_back_relinked_recorded_and_restarted() {
   assert_eq!(*services.steps.borrow(), ["stop", "restart"]);
   assert_eq!(services.asked.get(), 1);
   assert_eq!(at.linked(), Path::new("deploy-releases").join(short(&at.live)));
+  assert_eq!(
+    *services.said.borrow(),
+    [
+      fill_shown(&DEPLOY.rolling.back_to, &[("commit", &short(&at.live))]),
+      fill_shown(&DEPLOY.rolling.answers, &[("commit", &short(&at.live))]),
+    ]
+  );
 
   // The installed unit follows the file back to where the live commit keeps it.
   assert_eq!(
@@ -241,7 +250,14 @@ async fn a_service_silent_on_the_release_before_too_is_said_to_be_down() {
       answers: false,
     }
   );
-  assert!(services.said.borrow().iter().any(|line| line.contains("would not stop")));
+  assert_eq!(
+    *services.said.borrow(),
+    [
+      fill_shown(&DEPLOY.rolling.back_to, &[("commit", &short(&at.live))]),
+      DEPLOY.rolling.would_not_stop.clone(),
+      fill_shown(&DEPLOY.rolling.silent, &[("commit", &short(&at.live))]),
+    ]
+  );
   assert!(
     deploy_failure_notice(&failed, &outcome).contains("but the service still does not answer; it is down.")
   );
@@ -278,11 +294,11 @@ async fn a_deployment_with_a_command_before_the_start_is_never_rolled_back_by_it
   let outcome = roll_back(&failed, &mut at.tree(&quiet), &services).await;
 
   assert!(matches!(
-    outcome,
+    &outcome,
     Rollback::NotRolled {
       why: NotRolled::BeforeStart,
-      ..
-    }
+      detail,
+    } if *detail == DEPLOY.rolling.before_start
   ));
   assert!(services.steps.borrow().is_empty());
   assert_eq!(at.linked(), Path::new("deploy-releases").join(short(&at.failed)));
@@ -306,11 +322,11 @@ async fn a_first_deployment_has_nothing_to_go_back_to() {
     let outcome = roll_back(&failed, &mut at.tree(&quiet), &services).await;
 
     assert!(matches!(
-      outcome,
+      &outcome,
       Rollback::NotRolled {
         why: NotRolled::First,
-        ..
-      }
+        detail,
+      } if *detail == DEPLOY.rolling.first
     ));
     assert!(
       deploy_failure_notice(&failed, &outcome)
@@ -340,7 +356,13 @@ async fn a_release_before_that_is_gone_or_unfinished_is_not_flipped_onto() {
     panic!("{outcome:?}");
   };
 
-  assert!(detail.contains("no longer stands built"), "{detail}");
+  assert_eq!(
+    *detail,
+    fill_shown(
+      &DEPLOY.rolling.not_built,
+      &[("commit", &short(&at.live)), ("release", &live_release.display())]
+    )
+  );
   assert_eq!(*services.steps.borrow(), ["stop"]);
   assert_eq!(at.linked(), Path::new("deploy-releases").join(short(&at.failed)));
   assert!(deploy_failure_notice(&failed, &outcome).contains("The deploy tree could not be rolled back: "));

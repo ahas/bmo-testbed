@@ -148,6 +148,34 @@ pub struct EndingWords {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct CheckWords {
+  pub heading: String,
+  pub since: String,
+  pub given: String,
+  #[serde(rename = "where")]
+  pub where_it_runs: String,
+  pub step: String,
+  pub ok: String,
+  pub failed: String,
+  pub logged: String,
+  pub log: String,
+  pub no_turn: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CargoWords {
+  pub not_removed: String,
+  pub unasked: String,
+  pub no_code: String,
+  pub locked: String,
+  pub removed: String,
+  pub unstarted: String,
+  pub stood_up_elsewhere: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Suite {
   pub numbers: Numbers,
   pub run: RunWords,
@@ -158,6 +186,8 @@ pub struct Suite {
   pub lines: LineWords,
   pub file: FileWords,
   pub ending: EndingWords,
+  pub check: CheckWords,
+  pub cargo: CargoWords,
 }
 
 super::part!(pub SUITE: Suite = "suite.toml");

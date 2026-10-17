@@ -107,6 +107,7 @@ pub struct ImportsWords {
   pub not_checkout: String,
   pub refused: String,
   pub nothing_written: String,
+  pub none_written: String,
   pub to_fix: String,
   pub fixed: String,
   pub unit: String,

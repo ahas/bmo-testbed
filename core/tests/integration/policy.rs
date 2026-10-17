@@ -9,13 +9,13 @@ use bmo_testbed_core::policy::declaration::DECLARATION;
 use bmo_testbed_core::policy::deploy::DEPLOY;
 use bmo_testbed_core::policy::deploy_steps::{DEPLOY_STEPS, DeployStep};
 use bmo_testbed_core::policy::events::EVENTS;
-use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::policy::prune::PRUNE;
 use bmo_testbed_core::policy::quick_checks::QUICK_CHECKS;
 use bmo_testbed_core::policy::static_check::STATIC_CHECK;
 use bmo_testbed_core::policy::suite::SUITE;
 use bmo_testbed_core::policy::verbs::VERBS;
+use bmo_testbed_core::policy::{fill_marks, fill_shown};
 
 // "every part of the policy reads as its type": each file met once, so one that does not read fails here
 // before anything runs on it.
@@ -71,6 +71,21 @@ fn a_brace_with_no_name_stays() {
   assert_eq!(fill_marks("{} and {x", &[("x", "filled")]), "{} and {x");
   assert_eq!(fill_marks("{ x } and {x}", &[("x", "filled")]), "{ x } and filled");
   assert_eq!(fill_marks("ends with {", &[]), "ends with {");
+}
+
+// "a value that is no text is written as it displays": numbers and paths fill the marks as `fill_marks`
+// fills them with their text.
+#[test]
+fn a_value_that_is_no_text_is_written_as_it_displays() {
+  let path = std::path::Path::new("/srv/data");
+
+  assert_eq!(
+    fill_shown(
+      "{count} files under {dir}, {left}",
+      &[("count", &3), ("dir", &path.display()), ("left", &"{count}")]
+    ),
+    "3 files under /srv/data, {count}"
+  );
 }
 
 // "the policy names every step and no other"

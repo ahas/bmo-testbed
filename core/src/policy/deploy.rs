@@ -126,11 +126,129 @@ pub struct RunWords {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct AdoptWords {
+  pub retired_earlier: String,
+  pub a_file: String,
+  pub no_worktree: String,
+  pub not_built_from: String,
+  pub adopting: String,
+  pub elsewhere: String,
+  pub not_exchanged: String,
+  pub linked: String,
+  pub retired: String,
+  pub bin_not_taken: String,
+  pub not_retired: String,
+  pub not_repaired: String,
+  pub submodule_not_pointed: String,
+  pub not_removed: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BootWords {
+  pub no_answer: String,
+  pub not_run: String,
+  pub exit: String,
+  pub exit_said: String,
+  pub a_signal: String,
+  pub unasked: String,
+  pub unit_is: String,
+  pub unit_went: String,
+  pub pid_changed: String,
+  pub restarted: String,
+  pub unasked_hold: String,
+  pub strain: String,
+  pub unknown: String,
+  pub waited: String,
+  pub gave_up: String,
+  pub unit_unasked: String,
+  pub unit: String,
+  pub process: String,
+  pub machine: String,
+  pub journal: String,
+  pub journal_unread: String,
+  pub fell: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExpansionWords {
+  pub not_placed: String,
+  pub not_emptied: String,
+  pub failed: String,
+  pub no_addresses: String,
+  pub not_pinned: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RollingWords {
+  pub before_start: String,
+  pub first: String,
+  pub back_to: String,
+  pub would_not_stop: String,
+  pub dangling: String,
+  pub links_one: String,
+  pub links_many: String,
+  pub answers: String,
+  pub silent: String,
+  pub not_built: String,
+  pub flip_failed: String,
+  pub flipped: String,
+  pub unrecorded: String,
+  pub unlogged: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReleaseWords {
+  pub live_unbuilt: String,
+  pub leftover: String,
+  pub not_added: String,
+  pub unread_processes: String,
+  pub not_removed: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TreeWords {
+  pub dirty: String,
+  pub more: String,
+  pub no_commit: String,
+  pub unpushed: String,
+  pub link_gone: String,
+  pub link_several: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct UnitWords {
+  pub notice: String,
+  pub not_started: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RemoveWords {
+  pub inside: String,
+  pub holds: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Deploy {
   pub rollback: RollbackWords,
   pub refusal: RefusalWords,
   pub numbers: Numbers,
   pub run: RunWords,
+  pub adopt: AdoptWords,
+  pub boot: BootWords,
+  pub expansion: ExpansionWords,
+  pub rolling: RollingWords,
+  pub release: ReleaseWords,
+  pub tree: TreeWords,
+  pub unit: UnitWords,
+  pub remove: RemoveWords,
 }
 
 super::part!(pub DEPLOY: Deploy = "deploy.toml");

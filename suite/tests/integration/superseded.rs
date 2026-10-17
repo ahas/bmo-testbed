@@ -1,6 +1,8 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 
+use bmo_testbed_core::policy::fill_shown;
+use bmo_testbed_core::policy::suite::SUITE;
 use bmo_testbed_suite::superseded::{
   BUILT_UNITS_NAME, BuildIdentity, Builds, REPORTED_FORMAT, build_generation, built_units, plan_superseded,
   read_record, recorded_units, remove_superseded, reporting_args, shape_of, unit_hash,
@@ -13,6 +15,14 @@ fn now() -> i64 {
 
 fn words(given: &[&str]) -> Vec<String> {
   given.iter().map(|one| (*one).to_owned()).collect()
+}
+
+// Whether a line is the policy's removal line for `count` units, whatever target and size it names.
+fn removed_line(line: &str, count: usize) -> bool {
+  let filled = fill_shown(&SUITE.cargo.removed, &[("count", &count)]);
+  let pattern = regex::escape(&filled).replace(r"\{target\}", ".+").replace(r"\{megabytes\}", r"\d+");
+
+  regex::Regex::new(&format!("^{pattern}$")).unwrap().is_match(line)
 }
 
 // A build directory shaped as Cargo leaves it, and a checkout beside it whose own target directory stands
@@ -237,7 +247,7 @@ fn a_later_build_of_the_same_shape_removes_what_the_earlier_one_left_and_nothing
   assert!(scene.has("integration-a333333333333333"));
   // The shared dependency is never removed after a build.
   assert!(scene.has("libserde-5e5e5e5e5e5e5e5e.rlib"));
-  assert!(said.borrow().last().unwrap().contains("removed 1 superseded units"), "{said:?}");
+  assert!(removed_line(said.borrow().last().unwrap(), 1), "{said:?}");
 
   // Once the other shape moves on too, its library and its binary go.
   let moved = binary
@@ -249,7 +259,7 @@ fn a_later_build_of_the_same_shape_removes_what_the_earlier_one_left_and_nothing
   assert!(!scene.has("libservice_core-2222222222222222.rlib"));
   assert!(!scene.has("service_core-b222222222222222"));
   assert!(scene.has("libservice_core-3333333333333333.rlib"));
-  assert!(said.borrow().last().unwrap().contains("removed 2 superseded units"), "{said:?}");
+  assert!(removed_line(said.borrow().last().unwrap(), 2), "{said:?}");
 }
 
 #[test]

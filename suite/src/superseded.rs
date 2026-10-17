@@ -13,6 +13,7 @@ use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
+use bmo_testbed_core::policy::fill_shown;
 use bmo_testbed_core::policy::prune::PRUNE;
 use bmo_testbed_core::policy::suite::SUITE;
 use regex::Regex;
@@ -585,7 +586,7 @@ pub fn remove_superseded(builds: &Builds, wrapper: &str, output: &str, say: &mut
 
   let generation = match build_generation(&builds.root) {
     Ok(generation) => generation,
-    Err(why) => return say(&format!("cargo: superseded units not removed: {why}")),
+    Err(why) => return say(&fill_shown(&SUITE.cargo.not_removed, &[("why", &why)])),
   };
   let build = BuildIdentity {
     shape: shape_of(wrapper, &units),
@@ -596,7 +597,7 @@ pub fn remove_superseded(builds: &Builds, wrapper: &str, output: &str, say: &mut
   let record = builds.record_path();
   let written = |say: &mut dyn FnMut(&str)| {
     if let Err(why) = write_record(&record, &plan.record) {
-      say(&format!("cargo: superseded units not removed: {why}"));
+      say(&fill_shown(&SUITE.cargo.not_removed, &[("why", &why)]));
     }
   };
 
@@ -608,10 +609,9 @@ pub fn remove_superseded(builds: &Builds, wrapper: &str, output: &str, say: &mut
   let Some(locks) = take_build_locks(&builds.build_root, &plan.gone) else {
     written(say);
 
-    return say(&format!(
-      "cargo: another build holds the build lock; {} superseded units of {} are left to the prune",
-      plan.gone.len(),
-      target_name(builds)
+    return say(&fill_shown(
+      &SUITE.cargo.locked,
+      &[("count", &plan.gone.len()), ("target", &target_name(builds))],
     ));
   };
   let paths = swept_paths(&builds.build_root, &plan.gone);
@@ -623,10 +623,12 @@ pub fn remove_superseded(builds: &Builds, wrapper: &str, output: &str, say: &mut
 
   written(say);
   drop(locks);
-  say(&format!(
-    "cargo: removed {} superseded units of {}, {} MB",
-    plan.gone.len(),
-    target_name(builds),
-    (bytes as f64 / 1e6).round()
+  say(&fill_shown(
+    &SUITE.cargo.removed,
+    &[
+      ("count", &plan.gone.len()),
+      ("target", &target_name(builds)),
+      ("megabytes", &(bytes as f64 / 1e6).round()),
+    ],
   ));
 }

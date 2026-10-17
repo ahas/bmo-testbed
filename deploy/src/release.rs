@@ -7,6 +7,7 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use bmo_testbed_core::policy::deploy::DEPLOY;
+use bmo_testbed_core::policy::fill_shown;
 
 use crate::remove::remove_tree;
 use crate::run::Ran;
@@ -224,15 +225,14 @@ pub fn prepare(
     // The release the deploy tree names is what runs; one that does not stand built is never made again
     // over it.
     if live_release(preparing.deploy_dir).is_some_and(|live| same_place(&live, &release)) {
-      return Err(format!(
-        "the live release {} does not stand built for {}, and it is not made again under what runs",
-        release.display(),
-        short(preparing.commit)
+      return Err(fill_shown(
+        &DEPLOY.release.live_unbuilt,
+        &[("release", &release.display()), ("commit", &short(preparing.commit))],
       ));
     }
 
     if std::fs::symlink_metadata(&release).is_ok() {
-      say(&format!("taking away what an unfinished run left at {}", release.display()));
+      say(&fill_shown(&DEPLOY.release.leftover, &[("release", &release.display())]));
       remove_tree(&release, preparing.data_root)?;
     }
 
@@ -247,11 +247,13 @@ pub fn prepare(
     );
 
     if !added.ok {
-      return Err(format!(
-        "the release {} could not be added at {}: {}",
-        release.display(),
-        short(preparing.commit),
-        first_chars(&added.out, DEPLOY.numbers.quoted_chars)
+      return Err(fill_shown(
+        &DEPLOY.release.not_added,
+        &[
+          ("release", &release.display()),
+          ("commit", &short(preparing.commit)),
+          ("said", &first_chars(&added.out, DEPLOY.numbers.quoted_chars)),
+        ],
       ));
     }
 
@@ -616,9 +618,7 @@ pub fn prune(
 
   let Some(processes) = processes else {
     pruned.standing = names.len();
-    pruned
-      .warnings
-      .push("the live processes could not be read, so no release was pruned".to_owned());
+    pruned.warnings.push(DEPLOY.release.unread_processes.clone());
 
     return pruned;
   };
@@ -643,7 +643,11 @@ pub fn prune(
 
     match remove_tree(&release, data_root) {
       Ok(()) => pruned.removed.push(name),
-      Err(why) => pruned.warnings.push(format!("the release {name} could not be removed: {why}")),
+      Err(why) => {
+        pruned
+          .warnings
+          .push(fill_shown(&DEPLOY.release.not_removed, &[("name", &name), ("why", &why)]));
+      }
     }
   }
 

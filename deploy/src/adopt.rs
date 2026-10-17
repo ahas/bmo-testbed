@@ -6,6 +6,7 @@
 use std::path::{Path, PathBuf};
 
 use bmo_testbed_core::policy::deploy::DEPLOY;
+use bmo_testbed_core::policy::fill_shown;
 
 use crate::release::{
   GitRun, Pruned, RETIRED, Standing, beside, built_from, hard_link_tree, live_processes, release_dir,
@@ -47,7 +48,7 @@ pub fn adopt(
   for left in exchanged_leftovers(adopting.deploy_dir) {
     let retired = retire(adopting, &left, git)?;
 
-    say(&format!("an earlier adoption's directory retired to {}", retired.display()));
+    say(&fill_shown(&DEPLOY.adopt.retired_earlier, &[("dir", &retired.display())]));
   }
 
   if standing(adopting.deploy_dir) != Standing::NotLink {
@@ -57,43 +58,42 @@ pub fn adopt(
   let deploy_dir = adopting.deploy_dir;
 
   if !std::fs::symlink_metadata(deploy_dir).is_ok_and(|meta| meta.is_dir()) {
-    return Err(format!("{} stands as a file, which no deploy tree is", deploy_dir.display()));
+    return Err(fill_shown(&DEPLOY.adopt.a_file, &[("dir", &deploy_dir.display())]));
   }
 
   let head = git(&["rev-parse", "HEAD"], deploy_dir);
   let commit = head.out.trim().to_owned();
 
   if !head.ok || commit.len() != 40 {
-    return Err(format!(
-      "the directory {} is no git worktree at a commit: {}",
-      deploy_dir.display(),
-      first_chars(&head.out, DEPLOY.numbers.quoted_chars)
+    return Err(fill_shown(
+      &DEPLOY.adopt.no_worktree,
+      &[
+        ("dir", &deploy_dir.display()),
+        ("said", &first_chars(&head.out, DEPLOY.numbers.quoted_chars)),
+      ],
     ));
   }
 
   // The binaries are taken over rather than built, so they must be the commit's own: a release whose
   // `built-from` names another commit would be made again over the live tree by the next run.
   if built_from(deploy_dir).as_deref() != Some(commit.as_str()) {
-    return Err(format!(
-      "the directory {}'s bin/built-from does not name the commit it stands on, {}",
-      deploy_dir.display(),
-      short(&commit)
+    return Err(fill_shown(
+      &DEPLOY.adopt.not_built_from,
+      &[("dir", &deploy_dir.display()), ("commit", &short(&commit))],
     ));
   }
 
-  say(&format!(
-    "adopting the directory {} at {} into a release",
-    deploy_dir.display(),
-    short(&commit)
+  say(&fill_shown(
+    &DEPLOY.adopt.adopting,
+    &[("dir", &deploy_dir.display()), ("commit", &short(&commit))],
   ));
 
   let release = prepare(&commit)?;
 
   if release != release_dir(deploy_dir, &commit) {
-    return Err(format!(
-      "the release of {} was prepared somewhere else: {}",
-      short(&commit),
-      release.display()
+    return Err(fill_shown(
+      &DEPLOY.adopt.elsewhere,
+      &[("commit", &short(&commit)), ("release", &release.display())],
     ));
   }
 
@@ -109,17 +109,17 @@ pub fn adopt(
   if let Err(why) = exchange(&staged, deploy_dir) {
     let _ = std::fs::remove_file(&staged);
 
-    return Err(format!(
-      "the directory and the link onto {} could not be exchanged: {why}",
-      release.display()
+    return Err(fill_shown(
+      &DEPLOY.adopt.not_exchanged,
+      &[("release", &release.display()), ("why", &why)],
     ));
   }
 
-  say(&format!("the deploy tree is now a link onto {}", release.display()));
+  say(&fill_shown(&DEPLOY.adopt.linked, &[("release", &release.display())]));
 
   let retired = retire(adopting, &staged, git)?;
 
-  say(&format!("the directory it was retired to {}", retired.display()));
+  say(&fill_shown(&DEPLOY.adopt.retired, &[("dir", &retired.display())]));
 
   Ok(Some(Adopted { release, retired }))
 }
@@ -198,7 +198,9 @@ fn take_binaries(deploy_dir: &Path, release: &Path, data_root: &Path) -> Result<
 
   hard_link_tree(&deploy_dir.join("bin"), &staged)
     .and_then(|()| std::fs::rename(&staged, &bin))
-    .map_err(|why| format!("the directory's bin/ could not be taken into {}: {why}", release.display()))
+    .map_err(|why| {
+      fill_shown(&DEPLOY.adopt.bin_not_taken, &[("release", &release.display()), ("why", &why)])
+    })
 }
 
 // A directory exchanged out of the deploy tree's place renamed to a retired tree beside the link, at the
@@ -214,16 +216,18 @@ fn retire(adopting: &Adopting<'_>, exchanged: &Path, git: GitRun<'_>) -> Result<
   }
 
   std::fs::rename(exchanged, &retired).map_err(|why| {
-    format!("the exchanged directory {} could not be retired: {why}", exchanged.display())
+    fill_shown(&DEPLOY.adopt.not_retired, &[("dir", &exchanged.display()), ("why", &why)])
   })?;
 
   let repaired = git(&["worktree", "repair", &retired.to_string_lossy()], adopting.source);
 
   if !repaired.ok {
-    return Err(format!(
-      "the retired tree {} could not be repaired: {}",
-      retired.display(),
-      first_chars(&repaired.out, DEPLOY.numbers.quoted_chars)
+    return Err(fill_shown(
+      &DEPLOY.adopt.not_repaired,
+      &[
+        ("dir", &retired.display()),
+        ("said", &first_chars(&repaired.out, DEPLOY.numbers.quoted_chars)),
+      ],
     ));
   }
 
@@ -261,10 +265,13 @@ fn retire(adopting: &Adopting<'_>, exchanged: &Path, git: GitRun<'_>) -> Result<
       .ok;
 
     if !pointed {
-      return Err(format!(
-        "the retired tree's submodule {path} could not be pointed at {}: {}",
-        tree.display(),
-        first_chars(&admin.out, DEPLOY.numbers.quoted_chars)
+      return Err(fill_shown(
+        &DEPLOY.adopt.submodule_not_pointed,
+        &[
+          ("path", &path),
+          ("dir", &tree.display()),
+          ("said", &first_chars(&admin.out, DEPLOY.numbers.quoted_chars)),
+        ],
       ));
     }
   }
@@ -313,7 +320,7 @@ pub fn prune_retired(
       Ok(()) => pruned.removed.push(file_name(&tree)),
       Err(why) => pruned
         .warnings
-        .push(format!("the retired tree {} could not be removed: {why}", tree.display())),
+        .push(fill_shown(&DEPLOY.adopt.not_removed, &[("dir", &tree.display()), ("why", &why)])),
     }
   }
 

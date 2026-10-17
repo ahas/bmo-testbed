@@ -16,6 +16,7 @@ use oxc_parser::Parser;
 use oxc_span::SourceType;
 
 use bmo_testbed_core::declaration::Repository;
+use bmo_testbed_core::policy::verbs::VERBS;
 
 use crate::imports::{component_scripts, resolve_import};
 use crate::workspace::{PackageDeclaration, git_lines, owning_package, repository_paths};
@@ -343,7 +344,7 @@ pub fn import_repairs(
 /// Answers how many imports each file had rewritten, in the order the files first come.
 pub fn apply_repairs(root: &Path, repairs: &[ImportRepair]) -> Result<Vec<(String, usize)>, String> {
   if repairs.iter().any(ImportRepair::refused) {
-    return Err("a repair was refused, so nothing is written".to_owned());
+    return Err(VERBS.imports.none_written.clone());
   }
 
   let mut files: Vec<&str> = Vec::new();

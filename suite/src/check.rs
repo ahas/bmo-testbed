@@ -7,8 +7,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use bmo_testbed_core::declaration::{Repository, Test};
-use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::suite::SUITE;
+use bmo_testbed_core::policy::{fill_marks, fill_shown};
 use bmo_testbed_core::turn::{Lane, NOT_RUN_EXIT_CODE, TurnAsk, process_env, take_turn};
 use sha2::{Digest, Sha256};
 
@@ -78,7 +78,11 @@ fn plain(dir: &str, command: Vec<String>, env: Vec<(String, String)>) -> CheckSt
 
 // Where a step runs, as its name says it: nothing at the root.
 fn where_it_runs(dir: &Path) -> String {
-  if dir == Path::new(".") { String::new() } else { format!(" in {}", dir.display()) }
+  if dir == Path::new(".") {
+    String::new()
+  } else {
+    fill_shown(&SUITE.check.where_it_runs, &[("dir", &dir.display())])
+  }
 }
 
 // A static step, named by its id and where it runs, which is how a person reads it.
@@ -151,9 +155,9 @@ pub fn plan(repo: &Repository, ask: &CheckAsk) -> Result<CheckPlan, String> {
     let since = ask.since.clone().unwrap_or_else(|| default_since(repo));
     let changed = changed_paths(&repo.root, &since)?;
 
-    (format!("since {since}"), changed)
+    (fill_shown(&SUITE.check.since, &[("since", &since)]), changed)
   } else {
-    (format!("{} file(s) given", ask.files.len()), ask.files.clone())
+    (fill_shown(&SUITE.check.given, &[("count", &ask.files.len())]), ask.files.clone())
   };
   let touched = touched(repo, &changed);
   let mut steps: Vec<Step> = declared_steps(repo, Some(&changed)).into_iter().map(of).collect();
@@ -224,40 +228,43 @@ pub fn run_check(
   log: &Path,
   run: &dyn Fn(&Path, &Step) -> TimedRun,
 ) -> Checked {
-  let mut lines = vec![format!(
-    "check: {} path(s) changed ({}); {} test file(s), {} crate(s) tested, {} checked, {} project check(s), {} \
-     tool check(s)",
-    plan.changed.len(),
-    plan.from,
-    plan.touched.tests.len(),
-    plan.touched.tested_crates.len(),
-    plan.touched.checked_crates.len(),
-    plan.touched.projects.len(),
-    plan.touched.tools.len(),
+  let words = &SUITE.check;
+  let mut lines = vec![fill_shown(
+    &words.heading,
+    &[
+      ("changed", &plan.changed.len()),
+      ("from", &plan.from),
+      ("tests", &plan.touched.tests.len()),
+      ("tested", &plan.touched.tested_crates.len()),
+      ("checked", &plan.touched.checked_crates.len()),
+      ("projects", &plan.touched.projects.len()),
+      ("tools", &plan.touched.tools.len()),
+    ],
   )];
   let mut failed = false;
   let mut written = String::new();
 
   for step in &plan.steps {
     let done = run(root, step);
+    let logged = fill_shown(
+      &words.logged,
+      &[("name", &step.name), ("command", &step.step.command.join(" ")), ("code", &done.code)],
+    );
 
-    written.push_str(&format!(
-      "==> {} ({}): exit {}\n{}\n",
-      step.name,
-      step.step.command.join(" "),
-      done.code,
-      done.output
-    ));
+    written.push_str(&format!("{logged}\n{}\n", done.output));
     let _ = std::fs::write(log, &written);
 
-    let outcome = if done.code == 0 { "ok" } else { "FAILED" };
+    let outcome = if done.code == 0 { &words.ok } else { &words.failed };
 
-    lines.push(format!(
-      "{outcome} {} · exit {} · ran {:.0}s, waited {:.0}s",
-      step.name,
-      done.code,
-      done.ran_seconds.max(0.0),
-      done.waited_seconds.max(0.0)
+    lines.push(fill_shown(
+      &words.step,
+      &[
+        ("outcome", outcome),
+        ("name", &step.name),
+        ("code", &done.code),
+        ("ran", &format!("{:.0}", done.ran_seconds.max(0.0))),
+        ("waited", &format!("{:.0}", done.waited_seconds.max(0.0))),
+      ],
     ));
 
     if done.code != 0 {
@@ -287,7 +294,7 @@ pub fn run_check(
     lines.extend(read.output.lines().map(str::to_owned));
   }
 
-  lines.push(format!("log: {}", log.display()));
+  lines.push(fill_shown(&words.log, &[("path", &log.display())]));
 
   Checked {
     lines,
@@ -317,7 +324,7 @@ pub fn run_step(root: &Path, step: &Step) -> TimedRun {
   if !turn.had() {
     return TimedRun {
       code: i32::from(NOT_RUN_EXIT_CODE),
-      output: format!("the machine's turn did not come: {}", turn.words()),
+      output: fill_shown(&SUITE.check.no_turn, &[("words", &turn.words())]),
       waited_seconds: turn.waited_seconds(),
       ran_seconds: 0.0,
     };

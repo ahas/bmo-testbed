@@ -10,7 +10,7 @@ use std::process::{Command, Stdio};
 
 use bmo_testbed_core::policy::backups::BACKUPS;
 use bmo_testbed_core::policy::deploy::DEPLOY;
-use bmo_testbed_core::policy::fill_marks;
+use bmo_testbed_core::policy::{fill_marks, fill_shown};
 use regex::Regex;
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -159,9 +159,14 @@ fn confirm(
 
       return Err((
         UploadStep::ReadBack,
-        format!(
-          "read back {} bytes, sha256 {}, where the local file has {} bytes, sha256 {}",
-          back.size, back.sha256, local.size, local.sha256
+        fill_shown(
+          &BACKUPS.upload.mismatch,
+          &[
+            ("back_size", &back.size),
+            ("back_sha256", &back.sha256),
+            ("size", &local.size),
+            ("sha256", &local.sha256),
+          ],
         ),
       ));
     }
@@ -216,12 +221,18 @@ pub fn send_backups(hands: &mut impl UploadHands, names: &BackupNames, keep: usi
       match confirm(hands, backup, &mut present) {
         Ok(local) => {
           outcome.sent.push(backup.clone());
-          hands.say(&format!("{backup} stands remotely, {} bytes, sha256 {}", local.size, local.sha256));
+          hands.say(&fill_shown(
+            &BACKUPS.upload.stands,
+            &[("backup", backup), ("size", &local.size), ("sha256", &local.sha256)],
+          ));
         }
         Err((step, why)) => {
           let why = said(&why);
 
-          hands.say(&format!("{backup} was not confirmed remotely ({}): {why}", step.name()));
+          hands.say(&fill_shown(
+            &BACKUPS.upload.unconfirmed,
+            &[("backup", backup), ("step", &step.name()), ("why", &why)],
+          ));
           outcome.failed.push(UploadFailure {
             name: Some(backup.clone()),
             step,
@@ -237,7 +248,7 @@ pub fn send_backups(hands: &mut impl UploadHands, names: &BackupNames, keep: usi
       match hands.remove_remote(&backup) {
         Ok(()) => {
           present.remove(&backup);
-          hands.say(&format!("{backup} rotated off the remote"));
+          hands.say(&fill_shown(&BACKUPS.upload.rotated, &[("backup", &backup)]));
           outcome.removed_remote.push(backup);
         }
         Err(why) => outcome.failed.push(UploadFailure {
@@ -256,7 +267,7 @@ pub fn send_backups(hands: &mut impl UploadHands, names: &BackupNames, keep: usi
 
     match hands.remove_local(backup) {
       Ok(()) => {
-        hands.say(&format!("{backup} removed from the local disk"));
+        hands.say(&fill_shown(&BACKUPS.upload.removed_locally, &[("backup", backup)]));
         outcome.removed_local.push(backup.clone());
       }
       Err(why) => outcome.failed.push(UploadFailure {
@@ -291,10 +302,7 @@ pub fn upload_usage(remote: &str, keep: u64) -> Vec<String> {
     .iter()
     .map(|line| fill_marks(line, &[("remote", remote), ("keep", &keep.to_string())]));
 
-  ["usage: bmo-testbed backups".to_owned(), String::new()]
-    .into_iter()
-    .chain(lines)
-    .collect()
+  [BACKUPS.upload_heading.clone(), String::new()].into_iter().chain(lines).collect()
 }
 
 // A stream read whole into its length and SHA-256.
@@ -331,12 +339,12 @@ pub struct Remote {
 impl Remote {
   /// The declared `s3://bucket/prefix` address read; why it does not read as one where it does not.
   pub fn parse(address: &str) -> Result<Self, String> {
-    let read =
-      url::Url::parse(address).map_err(|why| format!("the remote {address} does not read: {why}"))?;
+    let read = url::Url::parse(address)
+      .map_err(|why| fill_shown(&BACKUPS.upload.remote_unread, &[("address", &address), ("why", &why)]))?;
     let bucket = read.host_str().filter(|_| read.scheme() == "s3").unwrap_or_default();
 
     if bucket.is_empty() {
-      return Err(format!("the remote {address} is no s3://bucket address"));
+      return Err(fill_shown(&BACKUPS.upload.not_s3, &[("address", &address)]));
     }
 
     let prefix = read.path().trim_matches('/');
@@ -377,7 +385,9 @@ impl AwsHands {
 
 // A command run to its end, its standard output where it ended well.
 fn ran(mut command: Command, what: &str) -> Result<String, String> {
-  let done = command.output().map_err(|why| format!("{what} could not be started: {why}"))?;
+  let done = command
+    .output()
+    .map_err(|why| fill_shown(&BACKUPS.upload.unstarted, &[("what", &what), ("why", &why)]))?;
 
   if done.status.success() {
     return Ok(String::from_utf8_lossy(&done.stdout).into_owned());
@@ -387,7 +397,10 @@ fn ran(mut command: Command, what: &str) -> Result<String, String> {
   let out = String::from_utf8_lossy(&done.stdout);
   let told = if err.trim().is_empty() { out.trim() } else { err.trim() };
 
-  Err(format!("{what} exited {}: {}", done.status.code().unwrap_or(-1), said(told)))
+  Err(fill_shown(
+    &BACKUPS.upload.exited,
+    &[("what", &what), ("code", &done.status.code().unwrap_or(-1)), ("said", &said(told))],
+  ))
 }
 
 impl UploadHands for AwsHands {
@@ -439,7 +452,7 @@ impl UploadHands for AwsHands {
     let size = std::fs::metadata(&path).map_err(|why| why.to_string())?.len();
 
     if digest.size != size {
-      return Err("the file changed while it was read".into());
+      return Err(BACKUPS.upload.changed.clone());
     }
 
     Ok(digest)
@@ -464,8 +477,8 @@ impl UploadHands for AwsHands {
       return Ok(vec![]);
     }
 
-    let read: Value =
-      serde_json::from_str(&listed).map_err(|why| format!("the listing could not be read: {why}"))?;
+    let read: Value = serde_json::from_str(&listed)
+      .map_err(|why| fill_shown(&BACKUPS.upload.listing_unread, &[("why", &why)]))?;
 
     Ok(
       read
@@ -505,7 +518,7 @@ impl UploadHands for AwsHands {
       .stdout(Stdio::piped())
       .stderr(Stdio::piped())
       .spawn()
-      .map_err(|why| format!("aws could not be started: {why}"))?;
+      .map_err(|why| fill_shown(&BACKUPS.upload.unstarted, &[("what", &"aws"), ("why", &why)]))?;
     let digest = reading.stdout.take().map(digest_of);
     let mut err = String::new();
 
@@ -516,13 +529,16 @@ impl UploadHands for AwsHands {
     let status = reading.wait().map_err(|why| why.to_string())?;
 
     if !status.success() {
-      return Err(format!("reading {object} back exited {}: {}", status.code().unwrap_or(-1), said(&err)));
+      return Err(fill_shown(
+        &BACKUPS.upload.back_exited,
+        &[("object", &object), ("code", &status.code().unwrap_or(-1)), ("said", &said(&err))],
+      ));
     }
 
     match digest {
       Some(Ok(digest)) => Ok(digest),
       Some(Err(why)) => Err(why.to_string()),
-      None => Err(format!("reading {object} back gave no output")),
+      None => Err(fill_shown(&BACKUPS.upload.back_empty, &[("object", &object)])),
     }
   }
 

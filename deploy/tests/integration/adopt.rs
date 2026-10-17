@@ -5,6 +5,8 @@
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 
+use bmo_testbed_core::policy::deploy::DEPLOY;
+use bmo_testbed_core::policy::fill_shown;
 use bmo_testbed_deploy::adopt::{Adopted, Adopting, adopt, exchange, prune_retired, stood_in};
 use bmo_testbed_deploy::release::{
   DEPLOY_VARIABLE, Preparing, Standing, built_from, live_release, prepare, release_dir, standing,
@@ -120,7 +122,13 @@ fn a_directory_whose_binaries_are_not_its_commits_is_refused_and_left_in_place()
   std::fs::write(at.deploy_dir.join("bin/built-from"), "0123456789abcdef0123456789abcdef01234567\n")
     .unwrap();
 
-  assert!(adopted(&at, "20261014-051500").unwrap_err().contains("built-from"));
+  assert_eq!(
+    adopted(&at, "20261014-051500").unwrap_err(),
+    fill_shown(
+      &DEPLOY.adopt.not_built_from,
+      &[("dir", &at.deploy_dir.display()), ("commit", &short(&commit))]
+    )
+  );
   assert_eq!(standing(&at.deploy_dir), Standing::NotLink);
   assert!(!release_dir(&at.deploy_dir, &commit).exists());
 }
@@ -128,13 +136,19 @@ fn a_directory_whose_binaries_are_not_its_commits_is_refused_and_left_in_place()
 #[test]
 fn a_directory_that_is_no_worktree_or_a_file_in_its_place_is_refused() {
   let at = stand();
+  // What git says of the directory follows the policy's line, so the line is matched up to it.
+  let no_worktree =
+    fill_shown(&DEPLOY.adopt.no_worktree, &[("dir", &at.deploy_dir.display()), ("said", &"")]);
 
   std::fs::create_dir_all(&at.deploy_dir).unwrap();
-  assert!(adopted(&at, "20261014-051500").unwrap_err().contains("no git worktree"));
+  assert!(adopted(&at, "20261014-051500").unwrap_err().starts_with(&no_worktree));
 
   std::fs::remove_dir(&at.deploy_dir).unwrap();
   std::fs::write(&at.deploy_dir, "a file").unwrap();
-  assert!(adopted(&at, "20261014-051500").unwrap_err().contains("stands as a file"));
+  assert_eq!(
+    adopted(&at, "20261014-051500").unwrap_err(),
+    fill_shown(&DEPLOY.adopt.a_file, &[("dir", &at.deploy_dir.display())])
+  );
 }
 
 #[test]

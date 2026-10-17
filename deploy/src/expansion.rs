@@ -5,6 +5,7 @@
 use std::path::{Path, PathBuf};
 
 use bmo_testbed_core::policy::deploy::DEPLOY;
+use bmo_testbed_core::policy::fill_shown;
 
 use crate::release::beside;
 use crate::remove::remove_tree;
@@ -54,11 +55,13 @@ pub fn put_build_tree(build: &BuildTree<'_>, run: CommandRun<'_>) -> Result<(), 
   };
 
   if !placed.ok {
-    return Err(format!(
-      "the build tree {} could not be put at {}: {}",
-      tree.display(),
-      short(build.head),
-      first_chars(&placed.out, DEPLOY.numbers.quoted_chars)
+    return Err(fill_shown(
+      &DEPLOY.expansion.not_placed,
+      &[
+        ("tree", &tree.display()),
+        ("commit", &short(build.head)),
+        ("said", &first_chars(&placed.out, DEPLOY.numbers.quoted_chars)),
+      ],
     ));
   }
 
@@ -86,25 +89,31 @@ pub fn bring_submodules(tree: &Path, data_root: &Path, run: CommandRun<'_>) -> R
     let at = tree.join(path);
 
     if pinned && !at.join(".git").exists() {
-      empty_folder(&at, data_root)
-        .map_err(|why| format!("could not empty {} for its submodule: {why}", at.display()))?;
+      empty_folder(&at, data_root).map_err(|why| {
+        fill_shown(&DEPLOY.expansion.not_emptied, &[("at", &at.display()), ("why", &why)])
+      })?;
     }
   }
 
   let fault = |ran: Ran, what: &str| {
-    (!ran.ok).then(|| format!("{what}: {}", first_chars(&ran.out, DEPLOY.numbers.quoted_chars)))
+    (!ran.ok).then(|| {
+      fill_shown(
+        &DEPLOY.expansion.failed,
+        &[("what", &what), ("said", &first_chars(&ran.out, DEPLOY.numbers.quoted_chars))],
+      )
+    })
   };
 
   if let Some(fault) = fault(
     git(run, &["submodule", "sync", "--quiet", "--recursive"], tree),
-    "could not read the submodules' addresses",
+    &DEPLOY.expansion.no_addresses,
   ) {
     return Err(fault);
   }
 
   match fault(
     git(run, &["submodule", "update", "--quiet", "--init", "--recursive", "--force"], tree),
-    &format!("could not bring the submodules of {} to their pins", tree.display()),
+    &fill_shown(&DEPLOY.expansion.not_pinned, &[("tree", &tree.display())]),
   ) {
     Some(fault) => Err(fault),
     None => Ok(()),

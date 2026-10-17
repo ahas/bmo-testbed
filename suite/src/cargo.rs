@@ -11,6 +11,8 @@ use std::process::{Command, Stdio};
 
 use bmo_testbed_core::languages::cargo_compiles as compiles;
 use bmo_testbed_core::memory::{MachineHands, MemoryLimits, RunEnd, run_in_turn};
+use bmo_testbed_core::policy::fill_shown;
+use bmo_testbed_core::policy::suite::SUITE;
 use bmo_testbed_core::turn::{Env, Lane, process_env};
 
 use crate::crates::{
@@ -134,17 +136,16 @@ pub fn remove_superseded_after(root: &Path, args: &[String], say: &mut dyn FnMut
   let asked = invocation.command(root).stdout(Stdio::piped()).stderr(Stdio::piped()).output();
   let asked = match asked {
     Ok(asked) => asked,
-    Err(why) => return say(&format!("cargo: superseded units not removed: {why}")),
+    Err(why) => return say(&fill_shown(&SUITE.cargo.not_removed, &[("why", &why)])),
   };
 
   if !asked.status.success() {
     let stderr = String::from_utf8_lossy(&asked.stderr);
     let said = stderr.trim().lines().last().unwrap_or_default();
-    let code = asked.status.code().map_or_else(|| "none".to_owned(), |code| code.to_string());
+    let code = asked.status.code().map_or_else(|| SUITE.cargo.no_code.clone(), |code| code.to_string());
+    let why = fill_shown(&SUITE.cargo.unasked, &[("code", &code), ("said", &said)]);
 
-    return say(&format!(
-      "cargo: superseded units not removed: asking Cargo what the build stood on ended with exit {code}: {said}"
-    ));
+    return say(&fill_shown(&SUITE.cargo.not_removed, &[("why", &why)]));
   }
 
   let wrapper = invocation.named("RUSTC_WORKSPACE_WRAPPER").unwrap_or_default();
@@ -165,7 +166,10 @@ pub fn run_cargo(root: &Path, args: &[String]) -> u8 {
     match command.status() {
       Ok(status) => RunEnd::from(status),
       Err(why) => {
-        eprintln!("cargo: {} could not be started: {why}", invocation.command[0]);
+        eprintln!(
+          "{}",
+          fill_shown(&SUITE.cargo.unstarted, &[("command", &invocation.command[0]), ("why", &why)])
+        );
 
         RunEnd {
           code: Some(127),
