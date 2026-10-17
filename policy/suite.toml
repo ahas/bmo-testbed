@@ -29,6 +29,8 @@ unit_output_grace_seconds = 2
 # answers before it is taken for one that did not come up.
 server_start_tries = 60
 server_start_poll_ms = 500
+# How long a run waits for another run standing the test server up before it gives up on it.
+server_stand_lock_seconds = 120
 # The removal of what a build superseded: how long it waits on Cargo's build lock before it leaves what it
 # found to the next one, and how far apart it tries.
 superseded_lock_wait_seconds = 5
@@ -190,5 +192,5 @@ no_code = "none"
 locked = "cargo: another build holds the build lock; {count} superseded units of {target} are left to the prune"
 removed = "cargo: removed {count} superseded units of {target}, {megabytes} MB"
 unstarted = "cargo: {command} could not be started: {why}"
-# The test server's stand lock not had: {dir} the server's folder.
-stood_up_elsewhere = "{dir} was being stood up by another run for two minutes"
+# The test server's stand lock not had: {dir} the server's folder, {seconds} how long it was waited for.
+stood_up_elsewhere = "{dir} was being stood up by another run for {seconds}s"

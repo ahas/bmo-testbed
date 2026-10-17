@@ -150,8 +150,10 @@ pub fn test_server_up() -> Result<(), String> {
 
   std::fs::create_dir_all(&dir).map_err(|why| why.to_string())?;
 
-  let lock = take_lock(&dir.join("stand.lock"), 120.0, LockWait::default())
-    .ok_or_else(|| fill_shown(&SUITE.cargo.stood_up_elsewhere, &[("dir", &dir.display())]))?;
+  let wait = SUITE.numbers.server_stand_lock_seconds;
+  let lock = take_lock(&dir.join("stand.lock"), wait as f64, LockWait::default()).ok_or_else(|| {
+    fill_shown(&SUITE.cargo.stood_up_elsewhere, &[("dir", &dir.display()), ("seconds", &wait)])
+  })?;
 
   if answers(&bin, &socket) {
     drop(lock);

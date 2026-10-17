@@ -17,6 +17,7 @@ pub struct Numbers {
   pub unit_output_grace_seconds: u64,
   pub server_start_tries: u32,
   pub server_start_poll_ms: u64,
+  pub server_stand_lock_seconds: u64,
   pub superseded_lock_wait_seconds: u64,
   pub superseded_lock_poll_ms: u64,
   pub check_shown_lines: usize,
