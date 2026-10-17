@@ -304,7 +304,7 @@ fn leaves_the_line_once_its_job_is_gone() {
   let path = dir.path().join("close.lock");
   let holder = take_close_line(&CloseLineAsk {
     path: path.clone(),
-    env: Env::from([("BMO_AGENT_PLACE".to_owned(), "worker-w4".to_owned())]),
+    env: Env::from([("BMO_AGENT_PLACE".to_owned(), "place-4".to_owned())]),
     checkout: "/checkout".to_owned(),
     say: &quiet,
     notice_seconds: None,
@@ -316,7 +316,7 @@ fn leaves_the_line_once_its_job_is_gone() {
   let job_pid = job.id().to_string();
   let lines = std::sync::Mutex::new(Vec::<String>::new());
   let keep = |line: &str| lines.lock().unwrap().push(line.to_owned());
-  let held_by = fill_marks(&CLOSE_LINE.line.held_by, &[("who", "worker-w4 · /checkout")]);
+  let held_by = fill_marks(&CLOSE_LINE.line.held_by, &[("who", "place-4 · /checkout")]);
 
   std::thread::scope(|scope| {
     let waiting = scope.spawn(|| {

@@ -12,19 +12,19 @@ setup_failed = "the tree's setup `{command}` failed: {said}"
 
 [run]
 # Where it went, since it never runs in its caller's process.
-unit_failed = "full-suite: refused — its unit {unit} could not be started, and it does not run in this shell instead: {said}"
+unit_failed = "full-suite: refused, since its unit {unit} could not be started, and it does not run in this shell instead: {said}"
 started = "full-suite: running as {unit}, which outlives this call; read it with: journalctl --user -u {unit} --no-pager"
 # A second run meeting one at work.
-refused = "full-suite: refused — another daily run is going; read it with journalctl --user -u 'bmo-full-suite-*'"
+refused = "full-suite: refused, since another daily run is going; read it with journalctl --user -u 'bmo-full-suite-*'"
 # A run that `--due` found already started since {due}.
 not_due = "full-suite: a run started at {started}, since {due}, so none starts now"
 # The main branch's head did not read: the line said, and the verdict the event carries.
-no_head = "full-suite: FAILED — the head of {main} could not be read, so nothing ran"
+no_head = "full-suite: FAILED, since the head of {main} could not be read, so nothing ran"
 no_head_verdict = "the head of {main} could not be read"
 # The run begins at {head}, its log in {log}.
 begins = "full-suite: every test at {head}, its log in {log}"
 # The tree could not be put on the head.
-failed = "full-suite: FAILED — {why}"
+failed = "full-suite: FAILED, {why}"
 # Files a round never started, run again by name.
 again = "full-suite: {count} never started; running them again: {files}"
 # A round that wrote no verdict.

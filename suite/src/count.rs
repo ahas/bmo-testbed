@@ -51,8 +51,9 @@ pub trait RangeReading {
 // The line a commit retires a test with: `Retired-test: <title> — <reason>`, the reason not empty. The
 // last dash parts the two, since a title may hold a dash of its own.
 fn retired_title(line: &str) -> Option<&str> {
-  static RETIREMENT: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^Retired-test:\s*(.+)\s+—\s+\S").expect("the retirement line reads"));
+  static RETIREMENT: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^Retired-test:\s*(.+)\s+\x{2014}\s+\S").expect("the retirement line reads")
+  });
 
   RETIREMENT
     .captures(line.trim())

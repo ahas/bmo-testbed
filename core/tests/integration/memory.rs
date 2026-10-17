@@ -195,7 +195,7 @@ fn a_turn_not_had_runs_nothing_and_ends_on_the_testbeds_code() {
 
   assert_eq!(run_in_turn(&mut bench, &MemoryLimits::default(), &mut || ()), NOT_RUN_EXIT_CODE);
   assert_eq!(bench.ran, 0);
-  assert!(bench.said[0].starts_with(&marked("cargo test not run — the machine's turn was not had")));
+  assert!(bench.said[0].starts_with(&marked("cargo test not run: the machine's turn was not had")));
 }
 
 #[test]

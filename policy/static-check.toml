@@ -3,7 +3,7 @@
 # English. Each `{name}` is filled in with what it names; {step} is a step as `step` names it.
 
 step = "{name} ({command} in {dir})"
-ended = "static check: {step} — exit {code}, {times}"
+ended = "static check: {step}, exit {code}, {times}"
 not_run = "static check: not run"
-not_had = "{mark} — {step} did not get its turn within its wait; run this again at once"
-failed = "static check: FAILED — {step} exited {code}"
+not_had = "{mark} {step} did not get its turn within its wait; run this again at once"
+failed = "static check: FAILED, {step} exited {code}"

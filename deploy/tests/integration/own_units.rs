@@ -45,9 +45,8 @@ fn the_repositorys_deployment_keeps_the_prune_and_its_timer() {
   assert_eq!(timer_service("bmo-cargo-prune.timer"), "bmo-cargo-prune.service");
 
   let service = read("units/bmo-cargo-prune.service");
-  let places =
-    DeployPlaces::of(&repo, &Env::from([("HOME".to_owned(), "/home/someone".to_owned())])).unwrap();
-  let program = unit_program(&service).unwrap().replace("%h", "/home/someone");
+  let places = DeployPlaces::of(&repo, &Env::from([("HOME".to_owned(), "/account".to_owned())])).unwrap();
+  let program = unit_program(&service).unwrap().replace("%h", "/account");
   let started = service.lines().find(|line| line.starts_with("ExecStart=")).unwrap();
 
   assert_eq!(PathBuf::from(program), places.deploy_dir.join("bin/bmo-testbed"));

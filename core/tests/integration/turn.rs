@@ -134,13 +134,13 @@ fn ask(lock: &Path, env: Env) -> TurnAsk<'static> {
 fn a_turn_held_writes_its_record_and_a_command_under_it_runs_inside() {
   let dir = tempfile::tempdir().unwrap();
   let lock = lock_in(dir.path());
-  let env = Env::from([("BMO_AGENT_PLACE".to_owned(), "/places/worker-w3/".to_owned())]);
+  let env = Env::from([("BMO_AGENT_PLACE".to_owned(), "/places/place-3/".to_owned())]);
   let turn = take_turn(&ask(&lock, env));
   let (name, pid) = turn.held_variable().expect("an own turn hands its children its mark");
   let holder = read_queue(&lock).holder.expect("the holder writes its record");
 
   assert_eq!(name, HELD_VARIABLE);
-  assert_eq!((holder.place.as_deref(), holder.command.as_str()), (Some("worker-w3"), "a check"));
+  assert_eq!((holder.place.as_deref(), holder.command.as_str()), (Some("place-3"), "a check"));
   assert!(inside_held_turn(&lock, &Env::from([(HELD_VARIABLE.to_owned(), pid.clone())])));
   assert!(matches!(
     take_turn(&ask(&lock, Env::from([(HELD_VARIABLE.to_owned(), pid)]))),
@@ -156,10 +156,10 @@ fn a_turn_held_writes_its_record_and_a_command_under_it_runs_inside() {
 fn a_turn_not_had_within_its_wait_says_who_holds_it() {
   let dir = tempfile::tempdir().unwrap();
   let lock = lock_in(dir.path());
-  let first = take_turn(&ask(&lock, Env::from([("BMO_AGENT_PLACE".to_owned(), "worker-w3".to_owned())])));
+  let first = take_turn(&ask(&lock, Env::from([("BMO_AGENT_PLACE".to_owned(), "place-3".to_owned())])));
   let second = take_turn(&ask(&lock, Env::new()));
   let holder = TurnEntry {
-    place: Some("worker-w3".to_owned()),
+    place: Some("place-3".to_owned()),
     checkout: "/checkout".to_owned(),
     command: "a check".to_owned(),
     ..TurnEntry::default()

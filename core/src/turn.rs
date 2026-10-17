@@ -218,7 +218,7 @@ pub fn place_name(env: &Env) -> Option<String> {
     .map(str::to_owned)
 }
 
-/// The job a command runs for, by its Claude process.
+/// The job a command runs for, by its agent process.
 pub fn job_pid(env: &Env) -> Option<i64> {
   env.get("CLAUDE_PID").and_then(|pid| leading_number(pid)).filter(|pid| *pid > 0)
 }
@@ -390,7 +390,7 @@ pub fn stop_tree(pid: i64, grace: Duration) {
   signal(&all.into_iter().filter(|pid| process_alive(*pid)).collect::<Vec<_>>(), libc::SIGKILL);
 }
 
-/// The watch on a job holding a turn or a line: once the job's Claude process is gone, this process and
+/// The watch on a job holding a turn or a line: once the job's agent process is gone, this process and
 /// everything under it are stopped, and what it held goes with them. Answers the switch that stops the
 /// watch.
 pub fn watch_job(job: i64) -> Arc<AtomicBool> {

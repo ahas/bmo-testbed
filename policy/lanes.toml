@@ -86,10 +86,10 @@ line = "waited {waited}s, ran {ran}s"
 # The one result a run ends on (docs/testbed.md, 「The result」).
 [run]
 # A run whose turn did not come, {turn} the `settled.queued` words.
-not_run = "testbed: FAILED — not run, nothing tested: the machine's turn was {turn}"
+not_run = "testbed: FAILED, not run, nothing tested: the machine's turn was {turn}"
 # A run that ran: {verdict} `ok` or `failed`, {language} the language that read it, {counts} the
 # `counts` or the `exit` words, {cut} the `cut` clause where its guard cut it, and {log} its log.
-line = "testbed: {verdict} in {seconds}s (waited {waited}s) — {language}: {counts}{cut}; log: {log}"
+line = "testbed: {verdict} in {seconds}s (waited {waited}s), {language}: {counts}{cut}; log: {log}"
 ok = "ok"
 failed = "FAILED"
 counts = "{pass} passed, {fail} failed, {skip} skipped"
@@ -105,7 +105,7 @@ unstarted = "testbed: {program} could not be started: {why}"
 # A run's log that could not be written.
 no_log = "testbed: the log could not be written in {dir}: {why}"
 # A run a placed machine dropped, {machine} the machine and {said} the last line it gave.
-dropped = "testbed: not run — {machine} dropped it: {said}; run the same command again"
+dropped = "testbed: not run, {machine} dropped it: {said}; run the same command again"
 
 # The lanes and the close line, as `status` prints them.
 [status]
@@ -115,9 +115,9 @@ nobody = "nobody"
 waiting = "  waiting {at}: {who}"
 # How long ago an entry asked, or its turn came.
 age = " ({seconds}s)"
-front = " — at the front"
-next = " — next after the front"
-kept = " — place kept for a job coming back"
+front = " (at the front)"
+next = " (next after the front)"
+kept = " (place kept for a job coming back)"
 close_line = "the close line:"
 
 # The `run` verb's refusal of a language it does not know, {name} the name given and {names} the ones
@@ -132,13 +132,13 @@ no_language = "testbed: no language is named {name}; there are {names}"
 # {available} and {ceiling} amounts of memory in gigabytes.
 [memory]
 mark = "memory turn:"
-not_run = "{what} not run — the machine's turn was {turn}"
+not_run = "{what} not run: the machine's turn was {turn}"
 took = "{what} took the machine's turn after {seconds}s waiting on other heavy commands on this machine"
 unread = "the available memory cannot be read; running {what} again"
 freed = "{available} available; running {what} again"
 short = "only {available} available after {minutes} minutes; running {what} again anyway"
-fenced = "FAILED — {what} failed ({end}) while the kernel killed a process at the {ceiling} memory ceiling of the fence it stands in, {fence}; the same run meets the same ceiling again, so it does not run again"
-spent = "FAILED — {what} failed while the kernel killed a process for want of memory on all {runs} runs; the code was never judged, so run it again once the machine has memory to spare"
+fenced = "FAILED: {what} failed ({end}) while the kernel killed a process at the {ceiling} memory ceiling of the fence it stands in, {fence}; the same run meets the same ceiling again, so it does not run again"
+spent = "FAILED: {what} failed while the kernel killed a process for want of memory on all {runs} runs; the code was never judged, so run it again once the machine has memory to spare"
 again = "{what} failed ({end}) while the kernel killed a process for want of memory (run {run} of {runs}); this is not taken for the change failing, and it runs again once memory frees"
 times = "{what} {times}"
 exit = "exit {code}"

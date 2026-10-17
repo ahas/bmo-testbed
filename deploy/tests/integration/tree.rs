@@ -94,10 +94,10 @@ fn a_backup_takes_an_ordinal_when_that_second_already_has_one() {
 // "is under the home's .config, or under XDG_CONFIG_HOME where it is set"
 #[test]
 fn the_user_units_are_under_the_homes_config_or_under_xdg_config_home() {
-  let home = Path::new("/home/u");
+  let home = Path::new("/account");
 
-  assert_eq!(user_unit_dir_from(None, home), Path::new("/home/u/.config/systemd/user"));
-  assert_eq!(user_unit_dir_from(Some(""), home), Path::new("/home/u/.config/systemd/user"));
+  assert_eq!(user_unit_dir_from(None, home), Path::new("/account/.config/systemd/user"));
+  assert_eq!(user_unit_dir_from(Some(""), home), Path::new("/account/.config/systemd/user"));
   assert_eq!(user_unit_dir_from(Some("/x/conf"), home), Path::new("/x/conf/systemd/user"));
 }
 

@@ -14,7 +14,7 @@ removed = "  removed: {file} · {title}"
 open = "removed with no replacement and no retirement reason: {file} · {title}"
 
 failed = "test count: {why}"
-unaccounted = "test count: removed with no replacement and no retirement reason — {tests}. A Rust test replacing one names its title; a commit retiring one carries a line `Retired-test: <title> — <reason>` (docs/checks.md, 「The test count」)"
+unaccounted = "test count: removed with no replacement and no retirement reason: {tests}. A Rust test replacing one names its title; a commit retiring one carries a trailer line opening `Retired-test:` with the title, then a dash and the reason (docs/checks.md, 「The test count」)"
 test = "{file}: {title}"
 joiner = "; "
 unreadable = "{file} at {end} could not be read: {why}"
