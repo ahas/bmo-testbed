@@ -227,6 +227,36 @@ test("passes the second time", () => {
 });
 "#;
 
+// "a test file runs from the folder of its runner's configuration": a file whose folder's bunfig.toml
+// preloads what its test reads passes in a run of the suite started at the repository's root.
+#[test]
+fn a_test_file_runs_from_the_folder_of_its_runner_s_configuration() {
+  let dir = tempfile::tempdir().unwrap();
+  let repo = repository(dir.path());
+  let data = dir.path().join("data");
+
+  std::fs::create_dir_all(repo.join("tests/ts/unit")).unwrap();
+  std::fs::create_dir_all(&data).unwrap();
+  std::fs::write(repo.join("tests/ts/bunfig.toml"), "[test]\npreload = [\"./preload.ts\"]\n").unwrap();
+  std::fs::write(repo.join("tests/ts/preload.ts"), "process.env.SUITE_PRELOADED = \"yes\";\n").unwrap();
+  std::fs::write(
+    repo.join("tests/ts/unit/reads.test.ts"),
+    "import { expect, test } from \"bun:test\";\n\ntest(\"reads what the preload set\", () => {\n  \
+     expect(process.env.SUITE_PRELOADED).toBe(\"yes\");\n});\n",
+  )
+  .unwrap();
+
+  let mut command = testbed(&repo, &data, &["suite", "tests/ts/"]);
+
+  command.env_remove("SUITE_PRELOADED");
+  std::os::unix::process::CommandExt::process_group(&mut command, 0);
+
+  let done = ended(command.spawn().unwrap());
+
+  assert_eq!(done.code, 0, "{}", done.err);
+  assert!(done.err.contains("tests/ts/unit/reads.test.ts"), "{}", done.err);
+}
+
 // "with --again what failed runs once more, and what passed only then is written down and sent as an event"
 #[test]
 fn a_run_once_more_passes_on_its_second_run_and_tells_of_the_flaky_test() {

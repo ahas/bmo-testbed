@@ -251,17 +251,25 @@ flowchart TD
   - what a run's output adds up to: how many tests passed, failed and were skipped;
   - what failed, as short lines out of the output;
   - for a language that runs test files, its own naming of a test file, and the command that runs
-    test files, handed the caller's words and the per-test timeout its own way;
+    test files, handed the caller's words, the per-test timeout its own way, and each file by its
+    path from the folder the command runs in;
+  - for a language whose runner reads a configuration file of its own from the folder it starts in,
+    that file's name, which decides the folder its test files run from (`docs/suite.md`, 「Which
+    files run」);
   - for a language that runs package scripts, the command that runs a project's script.
 - **The ones there are:**
   - `bun`: `bun test` over anything but one test file; its test files are named `*.test.ts`, run by
-    `bun test`, and it runs a project's script with `bun run`;
+    `bun test` handed each file as a path from where it runs (a word that is not written as a path
+    is a filter bun matches within every test file's path), its configuration is `bunfig.toml`, and
+    it runs a project's script with `bun run`;
   - `cargo`: build, check, clippy, test, bench, doc and nextest;
   - `node`: package scripts that test, check or build under npm, pnpm, yarn or bun; `node --test`;
     Vitest; Jest. Its test files are named `*.test.js`, `*.test.mjs` and `*.test.cjs`, run by
     `node --test`, and it runs a project's script with `npm run`;
   - `browser`: Playwright, and a `bun test` file under a `browser` directory, which it runs as bun
-    does.
+    does, by bun's configuration;
+  - `cargo` and `node` read no configuration file of their own, so their test files run from the
+    repository's root.
 - **A command no language claims** still runs through the testbed when it is started there, read by
   the plain language, `plain`: its exit code, its time, and the last lines of its output on a
   failure.
@@ -275,8 +283,9 @@ flowchart TD
 3. Widen through the runner's own handle and leave a number the command already names alone.
 4. Read counts from the runner's own summary lines and sum every block, since many runners print one
    per file or binary.
-5. Where it runs test files or package scripts, answer its naming and its commands for them.
+5. Where it runs test files or package scripts, answer its naming and its commands for them, and
+   where its runner reads a configuration file of its own, that file's name.
 6. Put a test in `core`'s tests that holds a claimed command, an unclaimed one, the widening, a
-   summary read back, and its naming and commands where it has them.
+   summary read back, and its naming, commands and configuration where it has them.
 7. Nothing else changes: `classify`, the run, its result, the suite and the check read the list.
    Adding a language is a minor version (`docs/boundary.md`, 「Versions」).

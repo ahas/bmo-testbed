@@ -30,7 +30,7 @@
 | Key | Type | Default | Meaning |
 |---|---|---|---|
 | `languages` | list of strings | `[]` | The kinds of unit the suite gathers: `bun` (test files run by `bun test`), `node` (test files run by `node --test`), `cargo` (crates of the Cargo workspace), `browser` (test files in the browser lane) |
-| `files` | list of globs | each declared language's own naming | The test files of the file languages |
+| `files` | list of globs | each declared language's own naming | The test files of the file languages, each run from the folder of its runner's configuration (`docs/suite.md`, 「Which files run」) |
 | `browser` | list of globs | `[]` | Test files run one at a time in the browser lane |
 | `guard_seconds` | integer | 240 | The whole-run guard |
 | `file_guard_seconds` | integer | 90 | The per-file guard |

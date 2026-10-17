@@ -119,8 +119,9 @@
 - **One call for a change's writing check and its first verification:** the `check` verb. In order:
   the enabled quick checks, the declared static steps the change reaches, `cargo check` on every crate
   the change marks, then the test files the change touches, `cargo test` on the crates it touches
-  itself, and the check of every tool, project and package the change reaches, a step each. The whole
-  suite stays with the close.
+  itself, and the check of every tool, project and package the change reaches, a step each. The test
+  files are one step for each declared language and folder they run from (`docs/suite.md`, 「Which
+  files run」), each file handed by its path from that folder. The whole suite stays with the close.
 - **The change is read two ways.** Given files, it is those files. Given none, it is every path changed
   since `--since`, by default the merge base with the main branch, with the working tree and the
   untracked files.

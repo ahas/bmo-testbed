@@ -148,7 +148,7 @@ fn a_change_read_since_the_commit_its_branch_was_made_from_selects_the_tests_tha
   assert_eq!(names(&named), [DeployStep::Quick.name(), "types", "bun test"]);
   assert_eq!(
     named.steps.iter().find(|step| step.tests).unwrap().step.command,
-    ["bun", "test", "packages/util/numbers.test.ts"]
+    ["bun", "test", "./packages/util/numbers.test.ts"]
   );
 
   // Read since HEAD on the branch, nothing is changed and no test is owed.
@@ -156,6 +156,42 @@ fn a_change_read_since_the_commit_its_branch_was_made_from_selects_the_tests_tha
 
   assert!(still.changed.is_empty());
   assert!(!still.steps.iter().any(|step| step.tests));
+}
+
+// "the touched test files are one step for each folder they run from, the folder of their runner's
+// configuration or else the root, each handed by its path from there"
+#[test]
+fn touched_test_files_run_one_step_per_folder_of_their_configuration() {
+  let (dir, _) = checkout();
+  let root = dir.path();
+
+  write(root, "packages/util/bunfig.toml", "");
+  write(root, "packages/other/bunfig.toml", "");
+  write(root, "top.test.ts", "console.log(0);\n");
+
+  let planned = plan(
+    &repo(root),
+    &files(&["packages/util/numbers.test.ts", "packages/other/other.test.ts", "top.test.ts"]),
+  )
+  .unwrap();
+  let tests: Vec<(String, String, Vec<String>)> = planned
+    .steps
+    .iter()
+    .filter(|step| step.tests)
+    .map(|step| (step.name.clone(), step.step.dir.display().to_string(), step.step.command.clone()))
+    .collect();
+  let ran = |name: &str, dir: &str, file: &str| {
+    (name.to_owned(), dir.to_owned(), ["bun", "test", file].map(str::to_owned).to_vec())
+  };
+
+  assert_eq!(
+    tests,
+    [
+      ran("bun test", ".", "./top.test.ts"),
+      ran("bun test in packages/other", "packages/other", "./other.test.ts"),
+      ran("bun test in packages/util", "packages/util", "./numbers.test.ts"),
+    ]
+  );
 }
 
 #[test]

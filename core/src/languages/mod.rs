@@ -3,7 +3,7 @@
 //! the job guard all ask that list.
 
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Component, Path, PathBuf};
 
 use regex::Regex;
 
@@ -53,9 +53,14 @@ pub trait Language: Sync {
   fn test_naming(&self) -> &'static [&'static str] {
     &[]
   }
-  /// The command that runs these test files, handed the caller's words and, where one is given, the
-  /// per-test limit in seconds its own way unless the words name one; none for a language that runs no
-  /// test files.
+  /// The name of the configuration file its runner reads from the folder it starts in, which decides the
+  /// folder its test files run from; none for a language whose runner reads none.
+  fn configuration_file(&self) -> Option<&'static str> {
+    None
+  }
+  /// The command that runs these test files, each a path from the folder it runs in, handed the caller's
+  /// words and, where one is given, the per-test limit in seconds its own way unless the words name one;
+  /// none for a language that runs no test files.
   fn test_command(
     &self,
     _files: &[String],
@@ -73,6 +78,20 @@ pub trait Language: Sync {
 /// Whether the words already name a flag, alone or with its value after `=`.
 pub fn names_flag(words: &[String], flag: &str) -> bool {
   words.iter().any(|word| word == flag || word.starts_with(&format!("{flag}=")))
+}
+
+/// The folder a test file runs from, as a path from the repository's root: the nearest folder at or above
+/// the file, inside the root, that holds the language's own configuration file; the root itself, an empty
+/// path, where none does, where the language reads none, or where the file's path leaves the root.
+pub fn run_folder(language: &dyn Language, root: &Path, file: &str) -> PathBuf {
+  let file = Path::new(file);
+  let inside = file.components().all(|part| matches!(part, Component::Normal(_) | Component::CurDir));
+
+  language
+    .configuration_file()
+    .filter(|_| inside)
+    .and_then(|name| file.ancestors().skip(1).find(|folder| root.join(folder).join(name).is_file()))
+    .map_or_else(PathBuf::new, Path::to_path_buf)
 }
 
 /// Every language there is, in the order of their names.

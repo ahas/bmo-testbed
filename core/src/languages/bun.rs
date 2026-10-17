@@ -106,7 +106,13 @@ impl Language for Bun {
     &["*.test.ts", "**/*.test.ts"]
   }
 
+  fn configuration_file(&self) -> Option<&'static str> {
+    Some("bunfig.toml")
+  }
+
   // Several files run side by side in bun's own pool; the per-test limit is bun's `--timeout`, in milliseconds.
+  // bun reads a word as a file only where it is written as a path, and any other word as a filter it matches
+  // within every test file's path, so a file handed by a bare name would run every file whose path holds it.
   fn test_command(
     &self,
     files: &[String],
@@ -127,7 +133,13 @@ impl Language for Bun {
       command.extend(["--timeout".to_owned(), (seconds * 1000).to_string()]);
     }
 
-    command.extend(files.iter().cloned());
+    command.extend(files.iter().map(|file| {
+      if file.starts_with('/') || file.starts_with("./") || file.starts_with("../") {
+        file.clone()
+      } else {
+        format!("./{file}")
+      }
+    }));
     Some(command)
   }
 

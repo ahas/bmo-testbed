@@ -72,7 +72,11 @@ impl Language for Browser {
       .collect()
   }
 
-  // A browser test file is a `bun test` file, run as bun runs it.
+  // A browser test file is a `bun test` file, run as bun runs it, from where bun's configuration stands.
+  fn configuration_file(&self) -> Option<&'static str> {
+    Bun.configuration_file()
+  }
+
   fn test_command(
     &self,
     files: &[String],

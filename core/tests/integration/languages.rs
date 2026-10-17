@@ -2,10 +2,11 @@
 //! widens a command, what it reads out of a log, and how it names, runs and checks what the suite hands it.
 
 use std::collections::BTreeMap;
+use std::path::Path;
 
 use bmo_testbed_core::languages::{
   Browser, Bun, Cargo, LANGUAGES, Language, Node, PLAIN, Tally, failures_of_log, language_for,
-  program_words, tally_of_log,
+  program_words, run_folder, tally_of_log,
 };
 
 fn words(line: &[&str]) -> Vec<String> {
@@ -280,15 +281,15 @@ fn a_file_language_names_runs_and_checks_its_own() {
   assert_eq!(Bun.test_naming(), ["*.test.ts", "**/*.test.ts"]);
   assert_eq!(
     Bun.test_command(&one, &words(&["--bail"]), Some(30)),
-    Some(words(&["bun", "test", "--bail", "--timeout", "30000", "a.test.ts"]))
+    Some(words(&["bun", "test", "--bail", "--timeout", "30000", "./a.test.ts"]))
   );
   assert_eq!(
     Bun.test_command(&one, &words(&["--timeout=5000"]), Some(30)),
-    Some(words(&["bun", "test", "--timeout=5000", "a.test.ts"]))
+    Some(words(&["bun", "test", "--timeout=5000", "./a.test.ts"]))
   );
   assert_eq!(
     Bun.test_command(&two, &[], None),
-    Some(words(&["bun", "test", "--parallel", "a.test.ts", "b.test.ts"]))
+    Some(words(&["bun", "test", "--parallel", "./a.test.ts", "./b.test.ts"]))
   );
   assert_eq!(Bun.script_command("check"), Some(words(&["bun", "run", "check"])));
 
@@ -314,4 +315,67 @@ fn a_file_language_names_runs_and_checks_its_own() {
     assert_eq!(language.test_command(&one, &[], None), None, "{}", language.name());
     assert_eq!(language.script_command("check"), None, "{}", language.name());
   }
+}
+
+// "bun hands each file as a path, since any other word is a filter it matches within every file's path"
+#[test]
+fn bun_hands_each_file_as_a_path_and_leaves_one_already_written_as_one() {
+  assert_eq!(
+    Bun.test_command(
+      &words(&["unit/a.test.ts", "./b.test.ts", "../c.test.ts", "/abs/d.test.ts"]),
+      &[],
+      None
+    ),
+    Some(words(&[
+      "bun",
+      "test",
+      "--parallel",
+      "./unit/a.test.ts",
+      "./b.test.ts",
+      "../c.test.ts",
+      "/abs/d.test.ts"
+    ]))
+  );
+}
+
+// "bun reads bunfig.toml, a browser file reads bun's, and the others read none"
+#[test]
+fn bun_and_the_browser_name_bun_s_configuration_and_the_others_none() {
+  assert_eq!(Bun.configuration_file(), Some("bunfig.toml"));
+  assert_eq!(Browser.configuration_file(), Some("bunfig.toml"));
+
+  for language in [&Cargo as &dyn Language, &Node, PLAIN] {
+    assert_eq!(language.configuration_file(), None, "{}", language.name());
+  }
+}
+
+// "a test file runs from the nearest folder at or above it inside the repository holding its language's
+// configuration, else from the root"
+#[test]
+fn a_test_file_runs_from_the_nearest_folder_holding_its_configuration_else_the_root() {
+  let dir = tempfile::tempdir().unwrap();
+  let root = dir.path().join("repo");
+
+  for folder in ["tests/ts", "tests/ts/deep/own", "tests/rs"] {
+    std::fs::create_dir_all(root.join(folder)).unwrap();
+  }
+
+  std::fs::write(root.join("tests/ts/bunfig.toml"), "").unwrap();
+  std::fs::write(root.join("tests/ts/deep/own/bunfig.toml"), "").unwrap();
+  // Above the repository, which no file of it runs from.
+  std::fs::write(dir.path().join("bunfig.toml"), "").unwrap();
+
+  let folder = |language: &dyn Language, file: &str| run_folder(language, &root, file);
+
+  assert_eq!(folder(&Bun, "tests/ts/a.test.ts"), Path::new("tests/ts"));
+  assert_eq!(folder(&Bun, "tests/ts/deep/b.test.ts"), Path::new("tests/ts"));
+  assert_eq!(folder(&Bun, "tests/ts/deep/own/c.test.ts"), Path::new("tests/ts/deep/own"));
+  assert_eq!(folder(&Browser, "tests/ts/browser/d.test.ts"), Path::new("tests/ts"));
+  assert_eq!(folder(&Bun, "tests/rs/e.test.ts"), Path::new(""));
+  assert_eq!(folder(&Bun, "../f.test.ts"), Path::new(""));
+  assert_eq!(folder(&Node, "tests/ts/g.test.mjs"), Path::new(""));
+
+  // The root's own configuration is the root.
+  std::fs::write(root.join("bunfig.toml"), "").unwrap();
+  assert_eq!(folder(&Bun, "tests/rs/e.test.ts"), Path::new(""));
 }

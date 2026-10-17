@@ -126,6 +126,12 @@
   caller's words and the declared per-test timeout. A repository declaring no language that runs
   test files has none; a project's check script is run by the first declared language that runs
   package scripts.
+- **Each file runs from the folder of its runner's configuration:** the nearest folder at or above
+  the file, inside the repository, holding the configuration file its language reads (bun's
+  `bunfig.toml`), or the repository's root where none does or its language reads none. It is handed
+  by its path from that folder. A runner reads its configuration only from the folder it starts in,
+  so a file run from anywhere else would lose what that configuration sets up, such as a preload
+  giving each file a test home of its own.
 - **A word naming a path narrows the run** to the test files whose path holds it, and runs no heavy
   unit, except a word that is a crate's or a project's unit name exactly, its directory and a slash,
   which picks that unit and no test file.

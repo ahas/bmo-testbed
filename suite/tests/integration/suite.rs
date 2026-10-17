@@ -18,7 +18,8 @@ use bmo_testbed_suite::fence::{
   fenced_build_jobs,
 };
 use bmo_testbed_suite::run::{
-  SuiteWords, SweepCount, ask_of, guards_line, runner_of, script_runner, sweep_ending, verdict_line,
+  SuiteWords, SweepCount, ask_of, file_groups, guards_line, runner_of, script_runner, sweep_ending,
+  verdict_line,
 };
 use bmo_testbed_suite::sweep::{SweepPlan, largest_first, sweep};
 
@@ -126,6 +127,89 @@ mod asked {
     assert_eq!(script_runner(&both).map(|language| language.name()), Some("bun"));
     assert_eq!(script_runner(&declared(&["node"])).map(|language| language.name()), Some("node"));
     assert!(script_runner(&declared(&["cargo"])).is_none());
+  }
+}
+
+mod folders {
+  use std::process::{Command, Stdio};
+
+  use super::*;
+
+  fn bun() -> Test {
+    Test {
+      languages: words(&["bun"]),
+      ..Test::default()
+    }
+  }
+
+  fn write(root: &Path, file: &str, text: &str) {
+    let path = root.join(file);
+
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(path, text).unwrap();
+  }
+
+  // What each group runs, read as plain values.
+  fn groups(root: &Path, files: &[&str]) -> Vec<(String, PathBuf, Vec<String>)> {
+    file_groups(root, &bun(), &words(files))
+      .into_iter()
+      .map(|group| (group.language.name().to_owned(), group.dir, group.files))
+      .collect()
+  }
+
+  // "files under two folders holding their own configuration are two commands, and a file with none above it
+  // runs from the root, each handed by its path from where it runs"
+  #[test]
+  fn files_are_one_group_per_folder_of_their_configuration_and_the_root_holds_the_rest() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+
+    write(root, "web/bunfig.toml", "");
+    write(root, "api/tests/bunfig.toml", "");
+
+    assert_eq!(
+      groups(root, &["web/a.test.ts", "api/tests/b.test.ts", "lib/c.test.ts", "web/deep/d.test.ts"]),
+      [
+        ("bun".to_owned(), PathBuf::new(), words(&["lib/c.test.ts"])),
+        ("bun".to_owned(), PathBuf::from("api/tests"), words(&["b.test.ts"])),
+        ("bun".to_owned(), PathBuf::from("web"), words(&["a.test.ts", "deep/d.test.ts"])),
+      ]
+    );
+  }
+
+  // "a file whose folder's configuration preloads what its test reads passes only when run from that folder"
+  #[test]
+  fn a_file_under_its_own_configuration_passes_only_when_run_from_that_folder() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+
+    write(root, "tests/ts/bunfig.toml", "[test]\npreload = [\"./preload.ts\"]\n");
+    write(root, "tests/ts/preload.ts", "process.env.SUITE_PRELOADED = \"yes\";\n");
+    write(
+      root,
+      "tests/ts/unit/reads.test.ts",
+      "import { expect, test } from \"bun:test\";\n\ntest(\"reads what the preload set\", () => {\n  \
+       expect(process.env.SUITE_PRELOADED).toBe(\"yes\");\n});\n",
+    );
+
+    let file = words(&["tests/ts/unit/reads.test.ts"]);
+    let group = file_groups(root, &bun(), &file).remove(0);
+    let command = group.language.test_command(&group.files, &[], None).unwrap();
+    let passes = |at: &Path, command: &[String]| {
+      Command::new(&command[0])
+        .args(&command[1..])
+        .current_dir(at)
+        .env_remove("SUITE_PRELOADED")
+        .stdin(Stdio::null())
+        .output()
+        .unwrap()
+        .status
+        .success()
+    };
+
+    assert_eq!(group.dir, Path::new("tests/ts"));
+    assert!(passes(&root.join(&group.dir), &command));
+    assert!(!passes(root, &group.language.test_command(&file, &[], None).unwrap()));
   }
 }
 

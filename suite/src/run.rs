@@ -3,12 +3,13 @@
 //! its own, inside the machine's turn and a fence of its own, each unit's result written out as it ends and the
 //! run's last line always its verdict.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 use bmo_testbed_core::declaration::{Repository, Test};
-use bmo_testbed_core::languages::Language;
+use bmo_testbed_core::languages::{Language, run_folder};
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::suite::SUITE;
 use bmo_testbed_core::turn::{self, Lane, NOT_RUN_EXIT_CODE, TestbedTurn, TurnAsk};
@@ -76,6 +77,42 @@ pub fn runner_of(test: &Test, file: &str) -> Option<&'static dyn Language> {
     .copied()
     .find(|language| language.test_naming().iter().any(|naming| glob_matches(naming, file)))
     .or_else(|| languages.first().copied())
+}
+
+/// Test files one command runs: the language running them, the folder it runs them from as a path from the
+/// repository's root, and each file as a path from that folder.
+pub struct FileGroup {
+  pub language: &'static dyn Language,
+  pub dir: PathBuf,
+  pub files: Vec<String>,
+}
+
+/// Test files, each a path from the repository's root, gathered into one group for each language that runs
+/// them and folder it runs them from (docs/suite.md, 「Which files run」): the languages in the order they are
+/// declared, the folders in their own order. A file no declared language runs is in none.
+pub fn file_groups(root: &Path, test: &Test, files: &[String]) -> Vec<FileGroup> {
+  let mut groups: Vec<FileGroup> = Vec::new();
+
+  for language in file_languages(test) {
+    let mut by_folder: BTreeMap<PathBuf, Vec<String>> = BTreeMap::new();
+
+    for file in files {
+      if runner_of(test, file).is_some_and(|runner| runner.name() == language.name()) {
+        let dir = run_folder(language, root, file);
+        let from_dir = Path::new(file).strip_prefix(&dir).unwrap_or(Path::new(file));
+
+        by_folder.entry(dir).or_default().push(from_dir.to_string_lossy().into_owned());
+      }
+    }
+
+    groups.extend(by_folder.into_iter().map(|(dir, files)| FileGroup {
+      language,
+      dir,
+      files,
+    }));
+  }
+
+  groups
 }
 
 /// The language that runs a project's script: the first declared one that runs package scripts.
@@ -652,14 +689,20 @@ fn run_held(
       };
     }
 
-    // A test file listed has a runner, since a repository with none lists no test file.
-    let line = runner_of(test, file)
-      .and_then(|runner| {
-        runner.test_command(std::slice::from_ref(file), &ask.extra, Some(test.test_timeout_seconds))
+    // A test file listed has a runner, since a repository with none lists no test file; it runs from the
+    // folder of its runner's configuration.
+    let (dir, line) = file_groups(root, test, std::slice::from_ref(file))
+      .into_iter()
+      .next()
+      .and_then(|group| {
+        let line =
+          group.language.test_command(&group.files, &ask.extra, Some(test.test_timeout_seconds))?;
+
+        Some((group.dir, line))
       })
       .unwrap_or_default();
 
-    UnitCommand::of(line, root.to_path_buf(), base, None)
+    UnitCommand::of(line, root.join(dir), base, None)
   };
   let file_run = |file: &String| -> (i32, bool) {
     let no_check = match (project_units.get(file), tool_units.get(file)) {

@@ -14,7 +14,7 @@ use sha2::{Digest, Sha256};
 
 use crate::cargo::cargo_verb_line;
 use crate::own_binary::testbed_line;
-use crate::run::{file_languages, runner_of, script_runner};
+use crate::run::{file_groups, script_runner};
 use crate::selection::changed_paths;
 use crate::static_check::{CheckStep, TimedRun, declared_steps, run_timed, spawn_step};
 use crate::test_server::test_postgres;
@@ -79,16 +79,15 @@ fn plain(dir: &str, command: Vec<String>, env: Vec<(String, String)>) -> CheckSt
   }
 }
 
+// Where a step runs, as its name says it: nothing at the root.
+fn where_it_runs(dir: &Path) -> String {
+  if dir == Path::new(".") { String::new() } else { format!(" in {}", dir.display()) }
+}
+
 // A static step, named by its id and where it runs, which is how a person reads it.
 fn of(step: CheckStep) -> Step {
-  let at = if step.dir == Path::new(".") {
-    String::new()
-  } else {
-    format!(" in {}", step.dir.display())
-  };
-
   Step {
-    name: format!("{}{at}", step.id),
+    name: format!("{}{}", step.id, where_it_runs(&step.dir)),
     step,
     tests: false,
   }
@@ -171,21 +170,22 @@ pub fn plan(repo: &Repository, ask: &CheckAsk) -> Result<CheckPlan, String> {
     steps.push(cargo("check", &touched.checked_crates, vec![]));
   }
 
-  // The touched test files, one step to each declared language that runs some of them.
+  // The touched test files, one step to each declared language that runs some of them and folder it runs
+  // them from.
   let test = &repo.declaration.test;
 
-  for language in file_languages(test) {
-    let files: Vec<String> = touched
-      .tests
-      .iter()
-      .filter(|file| runner_of(test, file).is_some_and(|runner| runner.name() == language.name()))
-      .cloned()
-      .collect();
+  for group in file_groups(&repo.root, test, &touched.tests) {
+    if let Some(command) = group.language.test_command(&group.files, &[], None) {
+      let dir = if group.dir.as_os_str().is_empty() { Path::new(".") } else { group.dir.as_path() };
+      let step = plain(&dir.to_string_lossy(), command, database.clone());
 
-    if let Some(command) = language.test_command(&files, &[], None).filter(|_| !files.is_empty()) {
       steps.push(Step {
-        name: fill_marks(&SUITE.file.tests_step, &[("language", language.name())]),
-        step: plain(".", command, database.clone()),
+        name: format!(
+          "{}{}",
+          fill_marks(&SUITE.file.tests_step, &[("language", group.language.name())]),
+          where_it_runs(&step.dir)
+        ),
+        step,
         tests: true,
       });
     }
