@@ -49,7 +49,7 @@
       "core/lanes-and-turn",
       "core/policy-loader"
     ],
-    "base": "a77b4bf9e85365752d6413c539955efad43fc51c"
+    "base": "f211fba9705f180cb46a50ae034c1d83b65caec0"
   },
   {
     "id": "core/event-hook",
@@ -125,7 +125,7 @@
   {
     "id": "core/policy-loader",
     "title": "Policy loader",
-    "what": "The testbed's own fixed numbers and words, one TOML part per file under policy/, compiled into core and read once into deny_unknown_fields structs; fill_marks fills a line's {name} marks.",
+    "what": "The testbed's own fixed numbers and words, one TOML part per file under policy/, compiled into core and read once into deny_unknown_fields structs; fill_marks and fill_shown fill a line's {name} marks.",
     "files": [
       "core/src/policy/mod.rs",
       "core/src/policy/answer.rs",
@@ -164,7 +164,7 @@
     "symbols": [],
     "aliases": [],
     "needs": [],
-    "base": "a77b4bf9e85365752d6413c539955efad43fc51c"
+    "base": "f211fba9705f180cb46a50ae034c1d83b65caec0"
   },
   {
     "id": "core/run-verb-and-status",
