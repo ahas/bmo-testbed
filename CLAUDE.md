@@ -16,7 +16,9 @@ These rules hold every change to this repository.
 ## Language
 
 - Everything in this repository is English: code, comments, strings, tests, documents, commit messages
-  and branch names. No Korean in code or tests.
+  and branch names. No Korean in code or tests, except where a check that reads Korean cannot do
+  without it, in its Hangul ranges and its tests' input: there it is written as Korean, never hidden
+  behind an escape, and the ledger `docs/korean-in-code-ledger.json` counts it.
 - Test input is neutral English. A fixture recorded from elsewhere stays as it was recorded.
 - No personal data: no user names, home directories, machine names or names of any agent or product
   that uses the testbed. A path is written from `$HOME` or from a variable.

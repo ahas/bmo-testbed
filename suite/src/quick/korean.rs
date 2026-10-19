@@ -1,20 +1,31 @@
 //! Korean in the code (docs/checks.md, 「The quick checks」). The code is written in English, and the Korean
 //! it still holds is a debt recorded file by file in the repository's ledger: the check refuses a file
 //! holding more lines with Korean in them than the ledger allows it, a file the ledger does not name being
-//! allowed none, and the ledger is only ever lowered, so the debt only shrinks.
-//!
-//! The Hangul ranges here are written as escapes, so the check's own source holds no Korean.
+//! allowed none, and the ledger is only ever lowered, so the debt only shrinks. Korean written as an escape
+//! is Korean all the same, so a line naming a Hangul character by its escape counts as one holding it.
 
 use std::collections::BTreeMap;
 use std::path::Path;
+use std::sync::LazyLock;
 
 use bmo_testbed_core::policy::answer::ANSWER;
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::quick_checks::QUICK_CHECKS;
+use regex::Regex;
 
 use super::files::{checkout_files_where, is_test_file, read_text};
 use super::source::{Language, Reading, within};
+use super::wording::hangul;
 use crate::selection::glob_matches;
+
+// A Unicode escape in any of the shapes the code languages share, its code point in hex: a braced `\u`, a
+// four-digit `\u`, an eight-digit `\U`, or a pattern's braced `\x`. Every code file is read the same way,
+// a comment as much as a literal and a language no parser here reads among them, so an escape is found by
+// its shape: the parsers here decode escapes only inside the literals of the languages they read.
+static ESCAPE: LazyLock<Regex> = LazyLock::new(|| {
+  Regex::new(r"\\(?:u\{([0-9A-Fa-f]{1,8})\}|x\{([0-9A-Fa-f]{1,8})\}|u([0-9A-Fa-f]{4})|U([0-9A-Fa-f]{8}))")
+    .expect("a Unicode escape")
+});
 
 /// Whether a path of the checkout is code, by its extension. A document, a data file and a settings file
 /// are where Korean may stand, and none of them is code.
@@ -24,14 +35,23 @@ pub fn is_code(path: &str) -> bool {
     .is_some_and(|(_, extension)| QUICK_CHECKS.korean.code.iter().any(|code| code == extension))
 }
 
-// Hangul syllables and both jamo blocks, as the wording check tells a Korean line.
-fn hangul(c: char) -> bool {
-  matches!(c, '\u{1100}'..='\u{11ff}' | '\u{3130}'..='\u{318f}' | '\u{ac00}'..='\u{d7af}')
+// Where a text holds Korean, by byte offset: each Hangul character, as the wording check tells a Korean line,
+// and each escape naming one, at its backslash.
+fn korean_offsets(text: &str) -> impl Iterator<Item = usize> + '_ {
+  let characters = text.char_indices().filter(|(_, c)| hangul(*c)).map(|(at, _)| at);
+  let escapes = ESCAPE.captures_iter(text).filter_map(|escape| {
+    let digits = escape.iter().skip(1).flatten().next()?;
+    let named = u32::from_str_radix(digits.as_str(), 16).ok().and_then(char::from_u32)?;
+
+    hangul(named).then(|| escape.get_match().start())
+  });
+
+  characters.chain(escapes)
 }
 
 /// How many lines of a text hold Korean, which is what the ledger counts.
 pub fn korean_line_count(text: &str) -> u64 {
-  text.split('\n').filter(|line| line.chars().any(hangul)).count() as u64
+  text.split('\n').filter(|line| korean_offsets(line).next().is_some()).count() as u64
 }
 
 /// How many Korean lines each file may hold, by its path from the checkout's root.
@@ -199,7 +219,7 @@ fn line_kind(offsets: &[usize], reading: &Reading, own: KoreanKind) -> KoreanKin
 /// Every line of a code file that holds Korean, counted from one, with what holds it; `people` are the
 /// globs naming people's text.
 pub fn korean_lines(path: &str, text: &str, people: &[String]) -> Vec<(usize, KoreanKind)> {
-  if !text.chars().any(hangul) {
+  if korean_offsets(text).next().is_none() {
     return Vec::new();
   }
 
@@ -209,8 +229,7 @@ pub fn korean_lines(path: &str, text: &str, people: &[String]) -> Vec<(usize, Ko
   let mut start = 0;
 
   for (index, line) in text.split('\n').enumerate() {
-    let offsets: Vec<usize> =
-      line.char_indices().filter(|(_, c)| hangul(*c)).map(|(at, _)| start + at).collect();
+    let offsets: Vec<usize> = korean_offsets(line).map(|at| start + at).collect();
 
     start += line.len() + 1;
 

@@ -113,14 +113,16 @@
       "suite/tests/integration/quick.rs"
     ],
     "symbols": [],
-    "aliases": [],
+    "aliases": [
+      "korean inspector"
+    ],
     "needs": [
       "core/declaration",
       "suite/change-selection",
       "core/answer-ceiling",
       "core/policy-loader"
     ],
-    "base": "a77b4bf9e85365752d6413c539955efad43fc51c"
+    "base": "d6f93ff9c61b7b279fac296e32c1367d58738d4c"
   },
   {
     "id": "suite/static-check",

@@ -9,8 +9,8 @@ use bmo_testbed_suite::quick::korean_check;
 
 use crate::quick::{checkout, env, repository, write};
 
-// A Korean word, written by its escapes so this file holds none of its own.
-const WORD: &str = "\u{bcf4}\u{b958}";
+// A Korean word, which the check reads and the ledger counts.
+const WORD: &str = "보류";
 
 fn kinds(path: &str, text: &str, people: &[&str]) -> Vec<(usize, &'static str)> {
   let people: Vec<String> = people.iter().map(|glob| (*glob).to_owned()).collect();
@@ -168,7 +168,22 @@ fn the_report_gives_a_row_to_each_area_or_to_each_file_under_a_prefix_the_larges
 #[test]
 fn a_line_is_counted_once_however_much_korean_it_holds() {
   assert_eq!(korean_line_count(&format!("// {WORD}\nlet a = \"{WORD} {WORD}\";\nlet b = 1;\n")), 2);
-  assert_eq!(korean_line_count("\u{3131}\n\u{1100}\nplain"), 2);
+  assert_eq!(korean_line_count("ㄱ\nᄀ\nplain"), 2);
+}
+
+// "a Hangul character named by its escape is Korean, in every shape and wherever it stands"
+#[test]
+fn a_hangul_character_named_by_its_escape_is_korean_in_every_shape_and_wherever_it_stands() {
+  let text = r#"let a = "\u{bcf4}";
+let b = "\uBCF4";
+let c = "\U0000bcf4";
+let d = Regex::new(r"\x{3131}");
+// \u{1100} in a comment
+let e = "\u{2014}\u00e9\U0001F600";
+"#;
+
+  assert_eq!(korean_line_count(text), 5);
+  assert_eq!(kinds("src/one.rs", text, &[])[3..], [(4, "literal"), (5, "comment")]);
 }
 
 // "a ledger not yet written allows none, and one that does not read is said to"

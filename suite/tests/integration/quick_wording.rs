@@ -11,11 +11,11 @@ use bmo_testbed_suite::quick::wording::{
 
 use crate::quick::{checkout, write};
 
-// Korean words, written by their escapes so this file holds none of its own: a bridge, a path, a ladder
-// and the words around them.
-const BRIDGE: &str = "\u{b2e4}\u{b9ac}";
-const PATH: &str = "\u{acbd}\u{b85c}";
-const UNDER: &str = "\u{bc11}";
+// Korean words, which the check reads and the ledger counts: a bridge, a path, a ladder and the words
+// around them.
+const BRIDGE: &str = "다리";
+const PATH: &str = "경로";
+const UNDER: &str = "밑";
 
 const SAMPLE: &str = "# Wording\n\n## Banned terms\n\n- Each line is `<language code> \u{b7} <banned term> \u{2192} <what to write>`.\n- en \u{b7} tool strip \u{2192} toolbar\n- en \u{b7} fixing \u{2192} editing \u{2014} when it means editing\n- en \u{b7} slot \u{2192} position\n\n## Uses in the word's own sense\n\n- Each line is `<language code> \u{b7} <banned term> \u{b7} <a phrase holding the term>`.\n- en \u{b7} slot \u{b7} slot machine \u{2014} a machine\n- en \u{b7} slot \u{b7} coin slot \u{2014} an opening\n\n## Allowed uses\n\n- en \u{b7} fixing \u{b7} docs/a.md \u{b7} bike fixing \u{2014} a repair\n";
 
@@ -103,11 +103,11 @@ fn a_banned_word_is_found_where_it_stands_alone_and_not_in_its_own_sense_or_insi
   };
 
   // "this bridge, go by it"
-  assert_eq!(found(&format!("\u{c774} {BRIDGE}\u{b85c} \u{ac00}")), [BRIDGE]);
+  assert_eq!(found(&format!("이 {BRIDGE}로 가")), [BRIDGE]);
   // "under the bridge"
-  assert!(found(&format!("{BRIDGE} {UNDER}\u{c5d0}")).is_empty());
+  assert!(found(&format!("{BRIDGE} {UNDER}에")).is_empty());
   // "climb the ladder", the term the tail of a longer word
-  assert!(found(&format!("\u{c0ac}{BRIDGE}\u{b97c} \u{c62c}\u{b77c}")).is_empty());
+  assert!(found(&format!("사{BRIDGE}를 올라")).is_empty());
   assert_eq!(found("we utilise it"), ["utilise"]);
   assert_eq!(glossary.banned[1].when.as_deref(), Some("always"));
 }
@@ -116,8 +116,8 @@ fn a_banned_word_is_found_where_it_stands_alone_and_not_in_its_own_sense_or_insi
 #[test]
 fn a_term_is_found_a_line_at_a_time_on_lines_of_its_own_language_and_not_in_its_own_sense() {
   let banned = parse_wording("words.md", SAMPLE).unwrap().banned;
-  // A Korean word, written by its escapes, makes its line a Korean one.
-  let korean_line = "\u{c704}\u{c5d0} tool strip";
+  // A Korean word makes its line a Korean one.
+  let korean_line = "위에 tool strip";
   let hits =
     find_banned(&format!("{korean_line}\nthe tool strip above\na slot machine\nan empty slot"), &banned);
 

@@ -99,7 +99,11 @@
     double quotes and a dash standing alone at either end of a piece keep theirs.
 - **`korean`:** no code file holds more lines with Korean in them than the repository's ledger allows
   it, and a file the ledger does not name is allowed none; a ledger file not yet written allows none
-  anywhere. The ledger is a JSON object from each file's path to its count. `--settle` lowers the
+  anywhere. A line holds Korean where it holds a Hangul character, or an escape naming one written in
+  any of the shapes the code languages share, `\u{…}`, `\uXXXX`, `\UXXXXXXXX` or a pattern's `\x{…}`,
+  in a comment as much as in a literal: Korean a file cannot do without, the Hangul ranges of a check
+  that reads Korean or the input of its tests, is written as Korean and stands in the ledger. The
+  ledger is a JSON object from each file's path to its count. `--settle` lowers the
   ledger to what each file holds now and never raises it; `--kinds` reads each area's Korean lines by
   what holds them: a comment, test input, people's text, another literal, or a line of a language no
   parser here reads.

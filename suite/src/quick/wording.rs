@@ -4,8 +4,8 @@
 //!
 //! The document is markdown, read by the markdown crate: its sections are its level-two headings and its
 //! entries the items of their lists. An entry's own shape, its parts parted by a middle dot, an arrow and
-//! a dash, is this check's own syntax, read here by its patterns. The Hangul and kana ranges and the dash
-//! are written as escapes, so this source holds none of them.
+//! a dash, is this check's own syntax, read here by its patterns. The Hangul ranges are written in Korean,
+//! which the Korean ledger counts; the kana ranges and the dash are written as escapes.
 
 use std::path::Path;
 use std::sync::LazyLock;
@@ -67,8 +67,9 @@ static OWN_SENSE_ITEM: LazyLock<Regex> =
 // The languages a line can be told to be in, by the script it is written in.
 const KNOWN_LANGUAGES: [&str; 3] = ["ko", "ja", "en"];
 
-fn hangul(c: char) -> bool {
-  matches!(c, '\u{1100}'..='\u{11ff}' | '\u{3130}'..='\u{318f}' | '\u{ac00}'..='\u{d7af}')
+/// Whether a character is Hangul: a syllable, or a letter of either jamo block.
+pub fn hangul(c: char) -> bool {
+  matches!(c, 'ᄀ'..='ᇿ' | 'ㄱ'..='ㆎ' | '가'..='힣')
 }
 
 fn kana(c: char) -> bool {
@@ -76,7 +77,7 @@ fn kana(c: char) -> bool {
 }
 
 fn hangul_syllable(c: char) -> bool {
-  matches!(c, '\u{ac00}'..='\u{d7a3}')
+  matches!(c, '가'..='힣')
 }
 
 /// The language a line is written in, told by its script: Korean where it holds Hangul, Japanese where
