@@ -100,6 +100,23 @@
     "changed": 1792498861744
   },
   {
+    "id": "suite/personal-data",
+    "title": "Personal-data check",
+    "what": "The repository's personal-data prohibition, held by a test over every tracked file: a mail address outside the example domains, a person's home path, a telephone number, a token or a private network address, named by file, line and kind and never by value.",
+    "files": [
+      "suite/tests/integration/personal_data.rs",
+      "docs/PERSONAL-DATA.md",
+      "suite/tests/integration/main.rs"
+    ],
+    "symbols": [],
+    "aliases": [
+      "개인정보 금지"
+    ],
+    "needs": [],
+    "base": "2d539d0a3b94c94d96bf0dab386a8c02f8b3eeba",
+    "changed": 1792533576054
+  },
+  {
     "id": "suite/quick-checks",
     "title": "Quick checks",
     "what": "The quick checks a repository enables: wording against its glossary and lines that are not English against a ledger, both by bmo-text's verdicts, dashes in people's text, the layout of folders and manifests, the dependency check and the Cargo profile check, run by check quick and its parts.",

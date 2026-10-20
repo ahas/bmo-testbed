@@ -27,6 +27,7 @@ and a release-based deployment of a repository onto the machine it runs on.
 | `docs/declaration.md` | The `testbed.toml` schema |
 | `docs/boundary.md` | Every verb, exit code, status field, environment variable, event, the record, the HTTP service, the harness plugin, the placement endpoint and the version rules |
 | `docs/openapi.json` | The HTTP service's routes and members and the harness plugin's tools, generated from the code |
+| `docs/PERSONAL-DATA.md` | What may never stand in this repository: a person's name, address, path, device or network details, an agent's or product's name, and the check that holds it |
 
 ## Layout
 

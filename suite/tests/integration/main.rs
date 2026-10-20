@@ -7,6 +7,7 @@ mod crates;
 mod log;
 mod moved_imports;
 mod once_more;
+mod personal_data;
 mod prune;
 mod quick;
 mod quick_cargo_profile;

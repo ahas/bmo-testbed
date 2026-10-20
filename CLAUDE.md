@@ -21,7 +21,7 @@ These rules hold every change to this repository.
   behind an escape, and the ledger `docs/language-ledger.json` counts it.
 - Test input is neutral English. A fixture recorded from elsewhere stays as it was recorded.
 - No personal data: no user names, home directories, machine names or names of any agent or product
-  that uses the testbed. A path is written from `$HOME` or from a variable.
+  that uses the testbed (`docs/PERSONAL-DATA.md`). A path is written from `$HOME` or from a variable.
 
 ## What the testbed may know
 
