@@ -197,6 +197,9 @@ not_emptied = "could not empty {at} for its submodule: {why}"
 failed = "{what}: {said}"
 no_addresses = "could not read the submodules' addresses"
 not_pinned = "could not bring the submodules of {tree} to their pins"
+trees_unread = "the trees {tree} names outside it could not be read: {said}"
+tree_absent = "{at}, which {tree} names outside it, stands nowhere beside the checkout: {why}"
+tree_unlinked = "{at} could not be laid beside {tree}: {why}"
 
 # What a rollback says as it goes (docs/deploy.md, 「Rollback」): {commit} a short commit, {release} a
 # release, {names} units, {why} what a call came to.

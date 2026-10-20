@@ -40,7 +40,8 @@
       "deploy/tests/integration/deployment.rs",
       "deploy/tests/integration/progress.rs",
       "deploy/tests/integration/boot.rs",
-      "cli/tests/integration/deploy_verbs.rs"
+      "cli/tests/integration/deploy_verbs.rs",
+      "deploy/tests/integration/expansion.rs"
     ],
     "symbols": [],
     "aliases": [],
@@ -55,8 +56,8 @@
       "core/policy-loader",
       "record/record"
     ],
-    "base": "5e955f94545d613b245e997b5b2e197509b07d4c",
-    "changed": 1792505134657
+    "base": "773991b4df5eac4302ba2571d01ca26e5a98a355",
+    "changed": 1792535409404
   },
   {
     "id": "deploy/releases-and-rollback",

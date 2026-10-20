@@ -30,7 +30,7 @@ use crate::boot::{
   HealthWatch, StayUp, boot_report, boot_scene, stay_report, stays_up, unit_gave_up, unit_status,
   wait_for_health,
 };
-use crate::expansion::{BuildTree, bring_submodules, expansion_tree, put_build_tree};
+use crate::expansion::{BuildTree, bring_submodules, expansion_tree, lay_outside_trees, put_build_tree};
 use crate::progress::{DeployRun, DeployStart, Outcome, Part, Stage, begin_deploy, deploy_progress_path};
 use crate::release::{
   LiveProcess, Preparing, differing_binaries, flip, link_of, live_processes, live_release, logged_before,
@@ -613,6 +613,7 @@ impl<'a> Laying<'a> {
     let run = |line: &[String], cwd: &Path| self.hands.run(line, cwd);
 
     bring_submodules(release, &self.places.data_root, &run)?;
+    lay_outside_trees(release, &self.places.source)?;
 
     for setup in &self.repo.declaration.test.setup {
       let ran = self.hands.run(&shell_words(setup), release);
@@ -661,6 +662,7 @@ impl<'a> Laying<'a> {
       },
       &run,
     )?;
+    lay_outside_trees(&tree, &places.source)?;
 
     let profile = &build.cargo_profile;
     let target = tree.join("target");

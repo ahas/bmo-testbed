@@ -38,6 +38,12 @@
   checkout of it is: its submodules brought to the commits it pins, then the declared setup steps, then
   the declared env links. Its `bin/` holds the binaries built for that commit, and its
   `bin/built-from` names that same commit.
+- **The trees the workspace names by a path outside the repository — the base libraries a release
+  build reads — are laid where each manifest names them, as links to the checkout's own trees.** A
+  worktree of the repository alone carries nothing beside it, so the release and the build tree read
+  a base library from the workspace the checkout stands in; the build tree's declared path reaches
+  the deploy root's parent, where the repositories of one workspace share one. A tree the checkout
+  does not carry refuses the deployment before anything is built.
 - **A release is finished before anything serves from it.** Prepared and built while the live release
   goes on serving; the deploy tree's link is then moved onto it by a new link written beside the old
   one and renamed over it, so every reader sees one release or the other and never a tree half moved.

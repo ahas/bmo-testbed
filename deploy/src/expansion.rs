@@ -2,14 +2,15 @@
 //! worktree moved to each commit deployed, where the release build runs, so its own target directory keeps
 //! the build warm from one deployment to the next.
 
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use bmo_testbed_core::policy::deploy::DEPLOY;
 use bmo_testbed_core::policy::fill_shown;
+use serde_json::Value;
 
-use crate::release::beside;
+use crate::release::{beside, put_link};
 use crate::remove::remove_tree;
-use crate::run::{Ran, words};
+use crate::run::{Ran, command, words};
 use crate::tree::short;
 use crate::unit::first_chars;
 
@@ -128,4 +129,160 @@ fn empty_folder(folder: &Path, data_root: &Path) -> Result<(), String> {
   };
 
   entries.flatten().try_for_each(|entry| remove_tree(&entry.path(), data_root))
+}
+
+/// A tree the workspace's manifests name by a path outside the tree.
+struct Outside {
+  /// The folder the package that names it stands in, from the tree's root.
+  package: PathBuf,
+  /// The path from that package to the tree it names, as the manifest gives it.
+  relative: PathBuf,
+  /// Where the tree must stand.
+  place: PathBuf,
+}
+
+/// The trees outside the repository that its manifests name by a path — the base libraries a release
+/// build reads — laid beside `tree` where those paths point, out of the checkout at the same place. A
+/// worktree of the repository carries nothing beside it, so a release built in one reads a base library
+/// from a path only the workspace around the checkout makes.
+pub fn lay_outside_trees(tree: &Path, checkout: &Path) -> Result<(), String> {
+  for one in outside_trees(tree)? {
+    let source = normalize(&checkout.join(&one.package).join(&one.relative));
+    let target = std::fs::canonicalize(&source).map_err(|why| {
+      fill_shown(
+        &DEPLOY.expansion.tree_absent,
+        &[("at", &source.display()), ("tree", &tree.display()), ("why", &why.to_string())],
+      )
+    })?;
+
+    if let Some(parent) = one.place.parent() {
+      std::fs::create_dir_all(parent).map_err(|why| {
+        fill_shown(
+          &DEPLOY.expansion.tree_unlinked,
+          &[("at", &one.place.display()), ("tree", &tree.display()), ("why", &why.to_string())],
+        )
+      })?;
+    }
+
+    // A tree already standing there is left as it is: what is not a link of the deployment's is nobody's
+    // to replace.
+    if std::fs::symlink_metadata(&one.place).is_ok_and(|meta| !meta.file_type().is_symlink()) {
+      continue;
+    }
+
+    put_link(&one.place, &target).map_err(|why| {
+      fill_shown(
+        &DEPLOY.expansion.tree_unlinked,
+        &[("at", &one.place.display()), ("tree", &tree.display()), ("why", &why.to_string())],
+      )
+    })?;
+  }
+
+  Ok(())
+}
+
+// Every path dependency of the tree's Cargo workspace that points outside it, read off Cargo's own word,
+// with where it must stand and the path the package names it by.
+fn outside_trees(tree: &Path) -> Result<Vec<Outside>, String> {
+  if !tree.join("Cargo.toml").exists() {
+    return Ok(Vec::new());
+  }
+
+  let unread = |said: String| {
+    fill_shown(&DEPLOY.expansion.trees_unread, &[("tree", &tree.display()), ("said", &said)])
+  };
+  let read = command(
+    &words(["cargo", "metadata", "--no-deps", "--offline", "--format-version", "1"]),
+    Some(tree),
+  )
+  .output()
+  .map_err(|why| unread(why.to_string()))?;
+
+  if !read.status.success() {
+    return Err(unread(String::from_utf8_lossy(&read.stderr).trim().to_owned()));
+  }
+
+  let metadata: Value = serde_json::from_slice(&read.stdout).map_err(|why| unread(why.to_string()))?;
+  let packages = metadata["packages"].as_array().into_iter().flatten();
+  let mut outside = Vec::new();
+
+  for package in packages {
+    let Some(manifest) = package["manifest_path"].as_str() else {
+      continue;
+    };
+    let Some(dir) = Path::new(manifest).parent() else {
+      continue;
+    };
+    let Ok(from_root) = dir.strip_prefix(tree) else {
+      continue;
+    };
+    let dependencies = package["dependencies"].as_array().into_iter().flatten();
+
+    for dependency in dependencies {
+      let Some(path) = dependency["path"].as_str() else {
+        continue;
+      };
+      let at = normalize(Path::new(path));
+
+      if at.starts_with(tree) {
+        continue;
+      }
+
+      let Some(relative) = upward(dir, &at).filter(|path| !path.as_os_str().is_empty()) else {
+        continue;
+      };
+
+      outside.push(Outside {
+        package: from_root.to_path_buf(),
+        place: normalize(&dir.join(&relative)),
+        relative,
+      });
+    }
+  }
+
+  Ok(outside)
+}
+
+// The path from one absolute directory to another, a step up for each folder between them.
+fn upward(from: &Path, to: &Path) -> Option<PathBuf> {
+  let from: Vec<Component<'_>> = from.components().collect();
+  let to: Vec<Component<'_>> = to.components().collect();
+  let shared = from.iter().zip(&to).take_while(|(one, other)| one == other).count();
+
+  // Two paths of different roots share no step to count.
+  if shared == 0 {
+    return None;
+  }
+
+  let mut relative = PathBuf::new();
+
+  for _ in shared..from.len() {
+    relative.push("..");
+  }
+
+  for part in &to[shared..] {
+    relative.push(part.as_os_str());
+  }
+
+  Some(relative)
+}
+
+// A path with its `.` and `..` taken out, an absolute path keeping its root.
+fn normalize(path: &Path) -> PathBuf {
+  let mut out = PathBuf::new();
+
+  for part in path.components() {
+    match part {
+      Component::CurDir => {}
+      Component::ParentDir => match out.components().next_back() {
+        Some(Component::Normal(_)) => {
+          out.pop();
+        }
+        _ => out.push(".."),
+      },
+      other => out.push(other.as_os_str()),
+    }
+  }
+
+  out
 }

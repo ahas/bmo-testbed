@@ -178,6 +178,9 @@ pub struct ExpansionWords {
   pub failed: String,
   pub no_addresses: String,
   pub not_pinned: String,
+  pub trees_unread: String,
+  pub tree_absent: String,
+  pub tree_unlinked: String,
 }
 
 #[derive(Debug, Deserialize)]
