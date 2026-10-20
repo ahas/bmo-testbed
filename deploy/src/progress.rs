@@ -1,4 +1,4 @@
-//! Where a deployment stands while it runs, written into one record under the data root (docs/deploy.md,
+//! Where a deployment stands while it runs, written into one record under the deploy root (docs/deploy.md,
 //! 「What a deployment says of itself as it runs」). It needs no service to be read: the file and the run's
 //! process are the whole of it, so a service restarting under a deployment leaves the reading as it was.
 //!
@@ -18,10 +18,10 @@ use bmo_testbed_client::{
 use bmo_testbed_record::{Record, say_unwritten};
 use serde::{Deserialize, Serialize};
 
-/// The record's file under the data root.
+/// The record's file under the deploy root.
 pub const DEPLOY_PROGRESS: &str = "deploy-progress.json";
 
-/// Names another file in place of the data root's, for a rehearsal.
+/// Names another file in place of the deploy root's, for a rehearsal.
 pub const DEPLOY_PROGRESS_VARIABLE: &str = "BMO_DEPLOY_PROGRESS";
 
 /// The stages a run can pass, in the order it passes them; a rollback is never planned.
@@ -168,11 +168,11 @@ pub struct DeployProgress {
   pub ending: Option<Ending>,
 }
 
-/// The record's file: the data root's, or the one the environment names.
-pub fn deploy_progress_path(data_root: &Path) -> PathBuf {
+/// The record's file: the deploy root's, or the one the environment names.
+pub fn deploy_progress_path(root: &Path) -> PathBuf {
   match std::env::var(DEPLOY_PROGRESS_VARIABLE) {
     Ok(named) if !named.is_empty() => PathBuf::from(named),
-    _ => data_root.join(DEPLOY_PROGRESS),
+    _ => root.join(DEPLOY_PROGRESS),
   }
 }
 

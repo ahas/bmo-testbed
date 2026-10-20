@@ -422,7 +422,8 @@ impl DeployStep {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Backup {
-  pub dir: PathBuf,
+  /// Where the backups stand; none is `backups/` under the deploy root.
+  pub dir: Option<PathBuf>,
   /// The backup file's name before its time; none is the repository's name.
   pub name: Option<String>,
   pub snapshot: Option<String>,

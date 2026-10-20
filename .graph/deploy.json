@@ -12,15 +12,17 @@
       "deploy/tests/integration/upload.rs"
     ],
     "symbols": [],
-    "aliases": [],
+    "aliases": [
+      "백업"
+    ],
     "needs": [
       "core/declaration",
       "core/event-hook",
       "deploy/releases-and-rollback",
       "core/policy-loader"
     ],
-    "base": "76e3f04107e25a01cd2eb3d4dc0be685b313e955",
-    "changed": 1792498861694
+    "base": "db2586b0c040f4b879a10c631aa219f2ab5fecf8",
+    "changed": 1792505141786
   },
   {
     "id": "deploy/deploy-run",
@@ -53,8 +55,8 @@
       "core/policy-loader",
       "record/record"
     ],
-    "base": "76e3f04107e25a01cd2eb3d4dc0be685b313e955",
-    "changed": 1792498861699
+    "base": "db2586b0c040f4b879a10c631aa219f2ab5fecf8",
+    "changed": 1792505134657
   },
   {
     "id": "deploy/releases-and-rollback",
@@ -73,11 +75,14 @@
       "deploy/tests/integration/rollback.rs"
     ],
     "symbols": [],
-    "aliases": [],
+    "aliases": [
+      "배포 기록",
+      "배포 로그"
+    ],
     "needs": [
       "core/policy-loader"
     ],
-    "base": "76e3f04107e25a01cd2eb3d4dc0be685b313e955",
-    "changed": 1792498861704
+    "base": "db2586b0c040f4b879a10c631aa219f2ab5fecf8",
+    "changed": 1792505141783
   }
 ]

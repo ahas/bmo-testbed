@@ -26,7 +26,7 @@ pub struct DeployRecord {
   pub backup: String,
 }
 
-/// Where the running deployment is written down, under the data root.
+/// Where the running deployment is written down, under the deploy root.
 pub const DEPLOY_RECORD: &str = "deployed.json";
 
 /// Where every deployment is appended, one line apiece, under the same root.
@@ -34,8 +34,8 @@ pub const DEPLOY_LOG: &str = "deployed.log";
 
 /// What is deployed now, or none where no deployment has been recorded — a first run, or a record that
 /// has been lost.
-pub fn read_deploy_record(data_root: &Path) -> Option<DeployRecord> {
-  serde_json::from_str(&std::fs::read_to_string(data_root.join(DEPLOY_RECORD)).ok()?).ok()
+pub fn read_deploy_record(path: &Path) -> Option<DeployRecord> {
+  serde_json::from_str(&std::fs::read_to_string(path).ok()?).ok()
 }
 
 /// The record written whole, as every reader of it reads it.

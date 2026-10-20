@@ -54,6 +54,8 @@ use crate::unit::{first_chars, upload_unit_name};
 pub const BACKUP_DIR_VARIABLE: &str = "BMO_BACKUP_DIR";
 /// The variable naming another `bot` service, for a rehearsal.
 pub const BOT_UNIT_VARIABLE: &str = "BMO_UNIT";
+/// The backup directory under the deploy root where the declaration names none.
+pub const BACKUP_DIR: &str = "backups";
 
 /// Where a deployment lays its commit down, each place the declaration's unless the environment names
 /// another (docs/boundary.md, 「The environment」); the deploy tree is the declaration's alone, since every
@@ -62,10 +64,16 @@ pub const BOT_UNIT_VARIABLE: &str = "BMO_UNIT";
 pub struct DeployPlaces {
   /// The checkout the commit is taken from.
   pub source: PathBuf,
+  /// The directory holding the deploy tree's link, its releases and its build tree.
+  pub deploy_root: PathBuf,
   pub deploy_dir: PathBuf,
   pub data_root: PathBuf,
   pub backup_dir: Option<PathBuf>,
   pub unit_dir: PathBuf,
+  /// The deployment record, under the deploy root.
+  pub record: PathBuf,
+  /// The deployment log, beside the record.
+  pub log: PathBuf,
   pub progress: PathBuf,
   /// The `bot` service the environment names over the commit's mark.
   pub bot_unit: Option<String>,
@@ -81,20 +89,28 @@ impl DeployPlaces {
     let (Some(root), Some(data)) = (&deploy.root, &deploy.data_root) else {
       return Err(said.no_deploy.clone());
     };
-    let deploy_dir = repo.path(root, env).join(&deploy.link);
+    let deploy_root = repo.path(root, env);
+    let deploy_dir = deploy_root.join(&deploy.link);
     let data_root = repo.path(data, env);
     let home = PathBuf::from(env.get("HOME").map_or("/", String::as_str));
 
     Ok(Self {
       source: repo.root.clone(),
       deploy_dir: link_of(&deploy_dir),
-      backup_dir: named(BACKUP_DIR_VARIABLE)
-        .or_else(|| deploy.backup.as_ref().map(|backup| repo.path(&backup.dir, env))),
+      backup_dir: named(BACKUP_DIR_VARIABLE).or_else(|| {
+        deploy.backup.as_ref().map(|backup| match &backup.dir {
+          Some(dir) => repo.path(dir, env),
+          None => deploy_root.join(BACKUP_DIR),
+        })
+      }),
       unit_dir: user_unit_dir_from(env.get("XDG_CONFIG_HOME").map(String::as_str), &home),
+      record: deploy_root.join(DEPLOY_RECORD),
+      log: deploy_root.join(DEPLOY_LOG),
       progress: named(crate::progress::DEPLOY_PROGRESS_VARIABLE)
-        .unwrap_or_else(|| deploy_progress_path(&data_root)),
+        .unwrap_or_else(|| deploy_progress_path(&deploy_root)),
       bot_unit: env.get(BOT_UNIT_VARIABLE).filter(|unit| !unit.is_empty()).cloned(),
       data_root,
+      deploy_root,
     })
   }
 }
@@ -813,8 +829,8 @@ impl<'a> Laying<'a> {
     let git = |args: &[&str], cwd: &Path| self.git(args, cwd);
     let mut tree = DeployTree {
       deploy_dir: places.deploy_dir.clone(),
-      record_path: places.data_root.join(DEPLOY_RECORD),
-      log_path: places.data_root.join(DEPLOY_LOG),
+      record_path: places.record.clone(),
+      log_path: places.log.clone(),
       unit_dir: places.unit_dir.clone(),
       git: &git,
       say: &said,
@@ -1002,7 +1018,7 @@ pub async fn deploy(
   }
 
   run.subject = run.git(&["log", "-1", "--format=%s", &run.commit], source).out.trim().to_owned();
-  run.previous = read_deploy_record(&places.data_root);
+  run.previous = read_deploy_record(&places.record);
 
   let commit = run.commit.clone();
   let shown = short(&commit);
@@ -1037,6 +1053,10 @@ pub async fn deploy(
     run.say(&fill_marks(&said.dry, &[("commit", &shown), ("live", &live)]));
     return 0;
   }
+
+  // The deploy root holds the run's own record, log and progress file; the first deployment makes it
+  // before the run begins writing there.
+  let _ = std::fs::create_dir_all(&places.deploy_root);
 
   run.progress = Some(begin_deploy(
     &places.progress,
@@ -1208,8 +1228,8 @@ pub async fn deploy(
   // 5. The release, the releases pruned first.
   run.stage(Stage::Tree);
 
-  let record_path = places.data_root.join(DEPLOY_RECORD);
-  let log_path = places.data_root.join(DEPLOY_LOG);
+  let record_path = places.record.clone();
+  let log_path = places.log.clone();
   let before = run.previous.as_ref().and_then(|previous| {
     std::fs::read_to_string(&log_path)
       .ok()

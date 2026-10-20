@@ -29,9 +29,11 @@ fn the_record_is_written_whole_and_read_back_and_none_stands_for_no_record() {
     backup: "x".to_owned(),
   };
 
-  assert_eq!(read_deploy_record(dir.path()), None);
-  write_deploy_record(&dir.path().join("deployed.json"), &record).unwrap();
-  assert_eq!(read_deploy_record(dir.path()), Some(record));
+  let path = dir.path().join("deployed.json");
+
+  assert_eq!(read_deploy_record(&path), None);
+  write_deploy_record(&path, &record).unwrap();
+  assert_eq!(read_deploy_record(&path), Some(record));
 }
 
 #[test]

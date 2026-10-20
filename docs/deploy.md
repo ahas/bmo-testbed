@@ -18,9 +18,15 @@
 | Releases | `deploy-releases/` beside the link, one release per deployed commit, named by its first twelve hex digits |
 | Build tree | `deploy-expand` beside the link, a detached worktree moved to each commit, where the release build runs, its target directory kept warm between deployments |
 | Data root | The repository's runtime data, inside no checkout and inside no release |
-| Backup directory | Where the deployment's backup is written, readable by the user alone, inside neither the data root nor a git work tree |
+| Deployment record | `deployed.json` under the deploy root, naming the commit that runs, its subject, when it was laid down and the backup behind it |
+| Deployment log | `deployed.log` under the deploy root, one line per deployment |
+| Progress record | `deploy-progress.json` under the deploy root, where a run stands while it runs |
+| Backup directory | `<deploy root>/backups` unless the declaration names another, where the deployment's backup is written, readable by the user alone, inside neither the data root nor a git work tree |
 
 - **The data root is never inside a git work tree.** A deployment finding it there does not start.
+- **A deployment's own files stand under its deploy root, never in its data root.** The data root
+  holds the repository's runtime data alone, so several repositories may declare the same data root
+  without one deployment writing over another's record or log.
 - **Every place but the deploy tree can be moved** by the variables `docs/boundary.md` lists. The
   deploy tree is the declaration's alone: every process a release starts carries `BMO_DEPLOY_DIR`
   naming its own release, so a deployment started from any of them would otherwise aim at that
@@ -137,7 +143,7 @@
    build that fails stops the deployment with every service untouched.
 7. **The steps before the flip,** declared under `[deploy]` with that phase: each runs in the release;
    one that fails stops the deployment with nothing flipped.
-8. **Record it** in `deployed.json` and `deployed.log` under the data root.
+8. **Record it** in `deployed.json` and `deployed.log` under the deploy root.
 9. **Flip the deploy tree:** confirm every unit link will resolve in the release, write a new link
    beside the deploy tree and rename it over the old one.
 10. **Restart:** relink the dangling unit links, link the marked units, reload, restart the `restart`
@@ -161,8 +167,9 @@
 
 ## What a deployment says of itself as it runs
 
-- **Every run writes where it stands into one progress record,** `deploy-progress.json` under the data
-  root, or the file `BMO_DEPLOY_PROGRESS` names. A reader needs only the file and the run's process.
+- **Every run writes where it stands into one progress record,** `deploy-progress.json` under the
+  deploy root, or the file `BMO_DEPLOY_PROGRESS` names. A reader needs only the file and the run's
+  process.
 - **It names from its start every stage the run means to pass,** its plan: `check`, `backup`, `tree`,
   `build`, `before`, `restart`, `stay-up`, `after`; `rollback` is never planned. Each stage is written
   with when it began.

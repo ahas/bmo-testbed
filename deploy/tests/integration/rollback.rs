@@ -29,15 +29,15 @@ impl Stand {
     std::fs::read_link(&self.deploy_dir).unwrap()
   }
 
-  fn data(&self) -> PathBuf {
-    self.root.path().join("data")
+  fn record(&self) -> PathBuf {
+    self.root.path().join("deployed.json")
   }
 
   fn tree<'a>(&self, said: &'a dyn Fn(&str)) -> DeployTree<'a> {
     DeployTree {
       deploy_dir: self.deploy_dir.clone(),
-      record_path: self.data().join("deployed.json"),
-      log_path: self.data().join("deployed.log"),
+      record_path: self.record(),
+      log_path: self.root.path().join("deployed.log"),
       unit_dir: self.unit_dir.clone(),
       git: &git,
       say: said,
@@ -195,7 +195,7 @@ async fn a_failed_deployment_is_flipped_back_relinked_recorded_and_restarted() {
   );
 
   // The record names the live commit again and keeps the backup the failed deployment took.
-  let record = read_deploy_record(&at.data()).unwrap();
+  let record = read_deploy_record(&at.record()).unwrap();
 
   assert_eq!(
     record,
@@ -207,7 +207,7 @@ async fn a_failed_deployment_is_flipped_back_relinked_recorded_and_restarted() {
     }
   );
   assert_eq!(
-    std::fs::read_to_string(at.data().join("deployed.log")).unwrap(),
+    std::fs::read_to_string(at.root.path().join("deployed.log")).unwrap(),
     format!(
       "2026-09-25T07:00:00.000Z {} new-backup rollback of {}: live\n",
       at.live,

@@ -166,12 +166,10 @@ command = "touch {after}"
 phase = "after-health"
 
 [deploy.backup]
-dir = "{backups}"
 "#,
         live = self.at("live").display(),
         data = self.at("data").display(),
         after = self.at("after-ran").display(),
-        backups = self.at("backups").display(),
       ),
     );
   }
@@ -266,7 +264,7 @@ fn a_commit_goes_live_with_its_bot_restarted_and_watched() {
   );
   assert_eq!(std::fs::read_to_string(release.join("bin/app")).unwrap(), "echo v1\n");
   assert_eq!(std::fs::read_to_string(release.join("bin/built-from")).unwrap().trim(), head);
-  assert_eq!(read_deploy_record(&scene.at("data")).unwrap().commit, head);
+  assert_eq!(read_deploy_record(&scene.at("live/deployed.json")).unwrap().commit, head);
   assert_eq!(
     std::fs::read_link(scene.unit_link()).unwrap(),
     scene.deploy_dir().join("units/app.service")
@@ -279,7 +277,7 @@ fn a_commit_goes_live_with_its_bot_restarted_and_watched() {
     assert!(systemctl.iter().any(|one| one == asked), "{asked}: {systemctl:?}");
   }
 
-  let backups: Vec<_> = std::fs::read_dir(scene.at("backups")).unwrap().flatten().collect();
+  let backups: Vec<_> = std::fs::read_dir(scene.at("live/backups")).unwrap().flatten().collect();
 
   assert_eq!(backups.len(), 1);
   assert!(backups[0].file_name().to_string_lossy().starts_with("sample-"));
@@ -293,7 +291,7 @@ fn a_commit_goes_live_with_its_bot_restarted_and_watched() {
   );
 
   let progress =
-    read_deploy_progress(std::fs::read_to_string(scene.at("data/deploy-progress.json")).ok().as_deref());
+    read_deploy_progress(std::fs::read_to_string(scene.at("live/deploy-progress.json")).ok().as_deref());
 
   assert_eq!(progress.unwrap().ending.unwrap().outcome, Outcome::Live);
 
@@ -321,6 +319,32 @@ fn a_commit_goes_live_with_its_bot_restarted_and_watched() {
   );
 }
 
+// "the records stand under the deploy root, and a data root another deployment records into is left alone"
+#[test]
+fn the_records_stand_under_the_deploy_root_and_leave_a_shared_data_root_alone() {
+  let scene = Scene::new();
+  let elsewhere = "{\n  \"commit\": \"another\",\n  \"subject\": \"another deployment\"\n}\n";
+  let elsewhere_log = "2026-10-20T00:00:00.000Z another backup another deployment\n";
+
+  std::fs::write(scene.at("data/deployed.json"), elsewhere).unwrap();
+  std::fs::write(scene.at("data/deployed.log"), elsewhere_log).unwrap();
+
+  let hands = Hands::default();
+
+  assert_eq!(scene.run(&hands), 0, "{}", said(&hands));
+
+  assert_eq!(std::fs::read_to_string(scene.at("data/deployed.json")).unwrap(), elsewhere);
+  assert_eq!(std::fs::read_to_string(scene.at("data/deployed.log")).unwrap(), elsewhere_log);
+  assert!(!scene.at("data/deploy-progress.json").exists());
+
+  let head = must(&["rev-parse", "HEAD"], &scene.source);
+
+  assert_eq!(read_deploy_record(&scene.at("live/deployed.json")).unwrap().commit, head);
+  assert!(scene.at("live/deployed.log").exists());
+  assert!(scene.at("live/deploy-progress.json").exists());
+  assert!(scene.at("live/backups").is_dir());
+}
+
 // "a second commit goes live beside the first, the binary that changed placed and the first release kept"
 #[test]
 fn a_second_commit_goes_live_beside_the_first() {
@@ -337,7 +361,7 @@ fn a_second_commit_goes_live_beside_the_first() {
   assert_eq!(scene.run(&hands), 0, "{}", said(&hands));
   assert_eq!(std::fs::read_to_string(scene.deploy_dir().join("bin/app")).unwrap(), "echo v2\n");
   assert!(release_dir(&scene.deploy_dir(), &first).join("bin/app").exists());
-  assert_eq!(read_deploy_record(&scene.at("data")).unwrap().commit, second);
+  assert_eq!(read_deploy_record(&scene.at("live/deployed.json")).unwrap().commit, second);
 }
 
 // "what may not be deployed is refused before anything changes"
@@ -376,7 +400,7 @@ fn an_open_change_an_unpushed_commit_and_a_backup_inside_the_data_root_are_refus
 
   assert!(!scene.deploy_dir().exists());
   assert!(scene.events().is_empty());
-  assert!(read_deploy_record(&scene.at("data")).is_none());
+  assert!(read_deploy_record(&scene.at("live/deployed.json")).is_none());
 }
 
 // "the deploy tree is the declaration's alone, whatever release the caller stands in"
@@ -404,7 +428,7 @@ fn a_dry_run_changes_nothing() {
   assert_eq!(scene.run_with(&ask, &Told(true), &hands, &scene.env()), 0);
   assert!(said(&hands).contains("--dry-run"), "{}", said(&hands));
   assert!(!scene.deploy_dir().exists());
-  assert!(!scene.at("backups").exists());
+  assert!(!scene.at("live/backups").exists());
 }
 
 // "a gate that fails puts nothing live and says so to the hook"
@@ -442,7 +466,7 @@ fn a_service_that_does_not_come_up_is_rolled_back() {
     std::fs::canonicalize(scene.deploy_dir()).unwrap(),
     std::fs::canonicalize(release_dir(&scene.deploy_dir(), &first)).unwrap()
   );
-  assert_eq!(read_deploy_record(&scene.at("data")).unwrap().commit, first);
+  assert_eq!(read_deploy_record(&scene.at("live/deployed.json")).unwrap().commit, first);
   assert_eq!(scene.names()[1..], ["deploy-rolled-back", "deploy-failed"]);
 
   let failed = &scene.events()[2];
@@ -451,7 +475,7 @@ fn a_service_that_does_not_come_up_is_rolled_back() {
   assert_eq!(failed["detail"]["stage"], "restart");
 
   let progress =
-    read_deploy_progress(std::fs::read_to_string(scene.at("data/deploy-progress.json")).ok().as_deref());
+    read_deploy_progress(std::fs::read_to_string(scene.at("live/deploy-progress.json")).ok().as_deref());
 
   let progress = progress.unwrap();
 
@@ -476,7 +500,7 @@ fn a_build_that_fails_flips_nothing_and_touches_no_service() {
   assert_eq!(scene.run(&hands), 1, "{}", said(&hands));
   assert!(!scene.deploy_dir().exists());
   assert!(hands.systemctl.borrow().is_empty());
-  assert!(read_deploy_record(&scene.at("data")).is_none());
+  assert!(read_deploy_record(&scene.at("live/deployed.json")).is_none());
   assert_eq!(scene.events()[0]["detail"]["stage"], "build");
 }
 

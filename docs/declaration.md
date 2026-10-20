@@ -129,7 +129,7 @@ step that fails stops the deployment with every service untouched.
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `dir` | path | required | The backup directory |
+| `dir` | path | `<root>/backups` | The backup directory |
 | `name` | string | the repository's name | The backup file's name before its time |
 | `snapshot` | command | none | Writes a consistent copy of what the services are writing into `BMO_BACKUP_SNAPSHOT_DIR`, with a manifest beside it |
 | `verify` | command | none | Holds a snapshot taken back out of the pack, in `BMO_BACKUP_SNAPSHOT_DIR`, to its manifest; 0 when it matches |

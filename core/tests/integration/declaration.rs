@@ -278,6 +278,11 @@ fn a_backup_naming_only_its_directory_has_every_other_default() {
 
   assert_eq!((backup.name, backup.snapshot, backup.keep), (None, None, 5));
   assert!(backup.exclude.is_empty());
+
+  // A backup naming no directory stands under the deploy root, which the deployment resolves.
+  let bare = parse(&declared("[deploy.backup]\n")).unwrap().deploy.backup.unwrap();
+
+  assert_eq!(bare.dir, None);
 }
 
 // "a key the schema does not name is refused, naming the key and its table"
