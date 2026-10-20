@@ -470,7 +470,7 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
 
 ## The harness plugin
 
-- **`bmo-testbed mcp` is the MCP server and `ahas-testbed` its skill,** under `plugin/skills/`, telling
+- **`bmo-testbed mcp` is the MCP server and `bmo-testbed` its skill,** under `plugin/skills/`, telling
   a harness when and how to use it. A harness's first use is to run its heavy test or build command
   through `testbed_run`, so it waits in the machine's one queue, and to read the run's counts and log
   with `testbed_test_run`.
@@ -560,7 +560,7 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   the service, each row read back as the client's member.
 - **`service`:** the HTTP service over the record and the lanes, which `serve` starts.
 - **`plugin`:** the harness plugin: the tool table, the MCP server `mcp` starts, the OpenAPI document
-  generated from the client's types and the tool table, and the `ahas-testbed` skill.
+  generated from the client's types and the tool table, and the `bmo-testbed` skill.
 - **`suite`:** the whole-suite run, change selection, the static and quick checks, the Cargo verb, the
   superseded removal and the prune.
 - **`deploy`:** releases, the link flip, unit links, the deploy run, the progress record, rollback

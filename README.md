@@ -12,7 +12,7 @@ and a release-based deployment of a repository onto the machine it runs on.
   service `serve` starts, the harness plugin `mcp` starts and the placement endpoint they ask are its
   whole boundary (`docs/boundary.md`), the routes and tools stated in `docs/openapi.json`.
 - **It is an upstream:** a harness takes it as its first entry point through its MCP server and the
-  `ahas-testbed` skill, with nothing else running.
+  `bmo-testbed` skill, with nothing else running.
 - **It depends on no other repository** but the base libraries `bmo-chat`, `bmo-chat-client`,
   `bmo-text` and `bmo-ui`, and a consumer may take its test kit as a dev-dependency.
 
@@ -39,7 +39,7 @@ and a release-based deployment of a repository onto the machine it runs on.
 | `client/` | The published client: the HTTP service's members, queries and error codes, and the client calling each route |
 | `record/` | The record every verb writes and the service reads: test runs, deployments, log lines, restarts and events |
 | `service/` | The HTTP service over the record and the lanes, with its event stream |
-| `plugin/` | The harness plugin: the MCP server's tools, the OpenAPI document and the `ahas-testbed` skill |
+| `plugin/` | The harness plugin: the MCP server's tools, the OpenAPI document and the `bmo-testbed` skill |
 | `test-support/` | The fixed ids a Rust test names its people, rooms and units by, the same as the test kit's |
 | `scratch-database/` | Per-test PostgreSQL databases cloned from a template a consumer's migrator makes |
 | `testkit/` | The TypeScript test kit a consumer preloads: the test home and the stand-ins |

@@ -1352,7 +1352,7 @@
   "x-harness": {
     "entry": "A harness runs its heavy test or build command through testbed_run, so it waits in the machine's one queue, and reads the run's counts and log with testbed_test_run.",
     "mcp": "bmo-testbed mcp",
-    "plugin": "ahas-testbed"
+    "plugin": "bmo-testbed"
   },
   "x-layer": "upstream",
   "x-stage": 2,

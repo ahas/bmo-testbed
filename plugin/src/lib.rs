@@ -1,6 +1,6 @@
 //! The testbed's harness plugin (docs/boundary.md, 「The harness plugin」): the tool table, the MCP server
 //! the `mcp` verb starts over it, and the OpenAPI document generated from the client's types and the
-//! table. The `ahas-testbed` skill stands beside them under `skills/`.
+//! table. The `bmo-testbed` skill stands beside them under `skills/`.
 
 mod openapi;
 mod server;

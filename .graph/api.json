@@ -22,12 +22,12 @@
   {
     "id": "api/harness",
     "title": "Harness plugin API",
-    "what": "The ahas-testbed MCP server and its eight tools, through which a harness runs a heavy command in the machine's queue and reads the queues, test runs and deployments, as docs/boundary.md states them.",
+    "what": "The bmo-testbed MCP server and its eight tools, through which a harness runs a heavy command in the machine's queue and reads the queues, test runs and deployments, as docs/boundary.md states them.",
     "files": [
       "docs/boundary.md",
       "docs/openapi.json",
       "plugin/src/lib.rs",
-      "plugin/skills/ahas-testbed/SKILL.md"
+      "plugin/skills/bmo-testbed/SKILL.md"
     ],
     "symbols": [],
     "aliases": [],
@@ -35,7 +35,7 @@
       "plugin/harness-plugin"
     ],
     "base": "5e955f94545d613b245e997b5b2e197509b07d4c",
-    "changed": 1792505134668,
+    "changed": 1792529689614,
     "boundary": {
       "side": "exposes"
     }

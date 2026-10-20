@@ -1,9 +1,9 @@
 ---
-name: ahas-testbed
+name: bmo-testbed
 description: Run heavy test and build commands through a machine's one queue with the bmo-testbed MCP server, and read what they came to. Use before running a whole test suite, a Cargo build or test, a package script that tests, checks or builds, or a browser test on a machine shared with other checkouts, and when reading a test run's counts and log, a change check, the lanes' queue, or a deployment's steps.
 ---
 
-# ahas-testbed
+# bmo-testbed
 
 A testbed holds one machine's heavy commands in line: two lanes, the wide one running one command on the
 machine's whole width and the narrow one beside it on a quarter of it, so two suites never run each other

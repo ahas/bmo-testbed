@@ -2,13 +2,13 @@
   {
     "id": "plugin/harness-plugin",
     "title": "Harness plugin and OpenAPI document",
-    "what": "The harness plugin: the eight tools the mcp verb's MCP server lists, five through the client and three through the binary's run, check and suite with --json, the ahas-testbed skill, and the OpenAPI document docs/openapi.json generated from the types and tools.",
+    "what": "The harness plugin: the eight tools the mcp verb's MCP server lists, five through the client and three through the binary's run, check and suite with --json, the bmo-testbed skill, and the OpenAPI document docs/openapi.json generated from the types and tools.",
     "files": [
       "plugin/src/lib.rs",
       "plugin/src/tools.rs",
       "plugin/src/server.rs",
       "plugin/src/openapi.rs",
-      "plugin/skills/ahas-testbed/SKILL.md",
+      "plugin/skills/bmo-testbed/SKILL.md",
       "cli/examples/openapi.rs",
       "cli/tests/integration/plugin.rs",
       "docs/openapi.json",
@@ -21,6 +21,6 @@
       "core/policy-loader"
     ],
     "base": "5e955f94545d613b245e997b5b2e197509b07d4c",
-    "changed": 1792505134673
+    "changed": 1792529689623
   }
 ]

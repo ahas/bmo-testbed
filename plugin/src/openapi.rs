@@ -19,7 +19,7 @@ use crate::tools::{Calls, tools};
 const SCHEMAS: &str = "/components/schemas";
 
 /// The plugin a harness takes the testbed in, and the command that starts its MCP server.
-pub const PLUGIN_NAME: &str = "ahas-testbed";
+pub const PLUGIN_NAME: &str = "bmo-testbed";
 pub const MCP_COMMAND: &str = "bmo-testbed mcp";
 
 /// One route as the document states it.
