@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::policy::prune::PRUNE;
+use bmo_testbed_core::policy::service::SERVICE;
 use bmo_testbed_core::policy::suite::SUITE;
 use bmo_testbed_core::policy::verbs::VERBS;
 use bmo_testbed_suite::template::is_database_name;
@@ -39,6 +40,8 @@ pub enum Verb {
   Full(FullArgs),
   Deploy(DeployArgs),
   Backups,
+  Serve(ServeArgs),
+  Mcp(McpArgs),
 }
 
 // A word that names something: not empty, and not a flag.
@@ -88,6 +91,8 @@ pub struct RunArgs {
   pub guard: Option<u64>,
   #[arg(long, value_parser = seconds())]
   pub wait: Option<u64>,
+  #[arg(long)]
+  pub json: bool,
   /// The command, after `--`.
   #[arg(last = true, required = true, num_args = 1..)]
   pub command: Vec<String>,
@@ -123,6 +128,8 @@ pub struct SuiteArgs {
   pub file_guard: Option<u64>,
   #[arg(long, value_parser = seconds())]
   pub turn_wait: Option<u64>,
+  #[arg(long)]
+  pub json: bool,
   #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
   pub words: Vec<String>,
 }
@@ -174,6 +181,8 @@ pub struct CheckArgs {
   pub since: Option<String>,
   #[arg(long)]
   pub log: Option<PathBuf>,
+  #[arg(long)]
+  pub json: bool,
   pub files: Vec<String>,
 }
 
@@ -184,7 +193,10 @@ pub enum CheckPart {
   Wording,
   Layout,
   Dependencies,
-  Korean {
+  CargoProfile,
+  /// The lines that are not English; `korean` names it as well.
+  #[command(alias = "korean")]
+  Language {
     #[arg(long)]
     kinds: bool,
     #[arg(long, conflicts_with_all = ["kinds", "prefix"])]
@@ -225,6 +237,22 @@ pub struct PruneArgs {
   pub all: bool,
 }
 
+#[derive(Debug, Args)]
+pub struct ServeArgs {
+  #[arg(long, value_name = "address")]
+  pub listen: Option<String>,
+  #[arg(long, env = "BMO_TESTBED_TOKEN", hide_env_values = true, default_value = "")]
+  pub token: String,
+}
+
+#[derive(Debug, Args)]
+pub struct McpArgs {
+  #[arg(long, env = "BMO_TESTBED_SERVICE", value_name = "url")]
+  pub service: Option<String>,
+  #[arg(long, env = "BMO_TESTBED_TOKEN", hide_env_values = true, default_value = "")]
+  pub token: String,
+}
+
 // A usage of the policy with the binary's name and numbers filled in.
 fn usage(text: &str) -> String {
   let numbers = &LANES.numbers;
@@ -234,11 +262,12 @@ fn usage(text: &str) -> String {
     &[
       ("verb", BINARY),
       ("guard", &numbers.guard_seconds.to_string()),
-      ("job_wait", &numbers.job_wait_seconds.to_string()),
+      ("harness_wait", &numbers.harness_wait_seconds.to_string()),
       ("unit_wait", &numbers.unit_wait_seconds.to_string()),
       ("kept", &numbers.kept_place_seconds.to_string()),
       ("days", &PRUNE.older_than_days.to_string()),
       ("hours", &PRUNE.incremental_hours.to_string()),
+      ("listen", &SERVICE.listen),
     ],
   )
 }
@@ -247,7 +276,7 @@ fn usage(text: &str) -> String {
 pub fn read(args: impl IntoIterator<Item = OsString>) -> Result<Words, clap::Error> {
   let said = &VERBS.usage;
   let check = usage(&said.check);
-  let parts = ["quick", "wording", "layout", "dependencies", "korean", "dashes"];
+  let parts = ["quick", "wording", "layout", "dependencies", "cargo-profile", "language", "dashes"];
   let command = Words::command()
     .override_help(usage(&said.binary))
     .mut_subcommand("run", |verb| verb.override_help(usage(&said.run)))
@@ -267,7 +296,9 @@ pub fn read(args: impl IntoIterator<Item = OsString>) -> Result<Words, clap::Err
     .mut_subcommand("prune", |verb| verb.override_help(usage(&said.prune)))
     .mut_subcommand("full", |verb| verb.override_help(usage(&said.full)))
     .mut_subcommand("deploy", |verb| verb.override_help(usage(&said.deploy)))
-    .mut_subcommand("backups", |verb| verb.override_help(usage(&said.backups)));
+    .mut_subcommand("backups", |verb| verb.override_help(usage(&said.backups)))
+    .mut_subcommand("serve", |verb| verb.override_help(usage(&said.serve)))
+    .mut_subcommand("mcp", |verb| verb.override_help(usage(&said.mcp)));
   let matches = command.try_get_matches_from(args)?;
 
   Words::from_arg_matches(&matches)

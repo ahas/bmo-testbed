@@ -18,6 +18,7 @@ use crate::queue::now_ms;
 use crate::turn::{
   NOT_RUN_EXIT_CODE, TurnAsk, lane_width, machine_threads, record_turn_times, stop_tree, take_turn,
 };
+use crate::witness::{RunBegun, RunEnded, RunVerdict, RunWitness};
 
 /// How one run ended.
 #[derive(Clone, Debug, PartialEq)]
@@ -35,6 +36,8 @@ pub struct TestbedResult {
   pub failures: Vec<String>,
   /// The turn, as its caller says it once settled.
   pub turn: String,
+  /// The id the witness kept the run under, where it kept it.
+  pub test_run: Option<i64>,
 }
 
 impl TestbedResult {
@@ -109,6 +112,8 @@ pub struct RunAsk<'a> {
   pub cwd: PathBuf,
   /// The turn's own ask, its lane the one the command runs in, at that lane's width.
   pub turn: TurnAsk<'a>,
+  /// Whoever keeps the record of the run, told as it begins and as it ends.
+  pub witness: &'a dyn RunWitness,
 }
 
 // The logs older than the days the policy keeps them, taken away as the next run starts.
@@ -130,8 +135,8 @@ fn prune_logs(dir: &Path, now: SystemTime) {
   }
 }
 
-// A run's log, named by when it started, its language and this process.
-fn log_name(started_ms: i64, language: &str) -> String {
+/// A run's log, named by when it started, what runs it and this process.
+pub fn log_name(started_ms: i64, language: &str) -> String {
   let at = chrono::DateTime::from_timestamp_millis(started_ms)
     .map_or_else(|| started_ms.to_string(), |at| at.format("%Y-%m-%dT%H-%M-%S-%3fZ").to_string());
 
@@ -154,6 +159,7 @@ pub fn run_in_testbed(ask: &RunAsk<'_>) -> Result<TestbedResult, String> {
     log: None,
     failures: Vec::new(),
     turn: turn.words(),
+    test_run: None,
   };
 
   if !turn.had() {
@@ -169,12 +175,35 @@ pub fn run_in_testbed(ask: &RunAsk<'_>) -> Result<TestbedResult, String> {
   std::fs::create_dir_all(&ask.log_dir).map_err(no_log)?;
   prune_logs(&ask.log_dir, SystemTime::now());
 
-  let log = ask.log_dir.join(log_name(now_ms(), ask.language.name()));
+  let started_at = now_ms();
+  let log = ask.log_dir.join(log_name(started_at, ask.language.name()));
   let out = File::create(&log).map_err(no_log)?;
+  let test_run = ask.witness.began(&RunBegun {
+    command: &ask.turn.command,
+    checkout: &ask.cwd,
+    log: &log,
+    started_at,
+    env: &ask.turn.env,
+  });
+  let tell_ended = |verdict: RunVerdict, tally: Option<&Tally>| {
+    if let Some(id) = test_run {
+      ask.witness.ended(
+        id,
+        &RunEnded {
+          verdict,
+          passed: tally.map_or(0, |tally| tally.pass),
+          failed: tally.map_or(0, |tally| tally.fail),
+          skipped: tally.map_or(0, |tally| tally.skip),
+          ended_at: now_ms(),
+        },
+      );
+    }
+  };
   let errors = out.try_clone().map_err(no_log)?;
   let env = &ask.turn.env;
   let widened = ask.language.widen(&ask.command, lane_width(ask.turn.lane, env, machine_threads()));
   let Some((program, args)) = widened.command.split_first() else {
+    tell_ended(RunVerdict::NotRun, None);
     return Ok(not_run());
   };
   // A process group of its own, so the guard takes everything the command started with it.
@@ -188,7 +217,10 @@ pub fn run_in_testbed(ask: &RunAsk<'_>) -> Result<TestbedResult, String> {
     .stderr(errors)
     .process_group(0)
     .spawn()
-    .map_err(|why| fill_marks(&said.unstarted, &[("program", program), ("why", &why.to_string())]))?;
+    .map_err(|why| {
+      tell_ended(RunVerdict::Failed, None);
+      fill_marks(&said.unstarted, &[("program", program), ("why", &why.to_string())])
+    })?;
   let cut = Arc::new(AtomicBool::new(false));
   let (ended, ending) = mpsc::channel::<()>();
   let guard =
@@ -218,17 +250,22 @@ pub fn run_in_testbed(ask: &RunAsk<'_>) -> Result<TestbedResult, String> {
 
   failures.truncate(LANES.numbers.failure_lines);
 
+  let tally = tally_of_log(ask.languages, &text);
+
+  tell_ended(if ok { RunVerdict::Passed } else { RunVerdict::Failed }, tally.as_ref());
+
   Ok(TestbedResult {
     language: ask.language.name(),
     ran: true,
     ok,
     code,
     cut,
-    tally: tally_of_log(ask.languages, &text),
+    tally,
     seconds,
     waited_seconds: turn.waited_seconds(),
     log: Some(log),
     failures,
     turn: turn.words(),
+    test_run,
   })
 }

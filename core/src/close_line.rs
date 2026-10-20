@@ -1,7 +1,7 @@
 //! The repository's close line (docs/testbed.md, 「The close line」): every close of one repository on this
 //! machine stands in it, the first to ask goes first, and the holder holds it from its rebase to the end of
-//! its landing. A close waits its turn out while its job lives, saying where it stands as it waits, and
-//! leaves the line once its job is gone. And the close's hold on the wide lane through each part of its
+//! its landing. A close waits its turn out while its harness lives, saying where it stands as it waits, and
+//! leaves the line once its harness is gone. And the close's hold on the wide lane through each part of its
 //! check.
 
 use std::path::{Path, PathBuf};
@@ -16,13 +16,14 @@ use sha2::{Digest, Sha256};
 use crate::policy::close_line::CLOSE_LINE;
 use crate::policy::fill_marks;
 use crate::queue::{HeldLock, LockWait, Rank, now_ms, process_alive, queue_tickets, take_lock};
-use crate::turn::{self, Env, Lane, TestbedTurn, TurnAsk, job_pid, place_name, watch_job};
+use crate::turn::{self, Env, Lane, TestbedTurn, TurnAsk, harness_pid, scope_of, watch_harness};
 
 /// Who stands in the line, or holds it.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CloseEntry {
-  /// The agent place of the job whose close it is, where one runs it.
-  pub place: Option<String>,
+  /// The caller's opaque scope; lines an earlier binary wrote carry it as `place`.
+  #[serde(alias = "place")]
+  pub scope: Option<String>,
   pub checkout: String,
   /// When it asked for the line, and when its turn came, in milliseconds.
   pub asked: i64,
@@ -32,9 +33,9 @@ pub struct CloseEntry {
 }
 
 impl CloseEntry {
-  /// Where it stands, in a few words: its job's place and its checkout.
+  /// Where it stands, in a few words: its caller's scope and its checkout.
   pub fn words(&self) -> String {
-    let parts: Vec<&str> = [self.place.as_deref().unwrap_or(""), &self.checkout]
+    let parts: Vec<&str> = [self.scope.as_deref().unwrap_or(""), &self.checkout]
       .into_iter()
       .filter(|part| !part.is_empty())
       .collect();
@@ -132,7 +133,7 @@ pub fn read_close_line(path: &Path) -> CloseLine {
   CloseLine { holder, waiting }
 }
 
-/// The line had, let go when dropped: its record taken away, the watch on its job stopped, the lock let go.
+/// The line had, let go when dropped: its record taken away, the watch on its harness stopped, the lock let go.
 pub struct CloseTurn {
   pub waited_seconds: f64,
   path: PathBuf,
@@ -162,19 +163,19 @@ pub struct CloseLineAsk<'a> {
   /// How often it says where it stands, and how often it looks; a test sets both short.
   pub notice_seconds: Option<f64>,
   pub poll: Option<Duration>,
-  /// Whether the job holding the line is watched, so a job that dies takes its close with it.
+  /// Whether the harness holding the line is watched, so a harness that dies takes its close with it.
   pub watch: bool,
 }
 
 /// The close line's turn, waited out: had once every close that asked before this one has let it go, or
-/// none where the job this close runs for is gone before then.
+/// none where the harness this close runs for is gone before then.
 pub fn take_close_line(ask: &CloseLineAsk<'_>) -> Option<CloseTurn> {
   let notice = ask.notice_seconds.unwrap_or(CLOSE_LINE.numbers.notice_seconds as f64);
-  let job = job_pid(&ask.env);
+  let job = harness_pid(&ask.env);
   let asked = now_ms();
   let me = i64::from(std::process::id());
   let entry = CloseEntry {
-    place: place_name(&ask.env),
+    scope: scope_of(&ask.env),
     checkout: ask.checkout.clone(),
     asked,
     since: None,
@@ -226,12 +227,12 @@ pub fn take_close_line(ask: &CloseLineAsk<'_>) -> Option<CloseTurn> {
     path: ask.path.clone(),
     pid: me,
     _lock: lock,
-    watching: job.filter(|_| ask.watch).map(watch_job),
+    watching: job.filter(|_| ask.watch).map(watch_harness),
   })
 }
 
 /// The testbed's wide lane held through a close's check, from its static check to the end of its suite, so
-/// no other job's heavy command comes between its steps. It is taken standing next, and before each part a
+/// no other harness's heavy command comes between its steps. It is taken standing next, and before each part a
 /// deployment waiting at the front goes first.
 pub struct WideStretch<'a> {
   env: Env,
@@ -266,7 +267,7 @@ impl<'a> WideStretch<'a> {
     self.path.clone().unwrap_or_else(|| turn::lock_path(&self.env, Lane::Wide))
   }
 
-  /// Held, a deployment waiting at the front let in first: false where the job ended meanwhile.
+  /// Held, a deployment waiting at the front let in first: false where the harness ended meanwhile.
   pub fn ready(&mut self) -> bool {
     if self.held.is_some() && queue_tickets(&self.lock()).iter().any(|one| one.front && !one.kept) {
       (self.say)(&CLOSE_LINE.stretch.front_first);

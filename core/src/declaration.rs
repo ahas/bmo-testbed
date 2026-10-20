@@ -213,15 +213,17 @@ impl Default for Tools {
   }
 }
 
-/// A quick check a declaration can name.
+/// A quick check a declaration can name; `korean` names the language check as well.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "kebab-case")]
 pub enum QuickCheck {
   Wording,
   Dashes,
-  Korean,
+  #[serde(alias = "korean")]
+  Language,
   Layout,
   Dependencies,
+  CargoProfile,
 }
 
 impl QuickCheck {
@@ -230,8 +232,8 @@ impl QuickCheck {
   pub fn input(self, check: &Check) -> Option<(&'static str, Option<&Path>)> {
     match self {
       Self::Wording => Some(("wording_document", check.wording_document.as_deref())),
-      Self::Korean => Some(("korean_ledger", check.korean_ledger.as_deref())),
-      Self::Dashes | Self::Layout | Self::Dependencies => None,
+      Self::Language => Some(("language_ledger", check.language_ledger.as_deref())),
+      Self::Dashes | Self::Layout | Self::Dependencies | Self::CargoProfile => None,
     }
   }
 
@@ -240,9 +242,10 @@ impl QuickCheck {
     match self {
       Self::Wording => "wording",
       Self::Dashes => "dashes",
-      Self::Korean => "korean",
+      Self::Language => "language",
       Self::Layout => "layout",
       Self::Dependencies => "dependencies",
+      Self::CargoProfile => "cargo-profile",
     }
   }
 }
@@ -258,7 +261,10 @@ pub struct Check {
   pub wording_files: Option<Vec<String>>,
   #[serde(default)]
   pub people_text: Vec<String>,
-  pub korean_ledger: Option<PathBuf>,
+  /// The ledger of lines holding letters that are not English, which `korean_ledger` names as well; a
+  /// declaration naming both is refused.
+  #[serde(alias = "korean_ledger")]
+  pub language_ledger: Option<PathBuf>,
   #[serde(default)]
   pub base_libraries: Vec<String>,
   #[serde(default = "Check::main")]

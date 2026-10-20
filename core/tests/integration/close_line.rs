@@ -1,5 +1,5 @@
 //! The repository's close line (docs/testbed.md, 「The close line」), and the testbed's next place its
-//! closes stand in (「Next after the front」). The first test stands in for several jobs at once:
+//! closes stand in (「Next after the front」). The first test stands in for several harnesses at once:
 //! this test binary runs itself again as each close and each job running heavy commands by hand, all on one
 //! testbed lock and one close line of the test's own, holding each turn for milliseconds where the machine
 //! holds for minutes.
@@ -49,7 +49,7 @@ fn close(setting: &Value) -> Value {
     poll: Some(POLL),
     watch: false,
   })
-  .expect("a close whose job lives is had its turn");
+  .expect("a close whose harness lives is had its turn");
   let lined = now_ms();
   let main = PathBuf::from(setting["main"].as_str().unwrap());
   let read_main = || std::fs::read_to_string(&main).unwrap().trim().parse::<i64>().unwrap();
@@ -153,7 +153,7 @@ fn answer(child: Child) -> Value {
 }
 
 // "takes five closes at once in the order they asked, each on the main the one before it landed, each
-// step behind one command at most": five jobs closing at once beside two jobs running heavy commands by
+// step behind one command at most": five harnesses closing at once beside two harnesses running heavy commands by
 // hand, where no close may lose its place in the line to the runs by hand.
 #[test]
 fn takes_five_closes_at_once_in_the_order_they_asked() {
@@ -297,14 +297,14 @@ fn holds_the_wide_lane_and_lets_a_deployment_at_the_front_in_before_the_next() {
   assert!(queue_tickets(&lock).is_empty());
 }
 
-// "leaves the line once its job is gone, saying where it stood while it waited"
+// "leaves the line once its harness is gone, saying where it stood while it waited"
 #[test]
-fn leaves_the_line_once_its_job_is_gone() {
+fn leaves_the_line_once_its_harness_is_gone() {
   let dir = tempfile::tempdir().unwrap();
   let path = dir.path().join("close.lock");
   let holder = take_close_line(&CloseLineAsk {
     path: path.clone(),
-    env: Env::from([("BMO_AGENT_PLACE".to_owned(), "place-4".to_owned())]),
+    env: Env::from([("BMO_TESTBED_SCOPE".to_owned(), "place-4".to_owned())]),
     checkout: "/checkout".to_owned(),
     say: &quiet,
     notice_seconds: None,
@@ -313,7 +313,7 @@ fn leaves_the_line_once_its_job_is_gone() {
   })
   .unwrap();
   let mut job = Command::new("sleep").arg("30").stdin(Stdio::null()).spawn().unwrap();
-  let job_pid = job.id().to_string();
+  let harness_pid = job.id().to_string();
   let lines = std::sync::Mutex::new(Vec::<String>::new());
   let keep = |line: &str| lines.lock().unwrap().push(line.to_owned());
   let held_by = fill_marks(&CLOSE_LINE.line.held_by, &[("who", "place-4 · /checkout")]);
@@ -322,7 +322,7 @@ fn leaves_the_line_once_its_job_is_gone() {
     let waiting = scope.spawn(|| {
       take_close_line(&CloseLineAsk {
         path: path.clone(),
-        env: Env::from([("CLAUDE_PID".to_owned(), job_pid.clone())]),
+        env: Env::from([("CLAUDE_PID".to_owned(), harness_pid.clone())]),
         checkout: String::new(),
         say: &keep,
         notice_seconds: Some(0.05),

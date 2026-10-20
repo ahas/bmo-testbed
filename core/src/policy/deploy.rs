@@ -50,7 +50,7 @@ pub struct Numbers {
 pub struct RunWords {
   pub refused: String,
   pub no_deploy: String,
-  pub job: String,
+  pub harness: String,
   pub data_relative: String,
   pub data_in_tree: String,
   pub data_missing: String,
@@ -249,6 +249,14 @@ pub struct Deploy {
   pub tree: TreeWords,
   pub unit: UnitWords,
   pub remove: RemoveWords,
+  pub restarts: RestartWords,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RestartWords {
+  pub putting: String,
+  pub rolling_back: String,
 }
 
 super::part!(pub DEPLOY: Deploy = "deploy.toml");

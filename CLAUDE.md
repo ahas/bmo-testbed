@@ -18,7 +18,7 @@ These rules hold every change to this repository.
 - Everything in this repository is English: code, comments, strings, tests, documents, commit messages
   and branch names. No Korean in code or tests, except where a check that reads Korean cannot do
   without it, in its Hangul ranges and its tests' input: there it is written as Korean, never hidden
-  behind an escape, and the ledger `docs/korean-in-code-ledger.json` counts it.
+  behind an escape, and the ledger `docs/language-ledger.json` counts it.
 - Test input is neutral English. A fixture recorded from elsewhere stays as it was recorded.
 - No personal data: no user names, home directories, machine names or names of any agent or product
   that uses the testbed. A path is written from `$HOME` or from a variable.
@@ -31,8 +31,8 @@ These rules hold every change to this repository.
 - **No lookup table standing in for polymorphism.** A language is a member of the language type and
   answers for itself; a deploy step is a declared step; a unit says its own deploy mark.
 - **Dependencies:** crates from the registry pinned in the workspace manifest, and among other
-  repositories only the base libraries `bmo-chat`, `bmo-chat-client` and `bmo-ui`. The quick checks'
-  dependency check holds this.
+  repositories only the base libraries `bmo-chat`, `bmo-chat-client`, `bmo-text` and `bmo-ui`. The quick
+  checks' dependency check holds this.
 - **No hand-written parser for a general format.** TOML, JSON, YAML, markdown, shell lines and command
   lines are read by a maintained library; where none fits, the reason is written beside the code.
 

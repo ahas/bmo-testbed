@@ -1,0 +1,18 @@
+[package]
+name = "bmo-testbed-record"
+description = "The testbed's record: its test runs, deployments, log lines, restarts and events, in one SQLite file every verb writes and the service reads."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+bmo-testbed-client = { path = "../client", default-features = false }
+bmo-testbed-core = { path = "../core" }
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+rusqlite.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true

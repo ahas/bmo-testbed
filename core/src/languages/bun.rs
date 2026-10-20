@@ -1,4 +1,4 @@
-//! bun's own test runner. One test file is a touched test a job runs while it writes, light enough to run
+//! bun's own test runner. One test file is a touched test a harness runs while it writes, light enough to run
 //! where it stands; a run over several files, a directory or a name that may match many is a suite. A
 //! browser file is the browser language's.
 

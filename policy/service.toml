@@ -1,0 +1,35 @@
+# The HTTP service (docs/boundary.md, 「The HTTP service」): the loopback address it serves at where none
+# is named, how often it reads the lanes and the record for the event stream, how often the stream
+# says it is open, and the sentences its errors and its verb carry. A caller reads the words, so they
+# are English.
+
+listen = "127.0.0.1:7460"
+# How often the lanes are read for a queue.changed event.
+queue_poll_milliseconds = 1000
+# How often an open stream asks the record for events written since.
+event_poll_milliseconds = 250
+# A comment line on an open stream this often.
+keep_alive_seconds = 15
+
+[errors]
+unauthorized = "the bearer token is missing or wrong"
+# {method} and {path} are the request's.
+no_route = "no route answers {method} {path}"
+# {what} names the member, {id} its key.
+not_found = "no {what} {id} stands"
+# {why} is what the query reader said.
+bad_query = "the query does not read: {why}"
+# {kind} is a word of kinds that names no kind.
+unknown_kind = "kinds names {kind}, which is no kind of event"
+# {through} is the last event number past the window.
+gone = "the events up to {through} are past the window; read the collections again"
+not_ready = "the record cannot be opened: {why}"
+
+[lines]
+# {address} is the bound address.
+listening = "serve: listening on {address}"
+no_token = "serve: no token is named; give --token or set BMO_TESTBED_TOKEN"
+# {address} is the address named, {why} what binding it came to.
+unbound = "serve: {address} cannot be served: {why}"
+# {why} is what came of the record.
+no_record = "serve: the record cannot be opened: {why}"

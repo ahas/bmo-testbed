@@ -1,6 +1,6 @@
 # The binary's own words (docs/boundary.md, 「The binary」 and 「The verbs」): the usage `--help` prints,
-# for the binary and for each verb, and what each verb says of itself. A job reads the words, so they are
-# English. {verb} is the binary's name, and {guard}, {job_wait}, {unit_wait} and {kept} are the `lanes`
+# for the binary and for each verb, and what each verb says of itself. A harness reads the words, so they are
+# English. {verb} is the binary's name, and {guard}, {harness_wait}, {unit_wait} and {kept} are the `lanes`
 # numbers they stand for.
 
 [usage]
@@ -21,10 +21,12 @@ prune     what no build reads any more, removed from the shared Cargo build dire
 full      the daily whole run of the repository's suite, in a unit of its own
 deploy    a commit of the repository put live, in a unit of its own
 backups   the backups a deployment took, sent away and rotated
+serve     the HTTP service: the record and the lanes, read-only behind a token
+mcp       the harness plugin's MCP server, on standard input and output
 
 {verb} <verb> --help prints that verb's own usage (docs/boundary.md)."""
 run = """
-usage: {verb} run [--narrow] [--adapter <name>] [--guard <seconds>] [--wait <seconds>] -- <command…>
+usage: {verb} run [--narrow] [--adapter <name>] [--guard <seconds>] [--wait <seconds>] [--json] -- <command…>
 
 Runs a heavy test or build command in the machine's turn: it waits behind every other such
 command of its lane on this machine, then runs alone there, handed the lane's width, and ends on
@@ -36,10 +38,13 @@ waited, and the log holding its whole output, with what failed under it.
            own over one test
 --adapter  the language that runs it, instead of the one that claims the command
 --guard    seconds the command may hold the machine before it is cut (default {guard})
---wait     seconds to wait for the turn (default {job_wait} in a job's call, {unit_wait} elsewhere)
+--wait     seconds to wait for the turn (default {harness_wait} in a harness's call, {unit_wait}
+           elsewhere)
+--json     the lines on standard error, and on standard output one command run once it has ended
+           (docs/boundary.md)
 
-Where the turn does not come within the wait, nothing runs, it ends with exit code 75, and a job's
-place in the line is kept for {kept} seconds: run the same command again at once."""
+Where the turn does not come within the wait, nothing runs, it ends with exit code 75, and a
+harness's place in the line is kept for {kept} seconds: run the same command again at once."""
 status = """
 usage: {verb} status [--json]
 
@@ -57,7 +62,7 @@ light line and 1 for a heavy one.
 --takes-turn  a command that takes the turn itself, its program and the words it opens with
 --json        the answer as one JSON object (docs/boundary.md)"""
 suite = """
-usage: {verb} suite [--since <commit>] [--again] [--guard <seconds>] [--file-guard <seconds>] [--turn-wait <seconds>] [<word>…]
+usage: {verb} suite [--since <commit>] [--again] [--guard <seconds>] [--file-guard <seconds>] [--turn-wait <seconds>] [--json] [<word>…]
 
 Runs the repository's units in the machine's turn (docs/suite.md): every one, or those the change
 since a commit reaches. A word naming a path narrows the files, a word naming a unit exactly picks
@@ -67,7 +72,8 @@ it, and every other word goes to each file's runner. The verb's own flags come b
 --again       what failed or never started, run once more by name and judged on that run
 --guard       seconds the whole run may take (default the declaration's)
 --file-guard  seconds one unit may take (default the declaration's)
---turn-wait   seconds to wait for the turn"""
+--turn-wait   seconds to wait for the turn
+--json        one command run on standard output once the run has ended, its log the run's own"""
 count = """
 usage: {verb} count [--since <commit>]
 
@@ -92,9 +98,9 @@ drop   the template and its pool of clones
 sweep  every other template made more than a day ago whose pool no living process holds, with its
        pool, and every scratch database whose process is gone"""
 check = """
-usage: {verb} check [--since <commit> | <file…>] [--log <path>]
-       {verb} check quick | wording | layout | dependencies
-       {verb} check korean [--kinds] [--settle] [<prefix>]
+usage: {verb} check [--since <commit> | <file…>] [--log <path>] [--json]
+       {verb} check quick | wording | layout | dependencies | cargo-profile
+       {verb} check language [--kinds] [--settle] [<prefix>]
        {verb} check dashes <file…> [--write]
 
 With no part named, the check a change owes, every step to its end: the enabled quick checks, the
@@ -102,13 +108,14 @@ declared static steps the change reaches, cargo check on every crate it marks, t
 touches, cargo test on the crates it touches itself, and the check of every tool and project it
 reaches (docs/checks.md). The change is the files given, or every path changed since --since, by
 default the commit the branch was made from. The output goes to one log, under the data root's
-testbed/ unless --log names another. Exits 1 where a step failed and 2 where the change could
-not be read.
+testbed/ unless --log names another; --json prints its lines on standard error, and on standard
+output one command run once it has ended. Exits 1 where a step failed and 2 where the change
+could not be read.
 
 quick         every quick check the declaration enables
-wording, layout, dependencies, korean  that check alone
-korean        --settle lowers the ledger; --kinds, or a prefix, prints the Korean lines by what
-              holds them
+wording, layout, dependencies, cargo-profile, language  that check alone
+language      --settle lowers the ledger; --kinds, or a prefix, prints the lines that are not
+              English by what holds them; korean names the same check
 dashes        each line of the markdown files named where a dash between words would change;
               --write writes them"""
 imports = """
@@ -169,6 +176,24 @@ usage: {verb} backups
 Sends every backup a deployment took and the remote does not yet hold, reads each back to match its
 size and checksum, and rotates them there and here (docs/deploy.md). Exits 1 where any failed to
 send, the rest sent all the same."""
+serve = """
+usage: {verb} serve [--listen <address>] [--token <token>]
+
+Serves the HTTP service until it is stopped (docs/boundary.md): the record's test runs,
+deployments, log lines and restarts and the lanes as they stand, read-only, with one event stream,
+behind a bearer token.
+
+--listen  the address to serve at (default {listen})
+--token   the bearer token every route takes (default BMO_TESTBED_TOKEN)"""
+mcp = """
+usage: {verb} mcp [--service <url>] [--token <token>]
+
+Serves the harness plugin's MCP server on standard input and output (docs/boundary.md): its reading
+tools call the HTTP service, and its running tools start this binary's run, check and suite in the
+checkout named.
+
+--service  the HTTP service's address (default BMO_TESTBED_SERVICE, else http://{listen})
+--token    the service's bearer token (default BMO_TESTBED_TOKEN)"""
 
 # What `classify` answers: `light`, or `heavy` with {language} the language that claims the command
 # and, on the line after it, `instead` with {testbed} the running binary and {words} the command's words.

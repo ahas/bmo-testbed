@@ -1,4 +1,4 @@
-//! A shell line read the way the shell splits it (docs/testbed.md, 「A shell hook sends a job's heavy
+//! A shell line read the way the shell splits it (docs/testbed.md, 「A shell hook sends a harness's heavy
 //! command to it」): its simple commands, their words apart from what their redirects name, the text its
 //! substitutions run, and nothing of a heredoc's body.
 

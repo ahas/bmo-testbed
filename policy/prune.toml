@@ -15,7 +15,7 @@ relatime_days = 1
 incremental_hours = 3
 
 # How long a unit of a checkout's own crates that no record names is left alone after it was built, in
-# hours: a build that failed leaves such units, and its job mends it and builds again within that.
+# hours: a build that failed leaves such units, and its harness mends it and builds again within that.
 own_grace_hours = 12
 
 # What the build directory holds in its normal standing apart from the checkouts, in bytes: every

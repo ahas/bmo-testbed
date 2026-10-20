@@ -1,6 +1,7 @@
 //! The `bmo-testbed` binary (docs/boundary.md, 「The binary」): each verb's words read, and handed to the
-//! crates that do the work; the classification of a shell line; the placement endpoint asked over HTTP; and a
-//! checkout of the testbed running its own binary.
+//! crates that do the work; the classification of a shell line; the placement endpoint asked over HTTP; the
+//! record its verbs keep; the HTTP service and the harness plugin it serves; and a checkout of the testbed
+//! running its own binary.
 
 pub mod cargo;
 pub mod check;
@@ -10,7 +11,9 @@ pub mod full;
 pub mod imports;
 pub mod own;
 pub mod placement;
+pub mod recorded;
 pub mod said;
+pub mod serve;
 pub mod shell;
 pub mod suite;
 pub mod words;
@@ -28,6 +31,7 @@ use bmo_testbed_core::verb::{self, REFUSED_EXIT_CODE, RunWords, VerbGround, data
 
 use crate::classify::{TakesTurn, answer, heavy_command};
 use crate::placement::HttpPlacement;
+use crate::recorded::{Recorded, command_run};
 use crate::words::{ClassifyArgs, RunArgs, Verb};
 
 /// The placement a run started in a directory asks: the endpoint named for it, or the local one.
@@ -42,21 +46,39 @@ fn run(args: RunArgs) -> u8 {
   let env = process_env();
   let cwd = std::env::current_dir().unwrap_or_default();
   let place = placement_of(&env, &cwd);
-
-  verb::run(
+  let root = data_root();
+  let witness = Recorded::commands(&root);
+  let outcome = verb::run(
     &RunWords {
       command: args.command,
       narrow: args.narrow,
       adapter: args.adapter,
       guard_seconds: args.guard.map(|seconds| seconds as f64),
       wait_seconds: args.wait.map(|seconds| seconds as f64),
+      json: args.json,
     },
     &VerbGround {
-      data_root: data_root(),
+      data_root: root.clone(),
       env,
       place: place.as_ref(),
+      witness: &witness,
     },
-  )
+  );
+
+  if args.json {
+    println!(
+      "{}",
+      command_run(
+        outcome.code,
+        outcome.log.as_deref(),
+        outcome.waited_seconds,
+        outcome.seconds,
+        outcome.test_run
+      )
+    );
+  }
+
+  outcome.code
 }
 
 fn status(json: bool) -> u8 {
@@ -64,7 +86,7 @@ fn status(json: bool) -> u8 {
   let close_line = close_line_path(&data_root(), &cwd);
 
   if json {
-    println!("{}", verb::status_json(close_line.as_deref()));
+    println!("{}", serve::status_json(&process_env(), close_line.as_deref()));
   } else {
     for line in verb::status_lines(close_line.as_deref()) {
       println!("{line}");
@@ -92,6 +114,16 @@ fn classify(args: ClassifyArgs) -> u8 {
 
   println!("{said}");
   code
+}
+
+/// The OpenAPI document as `docs/openapi.json` keeps it, its commands the binary's verbs.
+pub fn openapi_document() -> String {
+  use clap::CommandFactory as _;
+
+  let command = words::Words::command();
+  let verbs: Vec<&str> = command.get_subcommands().map(clap::Command::get_name).collect();
+
+  bmo_testbed_plugin::openapi_json(&verbs)
 }
 
 /// The binary over its words; the code it ends with.
@@ -122,5 +154,7 @@ pub fn main(args: impl IntoIterator<Item = OsString>) -> u8 {
     Verb::Full(args) => full::full(&args),
     Verb::Deploy(args) => deploy::deploy(&args),
     Verb::Backups => deploy::backups(),
+    Verb::Serve(args) => serve::serve(&args, &data_root(), process_env()),
+    Verb::Mcp(args) => serve::mcp(&args),
   }
 }

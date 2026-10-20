@@ -4,15 +4,21 @@
 //! run's last line always its verdict.
 
 use std::collections::{BTreeMap, HashMap};
+use std::fs::File;
+use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use bmo_testbed_core::declaration::{Repository, Test};
 use bmo_testbed_core::languages::{Language, run_folder};
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::suite::SUITE;
+use bmo_testbed_core::queue::now_ms;
+use bmo_testbed_core::run::log_name;
 use bmo_testbed_core::turn::{self, Lane, NOT_RUN_EXIT_CODE, TestbedTurn, TurnAsk};
+use bmo_testbed_core::witness::{RunBegun, RunEnded, RunVerdict, RunWitness};
 
 use crate::cargo::cargo_verb_line;
 use crate::crates::{
@@ -20,6 +26,7 @@ use crate::crates::{
   crate_test_args, set_by_cargo, workspace_crates,
 };
 use crate::fence::{LiveClear, LiveFence, clear_fence, fence_limits, fence_suite, fenced_build_jobs};
+use crate::log::tally_of;
 use crate::own_binary::testbed_line;
 use crate::selection::{
   Layout, Selection, changed_paths, glob_matches, select_packages, selected_tests, selection_lines,
@@ -28,7 +35,7 @@ use crate::sweep::{SweepPlan, largest_first, sweep};
 use crate::test_server::{template_name, test_postgres, test_server_up};
 use crate::tool_checks::{CheckedTool, package_check};
 use crate::unit::{UnitCommand, run_unit};
-use crate::workspace::{OwnProject, git_lines, own_projects, repository_paths};
+use crate::workspace::{OwnProject, git_lines, own_projects, project_browser_files, repository_paths};
 
 fn stderr(line: &str) {
   eprintln!("{line}");
@@ -45,6 +52,37 @@ pub struct SuiteAsk {
   pub picked: Vec<String>,
   /// Every other word, which goes to each test file's run.
   pub extra: Vec<String>,
+  /// Where the run keeps its own log and its test run; a run handed none keeps neither.
+  pub record: Option<SuiteRecord>,
+}
+
+/// Where a run keeps its record: the folder its own log goes under, the words it was asked with as one line,
+/// and the witness its test run is kept through.
+#[derive(Clone)]
+pub struct SuiteRecord {
+  pub log_dir: PathBuf,
+  pub command: String,
+  pub witness: Arc<dyn RunWitness + Send + Sync>,
+}
+
+impl std::fmt::Debug for SuiteRecord {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    f.debug_struct("SuiteRecord")
+      .field("log_dir", &self.log_dir)
+      .field("command", &self.command)
+      .finish()
+  }
+}
+
+/// What a run came to: the code it ends with, its own log, how long it waited for its turn and ran, and the
+/// test run its witness kept.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct SuiteEnded {
+  pub code: u8,
+  pub log: Option<PathBuf>,
+  pub waited_seconds: f64,
+  pub seconds: f64,
+  pub test_run: Option<i64>,
 }
 
 /// The run's words as the binary read them: its own flags, each a positive number of seconds where it is
@@ -156,6 +194,7 @@ pub fn ask_of(given: &SuiteWords, test: &Test) -> SuiteAsk {
       .filter(|word| !names_path(word, test))
       .map(|word| (*word).clone())
       .collect(),
+    record: None,
   }
 }
 
@@ -295,14 +334,37 @@ fn picked_units<T: Clone>(units: &[T], dir: impl Fn(&T) -> &str, picked: &[Strin
     .collect()
 }
 
-/// The suite run in the repository's checkout, its lines on standard error; the exit code it ends with.
-pub fn run(repo: &Repository, ask: &SuiteAsk) -> u8 {
+/// The suite run in the repository's checkout, its lines on standard error; what it came to.
+pub fn run(repo: &Repository, ask: &SuiteAsk) -> SuiteEnded {
   run_saying(repo, ask, &stderr)
 }
 
+// The run's own log, made under the record's folder; none where the run keeps no record or it cannot be made.
+fn own_log(record: Option<&SuiteRecord>) -> Option<(PathBuf, Mutex<File>)> {
+  let dir = &record?.log_dir;
+  let path = dir.join(log_name(now_ms(), "suite"));
+
+  std::fs::create_dir_all(dir).ok()?;
+  File::create(&path).ok().map(|file| (path, Mutex::new(file)))
+}
+
 /// The suite run in the repository's checkout, every line it writes about itself and each unit's output
-/// handed to `say`; the exit code it ends with.
-pub fn run_saying(repo: &Repository, ask: &SuiteAsk, say: &(dyn Fn(&str) + Sync)) -> u8 {
+/// handed to `say`, and to its own log where it keeps a record; what it came to.
+pub fn run_saying(repo: &Repository, ask: &SuiteAsk, heard: &(dyn Fn(&str) + Sync)) -> SuiteEnded {
+  let log = own_log(ask.record.as_ref());
+  let teed = |line: &str| {
+    heard(line);
+
+    if let Some(Ok(mut file)) = log.as_ref().map(|(_, file)| file.lock()) {
+      let _ = writeln!(file, "{line}");
+    }
+  };
+  let say: &(dyn Fn(&str) + Sync) = &teed;
+  let ended = |code: u8| SuiteEnded {
+    code,
+    log: log.as_ref().map(|(path, _)| path.clone()),
+    ..SuiteEnded::default()
+  };
   let root = repo.root.as_path();
   // The packages a selected run keeps, worked out before the turn is taken so a range that is not a commit
   // is refused at once.
@@ -313,7 +375,7 @@ pub fn run_saying(repo: &Repository, ask: &SuiteAsk, say: &(dyn Fn(&str) + Sync)
         Ok(changed) => changed,
         Err(why) => {
           say(&fill_marks(&SUITE.selection.not_a_range, &[("since", since), ("why", &why)]));
-          return 2;
+          return ended(2);
         }
       };
       let layout = Layout::of_checkout(repo).unwrap_or_else(|why| {
@@ -362,10 +424,50 @@ pub fn run_saying(repo: &Repository, ask: &SuiteAsk, say: &(dyn Fn(&str) + Sync)
   // Without the turn nothing starts, and the verdict says the run was not had rather than failed.
   if !turn.had() {
     say(&format!("\n{}", verdict_line(false, 0.0, &SUITE.ending.not_run)));
-    return NOT_RUN_EXIT_CODE;
+    return SuiteEnded {
+      waited_seconds: turn.waited_seconds(),
+      ..ended(NOT_RUN_EXIT_CODE)
+    };
   }
 
-  run_held(repo, ask, selected, &turn, turn_command, &env, say)
+  let started = Instant::now();
+  let test_run = match (ask.record.as_ref(), log.as_ref()) {
+    (Some(record), Some((path, _))) => record.witness.began(&RunBegun {
+      command: &record.command,
+      checkout: root,
+      log: path,
+      started_at: now_ms(),
+      env: &env,
+    }),
+    _ => None,
+  };
+  let code = run_held(repo, ask, selected, &turn, turn_command, &env, say);
+
+  if let (Some(record), Some(id), Some((path, _))) = (ask.record.as_ref(), test_run, log.as_ref()) {
+    let tally = tally_of(&std::fs::read_to_string(path).unwrap_or_default());
+
+    record.witness.ended(
+      id,
+      &RunEnded {
+        verdict: match code {
+          0 => RunVerdict::Passed,
+          NOT_RUN_EXIT_CODE => RunVerdict::NotRun,
+          _ => RunVerdict::Failed,
+        },
+        passed: tally.pass,
+        failed: tally.fail,
+        skipped: tally.skip,
+        ended_at: now_ms(),
+      },
+    );
+  }
+
+  SuiteEnded {
+    waited_seconds: turn.waited_seconds(),
+    seconds: started.elapsed().as_secs_f64(),
+    test_run,
+    ..ended(code)
+  }
 }
 
 fn run_held(
@@ -561,6 +663,11 @@ fn run_held(
     prebuild(&SUITE.lines.tests, &one.name, no_run(crate_test_args(&one.name)));
   }
 
+  // The browser test files each project of its own the run checks declares for itself, run in the browser
+  // lane beside the project's own check.
+  let project_browser: Vec<String> =
+    projects.iter().flat_map(|project| project_browser_files(root, project)).collect();
+
   // The TypeScript test files the run starts. A file git names that is already gone stays in.
   let tests = test_files(repo);
   let in_scope: Vec<String> = match &selected {
@@ -614,6 +721,7 @@ fn run_held(
   let mut crate_files: Vec<String> = crates.iter().map(|one| unit_of(&one.dir)).collect();
 
   files.append(&mut crate_files);
+  files.extend(project_browser.iter().cloned());
   files.extend(largest_first(in_scope, |file| {
     std::fs::metadata(root.join(file)).map_or(0, |held| held.len())
   }));
@@ -745,7 +853,7 @@ fn run_held(
     (ran.code, ran.cut)
   };
   let lane = |file: &String| -> Option<String> {
-    if browser_file(test, file) {
+    if browser_file(test, file) || project_browser.contains(file) {
       Some("browser".to_owned())
     } else if project_units.contains_key(file)
       || tool_units.contains_key(file)

@@ -138,8 +138,11 @@
       "core/src/policy/deploy_steps.rs",
       "core/src/policy/events.rs",
       "core/src/policy/lanes.rs",
+      "core/src/policy/plugin.rs",
       "core/src/policy/prune.rs",
       "core/src/policy/quick_checks.rs",
+      "core/src/policy/record.rs",
+      "core/src/policy/service.rs",
       "core/src/policy/static_check.rs",
       "core/src/policy/suite.rs",
       "core/src/policy/verbs.rs",
@@ -153,9 +156,12 @@
       "policy/deploy.toml",
       "policy/events.toml",
       "policy/lanes.toml",
+      "policy/plugin.toml",
       "policy/prune.toml",
       "policy/quick-checks.toml",
+      "policy/record.toml",
       "policy/scratch-database.toml",
+      "policy/service.toml",
       "policy/static-check.toml",
       "policy/suite.toml",
       "policy/verbs.toml",
@@ -164,15 +170,16 @@
     "symbols": [],
     "aliases": [],
     "needs": [],
-    "base": "f211fba9705f180cb46a50ae034c1d83b65caec0"
+    "base": "4922d4039e072bbb8c12da72c0e05220f8497ab3"
   },
   {
     "id": "core/run-verb-and-status",
     "title": "Run verb and status",
-    "what": "The run verb, which runs one heavy command in its lane's turn or places it elsewhere and ends on one result line, and the status verb, which shows each lane's holder and line and the close line.",
+    "what": "The run verb, which runs one heavy command in its lane's turn or places it elsewhere, tells a run witness as it begins and ends, and ends on one result line or one command run; and the status verb's lines over each lane and the close line.",
     "files": [
       "core/src/run.rs",
       "core/src/verb.rs",
+      "core/src/witness.rs",
       "docs/testbed.md",
       "docs/boundary.md",
       "core/tests/integration/run.rs",
@@ -188,6 +195,6 @@
       "core/close-line",
       "core/policy-loader"
     ],
-    "base": "a77b4bf9e85365752d6413c539955efad43fc51c"
+    "base": "4922d4039e072bbb8c12da72c0e05220f8497ab3"
   }
 ]

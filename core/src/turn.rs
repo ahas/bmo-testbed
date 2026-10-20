@@ -124,8 +124,10 @@ pub fn lane_width(lane: Lane, env: &Env, threads: usize) -> usize {
 /// Who stands in the line, or holds the turn.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TurnEntry {
-  /// The agent place of the job that started it, where one did.
-  pub place: Option<String>,
+  /// The caller's opaque scope, which the testbed never reads; tickets an earlier binary stood carry it
+  /// as `place`.
+  #[serde(alias = "place")]
+  pub scope: Option<String>,
   pub checkout: String,
   pub command: String,
   /// When it asked for the turn, and when the turn came, in milliseconds.
@@ -142,9 +144,9 @@ pub struct TurnEntry {
 }
 
 impl TurnEntry {
-  /// Where it stands, in a few words: its job's place, its checkout and its command.
+  /// Where it stands, in a few words: its caller's scope, its checkout and its command.
   pub fn words(&self) -> String {
-    let parts: Vec<&str> = [self.place.as_deref().unwrap_or(""), &self.checkout, &self.command]
+    let parts: Vec<&str> = [self.scope.as_deref().unwrap_or(""), &self.checkout, &self.command]
       .into_iter()
       .filter(|part| !part.is_empty())
       .collect();
@@ -209,26 +211,25 @@ pub fn inside_held_turn(path: &Path, env: &Env) -> bool {
   held.is_some() && read_holder_record(path).map(|record| record.pid) == held
 }
 
-/// The agent place a command runs in, by the place's own name.
-pub fn place_name(env: &Env) -> Option<String> {
-  named(env, "BMO_AGENT_PLACE")
-    .map(|place| place.trim_end_matches('/'))
-    .and_then(|place| place.rsplit('/').next())
-    .filter(|name| !name.is_empty())
-    .map(str::to_owned)
+/// The variable naming the caller's opaque scope.
+pub const SCOPE_VARIABLE: &str = "BMO_TESTBED_SCOPE";
+
+/// The caller's scope, as the environment names it.
+pub fn scope_of(env: &Env) -> Option<String> {
+  named(env, SCOPE_VARIABLE).map(str::to_owned)
 }
 
-/// The job a command runs for, by its agent process.
-pub fn job_pid(env: &Env) -> Option<i64> {
+/// The harness a command runs for, by its harness process.
+pub fn harness_pid(env: &Env) -> Option<i64> {
   env.get("CLAUDE_PID").and_then(|pid| leading_number(pid)).filter(|pid| *pid > 0)
 }
 
-/// Whether a caller stands at the front: one the environment stands there, and no job's.
+/// Whether a caller stands at the front: one the environment stands there, and no harness's.
 pub fn stands_at_front(env: &Env) -> bool {
-  env.get(FRONT_VARIABLE).is_some_and(|value| value == "1") && job_pid(env).is_none()
+  env.get(FRONT_VARIABLE).is_some_and(|value| value == "1") && harness_pid(env).is_none()
 }
 
-/// Whether a caller stands next: one the environment stands there, a job's among them, and not at the front.
+/// Whether a caller stands next: one the environment stands there, a harness's among them, and not at the front.
 pub fn stands_next(env: &Env) -> bool {
   env.get(NEXT_VARIABLE).is_some_and(|value| value == "1") && !stands_at_front(env)
 }
@@ -276,7 +277,7 @@ pub enum TestbedTurn {
   },
 }
 
-/// A lane's turn held by this process, let go when dropped: its record taken away, the watch on its job
+/// A lane's turn held by this process, let go when dropped: its record taken away, the watch on its harness
 /// stopped, and the lock let go.
 pub struct Holding {
   path: PathBuf,
@@ -390,10 +391,10 @@ pub fn stop_tree(pid: i64, grace: Duration) {
   signal(&all.into_iter().filter(|pid| process_alive(*pid)).collect::<Vec<_>>(), libc::SIGKILL);
 }
 
-/// The watch on a job holding a turn or a line: once the job's agent process is gone, this process and
+/// The watch on a harness holding a turn or a line: once the harness's process is gone, this process and
 /// everything under it are stopped, and what it held goes with them. Answers the switch that stops the
 /// watch.
-pub fn watch_job(job: i64) -> Arc<AtomicBool> {
+pub fn watch_harness(job: i64) -> Arc<AtomicBool> {
   let watching = Arc::new(AtomicBool::new(true));
   let still = Arc::clone(&watching);
 
@@ -445,17 +446,17 @@ pub fn take_turn(ask: &TurnAsk<'_>) -> TestbedTurn {
     return TestbedTurn::Inside;
   }
 
-  let job = job_pid(env);
+  let job = harness_pid(env);
   let front = stands_at_front(env);
   let next = stands_next(env);
-  // A caller standing next waits its turn out; the job it runs for ends its wait by ending.
+  // A caller standing next waits its turn out; the harness it runs for ends its wait by ending.
   let numbers = &LANES.numbers;
   let wait_seconds = ask.wait_seconds.unwrap_or(if next {
     f64::INFINITY
   } else if job.is_none() {
     numbers.unit_wait_seconds as f64
   } else {
-    numbers.job_wait_seconds as f64
+    numbers.harness_wait_seconds as f64
   });
   let notice = ask.notice_seconds.unwrap_or(numbers.notice_seconds as f64);
   let asked = now_ms();
@@ -464,7 +465,7 @@ pub fn take_turn(ask: &TurnAsk<'_>) -> TestbedTurn {
   let mut looked = asked;
   let me = i64::from(std::process::id());
   let entry = TurnEntry {
-    place: place_name(env),
+    scope: scope_of(env),
     checkout: ask.checkout.clone(),
     command: ask.command.clone(),
     asked,
@@ -474,7 +475,7 @@ pub fn take_turn(ask: &TurnAsk<'_>) -> TestbedTurn {
     front,
     next,
   };
-  // A place is kept for a job that may come back, which a caller standing next never leaves to do.
+  // A place is kept for a harness that may come back, which a caller standing next never leaves to do.
   let keeps = job.is_some() && !next;
   let mut wait_on = |_: Option<&str>| -> Option<i64> {
     let now = now_ms();
@@ -549,7 +550,7 @@ pub fn take_turn(ask: &TurnAsk<'_>) -> TestbedTurn {
     held: Holding {
       path,
       _lock: lock,
-      watching: job.map(watch_job),
+      watching: job.map(watch_harness),
     },
   }
 }

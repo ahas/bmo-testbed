@@ -9,7 +9,8 @@ use bmo_testbed_core::close_line::{close_line_path, lock_file_name};
 use bmo_testbed_core::placement::{DEPLOY_UNIT_VARIABLE, Local, PlaceAsk, Placement, runs_here};
 use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::turn::{Env, HELD_VARIABLE, Lane};
-use bmo_testbed_core::verb::{REFUSED_EXIT_CODE, RunWords, VerbGround, run, status_json};
+use bmo_testbed_core::verb::{REFUSED_EXIT_CODE, RunWords, VerbGround, run};
+use bmo_testbed_core::witness::Unwitnessed;
 
 fn words(line: &[&str]) -> Vec<String> {
   line.iter().map(|word| (*word).to_owned()).collect()
@@ -44,10 +45,11 @@ fn a_language_it_does_not_know_is_refused_and_nothing_is_placed() {
       data_root: dir.path().to_path_buf(),
       env: Env::new(),
       place: &elsewhere,
+      witness: &Unwitnessed,
     },
   );
 
-  assert_eq!(code, REFUSED_EXIT_CODE);
+  assert_eq!(code.code, REFUSED_EXIT_CODE);
   assert_eq!(elsewhere.asked.take(), None);
 }
 
@@ -69,9 +71,10 @@ fn a_run_ends_with_the_code_its_placement_answers() {
     data_root: dir.path().to_path_buf(),
     env: Env::new(),
     place: &elsewhere,
+    witness: &Unwitnessed,
   };
 
-  assert_eq!(run(&asked, &ground), 9);
+  assert_eq!(run(&asked, &ground).code, 9);
   assert_eq!(elsewhere.asked.take(), Some((words(&["cargo", "test"]), Lane::Narrow, 60)));
 }
 
@@ -98,13 +101,13 @@ fn placed(env: &Env) -> PlaceAsk<'_> {
   }
 }
 
-// "a caller's wait is a job's call's or a unit's where it names none, and its guard the run's own"
+// "a caller's wait is a harness's call's or a unit's where it names none, and its guard the run's own"
 #[test]
 fn the_wait_and_guard_a_placement_is_handed() {
   let numbers = &LANES.numbers;
   let job = Env::from([("CLAUDE_PID".to_owned(), "4242".to_owned())]);
 
-  assert_eq!(PlaceAsk::wait_of(None, &job), numbers.job_wait_seconds);
+  assert_eq!(PlaceAsk::wait_of(None, &job), numbers.harness_wait_seconds);
   assert_eq!(PlaceAsk::wait_of(None, &Env::new()), numbers.unit_wait_seconds);
   assert_eq!(PlaceAsk::wait_of(Some(7.0), &job), 7);
   assert_eq!(PlaceAsk::guard_of(None), numbers.guard_seconds);
@@ -159,23 +162,10 @@ fn a_lock_file_name_is_safe_short_and_apart() {
   assert!(lock_file_name("::").starts_with("root-"));
 }
 
-// "status as JSON carries both lanes and the close line, null where none is named"
-#[test]
-fn the_status_json_carries_the_lanes_and_the_close_line() {
-  let dir = tempfile::tempdir().unwrap();
-  let none: serde_json::Value = serde_json::from_str(&status_json(None)).unwrap();
-  let named: serde_json::Value =
-    serde_json::from_str(&status_json(Some(&dir.path().join("close.lock")))).unwrap();
-
-  assert!(none["wide"].is_object() && none["narrow"].is_object());
-  assert!(none["close_line"].is_null());
-  assert_eq!(named["close_line"], serde_json::json!({ "holder": null, "waiting": [] }));
-}
-
 // The usage's defaults are the policy's own numbers, each a mark the binary fills.
 #[test]
 fn the_run_usage_names_the_policys_numbers_by_their_marks() {
-  for mark in ["{verb}", "{guard}", "{job_wait}", "{unit_wait}", "{kept}"] {
+  for mark in ["{verb}", "{guard}", "{harness_wait}", "{unit_wait}", "{kept}"] {
     assert!(bmo_testbed_core::policy::verbs::VERBS.usage.run.contains(mark), "{mark}");
   }
 }

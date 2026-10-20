@@ -1,8 +1,8 @@
 # What the repository's close line says and the number it keeps to (docs/testbed.md, 「The close
 # line」): the line a close writes while it waits for the line, and what it says of the wide lane it holds
-# through its check. A job reads the words, so they are English. Each `{name}` is filled in with what it names.
+# through its check. A harness reads the words, so they are English. Each `{name}` is filled in with what it names.
 
-# The repository's close line, {who} where it stands: its job's place and its checkout joined, or its pid.
+# The repository's close line, {who} where it stands: its harness's place and its checkout joined, or its pid.
 [line]
 waiting = "close line: waiting for the repository's close line ({seconds}s so far): {ahead} ahead, {holder}"
 nobody = "nobody holding it yet"

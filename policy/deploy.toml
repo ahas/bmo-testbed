@@ -1,5 +1,5 @@
 # What a deployment says where its caller reads it (docs/deploy.md): the account of a rollback, and the
-# account of a deployment its gate or its own run refused. A job and the readers of the deploy events
+# account of a deployment its gate or its own run refused. A harness and the readers of the deploy events
 # read them, so they are English. Each `{name}` is filled in with what it names.
 
 # The account of a deployment whose service did not come up: first why, then what the rollback came to,
@@ -61,7 +61,7 @@ step_stop_grace_seconds = 1
 [run]
 refused = "refused: {why}"
 no_deploy = "the declaration names no [deploy] root and data root, so this repository deploys nothing"
-job = "a job's shell does not deploy: CLAUDE_PID names a job's process, and a deployment outlives every job's call"
+harness = "a harness's shell does not deploy: CLAUDE_PID names a harness's process, and a deployment outlives every harness's call"
 data_relative = "the data root {data} is not an absolute path"
 data_in_tree = "the data root {data} sits inside the git work tree at {tree}; move it out"
 data_missing = "the data root {data} does not exist, so there is nothing to back up and nothing to run against"
@@ -249,3 +249,10 @@ not_started = "refused: its unit {unit} could not be started, and it does not ru
 [remove]
 inside = "refusing to remove {path}: it is inside the runtime data root {data}"
 holds = "refusing to remove {path}: the runtime data root {data} is inside it"
+
+# Why a deployment stops or restarts a unit, written into the record for the unit to read as it starts
+# again (docs/boundary.md, 「The record」). {deployment} is the deployment's id, {verb} `stop` or
+# `restart`, {commit} the commit and {repository} the repository's name.
+[restarts]
+putting = "deployment {deployment} {verb}s it to put {commit} of {repository} live"
+rolling_back = "deployment {deployment} {verb}s it to roll {repository} back from {commit}"

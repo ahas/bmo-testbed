@@ -1,0 +1,25 @@
+[
+  {
+    "id": "service/http-service",
+    "title": "HTTP service",
+    "what": "The read-only HTTP service the serve verb starts: health, the event stream, the lanes, test runs, deployments with their log lines, and restarts, served from the record behind a bearer token, with its own queue.changed watch.",
+    "files": [
+      "service/src/lib.rs",
+      "service/src/events.rs",
+      "service/src/queues.rs",
+      "service/tests/integration/service.rs",
+      "cli/src/serve.rs",
+      "policy/service.toml",
+      "docs/boundary.md"
+    ],
+    "symbols": [],
+    "aliases": [],
+    "needs": [
+      "record/record",
+      "client/members-and-client",
+      "core/lanes-and-turn",
+      "core/policy-loader"
+    ],
+    "base": "d562ea2c953f6b0b9384c92324f9038550fb2ab6"
+  }
+]

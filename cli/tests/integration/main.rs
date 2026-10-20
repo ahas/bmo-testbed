@@ -6,6 +6,7 @@ mod imports;
 mod log;
 mod own;
 mod placement;
+mod plugin;
 mod prune;
 mod shell;
 mod stand;

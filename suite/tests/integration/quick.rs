@@ -68,7 +68,7 @@ fn the_enabled_checks_run_in_the_order_the_declaration_names_them_each_naming_th
   let dir = checkout(&[
     (
       "testbed.toml",
-      "testbed = 0\n[check]\nquick = [\"korean\", \"dependencies\", \"wording\"]\nkorean_ledger = \"ledger.json\"\nwording_document = \"words.md\"\n",
+      "testbed = 0\n[check]\nquick = [\"language\", \"dependencies\", \"wording\", \"cargo-profile\"]\nlanguage_ledger = \"ledger.json\"\nwording_document = \"words.md\"\n",
     ),
     ("words.md", "## Banned terms\n\n- en \u{b7} tool strip \u{2192} toolbar\n"),
     ("notes.txt", "the tool strip\n"),
@@ -79,12 +79,16 @@ fn the_enabled_checks_run_in_the_order_the_declaration_names_them_each_naming_th
   assert_eq!(
     heads,
     [
-      "quick check: korean (ledger.json): 0 files within the ledger",
+      "quick check: language (ledger.json): 0 files within the ledger",
       "quick check: dependencies: 0 dependencies, each allowed",
       "quick check: wording (words.md): 1 to fix",
+      "quick check: cargo-profile: 0 profile settings keep every build small",
     ]
   );
-  assert_eq!(checks.iter().map(|check| check.faulted).collect::<Vec<_>>(), [false, false, true]);
+  assert_eq!(
+    checks.iter().map(|check| check.faulted).collect::<Vec<_>>(),
+    [false, false, true, false]
+  );
   assert_eq!(checks[2].lines[1], "  notes.txt:1: \"tool strip\" \u{2192} toolbar");
 }
 

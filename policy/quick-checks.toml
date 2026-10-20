@@ -1,5 +1,5 @@
 # What the quick checks say (docs/checks.md, 「The quick checks」), and the fixed words they read the
-# tree by. A job reads the lines, so they are English. Each `{name}` is filled in with what it names.
+# tree by. A harness reads the lines, so they are English. Each `{name}` is filled in with what it names.
 
 # A check's line: {name} is the check, {said} what it found; {count} faults are said as `to_fix`.
 head = "quick check: {name}: {said}"
@@ -29,10 +29,10 @@ hit = "{path}:{line}: {excerpt}"
 # How many characters of a piece its excerpt keeps either side of the first dash.
 excerpt_reach = 40
 
-[korean]
+[language]
 clean = "{count} files within the ledger"
-below = "{count} files within the ledger, {below} below it: bmo-testbed check korean --settle lowers it"
-over = "{path}: {count} lines hold Korean where the ledger allows {allowed}: write it in English, or move it out of the code"
+below = "{count} files within the ledger, {below} below it: bmo-testbed check language --settle lowers it"
+over = "{path}: {count} lines hold letters that are not English where the ledger allows {allowed}: write it in English, or move it out of the code"
 not_ledger = "{ledger} does not read as a ledger: {why}"
 # The report by kind: its head over {count} areas or files, a row, one kind's count, and the cut.
 areas = "{count} areas"
@@ -42,6 +42,26 @@ kind = "{kind} {count}"
 cut = "cut at {shown} of {rows} rows; name a narrower prefix for the rest"
 # The extensions of a code file.
 code = ["ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs", "vue", "rs", "py", "sh", "kt", "cs"]
+
+[cargo_profile]
+# The workspace manifest the check reads at the repository's root.
+manifest = "Cargo.toml"
+clean = "{count} profile settings keep every build small"
+# {profile} and {key} name the setting, {found} what the manifest says and {wanted} what keeps builds small.
+differs = "{manifest}: [profile.{profile}] {key} is {found} where it should be {wanted}"
+missing = "{manifest}: [profile.{profile}] {key} is not set where it should be {wanted}"
+not_manifest = "{manifest} does not read as a Cargo manifest: {why}"
+
+# The settings that keep every build's output small: debug information down to line numbers and kept
+# beside the objects, no incremental state, and none kept in a release.
+[cargo_profile.wanted.dev]
+debug = "line-tables-only"
+split-debuginfo = "unpacked"
+incremental = false
+
+[cargo_profile.wanted.release]
+debug = false
+strip = "debuginfo"
 
 [layout]
 clean = "none over {count} files"

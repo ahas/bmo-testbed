@@ -2,8 +2,8 @@
 
 ## What it is
 
-- **The queue every heavy test and build command on a machine stands in,** whatever job runs it and
-  whatever repository the job works in: a whole suite, a Cargo build or test, a package script that
+- **The queue every heavy test and build command on a machine stands in,** whatever harness runs it and
+  whatever repository the harness works in: a whole suite, a Cargo build or test, a package script that
   tests, checks or builds, a browser run.
 - **Two lanes, one holder each** (「The lanes」): the wide lane, whose holder runs on the machine's
   whole width, and the narrow lane beside it, whose holder runs on a quarter of it. The numbers are
@@ -17,8 +17,8 @@
   deployment and ahead of every other caller.
 - **Only what needs the machine stands in line.** A light command runs where it stands, beside any
   holder (「What goes through it」).
-- **Jobs still run side by side.** Only their heavy commands queue; editing, reading and light checks
-  go on while another job's tests run.
+- **Callers still work side by side.** Only their heavy commands queue; editing, reading and light checks
+  go on while another harness's tests run.
 
 ```mermaid
 flowchart TD
@@ -62,16 +62,16 @@ flowchart TD
   Playwright.
 - **What is not heavy:** a `bun test` of one named test file that opens no browser, run once or again
   and again with `--rerun-each`, a type check, the quick checks, a format check, and Cargo's reading
-  verbs. Queuing a one-second check behind a three-minute suite costs a job more than the memory it
+  verbs. Queuing a one-second check behind a three-minute suite costs a harness more than the memory it
   saves.
 - **A close holds the wide lane through each part of its check.** It stands in its repository's close
   line (「The close line」), and inside it holds the wide lane through its static check and again
   through its suite, standing next after the front; a deployment waiting at the front goes in between
   the two parts.
 
-## A shell hook sends a job's heavy command to it
+## A shell hook sends a harness's heavy command to it
 
-- **A job's shell hook asks the `classify` verb** whether a command line holds a heavy command
+- **A harness's shell hook asks the `classify` verb** whether a command line holds a heavy command
   (`docs/boundary.md`). The line is read as the shell splits it, by a shell-language parser: a
   variable the line itself assigned is read as its value, and text run as a command (a string handed
   to `eval`, `source` or a shell's `-c`, a command substitution in the command position) is read as a
@@ -97,8 +97,8 @@ flowchart TD
   wide lane and `bmo-testbed-narrow.lock` beside it, taken through a queue that hands a released lock
   to whoever stands first. `BMO_TESTBED_LOCK` names another wide lock, the narrow one beside it, which
   is how a test holds a turn of its own.
-- **Each waiter's ticket says who it is:** the agent place of the job that started it where one is
-  named, its checkout, the command, its process and when it asked.
+- **Each waiter's ticket says who it is:** the caller's opaque scope where `BMO_TESTBED_SCOPE` names
+  one, its checkout, the command, its process and when it asked.
 - **The holder writes a record beside the lock** naming itself, its process and when the turn came,
   and takes it away when it lets go. A record whose process is gone is read as nobody's.
 - **A command started inside a held turn runs at once.** The holder hands its children
@@ -113,7 +113,7 @@ flowchart TD
   themselves keep the order they asked in.
 - **The holder is never cut.** Standing at the front waits for the lock all the same.
 - **A deployment says so through `BMO_TESTBED_FRONT`,** set by the deployment's verbs for themselves;
-  a caller inside a job's call is never stood at the front, whatever it sets.
+  a caller inside a harness's call is never stood at the front, whatever it sets.
 
 ## Next after the front
 
@@ -122,7 +122,7 @@ flowchart TD
   starts. Callers standing next keep among themselves the order they asked in.
 - **The holder is never cut,** as for the front.
 - **A close says so through `BMO_TESTBED_NEXT`,** set for its own commands once its turn in the close
-  line has come. Unlike the front, a caller inside a job's call may stand next, since a close runs in
+  line has come. Unlike the front, a caller inside a harness's call may stand next, since a close runs in
   one.
 - **A caller standing next waits its turn out** (「Waiting never fails a command」).
 
@@ -133,7 +133,7 @@ flowchart TD
   git directory, so every worktree of one repository shares it.
 - **One close checks at a time because a check is of what lands.** In the line each close rebases onto
   the main the close before it landed, so its check runs once, on the commit that lands.
-- **A close waits its turn out** while its job lives, and leaves the line once its job is gone.
+- **A close waits its turn out** while its harness lives, and leaves the line once its harness is gone.
 - **It holds the wide lane through each part of its check** while it holds the line, and lets the
   lane go while it rebases, lands and writes down. Between the two parts a deployment waiting at the
   front goes first.
@@ -152,14 +152,14 @@ flowchart TD
 
 ## Waiting never fails a command
 
-- **A caller inside a job's call waits three minutes,** so the wait, the run and anything after it fit
-  in the one call the job gives it. A caller is inside a job's call where `CLAUDE_PID` names the job's
-  agent process. A caller no job's call bounds, a deployment, the daily whole run, a person's shell,
+- **A caller inside a harness's call waits three minutes,** so the wait, the run and anything after it fit
+  in the one call the harness gives it. A caller is inside a harness's call where `CLAUDE_PID` names the harness's
+  process. A caller no harness's call bounds, a deployment, the daily whole run, a person's shell,
   waits up to twenty-five minutes. `--wait` sets another.
-- **A caller standing next waits with no limit while its job lives.**
-- **A waiter whose job is gone leaves the line,** whatever its wait.
-- **The time spent behind a deployment does not count against a job's wait,** up to six minutes more:
-  while a deployment holds the lane or stands ahead of the job's ticket, the job's three minutes stand
+- **A caller standing next waits with no limit while its harness lives.**
+- **A waiter whose harness is gone leaves the line,** whatever its wait.
+- **The time spent behind a deployment does not count against a harness's wait,** up to six minutes more:
+  while a deployment holds the lane or stands ahead of the harness's ticket, the harness's three minutes stand
   still.
 - **While it waits it says, every thirty seconds, its place in the line and who holds the turn,** so a
   reader sees it is queued and not stuck.
@@ -167,10 +167,10 @@ flowchart TD
   place and the holder, a verdict of not run with nothing tested and nothing failed, and exit code 75.
   The caller runs the same command again.
 - **Its place is kept for ten minutes.** The ticket passes to a stand-in process that lives that long;
-  the same job running a heavy command again within those minutes takes the ticket back and waits on
+  the same harness running a heavy command again within those minutes takes the ticket back and waits on
   from where it stood. A place nobody comes back for is dropped when the stand-in ends. A caller
   standing next keeps none, since it never gives its wait up.
-- **A kept place holds nobody up while its job is away.** The tickets behind it go for the lane past
+- **A kept place holds nobody up while its harness is away.** The tickets behind it go for the lane past
   it, so a free lane never stands idle.
 - **The wait is never the command's own time.** The guards start once the turn has come.
 
@@ -178,8 +178,8 @@ flowchart TD
 
 - **A holder process that dies lets the turn go with it:** the lock goes the moment the process
   holding it ends.
-- **A job that dies holding the turn lets it go too.** The holder of a job's turn watches the job's
-  agent process named in `CLAUDE_PID`; once that process is gone the watch stops the holder and every
+- **A harness that dies holding the turn lets it go too.** The holder of a harness's turn watches the harness's
+  process named in `CLAUDE_PID`; once that process is gone the watch stops the holder and every
   process under it, and the turn goes with them.
 - **A run that will not end is cut.** It is given thirty minutes, `--guard` sets another; past it the
   command and everything under it are stopped and the result says it was cut.

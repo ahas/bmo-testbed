@@ -33,8 +33,10 @@
 
 ## Browser files run in a lane of one
 
-- **The files the declaration names as browser files** run in the same sweep, one at a time, in a lane
-  of their own beside the other files. The lane starts with the run, so the browser files do not wait
+- **The files the declaration names as browser files,** and the ones each project of its own the run
+  checks declares as its own (`docs/checks.md`, 「Which tests a change runs」), run in the same sweep, one
+  at a time, in a lane of their own beside the other files. A project's browser file runs as any test
+  file does, by the declared language that runs it, from the folder of its runner's configuration. The lane starts with the run, so the browser files do not wait
   for the rest and the rest do not wait for them.
 - **Why one at a time:** each drives a browser, and several browsers side by side slow one another far
   more than they slow the rest.
@@ -66,7 +68,7 @@
 ## One run at a time on a machine
 
 - **A run takes the testbed's wide lane before it starts,** with the testbed's waits
-  (`docs/testbed.md`, 「Waiting never fails a command」); `--turn-wait` sets another. A caller no job's
+  (`docs/testbed.md`, 「Waiting never fails a command」); `--turn-wait` sets another. A caller no harness's
   call bounds passes twenty-five minutes.
 - **Inside a turn its caller holds, a run starts at once.**
 - **Where the turn has not come, the run does not start.** It writes its turn line, naming its place
@@ -274,6 +276,8 @@
   at its head what the run was allowing.
 - **The last line is always the verdict:** whether it passed, how long it took, and what happened. Its
   presence is the answer to whether the run has ended.
+- **Every line goes to the run's own log as well,** under the data root's `testbed/`, which its test
+  run in the record names once its turn has come (`docs/boundary.md`, 「The record」).
 
 ## Reading the output
 

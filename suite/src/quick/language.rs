@@ -1,60 +1,59 @@
-//! Korean in the code (docs/checks.md, 「The quick checks」). The code is written in English, and the Korean
-//! it still holds is a debt recorded file by file in the repository's ledger: the check refuses a file
-//! holding more lines with Korean in them than the ledger allows it, a file the ledger does not name being
-//! allowed none, and the ledger is only ever lowered, so the debt only shrinks. Korean written as an escape
-//! is Korean all the same, so a line naming a Hangul character by its escape counts as one holding it.
+//! Letters that are not English in the code (docs/checks.md, 「The quick checks」). The code is written in
+//! English, and what it still holds of another language is a debt recorded file by file in the repository's
+//! ledger: the check refuses a file holding more such lines than the ledger allows it, a file the ledger
+//! does not name being allowed none, and the ledger is only ever lowered, so the debt only shrinks. Whether
+//! a line holds a letter that is not English, written as itself or named by an escape, is bmo-text's
+//! verdict; sweeping the files, matching them to the ledger and telling what holds each line are the
+//! testbed's.
 
 use std::collections::BTreeMap;
 use std::path::Path;
-use std::sync::LazyLock;
 
 use bmo_testbed_core::policy::answer::ANSWER;
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::quick_checks::QUICK_CHECKS;
-use regex::Regex;
+use bmo_text::english::{CodeStretches, holds_non_english, non_english_letters};
 
 use super::files::{checkout_files_where, is_test_file, read_text};
 use super::source::{Language, Reading, within};
-use super::wording::hangul;
 use crate::selection::glob_matches;
 
-// A Unicode escape in any of the shapes the code languages share, its code point in hex: a braced `\u`, a
-// four-digit `\u`, an eight-digit `\U`, or a pattern's braced `\x`. Every code file is read the same way,
-// a comment as much as a literal and a language no parser here reads among them, so an escape is found by
-// its shape: the parsers here decode escapes only inside the literals of the languages they read.
-static ESCAPE: LazyLock<Regex> = LazyLock::new(|| {
-  Regex::new(r"\\(?:u\{([0-9A-Fa-f]{1,8})\}|x\{([0-9A-Fa-f]{1,8})\}|u([0-9A-Fa-f]{4})|U([0-9A-Fa-f]{8}))")
-    .expect("a Unicode escape")
-});
-
 /// Whether a path of the checkout is code, by its extension. A document, a data file and a settings file
-/// are where Korean may stand, and none of them is code.
+/// are where another language may stand, and none of them is code.
 pub fn is_code(path: &str) -> bool {
   path
     .rsplit_once('.')
-    .is_some_and(|(_, extension)| QUICK_CHECKS.korean.code.iter().any(|code| code == extension))
+    .is_some_and(|(_, extension)| QUICK_CHECKS.language.code.iter().any(|code| code == extension))
 }
 
-// Where a text holds Korean, by byte offset: each Hangul character, as the wording check tells a Korean line,
-// and each escape naming one, at its backslash.
-fn korean_offsets(text: &str) -> impl Iterator<Item = usize> + '_ {
-  let characters = text.char_indices().filter(|(_, c)| hangul(*c)).map(|(at, _)| at);
-  let escapes = ESCAPE.captures_iter(text).filter_map(|escape| {
-    let digits = escape.iter().skip(1).flatten().next()?;
-    let named = u32::from_str_radix(digits.as_str(), 16).ok().and_then(char::from_u32)?;
+// Where a text holds a letter that is not English, by byte offset: each such letter, or the backslash of
+// the escape naming one. bmo-text places them in UTF-16 units, which are turned into the text's bytes.
+fn foreign_offsets(text: &str) -> Vec<usize> {
+  let mut starts = non_english_letters(text, &CodeStretches::default())
+    .into_iter()
+    .map(|one| one.start)
+    .peekable();
+  let mut offsets = Vec::new();
+  let mut units = 0;
 
-    hangul(named).then(|| escape.get_match().start())
-  });
+  for (at, character) in text.char_indices() {
+    while starts.peek().is_some_and(|start| *start <= units) {
+      starts.next();
+      offsets.push(at);
+    }
+    units += character.len_utf16();
+  }
 
-  characters.chain(escapes)
+  offsets
 }
 
-/// How many lines of a text hold Korean, which is what the ledger counts.
-pub fn korean_line_count(text: &str) -> u64 {
-  text.split('\n').filter(|line| korean_offsets(line).next().is_some()).count() as u64
+/// How many lines of a text hold a letter that is not English, which is what the ledger counts.
+pub fn foreign_line_count(text: &str) -> u64 {
+  text.split('\n').filter(|line| holds_non_english(line)).count() as u64
 }
 
-/// How many Korean lines each file may hold, by its path from the checkout's root.
+/// How many lines holding letters that are not English each file may hold, by its path from the checkout's
+/// root.
 pub type Ledger = BTreeMap<String, u64>;
 
 /// The ledger at `ledger`, named `named` in what it says; an empty one where none is written yet.
@@ -63,7 +62,7 @@ pub fn read_ledger(ledger: &Path, named: &str) -> Result<Ledger, String> {
 
   match std::fs::read_to_string(ledger) {
     Ok(text) => serde_json::from_str(&text).map_err(|why| {
-      fill_marks(&QUICK_CHECKS.korean.not_ledger, &[("ledger", named), ("why", &why.to_string())])
+      fill_marks(&QUICK_CHECKS.language.not_ledger, &[("ledger", named), ("why", &why.to_string())])
     }),
     Err(why) if why.kind() == std::io::ErrorKind::NotFound => Ok(Ledger::new()),
     Err(why) => Err(fault(why.to_string())),
@@ -75,38 +74,43 @@ pub fn ledger_text(ledger: &Ledger) -> String {
   format!("{}\n", serde_json::to_string_pretty(ledger).expect("a ledger is written"))
 }
 
-/// How many Korean lines each code file of the checkout holds, the files holding none left out.
-pub fn checkout_korean_counts(root: &Path) -> Ledger {
+/// How many lines holding letters that are not English each code file of the checkout holds, the files
+/// holding none left out.
+pub fn checkout_foreign_counts(root: &Path) -> Ledger {
   checkout_files_where(root, is_code)
     .into_iter()
     .filter_map(|path| {
-      let count = korean_line_count(&read_text(root, &path));
+      let count = foreign_line_count(&read_text(root, &path));
 
       (count > 0).then_some((path, count))
     })
     .collect()
 }
 
-/// What the check came to: how many code files hold Korean, a line for each holding more than the
+/// What the check came to: how many code files hold letters that are not English, a line for each holding more than the
 /// ledger allows it, and how many hold fewer, which settling the ledger would lower.
 #[derive(Debug, PartialEq, Eq)]
-pub struct KoreanInCode {
+pub struct LanguageInCode {
   pub files: usize,
   pub findings: Vec<String>,
   pub below: usize,
 }
 
 /// The check over the checkout at `root`, held to the ledger at `ledger` named `named`.
-pub fn checkout_korean_in_code(root: &Path, ledger: &Path, named: &str) -> Result<KoreanInCode, String> {
+pub fn checkout_language_in_code(
+  root: &Path,
+  ledger: &Path,
+  named: &str,
+) -> Result<LanguageInCode, String> {
   let ledger = read_ledger(ledger, named)?;
-  let counts = checkout_korean_counts(root);
+  let counts = checkout_foreign_counts(root);
   let allowed = |path: &str| ledger.get(path).copied().unwrap_or(0);
   let findings = counts
     .iter()
     .filter(|(path, count)| **count > allowed(path))
     .map(|(path, count)| {
       fill_marks(
-        &QUICK_CHECKS.korean.over,
+        &QUICK_CHECKS.language.over,
         &[("path", path), ("count", &count.to_string()), ("allowed", &allowed(path).to_string())],
       )
     })
@@ -116,14 +120,14 @@ pub fn checkout_korean_in_code(root: &Path, ledger: &Path, named: &str) -> Resul
     .filter(|(path, allowed)| counts.get(*path).copied().unwrap_or(0) < **allowed)
     .count();
 
-  Ok(KoreanInCode {
+  Ok(LanguageInCode {
     files: counts.len(),
     findings,
     below,
   })
 }
 
-/// What settling the ledger did: how many files it lowered and how many still hold Korean.
+/// What settling the ledger did: how many files it lowered and how many still hold such lines.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Settled {
   pub lowered: usize,
@@ -135,7 +139,7 @@ pub struct Settled {
 /// file the ledger does not name is allowed none.
 pub fn settle(root: &Path, ledger: &Path, named: &str) -> Result<Settled, String> {
   let held = read_ledger(ledger, named)?;
-  let counts = checkout_korean_counts(root);
+  let counts = checkout_foreign_counts(root);
   let mut settled = Ledger::new();
   let mut lowered = 0;
 
@@ -160,11 +164,11 @@ pub fn settle(root: &Path, ledger: &Path, named: &str) -> Result<Settled, String
   })
 }
 
-/// What holds a Korean line: a comment; test input; people's text, a literal in a file the declaration
+/// What holds a line that is not English: a comment; test input; people's text, a literal in a file the declaration
 /// names as such; another literal, a fixed sentence or a pattern; or a line of a language no parser here
 /// reads.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum KoreanKind {
+pub enum LineKind {
   Comment,
   Test,
   People,
@@ -172,7 +176,7 @@ pub enum KoreanKind {
   Unread,
 }
 
-impl KoreanKind {
+impl LineKind {
   /// Every kind, in the order a report names them.
   pub const ALL: [Self; 5] = [Self::Comment, Self::Test, Self::People, Self::Literal, Self::Unread];
 
@@ -199,37 +203,37 @@ impl KoreanKind {
   }
 }
 
-// What holds a line, by where its Korean stands: a line whose Korean is all in comments is a comment's,
-// one whose code Korean is all in a test module is test input, one whose code Korean is all in patterns
-// is a literal, and the rest is the file's own kind.
-fn line_kind(offsets: &[usize], reading: &Reading, own: KoreanKind) -> KoreanKind {
+// What holds a line, by where its letters stand: a line whose letters are all in comments is a comment's,
+// one whose letters in code are all in a test module is test input, one whose letters in code are all in
+// patterns is a literal, and the rest is the file's own kind.
+fn line_kind(offsets: &[usize], reading: &Reading, own: LineKind) -> LineKind {
   let code: Vec<usize> = offsets.iter().copied().filter(|at| !within(&reading.comments, *at)).collect();
 
   if code.is_empty() {
-    KoreanKind::Comment
-  } else if own == KoreanKind::Test || code.iter().all(|at| within(&reading.tests, *at)) {
-    KoreanKind::Test
+    LineKind::Comment
+  } else if own == LineKind::Test || code.iter().all(|at| within(&reading.tests, *at)) {
+    LineKind::Test
   } else if code.iter().all(|at| within(&reading.patterns, *at)) {
-    KoreanKind::Literal
+    LineKind::Literal
   } else {
     own
   }
 }
 
-/// Every line of a code file that holds Korean, counted from one, with what holds it; `people` are the
-/// globs naming people's text.
-pub fn korean_lines(path: &str, text: &str, people: &[String]) -> Vec<(usize, KoreanKind)> {
-  if korean_offsets(text).next().is_none() {
+/// Every line of a code file that holds a letter that is not English, counted from one, with what holds it;
+/// `people` are the globs naming people's text.
+pub fn foreign_lines(path: &str, text: &str, people: &[String]) -> Vec<(usize, LineKind)> {
+  if !holds_non_english(text) {
     return Vec::new();
   }
 
   let reading = Language::of(path).map(|language| language.read(text));
-  let own = KoreanKind::of_file(path, people);
+  let own = LineKind::of_file(path, people);
   let mut lines = Vec::new();
   let mut start = 0;
 
   for (index, line) in text.split('\n').enumerate() {
-    let offsets: Vec<usize> = korean_offsets(line).map(|at| start + at).collect();
+    let offsets: Vec<usize> = foreign_offsets(line).into_iter().map(|at| start + at).collect();
 
     start += line.len() + 1;
 
@@ -237,7 +241,7 @@ pub fn korean_lines(path: &str, text: &str, people: &[String]) -> Vec<(usize, Ko
       continue;
     }
 
-    let kind = reading.as_ref().map_or(KoreanKind::Unread, |reading| line_kind(&offsets, reading, own));
+    let kind = reading.as_ref().map_or(LineKind::Unread, |reading| line_kind(&offsets, reading, own));
 
     lines.push((index + 1, kind));
   }
@@ -245,16 +249,16 @@ pub fn korean_lines(path: &str, text: &str, people: &[String]) -> Vec<(usize, Ko
   lines
 }
 
-/// The Korean the code of the checkout at `root` still holds, by what holds it: without a prefix a row
+/// The lines that are not English the code of the checkout at `root` still holds, by what holds them: without a prefix a row
 /// to an area, the first two folders of a path, and with one a row to each file under it; the largest
 /// rows first, cut under the answer's ceiling with the cut said.
-pub fn korean_report(root: &Path, prefix: Option<&str>, people: &[String]) -> Vec<String> {
-  type Tally = [usize; KoreanKind::ALL.len()];
+pub fn language_report(root: &Path, prefix: Option<&str>, people: &[String]) -> Vec<String> {
+  type Tally = [usize; LineKind::ALL.len()];
 
-  let words = &QUICK_CHECKS.korean;
+  let words = &QUICK_CHECKS.language;
   // The rows in the order their first file is listed, which the sort keeps among rows of one size.
   let mut rows: Vec<(String, Tally)> = Vec::new();
-  let mut total: Tally = [0; KoreanKind::ALL.len()];
+  let mut total: Tally = [0; LineKind::ALL.len()];
   let row_of = |path: &str| match prefix {
     Some(_) => path.to_owned(),
     None => {
@@ -268,11 +272,11 @@ pub fn korean_report(root: &Path, prefix: Option<&str>, people: &[String]) -> Ve
   for path in
     checkout_files_where(root, |path| is_code(path) && prefix.is_none_or(|prefix| path.starts_with(prefix)))
   {
-    for (_, kind) in korean_lines(&path, &read_text(root, &path), people) {
-      let at = KoreanKind::ALL.iter().position(|one| *one == kind).unwrap_or_default();
+    for (_, kind) in foreign_lines(&path, &read_text(root, &path), people) {
+      let at = LineKind::ALL.iter().position(|one| *one == kind).unwrap_or_default();
       let row = row_of(&path);
       let index = rows.iter().position(|(name, _)| *name == row).unwrap_or_else(|| {
-        rows.push((row, [0; KoreanKind::ALL.len()]));
+        rows.push((row, [0; LineKind::ALL.len()]));
         rows.len() - 1
       });
 
@@ -282,7 +286,7 @@ pub fn korean_report(root: &Path, prefix: Option<&str>, people: &[String]) -> Ve
   }
 
   let say = |name: &str, tally: &Tally| {
-    let kinds: Vec<String> = KoreanKind::ALL
+    let kinds: Vec<String> = LineKind::ALL
       .iter()
       .zip(tally)
       .map(|(kind, count)| fill_marks(&words.kind, &[("kind", kind.name()), ("count", &count.to_string())]))

@@ -1,0 +1,18 @@
+[package]
+name = "bmo-testbed-client"
+description = "The testbed's published client: the HTTP service's members, pages, queries and error codes, and the client calling each route."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[features]
+default = ["http"]
+# The HTTP client; a crate taking the types alone leaves it out.
+http = ["dep:reqwest"]
+
+[dependencies]
+reqwest = { workspace = true, features = ["query"], optional = true }
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+strum.workspace = true

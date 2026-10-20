@@ -2,12 +2,20 @@
 //! 「What a deployment says of itself as it runs」). It needs no service to be read: the file and the run's
 //! process are the whole of it, so a service restarting under a deployment leaves the reading as it was.
 //!
+//! Where the run is handed the testbed's data root, every change of the record is written into the testbed's
+//! record too, as the deployment member the HTTP service answers, with every line the run says and a restart
+//! for every unit it stops (docs/boundary.md, 「The record」).
+//!
 //! The outermost run begins the record; a deployment started inside that run's unit carries it on, writing
 //! its own stages into it, and the outermost run ends it. The two are separate processes writing one file,
 //! so every change reads the file as it stands and writes it whole.
 
 use std::path::{Path, PathBuf};
 
+use bmo_testbed_client::{
+  Deployment, DeploymentStage, DeploymentState, DeploymentStep, StageName, StepPart, StepState, StopCode,
+};
+use bmo_testbed_record::{Record, say_unwritten};
 use serde::{Deserialize, Serialize};
 
 /// The record's file under the data root.
@@ -149,6 +157,12 @@ pub struct DeployProgress {
   /// Whether the commit that was live before was put back.
   #[serde(default)]
   pub rolled_back: bool,
+  /// Whether it ended on a refusal, before anything changed.
+  #[serde(default)]
+  pub refused: bool,
+  /// The repository's declared name.
+  #[serde(default)]
+  pub repository: Option<String>,
   /// How it ended, none while it runs.
   #[serde(default)]
   pub ending: Option<Ending>,
@@ -185,6 +199,9 @@ pub struct DeployStart {
   /// Every stage the run means to pass, in order; a run carrying another's record on leaves its plan.
   pub plan: Vec<Stage>,
   pub now: i64,
+  pub repository: Option<String>,
+  /// The testbed's data root whose record the run is written into too; none writes into none.
+  pub record: Option<PathBuf>,
 }
 
 /// One run's hold on the record. Every change goes to the record the run began or carried on, read afresh,
@@ -197,6 +214,8 @@ pub struct DeployRun {
   /// Whether this run began the record and so is the one that ends it.
   pub owner: bool,
   now: fn() -> i64,
+  /// The testbed's data root whose record the run is written into too.
+  record: Option<PathBuf>,
 }
 
 impl DeployRun {
@@ -214,6 +233,43 @@ impl DeployRun {
 
     // What the record says is for whoever watches; a deployment never stops over it.
     let _ = write_record(&self.path, &record);
+    self.mirror(&record);
+  }
+
+  // The testbed's record opened, where the run writes into one; a failure is said and nothing more.
+  fn recorded(&self, write: impl FnOnce(&mut Record) -> Result<(), String>) {
+    let Some(root) = &self.record else { return };
+
+    if let Err(why) = Record::open(root).and_then(|mut record| write(&mut record)) {
+      say_unwritten(&why);
+    }
+  }
+
+  fn mirror(&self, progress: &DeployProgress) {
+    self.recorded(|record| record.write_deployment(&deployment_member(progress)).map(|_| ()));
+  }
+
+  /// The deployment's id in the testbed's record, where the run writes into one and it stands there.
+  pub fn deployment_id(&self) -> Option<i64> {
+    let root = self.record.as_ref()?;
+
+    Record::open(root).ok()?.deployment_of(self.pid, self.started_at).ok().flatten()
+  }
+
+  /// A line the run said, written as one of the deployment's log lines.
+  pub fn said(&self, line: &str) {
+    self.recorded(|record| match record.deployment_of(self.pid, self.started_at)? {
+      Some(id) => record.add_log_line(id, line).map(|_| ()),
+      None => Ok(()),
+    });
+  }
+
+  /// Why the run stops or restarts a unit, written before it does.
+  pub fn restarting(&self, unit: &str, reason: &str) {
+    self.recorded(|record| match record.deployment_of(self.pid, self.started_at)? {
+      Some(id) => record.add_restart(unit, id, reason).map(|_| ()),
+      None => Ok(()),
+    });
   }
 
   /// The run has reached a stage, which begins with no step ahead or under way. Reaching the stage it is
@@ -294,6 +350,14 @@ impl DeployRun {
     self.change(|record| record.rolled_back = true);
   }
 
+  /// Ends the record on a refusal, where this run began it: stopped, before anything changed.
+  pub fn refuse(&self, why: &str) {
+    if self.owner {
+      self.change(|record| record.refused = true);
+    }
+    self.end(Outcome::Stopped, Some(why));
+  }
+
   /// Ends the record, where this run began it. A failure after a rollback is told as the rollback.
   pub fn end(&self, outcome: Outcome, why: Option<&str>) {
     if !self.owner {
@@ -343,6 +407,7 @@ pub fn begin_deploy(path: &Path, start: &DeployStart, now: fn() -> i64) -> Deplo
       pid: standing.pid,
       owner: false,
       now,
+      record: start.record.clone(),
     };
 
     if let Some(commit) = &start.commit {
@@ -363,17 +428,145 @@ pub fn begin_deploy(path: &Path, start: &DeployStart, now: fn() -> i64) -> Deplo
     ahead: vec![],
     running: None,
     rolled_back: false,
+    refused: false,
+    repository: start.repository.clone(),
     ending: None,
   };
 
   // Unwritten, the run goes on all the same; its changes then find no record of theirs.
   let _ = write_record(path, &record);
 
-  DeployRun {
+  let run = DeployRun {
     path: path.to_path_buf(),
     started_at: start.now,
     pid: start.pid,
     owner: true,
     now,
+    record: start.record.clone(),
+  };
+
+  run.mirror(&record);
+  run
+}
+
+impl From<Stage> for StageName {
+  fn from(stage: Stage) -> Self {
+    match stage {
+      Stage::Check => Self::Check,
+      Stage::Backup => Self::Backup,
+      Stage::Tree => Self::Tree,
+      Stage::Build => Self::Build,
+      Stage::Before => Self::Before,
+      Stage::Restart => Self::Restart,
+      Stage::StayUp => Self::StayUp,
+      Stage::After => Self::After,
+      Stage::Rollback => Self::Rollback,
+    }
+  }
+}
+
+impl From<Part> for StepPart {
+  fn from(part: Part) -> Self {
+    match part {
+      Part::Snapshot => Self::Snapshot,
+      Part::Pack => Self::Pack,
+      Part::Check => Self::Check,
+    }
+  }
+}
+
+// The code of why a run did not go live: the last stage it reached short of a rollback, or its refusal.
+fn stopped_for(progress: &DeployProgress) -> Option<StopCode> {
+  let ending = progress.ending.as_ref()?;
+
+  if ending.outcome == Outcome::Live {
+    return None;
+  }
+  if progress.refused {
+    return Some(StopCode::Refused);
+  }
+
+  progress.stages.iter().rev().find_map(|at| match at.stage {
+    Stage::Check => Some(StopCode::Check),
+    Stage::Backup => Some(StopCode::Backup),
+    Stage::Tree => Some(StopCode::Tree),
+    Stage::Build => Some(StopCode::Build),
+    Stage::Before => Some(StopCode::Before),
+    Stage::Restart => Some(StopCode::Restart),
+    Stage::StayUp => Some(StopCode::StayUp),
+    Stage::After | Stage::Rollback => None,
+  })
+}
+
+/// The progress record as the deployment member the HTTP service answers: its steps ended, under way and
+/// still ahead, in that order. Its id is the testbed record's own, written there.
+pub fn deployment_member(progress: &DeployProgress) -> Deployment {
+  let stage_now = progress.stages.last().map(|last| StageName::from(last.stage));
+  let ended = progress.steps.iter().map(|step| {
+    let spent = (step.ran_seconds * 1000.0).round() as i64;
+
+    DeploymentStep {
+      name: step.name.clone(),
+      stage: step.stage.map(StageName::from),
+      part: step.part.map(StepPart::from),
+      state: StepState::Ended,
+      exit_code: Some(step.code),
+      waited_ms: Some((step.waited_seconds * 1000.0).round() as i64),
+      spent_ms: Some(spent),
+      started_at: Some(step.at - spent),
+      ended_at: Some(step.at),
+    }
+  });
+  let running = progress.running.iter().map(|step| DeploymentStep {
+    name: step.name.clone(),
+    stage: step.stage.map(StageName::from),
+    part: step.part.map(StepPart::from),
+    state: StepState::Running,
+    exit_code: None,
+    waited_ms: None,
+    spent_ms: None,
+    started_at: Some(step.at),
+    ended_at: None,
+  });
+  let ahead = progress.ahead.iter().map(|step| DeploymentStep {
+    name: step.name.clone(),
+    stage: stage_now,
+    part: step.part.map(StepPart::from),
+    state: StepState::Ahead,
+    exit_code: None,
+    waited_ms: None,
+    spent_ms: None,
+    started_at: None,
+    ended_at: None,
+  });
+
+  Deployment {
+    id: 0,
+    repository_name: progress.repository.clone(),
+    unit_name: progress.unit.clone(),
+    pid: progress.pid,
+    commit: progress.commit.clone(),
+    state: match progress.ending.as_ref().map(|ending| ending.outcome) {
+      None => DeploymentState::Running,
+      Some(Outcome::Live) => DeploymentState::Live,
+      Some(Outcome::RolledBack) => DeploymentState::RolledBack,
+      Some(Outcome::Failed) => DeploymentState::Failed,
+      Some(Outcome::Stopped) => DeploymentState::Stopped,
+    },
+    plan: progress.plan.iter().copied().map(StageName::from).collect(),
+    stages: progress
+      .stages
+      .iter()
+      .map(|at| DeploymentStage {
+        stage: at.stage.into(),
+        started_at: at.at,
+      })
+      .collect(),
+    steps: ended.chain(running).chain(ahead).collect(),
+    rolled_back: progress.rolled_back,
+    stopped_for: stopped_for(progress),
+    reason: progress.ending.as_ref().and_then(|ending| ending.why.clone()),
+    started_at: progress.started_at,
+    ended_at: progress.ending.as_ref().map(|ending| ending.at),
   }
 }

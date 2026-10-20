@@ -1,5 +1,5 @@
 # What the test count says (docs/checks.md, 「The test count」): the tests the checkout holds, and with
-# `--since` the tests the range removed, each accounted for or not, and its refusal. A job reads them, so
+# `--since` the tests the range removed, each accounted for or not, and its refusal. A harness reads them, so
 # they are English. Each `{name}` is filled in with what it names.
 
 usage = "usage: bmo-testbed count [--since <commit>]"

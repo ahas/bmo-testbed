@@ -1,0 +1,22 @@
+[
+  {
+    "id": "record/record",
+    "title": "Record",
+    "what": "The record: one SQLite file under the data root's testbed/record/ holding test runs, deployments, their log lines, restarts and an event for each change, written by the verbs and read by the service; the binary's witness keeps runs in it.",
+    "files": [
+      "record/src/lib.rs",
+      "record/tests/integration/record.rs",
+      "cli/src/recorded.rs",
+      "policy/record.toml",
+      "docs/boundary.md"
+    ],
+    "symbols": [],
+    "aliases": [],
+    "needs": [
+      "client/members-and-client",
+      "core/policy-loader",
+      "core/run-verb-and-status"
+    ],
+    "base": "d562ea2c953f6b0b9384c92324f9038550fb2ab6"
+  }
+]

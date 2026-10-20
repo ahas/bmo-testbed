@@ -1,5 +1,5 @@
 # A repository's declaration (docs/declaration.md): the file it is read from, every default a key the
-# declaration leaves out takes, and what a declaration that does not read is refused with. A job reads
+# declaration leaves out takes, and what a declaration that does not read is refused with. A harness reads
 # the refusals, so they are English. Each `{name}` is filled in with what it names.
 
 # The declaration's file, at the checkout's root.

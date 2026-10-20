@@ -1,6 +1,6 @@
 //! What one language answers to run in the testbed (docs/testbed.md, 「Languages」). Each language is a
 //! module of its own here, a member of [`Language`], named once in [`LANGUAGES`]; the run, its result and
-//! the job guard all ask that list.
+//! the harness guard all ask that list.
 
 use std::collections::BTreeMap;
 use std::path::{Component, Path, PathBuf};

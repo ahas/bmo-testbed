@@ -19,7 +19,7 @@ use bmo_testbed_core::policy::deploy::DEPLOY;
 use bmo_testbed_core::policy::deploy_steps::DeployStep as OwnStep;
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::turn::{
-  Env, FRONT_VARIABLE, Lane, NOT_RUN_EXIT_CODE, TurnAsk, job_pid, process_env, stop_tree, take_turn,
+  Env, FRONT_VARIABLE, Lane, NOT_RUN_EXIT_CODE, TurnAsk, harness_pid, process_env, stop_tree, take_turn,
 };
 use bmo_testbed_core::verb::REFUSED_EXIT_CODE;
 use serde_json::{Value, json};
@@ -114,6 +114,8 @@ pub struct DeployAsk {
   /// What the backup upload's unit is started with after `systemd-run`'s own words: its options, then the
   /// binary's `backups` verb.
   pub upload: Option<Vec<String>>,
+  /// The testbed's data root whose record the deployment is written into; none writes into none.
+  pub record: Option<PathBuf>,
 }
 
 /// What the gate is asked: the commit, in the checkout it is taken from, over the range from what was live.
@@ -433,6 +435,10 @@ struct Laying<'a> {
 impl<'a> Laying<'a> {
   fn say(&self, line: &str) {
     self.hands.say(line);
+
+    if let Some(progress) = &self.progress {
+      progress.said(line);
+    }
   }
 
   fn warn(&self, line: String) {
@@ -447,6 +453,24 @@ impl<'a> Laying<'a> {
   }
 
   fn systemctl(&self, args: &[&str]) -> Ran {
+    if let (Some(&verb @ ("stop" | "restart")), Some(progress)) = (args.first(), &self.progress) {
+      let said = &DEPLOY.restarts;
+      let deployment = progress.deployment_id().map(|id| id.to_string()).unwrap_or_default();
+      let reason = fill_marks(
+        if self.rolling_back.get() { &said.rolling_back } else { &said.putting },
+        &[
+          ("deployment", &deployment),
+          ("verb", verb),
+          ("commit", &short(&self.commit)),
+          ("repository", &self.repo.name()),
+        ],
+      );
+
+      for unit in args[1..].iter().filter(|word| !word.starts_with('-')) {
+        progress.restarting(unit, &reason);
+      }
+    }
+
     let line: Vec<String> = ["systemctl", "--user"]
       .into_iter()
       .chain(args.iter().copied())
@@ -485,7 +509,7 @@ impl<'a> Laying<'a> {
     self.say(&fill_marks(&DEPLOY.run.refused, &[("why", &line)]));
 
     if let Some(progress) = &self.progress {
-      progress.end(Outcome::Stopped, Some(&line));
+      progress.refuse(&line);
     }
 
     REFUSED_EXIT_CODE
@@ -852,15 +876,15 @@ impl<'a> Laying<'a> {
   }
 }
 
-// The checks before anything changes, each a refusal where it fails: no job's shell, the data root, the
+// The checks before anything changes, each a refusal where it fails: no harness's shell, the data root, the
 // backup directory and the env files where they may stand.
 fn place_refusal(repo: &Repository, places: &DeployPlaces, env: &Env) -> Option<String> {
   let said = &DEPLOY.run;
   let data = &places.data_root;
   let shown = |path: &Path| path.to_string_lossy().into_owned();
 
-  if job_pid(env).is_some() {
-    return Some(said.job.clone());
+  if harness_pid(env).is_some() {
+    return Some(said.harness.clone());
   }
 
   if !data.is_absolute() {
@@ -1022,6 +1046,8 @@ pub async fn deploy(
       commit: Some(commit.clone()),
       plan: Stage::PLANNED.to_vec(),
       now: hands.now_ms(),
+      repository: Some(repo.name()),
+      record: ask.record.clone(),
     },
     now_ms,
   ));

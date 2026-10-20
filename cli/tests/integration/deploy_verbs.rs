@@ -97,9 +97,9 @@ fn numbered(unit: &str, prefix: &str) -> bool {
     .is_some_and(|number| !number.is_empty() && number.chars().all(|one| one.is_ascii_digit()))
 }
 
-// "the deploy verbs refuse a job's shell before anything is done"
+// "the deploy verbs refuse a harness's shell before anything is done"
 #[test]
-fn the_deploy_verb_refuses_a_jobs_shell_before_anything_is_done() {
+fn the_deploy_verb_refuses_a_harness_s_shell_before_anything_is_done() {
   let scene = Scene::new("");
   let bin = scene.systemd_run(0);
 
@@ -107,7 +107,7 @@ fn the_deploy_verb_refuses_a_jobs_shell_before_anything_is_done() {
     let refused = scene.run(args, &[("CLAUDE_PID", "4242")], Some(&bin));
 
     assert_eq!(refused.code, 2, "{args:?}: {}", refused.err);
-    assert!(refused.err.contains(&DEPLOY.run.job), "{args:?}: {}", refused.err);
+    assert!(refused.err.contains(&DEPLOY.run.harness), "{args:?}: {}", refused.err);
   }
 
   assert!(scene.line().is_empty());

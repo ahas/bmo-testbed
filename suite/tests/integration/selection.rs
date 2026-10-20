@@ -781,6 +781,7 @@ mod a_project_of_its_own {
         dir: "lab".to_owned(),
         check: true,
         members: vec![],
+        browser: vec![],
       }]
     );
     assert_eq!(fixture.layout.owner_of("lab/src/thing.ts"), None);
@@ -805,6 +806,7 @@ mod a_project_of_its_own {
         dir: "tools/bench".to_owned(),
         check: true,
         members: vec![],
+        browser: vec![],
       }]
     );
   }

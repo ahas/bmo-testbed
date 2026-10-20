@@ -107,9 +107,11 @@ fn the_status_prints_the_close_line_of_the_repository_it_is_run_in() {
     serde_json::from_str(&run_in(dir.path(), &["status", "--json"]).out).expect("the status reads as JSON");
 
   assert!(inside.out.contains(&LANES.status.close_line), "{}", inside.out);
-  assert_eq!(json["close_line"], serde_json::json!({ "holder": null, "waiting": [] }));
-  assert!(json["wide"]["waiting"].is_array());
-  assert!(outside["close_line"].is_null());
+  assert_eq!(json["closeLine"], serde_json::json!({ "holder": null, "waiting": [] }));
+  assert_eq!(json["queues"]["items"][0]["name"], "wide");
+  assert_eq!(json["queues"]["items"][1]["name"], "narrow");
+  assert!(json["queues"]["items"][0]["waiting"].is_array());
+  assert!(outside["closeLine"].is_null());
 }
 
 // "words that do not read name the one thing wrong and end with 2; asking for the usage ends with 0"

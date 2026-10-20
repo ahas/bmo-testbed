@@ -5,21 +5,28 @@
 resolver = "3"
 members = [
   "cli",
+  "client",
   "core",
   "deploy",
+  "plugin",
+  "record",
   "scratch-database",
+  "service",
   "suite",
   "test-support",
 ]
 
 # One version for the whole repository, over the boundary docs/boundary.md states.
 [workspace.package]
-version = "0.1.0"
+version = "0.1.0-rev.1"
 edition = "2024"
 publish = false
 
 [workspace.dependencies]
-# A stand-in placement endpoint, served by the binary's tests.
+# The base library whose verdicts the quick checks take: whether a line is English, the wording
+# document's terms, and the dashes a person would not type.
+bmo-text = { path = "../../base/text", version = "=0.1.0-rev.5", default-features = false }
+# The HTTP service's routes, and a stand-in placement endpoint served by the binary's tests.
 axum = "0.8.9"
 # The shell line a heavy-command classification reads, split the way the shell splits it.
 brush-parser = "0.4.0"
@@ -43,6 +50,12 @@ oxc_parser = "=0.153.0"
 oxc_span = "=0.153.0"
 percent-encoding = "2.3.2"
 regex = "1.11.1"
+# The harness plugin's MCP server, on standard input and output.
+rmcp = { version = "3.5.0", default-features = false, features = ["server", "transport-io"] }
+# The record, one SQLite file every verb writes and the service reads, on the SQLite sqlx builds too.
+rusqlite = { version = "0.32.1", features = ["bundled"] }
+# The JSON Schemas of the members, the tools' inputs and outputs and the OpenAPI document.
+schemars = "1.0.4"
 # The placement endpoint, asked over HTTP.
 reqwest = { version = "0.13.5", features = ["json"] }
 scraper = "0.25.0"
@@ -59,6 +72,8 @@ sha2 = "0.10.9"
 shlex = "2.0.1"
 # A placed run's output and result, read off its event stream.
 sse-stream = "0.2.6"
+# The members' closed sets of words, listed whole for the OpenAPI document.
+strum = { version = "0.28.0", features = ["derive"] }
 sqlx = { version = "0.8.6", default-features = false, features = ["any", "postgres", "sqlite", "runtime-tokio"] }
 tempfile = "3.20.0"
 tokio = { version = "1.47.0", features = ["macros", "rt", "rt-multi-thread", "net", "time", "signal", "io-util", "process"] }

@@ -1,0 +1,16 @@
+[package]
+name = "bmo-testbed-plugin"
+description = "The testbed's harness plugin: the tool table, the MCP server the mcp verb starts, the OpenAPI document and the ahas-testbed skill."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+bmo-testbed-client = { path = "../client" }
+bmo-testbed-core = { path = "../core" }
+rmcp.workspace = true
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+strum.workspace = true
+tokio = { workspace = true, features = ["io-std"] }

@@ -1,6 +1,6 @@
 # What the backup and the `backups` verb say and count by (docs/deploy.md, 「Backups」 and 「Sending backups
 # away」): the verb's usage, the lines a failed upload's event carries, and the backup's fixed numbers. A
-# job and the event's reader read the lines, so they are English. Each `{name}` is filled in with what it
+# caller and the event's reader read the lines, so they are English. Each `{name}` is filled in with what it
 # names.
 
 # The usage of the `backups` verb: its heading, then a blank line, then one line to an entry, {remote}

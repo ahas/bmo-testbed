@@ -1,6 +1,6 @@
 # What a run of the suite says (docs/suite.md): the selection it opens with (docs/checks.md, 「Which
 # tests a change runs」), the lines it writes about itself, each unit's result and the verdict it ends on.
-# A job and the readers of a suite's log read them, so they are English, and the lines a reader parses —
+# A harness and the readers of a suite's log read them, so they are English, and the lines a reader parses —
 # each unit's mark, the summary of what failed, would not end or never started, and the verdict — keep
 # their shape. Each `{name}` is filled in with what it names. Its numbers, the fence's, each unit's, the
 # test server's, the superseded removal's and the change check's, stand under `[numbers]`.

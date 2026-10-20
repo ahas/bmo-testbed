@@ -11,12 +11,12 @@ use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::quick_checks::QUICK_CHECKS;
 use bmo_testbed_core::turn::Env;
 
+pub mod cargo_profile;
 pub mod dashes;
 pub mod dependencies;
 pub mod files;
-pub mod korean;
+pub mod language;
 pub mod layout;
-pub mod rewrite;
 pub mod source;
 pub mod wording;
 
@@ -108,30 +108,30 @@ pub fn dashes_check(repo: &Repository) -> Checked {
   )
 }
 
-/// The Korean in the checkout's code, held to the declared ledger.
-pub fn korean_check(repo: &Repository, env: &Env) -> Checked {
-  let words = &QUICK_CHECKS.korean;
-  let (ledger, name) = match declared_input(QuickCheck::Korean, repo, env) {
+/// The lines of the checkout's code that are not English, held to the declared ledger.
+pub fn language_check(repo: &Repository, env: &Env) -> Checked {
+  let words = &QUICK_CHECKS.language;
+  let (ledger, name) = match declared_input(QuickCheck::Language, repo, env) {
     Ok(input) => input,
     Err(checked) => return checked,
   };
-  let named = repo.declaration.check.korean_ledger.as_deref().unwrap_or(Path::new(""));
-  let (faults, clean) = match korean::checkout_korean_in_code(&repo.root, &ledger, &named.to_string_lossy())
-  {
-    Ok(found) => {
-      let clean = if found.below == 0 {
-        counted(&words.clean, found.files)
-      } else {
-        fill_marks(
-          &words.below,
-          &[("count", &found.files.to_string()), ("below", &found.below.to_string())],
-        )
-      };
+  let named = repo.declaration.check.language_ledger.as_deref().unwrap_or(Path::new(""));
+  let (faults, clean) =
+    match language::checkout_language_in_code(&repo.root, &ledger, &named.to_string_lossy()) {
+      Ok(found) => {
+        let clean = if found.below == 0 {
+          counted(&words.clean, found.files)
+        } else {
+          fill_marks(
+            &words.below,
+            &[("count", &found.files.to_string()), ("below", &found.below.to_string())],
+          )
+        };
 
-      (found.findings, clean)
-    }
-    Err(why) => (vec![why], String::new()),
-  };
+        (found.findings, clean)
+      }
+      Err(why) => (vec![why], String::new()),
+    };
 
   Checked::of(&name, &faults, &clean)
 }
@@ -144,6 +144,17 @@ pub fn layout_check(repo: &Repository) -> Checked {
     QuickCheck::Layout.name(),
     &found.findings,
     &counted(&QUICK_CHECKS.layout.clean, found.paths),
+  )
+}
+
+/// The Cargo profile check over the checkout's workspace manifest.
+pub fn cargo_profile_check(repo: &Repository) -> Checked {
+  let found = cargo_profile::checkout_cargo_profile(&repo.root);
+
+  Checked::of(
+    QuickCheck::CargoProfile.name(),
+    &found.findings,
+    &counted(&QUICK_CHECKS.cargo_profile.clean, found.paths),
   )
 }
 
@@ -163,9 +174,10 @@ pub fn quick_check(check: QuickCheck, repo: &Repository, env: &Env) -> Checked {
   match check {
     QuickCheck::Wording => wording_check(repo, env),
     QuickCheck::Dashes => dashes_check(repo),
-    QuickCheck::Korean => korean_check(repo, env),
+    QuickCheck::Language => language_check(repo, env),
     QuickCheck::Layout => layout_check(repo),
     QuickCheck::Dependencies => dependencies_check(repo),
+    QuickCheck::CargoProfile => cargo_profile_check(repo),
   }
 }
 

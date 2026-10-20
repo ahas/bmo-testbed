@@ -21,6 +21,8 @@ pub struct UsageWords {
   pub full: String,
   pub deploy: String,
   pub backups: String,
+  pub serve: String,
+  pub mcp: String,
 }
 
 #[derive(Debug, Deserialize)]

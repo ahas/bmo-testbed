@@ -19,12 +19,13 @@ use bmo_testbed_suite::log::{
   failed_files_of, failed_tests_of, failures_of, tally_of, unstarted_of, verdict_of,
 };
 use bmo_testbed_suite::once_more::run_judged;
-use bmo_testbed_suite::run::{SuiteWords, ask_of, run, verdict_line};
+use bmo_testbed_suite::run::{SuiteAsk, SuiteWords, ask_of, run, verdict_line};
 use bmo_testbed_suite::template::{TemplateVerb, template as template_on};
 use serde_json::json;
 
 use crate::own::run_own;
 use crate::placement_of;
+use crate::recorded::{command_run, suite_record};
 use crate::said::Said;
 use crate::words::{BINARY, CountArgs, LogArgs, SuiteArgs, TemplateArgs, TemplateWord};
 
@@ -56,12 +57,15 @@ pub fn suite(args: SuiteArgs) -> u8 {
     turn_wait: args.turn_wait,
     words: args.words.clone(),
   };
-  let ask = ask_of(&given, &repo.declaration.test);
+  let command: Vec<String> = std::iter::once(BINARY.to_owned()).chain(std::env::args().skip(1)).collect();
+  let ask = SuiteAsk {
+    record: Some(suite_record(&data_root(), &repo, command.join(" "))),
+    ..ask_of(&given, &repo.declaration.test)
+  };
   let env = process_env();
 
   // A placed suite runs on the other machine as this same verb of the testbed there, on the same words.
   if !runs_here(&env) {
-    let command: Vec<String> = std::iter::once(BINARY.to_owned()).chain(std::env::args().skip(1)).collect();
     let placed = placement_of(&env, &repo.root).place(&PlaceAsk {
       command: &command,
       lane: Lane::Wide,
@@ -72,15 +76,27 @@ pub fn suite(args: SuiteArgs) -> u8 {
     });
 
     if let Some(code) = placed {
+      if args.json {
+        println!("{}", command_run(code, None, 0.0, 0.0, None));
+      }
       return code;
     }
   }
 
-  if args.again {
+  let ended = if args.again {
     run_judged(&repo, &ask, &data_root(), &Hook::of(Some(&repo), &env)).0
   } else {
     run(&repo, &ask)
+  };
+
+  if args.json {
+    println!(
+      "{}",
+      command_run(ended.code, ended.log.as_deref(), ended.waited_seconds, ended.seconds, ended.test_run)
+    );
   }
+
+  ended.code
 }
 
 /// `count`: the tests the checkout holds, and with a range the tests it removed, each accounted for or not.

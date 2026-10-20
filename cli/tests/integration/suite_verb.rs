@@ -7,11 +7,13 @@ use std::path::{Path, PathBuf};
 use std::process::Child;
 use std::time::Duration;
 
+use bmo_testbed_client::{CommandRun, TestRunKind, TestRunState};
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::policy::suite::SUITE;
 use bmo_testbed_core::queue::{LockWait, take_lock};
 use bmo_testbed_core::turn::{Env, Lane, NOT_RUN_EXIT_CODE, TurnAsk, take_turn};
+use bmo_testbed_record::Record;
 
 use crate::stand::{Ran, checkout, finished, testbed, until};
 
@@ -141,7 +143,7 @@ fn a_run_whose_turn_does_not_come_runs_nothing() {
     wait_seconds: Some(5.0),
     say: &|_| {},
     path: Some(lock.clone()),
-    env: Env::from([("BMO_AGENT_PLACE".to_owned(), "place-3".to_owned())]),
+    env: Env::from([("BMO_TESTBED_SCOPE".to_owned(), "place-3".to_owned())]),
     checkout: "/checkout".to_owned(),
     poll: None,
     notice_seconds: None,
@@ -246,7 +248,7 @@ fn a_test_file_runs_from_the_folder_of_its_runner_s_configuration() {
   )
   .unwrap();
 
-  let mut command = testbed(&repo, &data, &["suite", "tests/ts/"]);
+  let mut command = testbed(&repo, &data, &["suite", "--json", "tests/ts/"]);
 
   command.env_remove("SUITE_PRELOADED");
   std::os::unix::process::CommandExt::process_group(&mut command, 0);
@@ -255,6 +257,63 @@ fn a_test_file_runs_from_the_folder_of_its_runner_s_configuration() {
 
   assert_eq!(done.code, 0, "{}", done.err);
   assert!(done.err.contains("tests/ts/unit/reads.test.ts"), "{}", done.err);
+
+  // With --json the run's command run stands on standard output: its own log, and its test run in the record.
+  let answer: CommandRun = serde_json::from_str(done.out.trim()).expect("one command run");
+  let kept = Record::open(&data)
+    .unwrap()
+    .test_run(answer.test_run_id.expect("a test run is kept"))
+    .unwrap()
+    .unwrap();
+
+  assert_eq!(answer.exit_code, 0);
+  assert!(
+    std::fs::read_to_string(&answer.log_path)
+      .unwrap()
+      .contains("tests/ts/unit/reads.test.ts")
+  );
+  assert_eq!(
+    (kept.kind, kept.state, kept.passed_count),
+    (TestRunKind::Suite, TestRunState::Passed, 1)
+  );
+  assert_eq!(kept.repository_name.as_deref(), Some("repo"));
+}
+
+// "the browser files a project of its own declares run in the browser lane, beside the project's check"
+#[test]
+fn the_browser_files_a_project_declares_run_beside_its_check() {
+  let dir = tempfile::tempdir().unwrap();
+  let repo = dir.path().join("repo");
+  let data = dir.path().join("data");
+
+  checkout(&repo, "testbed = 0\n\n[test]\nlanguages = [\"bun\"]\n");
+  std::fs::create_dir_all(repo.join("lab/tests")).unwrap();
+  std::fs::create_dir_all(&data).unwrap();
+  std::fs::write(
+    repo.join("lab/package.json"),
+    r#"{ "name": "lab", "scripts": { "check": "true" }, "bmo": { "browser": ["tests/*.test.ts"] } }"#,
+  )
+  .unwrap();
+  std::fs::write(repo.join("lab/bun.lock"), "{}").unwrap();
+  std::fs::write(
+    repo.join("lab/tests/page.test.ts"),
+    "import { expect, test } from \"bun:test\";\n\ntest(\"the page answers\", () => {\n  expect(1).toBe(1);\n});\n",
+  )
+  .unwrap();
+
+  let mut command = testbed(&repo, &data, &["suite"]);
+
+  std::os::unix::process::CommandExt::process_group(&mut command, 0);
+
+  let done = ended(command.spawn().unwrap());
+  let headings: Vec<&str> = done
+    .err
+    .lines()
+    .filter(|line| line.ends_with("lab/") || line.ends_with("lab/tests/page.test.ts"))
+    .collect();
+
+  assert_eq!(done.code, 0, "{}", done.err);
+  assert_eq!(headings.len(), 2, "{}", done.err);
 }
 
 // "with --again what failed runs once more, and what passed only then is written down and sent as an event"

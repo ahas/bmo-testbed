@@ -11,6 +11,7 @@ use bmo_testbed_core::declaration::Repository;
 use serde_json::Value;
 
 use crate::files::checkout_files;
+use crate::selection::glob_matches;
 
 /// A workspace package as its own `package.json` declares it.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -40,6 +41,8 @@ pub struct OwnProject {
   pub check: bool,
   /// The workspace packages standing inside it, by directory: their paths are theirs, not the project's.
   pub members: Vec<String>,
+  /// The globs of its browser test files, from its own folder, as its manifest's `bmo` section names them.
+  pub browser: Vec<String>,
 }
 
 fn read_json(path: &Path) -> Option<Value> {
@@ -210,13 +213,39 @@ pub fn own_projects(repo: &Repository) -> Vec<OwnProject> {
 
       members.sort();
 
+      let browser = own["bmo"]["browser"]
+        .as_array()
+        .map(|globs| globs.iter().filter_map(Value::as_str).map(str::to_owned).collect())
+        .unwrap_or_default();
+
       Some(OwnProject {
         check: own["scripts"][&declared.check_script].is_string(),
         members,
+        browser,
         dir,
       })
     })
     .collect()
+}
+
+/// The browser test files a project of its own declares, each a path from the repository's root: every file
+/// git tracks or holds new and not ignored inside the project that one of its globs reaches from its folder.
+pub fn project_browser_files(root: &Path, project: &OwnProject) -> Vec<String> {
+  if project.browser.is_empty() {
+    return Vec::new();
+  }
+
+  let globs: Vec<String> = project.browser.iter().map(|glob| format!("{}/{glob}", project.dir)).collect();
+  let mut files: Vec<String> =
+    git_lines(root, &["ls-files", "--cached", "--others", "--exclude-standard", "--", &project.dir])
+      .unwrap_or_default()
+      .into_iter()
+      .filter(|file| globs.iter().any(|glob| glob_matches(glob, file)))
+      .collect();
+
+  files.sort();
+  files.dedup();
+  files
 }
 
 /// Every directory a project of its own installs in, from the root: each one inside it that holds the

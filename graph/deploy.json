@@ -24,7 +24,7 @@
   {
     "id": "deploy/deploy-run",
     "title": "Deploy run",
-    "what": "The deploy verb a repository's declaration drives: refusals, the gate, backup, release build and declared steps, the flip, unit links and restarts, the health wait and stay-up watch with rollback, run in a transient unit with a progress record.",
+    "what": "The deploy run in a unit of its own: gate, backup, release, flip, restarts watched and rolled back, its progress record mirrored into the testbed's record with its log lines and a restart for each unit it stops.",
     "files": [
       "deploy/src/deployment.rs",
       "deploy/src/progress.rs",
@@ -49,9 +49,10 @@
       "core/lanes-and-turn",
       "suite/static-check",
       "suite/suite-run",
-      "core/policy-loader"
+      "core/policy-loader",
+      "record/record"
     ],
-    "base": "f211fba9705f180cb46a50ae034c1d83b65caec0"
+    "base": "4922d4039e072bbb8c12da72c0e05220f8497ab3"
   },
   {
     "id": "deploy/releases-and-rollback",

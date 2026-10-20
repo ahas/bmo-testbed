@@ -1,0 +1,1589 @@
+{
+  "components": {
+    "responses": {
+      "Error": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/WireError"
+            }
+          }
+        },
+        "description": "a failure, in the common error shape"
+      }
+    },
+    "schemas": {
+      "CommandRun": {
+        "description": "What a run, a check or a suite came to, as its verb prints it with `--json`.",
+        "properties": {
+          "exitCode": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "logPath": {
+            "type": "string"
+          },
+          "spentMs": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "testRunId": {
+            "description": "The test run it wrote; null for a check, and for a run placed elsewhere.",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "waitedMs": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "exitCode",
+          "logPath",
+          "waitedMs",
+          "spentMs",
+          "testRunId"
+        ],
+        "type": "object"
+      },
+      "Deployment": {
+        "description": "One deployment: its stages, its steps and why it stopped where it did not go live.",
+        "properties": {
+          "commit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "endedAt": {
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "pid": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "plan": {
+            "description": "The stages it means to pass, in order.",
+            "items": {
+              "$ref": "#/components/schemas/StageName"
+            },
+            "type": "array"
+          },
+          "reason": {
+            "description": "The sentence beside its outcome.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "repositoryName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rolledBack": {
+            "type": "boolean"
+          },
+          "stages": {
+            "items": {
+              "$ref": "#/components/schemas/DeploymentStage"
+            },
+            "type": "array"
+          },
+          "startedAt": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "state": {
+            "$ref": "#/components/schemas/DeploymentState"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/DeploymentStep"
+            },
+            "type": "array"
+          },
+          "stoppedFor": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StopCode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "unitName": {
+            "description": "The deployment's unit, whose journal is its log.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "repositoryName",
+          "unitName",
+          "pid",
+          "commit",
+          "state",
+          "plan",
+          "stages",
+          "steps",
+          "rolledBack",
+          "stoppedFor",
+          "reason",
+          "startedAt",
+          "endedAt"
+        ],
+        "type": "object"
+      },
+      "DeploymentPage": {
+        "description": "A page of a list: the items, and whether anything stands past the last of them.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Deployment"
+            },
+            "type": "array"
+          },
+          "more": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items",
+          "more"
+        ],
+        "type": "object"
+      },
+      "DeploymentStage": {
+        "description": "One stage a deployment reached, with when.",
+        "properties": {
+          "stage": {
+            "$ref": "#/components/schemas/StageName"
+          },
+          "startedAt": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "stage",
+          "startedAt"
+        ],
+        "type": "object"
+      },
+      "DeploymentState": {
+        "description": "Where a deployment stands in its life.",
+        "oneOf": [
+          {
+            "enum": [
+              "running",
+              "live",
+              "rolled-back",
+              "failed",
+              "stopped"
+            ],
+            "type": "string"
+          },
+          {
+            "const": "gone",
+            "description": "Its process went without ending it.",
+            "type": "string"
+          }
+        ]
+      },
+      "DeploymentStep": {
+        "description": "One heavy step of a deployment: a check, the suite, a build, a part of the backup.",
+        "properties": {
+          "endedAt": {
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "exitCode": {
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "name": {
+            "description": "Its declared English id.",
+            "type": "string"
+          },
+          "part": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StepPart"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "spentMs": {
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "stage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StageName"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "startedAt": {
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "state": {
+            "$ref": "#/components/schemas/StepState"
+          },
+          "waitedMs": {
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "stage",
+          "part",
+          "state",
+          "exitCode",
+          "waitedMs",
+          "spentMs",
+          "startedAt",
+          "endedAt"
+        ],
+        "type": "object"
+      },
+      "ErrorCode": {
+        "description": "The codes the service answers with, each meaning one thing on every route.",
+        "oneOf": [
+          {
+            "const": "bad-request",
+            "description": "400: the query is not the shape the route takes.",
+            "type": "string"
+          },
+          {
+            "const": "unauthorized",
+            "description": "401: the token is missing or wrong.",
+            "type": "string"
+          },
+          {
+            "const": "no-route",
+            "description": "404: no route answers this method and path.",
+            "type": "string"
+          },
+          {
+            "const": "not-found",
+            "description": "404: nothing stands at the key the path names.",
+            "type": "string"
+          },
+          {
+            "const": "gone",
+            "description": "410: the events asked for are past the window.",
+            "type": "string"
+          },
+          {
+            "const": "failed",
+            "description": "500: the service failed.",
+            "type": "string"
+          }
+        ]
+      },
+      "Event": {
+        "description": "One event of the stream: its number, its kind, when, and the member as a `GET` answered it then.",
+        "properties": {
+          "at": {
+            "description": "Epoch milliseconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "data": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/EventKind"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "at",
+          "data"
+        ],
+        "type": "object"
+      },
+      "EventKind": {
+        "description": "The kinds of event the stream carries, each a resource and its change.",
+        "enum": [
+          "queue.changed",
+          "test-run.created",
+          "test-run.ended",
+          "deployment.created",
+          "deployment.changed",
+          "restart.created"
+        ],
+        "type": "string"
+      },
+      "EventPage": {
+        "description": "A page of a list: the items, and whether anything stands past the last of them.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Event"
+            },
+            "type": "array"
+          },
+          "more": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items",
+          "more"
+        ],
+        "type": "object"
+      },
+      "Health": {
+        "description": "Whether the service can answer, and its version.",
+        "properties": {
+          "ready": {
+            "type": "boolean"
+          },
+          "reason": {
+            "description": "Why it is not ready; null when it is.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ready",
+          "reason",
+          "version"
+        ],
+        "type": "object"
+      },
+      "LaneName": {
+        "description": "The two lanes, by their own names.",
+        "enum": [
+          "wide",
+          "narrow"
+        ],
+        "type": "string"
+      },
+      "LogLine": {
+        "description": "One line a deployment said.",
+        "properties": {
+          "at": {
+            "description": "Epoch milliseconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "at",
+          "text"
+        ],
+        "type": "object"
+      },
+      "LogLinePage": {
+        "description": "A page of a list: the items, and whether anything stands past the last of them.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LogLine"
+            },
+            "type": "array"
+          },
+          "more": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items",
+          "more"
+        ],
+        "type": "object"
+      },
+      "Queue": {
+        "description": "One lane's line: who holds its turn and who waits behind, in the order they will be served.",
+        "properties": {
+          "holder": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QueueEntry"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "$ref": "#/components/schemas/LaneName"
+          },
+          "waiting": {
+            "items": {
+              "$ref": "#/components/schemas/QueueEntry"
+            },
+            "type": "array"
+          },
+          "width": {
+            "description": "How many threads its holder runs on.",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "width",
+          "holder",
+          "waiting"
+        ],
+        "type": "object"
+      },
+      "QueueEntry": {
+        "description": "Who stands in a lane's line, or holds its turn.",
+        "properties": {
+          "askedAt": {
+            "description": "When it asked for the turn, epoch milliseconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "checkout": {
+            "description": "The checkout it was started in.",
+            "type": "string"
+          },
+          "command": {
+            "description": "The command, as one line.",
+            "type": "string"
+          },
+          "front": {
+            "description": "Standing at the front.",
+            "type": "boolean"
+          },
+          "heldAt": {
+            "description": "When the turn came; null while it waits.",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "kept": {
+            "description": "A place kept for a run that ended not run.",
+            "type": "boolean"
+          },
+          "next": {
+            "description": "Standing next after the front.",
+            "type": "boolean"
+          },
+          "pid": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "scope": {
+            "description": "The caller's opaque scope, which the testbed never reads.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "scope",
+          "checkout",
+          "command",
+          "pid",
+          "askedAt",
+          "heldAt",
+          "kept",
+          "front",
+          "next"
+        ],
+        "type": "object"
+      },
+      "QueuePage": {
+        "description": "A page of a list: the items, and whether anything stands past the last of them.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Queue"
+            },
+            "type": "array"
+          },
+          "more": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items",
+          "more"
+        ],
+        "type": "object"
+      },
+      "Restart": {
+        "description": "Why a deployment stopped a unit, for the unit to read as it starts again.",
+        "properties": {
+          "at": {
+            "description": "Epoch milliseconds.",
+            "format": "int64",
+            "type": "integer"
+          },
+          "deploymentId": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "unitName": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "unitName",
+          "deploymentId",
+          "reason",
+          "at"
+        ],
+        "type": "object"
+      },
+      "RestartPage": {
+        "description": "A page of a list: the items, and whether anything stands past the last of them.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Restart"
+            },
+            "type": "array"
+          },
+          "more": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items",
+          "more"
+        ],
+        "type": "object"
+      },
+      "StageName": {
+        "description": "The stages a deployment passes, in the order it passes them; a rollback is never planned.",
+        "enum": [
+          "check",
+          "backup",
+          "tree",
+          "build",
+          "before",
+          "restart",
+          "stay-up",
+          "after",
+          "rollback"
+        ],
+        "type": "string"
+      },
+      "StepPart": {
+        "description": "The parts of the backup stage written as steps of their own.",
+        "enum": [
+          "snapshot",
+          "pack",
+          "check"
+        ],
+        "type": "string"
+      },
+      "StepState": {
+        "description": "Where a deployment step stands.",
+        "enum": [
+          "ahead",
+          "running",
+          "ended"
+        ],
+        "type": "string"
+      },
+      "StopCode": {
+        "description": "Why a deployment did not go live: the stage it stopped in, or a refusal.",
+        "enum": [
+          "check",
+          "backup",
+          "tree",
+          "build",
+          "before",
+          "restart",
+          "stay-up",
+          "refused"
+        ],
+        "type": "string"
+      },
+      "TestRun": {
+        "description": "One test run and its counts.",
+        "properties": {
+          "checkout": {
+            "type": "string"
+          },
+          "command": {
+            "description": "The words run, as one line.",
+            "type": "string"
+          },
+          "commit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "endedAt": {
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "failedCount": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/TestRunKind"
+          },
+          "logPath": {
+            "type": "string"
+          },
+          "passedCount": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "pid": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "repositoryName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "scope": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "skippedCount": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "startedAt": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "state": {
+            "$ref": "#/components/schemas/TestRunState"
+          },
+          "unitName": {
+            "description": "The unit it runs in, where it runs in one.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "checkout",
+          "repositoryName",
+          "commit",
+          "command",
+          "scope",
+          "unitName",
+          "pid",
+          "state",
+          "passedCount",
+          "failedCount",
+          "skippedCount",
+          "logPath",
+          "startedAt",
+          "endedAt"
+        ],
+        "type": "object"
+      },
+      "TestRunKind": {
+        "description": "What a test run is a run of.",
+        "oneOf": [
+          {
+            "const": "suite",
+            "description": "A run of the `suite` verb.",
+            "type": "string"
+          },
+          {
+            "const": "command",
+            "description": "One heavy command of the `run` verb.",
+            "type": "string"
+          }
+        ]
+      },
+      "TestRunPage": {
+        "description": "A page of a list: the items, and whether anything stands past the last of them.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TestRun"
+            },
+            "type": "array"
+          },
+          "more": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items",
+          "more"
+        ],
+        "type": "object"
+      },
+      "TestRunState": {
+        "description": "Where a test run stands in its life.",
+        "oneOf": [
+          {
+            "enum": [
+              "running",
+              "passed",
+              "failed",
+              "not-run"
+            ],
+            "type": "string"
+          },
+          {
+            "const": "gone",
+            "description": "Its process went without ending it.",
+            "type": "string"
+          }
+        ]
+      },
+      "WireError": {
+        "description": "A failure: its code, and an English sentence saying what is wrong.",
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/ErrorCode"
+          },
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "error"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "description": "The service's token, from the caller's own configuration.",
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "description": "One machine's testbed shared by every checkout on it: the queue heavy commands wait in, whole-suite runs with change selection, quick static checks, and release-based deployments. The HTTP service only reads, from the record every verb writes and the lanes as they stand; running anything is the command line's, and the MCP server wraps those commands where the harness runs. Times are integers of epoch milliseconds, and every failure is answered in the error shape with its status.",
+    "title": "bmo-testbed",
+    "version": "0.1.0-rev.1"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/deployments": {
+      "get": {
+        "operationId": "listDeployments",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "description": "a cursor: the id of the last item of the page before",
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentPage"
+                }
+              }
+            },
+            "description": "Deployments, newest first."
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Deployments, newest first.",
+        "tags": [
+          "deployments"
+        ],
+        "x-codes": [
+          "unauthorized",
+          "bad-request"
+        ]
+      }
+    },
+    "/deployments/{deploymentId}": {
+      "get": {
+        "operationId": "readDeploymentsByDeploymentId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deploymentId",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Deployment"
+                }
+              }
+            },
+            "description": "One deployment: its steps and the code it stopped for."
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "One deployment: its steps and the code it stopped for.",
+        "tags": [
+          "deployments"
+        ],
+        "x-codes": [
+          "unauthorized",
+          "bad-request",
+          "not-found"
+        ]
+      }
+    },
+    "/deployments/{deploymentId}/log-lines": {
+      "get": {
+        "operationId": "listDeploymentsLogLinesByDeploymentId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "deploymentId",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "description": "a cursor: the id of the last item of the page before",
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogLinePage"
+                }
+              }
+            },
+            "description": "A deployment's log, oldest first."
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "A deployment's log, oldest first.",
+        "tags": [
+          "deployments"
+        ],
+        "x-codes": [
+          "unauthorized",
+          "bad-request",
+          "not-found"
+        ]
+      }
+    },
+    "/events": {
+      "get": {
+        "operationId": "listEvents",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "description": "a cursor: the id of the last item of the page before",
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kinds",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventPage"
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The service's one event stream (SSE), or a page of it with Accept: application/json."
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "The service's one event stream (SSE), or a page of it with Accept: application/json.",
+        "tags": [
+          "events"
+        ],
+        "x-codes": [
+          "unauthorized",
+          "bad-request",
+          "gone"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "listHealth",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            },
+            "description": "Readiness and version."
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Readiness and version.",
+        "tags": [
+          "health"
+        ],
+        "x-codes": [
+          "unauthorized"
+        ]
+      }
+    },
+    "/queues": {
+      "get": {
+        "operationId": "listQueues",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "description": "a cursor: the id of the last item of the page before",
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueuePage"
+                }
+              }
+            },
+            "description": "The wide and narrow queues: holder and waiting entries."
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "The wide and narrow queues: holder and waiting entries.",
+        "tags": [
+          "queues"
+        ],
+        "x-codes": [
+          "unauthorized",
+          "bad-request"
+        ]
+      }
+    },
+    "/restarts": {
+      "get": {
+        "operationId": "listRestarts",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "description": "a cursor: the id of the last item of the page before",
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "unitName",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestartPage"
+                }
+              }
+            },
+            "description": "Why each unit a deployment stopped was stopped, for the unit to read as it starts again."
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Why each unit a deployment stopped was stopped, for the unit to read as it starts again.",
+        "tags": [
+          "restarts"
+        ],
+        "x-codes": [
+          "unauthorized",
+          "bad-request"
+        ]
+      }
+    },
+    "/test-runs": {
+      "get": {
+        "operationId": "listTestRuns",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "description": "a cursor: the id of the last item of the page before",
+              "format": "int64",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "checkout",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestRunPage"
+                }
+              }
+            },
+            "description": "Test runs, newest first."
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Test runs, newest first.",
+        "tags": [
+          "test-runs"
+        ],
+        "x-codes": [
+          "unauthorized",
+          "bad-request"
+        ]
+      }
+    },
+    "/test-runs/{testRunId}": {
+      "get": {
+        "operationId": "readTestRunsByTestRunId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "testRunId",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestRun"
+                }
+              }
+            },
+            "description": "One test run and its counts."
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "One test run and its counts.",
+        "tags": [
+          "test-runs"
+        ],
+        "x-codes": [
+          "unauthorized",
+          "bad-request",
+          "not-found"
+        ]
+      }
+    }
+  },
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "servers": [
+    {
+      "description": "the testbed service",
+      "url": "/"
+    }
+  ],
+  "tags": [
+    {
+      "name": "health"
+    },
+    {
+      "name": "events"
+    },
+    {
+      "name": "queues"
+    },
+    {
+      "name": "test-runs"
+    },
+    {
+      "name": "deployments"
+    },
+    {
+      "name": "restarts"
+    }
+  ],
+  "x-calls": [],
+  "x-commands": [
+    "run",
+    "status",
+    "classify",
+    "suite",
+    "count",
+    "log",
+    "template",
+    "check",
+    "imports",
+    "cargo",
+    "prune",
+    "full",
+    "deploy",
+    "backups",
+    "serve",
+    "mcp"
+  ],
+  "x-events": [
+    "queue.changed",
+    "test-run.created",
+    "test-run.ended",
+    "deployment.created",
+    "deployment.changed",
+    "restart.created"
+  ],
+  "x-harness": {
+    "entry": "A harness runs its heavy test or build command through testbed_run, so it waits in the machine's one queue, and reads the run's counts and log with testbed_test_run.",
+    "mcp": "bmo-testbed mcp",
+    "plugin": "ahas-testbed"
+  },
+  "x-layer": "upstream",
+  "x-stage": 2,
+  "x-tools": [
+    {
+      "description": "The wide and narrow queues: holder and waiting entries.",
+      "input": {
+        "additionalProperties": false,
+        "description": "A list's page: the id of the last item of the page before, and how many to answer.",
+        "properties": {
+          "after": {
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "limit": {
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "name": "testbed_queues",
+      "output": {
+        "$ref": "#/components/schemas/QueuePage"
+      },
+      "route": "GET /queues"
+    },
+    {
+      "description": "Test runs, newest first: whole suites and single heavy commands, narrowed to one checkout.",
+      "input": {
+        "additionalProperties": false,
+        "description": "The test runs, narrowed to one checkout.",
+        "properties": {
+          "after": {
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "checkout": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "limit": {
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "name": "testbed_test_runs",
+      "output": {
+        "$ref": "#/components/schemas/TestRunPage"
+      },
+      "route": "GET /test-runs"
+    },
+    {
+      "description": "One test run and its counts.",
+      "input": {
+        "additionalProperties": false,
+        "description": "One test run, by its id.",
+        "properties": {
+          "testRunId": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "testRunId"
+        ],
+        "type": "object"
+      },
+      "name": "testbed_test_run",
+      "output": {
+        "$ref": "#/components/schemas/TestRun"
+      },
+      "route": "GET /test-runs/{testRunId}"
+    },
+    {
+      "description": "Deployments, newest first.",
+      "input": {
+        "additionalProperties": false,
+        "description": "A list's page: the id of the last item of the page before, and how many to answer.",
+        "properties": {
+          "after": {
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "limit": {
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "name": "testbed_deployments",
+      "output": {
+        "$ref": "#/components/schemas/DeploymentPage"
+      },
+      "route": "GET /deployments"
+    },
+    {
+      "description": "One deployment: its steps and the code it stopped for.",
+      "input": {
+        "additionalProperties": false,
+        "description": "One deployment, by its id.",
+        "properties": {
+          "deploymentId": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "deploymentId"
+        ],
+        "type": "object"
+      },
+      "name": "testbed_deployment",
+      "output": {
+        "$ref": "#/components/schemas/Deployment"
+      },
+      "route": "GET /deployments/{deploymentId}"
+    },
+    {
+      "command": "bmo-testbed run --",
+      "description": "Run a heavy command through the machine's queue in a checkout; answered with its exit code, log path, wait, time and test run.",
+      "input": {
+        "additionalProperties": false,
+        "description": "A heavy command, the checkout it runs in, and the lane, the wide one where none is named.",
+        "properties": {
+          "checkout": {
+            "description": "The checkout the command runs in.",
+            "type": "string"
+          },
+          "command": {
+            "description": "The command's words.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "queue": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LaneName"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "command",
+          "checkout"
+        ],
+        "type": "object"
+      },
+      "name": "testbed_run",
+      "output": {
+        "$ref": "#/components/schemas/CommandRun"
+      },
+      "route": null
+    },
+    {
+      "command": "bmo-testbed check",
+      "description": "Run the change check of a checkout: its quick checks, static steps and the tests the change touches.",
+      "input": {
+        "additionalProperties": false,
+        "description": "The checkout whose change is checked, and the commit the change is read from.",
+        "properties": {
+          "checkout": {
+            "type": "string"
+          },
+          "since": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "checkout"
+        ],
+        "type": "object"
+      },
+      "name": "testbed_check",
+      "output": {
+        "$ref": "#/components/schemas/CommandRun"
+      },
+      "route": null
+    },
+    {
+      "command": "bmo-testbed suite",
+      "description": "Run the whole suite of a checkout with change selection.",
+      "input": {
+        "additionalProperties": false,
+        "description": "The checkout whose suite runs.",
+        "properties": {
+          "checkout": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "checkout"
+        ],
+        "type": "object"
+      },
+      "name": "testbed_suite",
+      "output": {
+        "$ref": "#/components/schemas/CommandRun"
+      },
+      "route": null
+    }
+  ]
+}

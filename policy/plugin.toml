@@ -1,0 +1,49 @@
+# The harness plugin (docs/boundary.md, 「The harness plugin」): what the MCP server tells a harness of
+# itself, what each tool says it does, and the lines the mcp verb writes. A harness reads the words, so
+# they are English.
+
+instructions = "Runs a machine's heavy test and build commands in its one queue and reads what they came to. Run a heavy command with testbed_run in the checkout it belongs to, so it waits its turn behind every other heavy command on the machine, then read its counts and log with testbed_test_run on the testRunId it answers. testbed_check runs a checkout's change check and testbed_suite its whole suite; testbed_queues shows who holds each lane and who waits. A failure comes back as a tool error whose text is JSON with the service's code and sentence."
+
+# What the OpenAPI document says of the service and of each route. {plugin} and {mcp} are the plugin's name
+# and the command starting its MCP server.
+[document]
+title = "bmo-testbed"
+description = "One machine's testbed shared by every checkout on it: the queue heavy commands wait in, whole-suite runs with change selection, quick static checks, and release-based deployments. The HTTP service only reads, from the record every verb writes and the lanes as they stand; running anything is the command line's, and the MCP server wraps those commands where the harness runs. Times are integers of epoch milliseconds, and every failure is answered in the error shape with its status."
+server = "the testbed service"
+bearer = "The service's token, from the caller's own configuration."
+entry = "A harness runs its heavy test or build command through testbed_run, so it waits in the machine's one queue, and reads the run's counts and log with testbed_test_run."
+health = "Readiness and version."
+events = "The service's one event stream (SSE), or a page of it with Accept: application/json."
+queues = "The wide and narrow queues: holder and waiting entries."
+test_runs = "Test runs, newest first."
+test_run = "One test run and its counts."
+deployments = "Deployments, newest first."
+deployment = "One deployment: its steps and the code it stopped for."
+log_lines = "A deployment's log, oldest first."
+restarts = "Why each unit a deployment stopped was stopped, for the unit to read as it starts again."
+error = "a failure, in the common error shape"
+after = "a cursor: the id of the last item of the page before"
+
+[tools]
+testbed_queues = "The wide and narrow queues: holder and waiting entries."
+testbed_test_runs = "Test runs, newest first: whole suites and single heavy commands, narrowed to one checkout."
+testbed_test_run = "One test run and its counts."
+testbed_deployments = "Deployments, newest first."
+testbed_deployment = "One deployment: its steps and the code it stopped for."
+testbed_run = "Run a heavy command through the machine's queue in a checkout; answered with its exit code, log path, wait, time and test run."
+testbed_check = "Run the change check of a checkout: its quick checks, static steps and the tests the change touches."
+testbed_suite = "Run the whole suite of a checkout with change selection."
+
+[lines]
+# {why} is what the arguments reader said.
+bad_arguments = "the arguments do not read: {why}"
+no_command = "the arguments do not read: command names no words"
+# {name} is the tool asked for.
+no_tool = "there is no tool {name}"
+# {why} is what starting the verb came to.
+unstarted = "the testbed's verb could not be started: {why}"
+# {why} is what reading its answer came to, {said} the last of what it wrote.
+unread = "the testbed's verb answered nothing that reads: {why}; it said: {said}"
+# {why} is what the session came to.
+unserved = "mcp: the MCP session did not start: {why}"
+ended = "mcp: the MCP session ended in a failure: {why}"

@@ -1,0 +1,20 @@
+# The record every verb writes and the HTTP service reads (docs/boundary.md, 「The record」): its file
+# under the data root's testbed folder, how long it keeps what it holds, how long a writer waits on
+# another's lock, how many items a page answers, and the line said where it could not be written. A
+# caller reads the words, so they are English.
+
+# The folder under the data root's testbed folder, which the logs' prune passes over, and the file in it.
+dir = "record"
+file = "record.sqlite"
+# Test runs, deployments, their log lines and restarts older than this many days go.
+keep_days = 30
+# Events older than this many days go; a resume from before them is answered gone.
+event_window_days = 7
+busy_milliseconds = 5000
+# A page's items where the query names no limit, and the most it ever answers.
+default_limit = 50
+limit_ceiling = 500
+
+[lines]
+# The record could not be opened or written; the verb goes on. {why} is what it came to.
+unwritten = "record: not written, the verb goes on: {why}"

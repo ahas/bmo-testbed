@@ -97,24 +97,27 @@
   {
     "id": "suite/quick-checks",
     "title": "Quick checks",
-    "what": "The quick checks a repository enables: wording against its glossary, dashes in people's text, Korean in code against its ledger, the layout of folders and manifests, and the dependency check, run by check quick and its parts.",
+    "what": "The quick checks a repository enables: wording against its glossary and lines that are not English against a ledger, both by bmo-text's verdicts, dashes in people's text, the layout of folders and manifests, the dependency check and the Cargo profile check, run by check quick and its parts.",
     "files": [
       "suite/src/quick/mod.rs",
       "suite/src/quick/wording.rs",
       "suite/src/quick/dashes.rs",
-      "suite/src/quick/korean.rs",
+      "suite/src/quick/language.rs",
+      "suite/src/quick/cargo_profile.rs",
       "suite/src/quick/layout.rs",
       "suite/src/quick/dependencies.rs",
-      "suite/src/quick/rewrite.rs",
       "suite/src/quick/source.rs",
       "suite/src/quick/files.rs",
       "cli/src/check.rs",
       "docs/checks.md",
-      "suite/tests/integration/quick.rs"
+      "suite/tests/integration/quick.rs",
+      "suite/tests/integration/quick_language.rs",
+      "suite/tests/integration/quick_cargo_profile.rs"
     ],
     "symbols": [],
     "aliases": [
-      "korean inspector"
+      "korean inspector",
+      "코드 언어 검사"
     ],
     "needs": [
       "core/declaration",
@@ -122,7 +125,7 @@
       "core/answer-ceiling",
       "core/policy-loader"
     ],
-    "base": "d6f93ff9c61b7b279fac296e32c1367d58738d4c"
+    "base": "4922d4039e072bbb8c12da72c0e05220f8497ab3"
   },
   {
     "id": "suite/static-check",
@@ -162,7 +165,9 @@
       "cli/tests/integration/suite_verb.rs"
     ],
     "symbols": [],
-    "aliases": [],
+    "aliases": [
+      "브라우저 레인"
+    ],
     "needs": [
       "core/declaration",
       "core/languages",
@@ -171,9 +176,10 @@
       "suite/test-template",
       "suite/test-log",
       "core/event-hook",
-      "core/policy-loader"
+      "core/policy-loader",
+      "core/run-verb-and-status"
     ],
-    "base": "a77b4bf9e85365752d6413c539955efad43fc51c"
+    "base": "4922d4039e072bbb8c12da72c0e05220f8497ab3"
   },
   {
     "id": "suite/test-count",

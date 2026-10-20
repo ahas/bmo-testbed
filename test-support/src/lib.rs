@@ -13,5 +13,5 @@ pub const MESSAGE: i64 = 9;
 pub const ACCOUNT: &str = "account";
 /// A worker's name: the built-in worker's.
 pub const WORKER: &str = "worker";
-/// A job's unit name.
+/// A unit's name.
 pub const UNIT: &str = "bmo-task-1";

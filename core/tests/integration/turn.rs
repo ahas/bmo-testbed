@@ -1,5 +1,5 @@
 //! The machine's turn (docs/testbed.md, 「The turn」): the queue hands a lock out in the order its takers
-//! asked, the front ahead of everyone and the next behind the front, a job's place kept for it to come
+//! asked, the front ahead of everyone and the next behind the front, a harness's place kept for it to come
 //! back to, and a command inside a turn its caller holds running at once.
 
 use std::path::{Path, PathBuf};
@@ -76,7 +76,7 @@ fn a_ticket_at_the_front_stands_ahead_of_every_ordinary_one_and_a_next_one_betwe
 }
 
 #[test]
-fn a_job_s_place_is_kept_when_its_wait_runs_out_and_taken_back_where_it_stood() {
+fn a_harness_s_place_is_kept_when_its_wait_runs_out_and_taken_back_where_it_stood() {
   let dir = tempfile::tempdir().unwrap();
   let lock = lock_in(dir.path());
   let held = take_lock(&lock, 1.0, waiting(Rank::Ordinary, "holder")).unwrap();
@@ -134,13 +134,16 @@ fn ask(lock: &Path, env: Env) -> TurnAsk<'static> {
 fn a_turn_held_writes_its_record_and_a_command_under_it_runs_inside() {
   let dir = tempfile::tempdir().unwrap();
   let lock = lock_in(dir.path());
-  let env = Env::from([("BMO_AGENT_PLACE".to_owned(), "/places/place-3/".to_owned())]);
+  let env = Env::from([("BMO_TESTBED_SCOPE".to_owned(), "/scopes/scope-3/".to_owned())]);
   let turn = take_turn(&ask(&lock, env));
   let (name, pid) = turn.held_variable().expect("an own turn hands its children its mark");
   let holder = read_queue(&lock).holder.expect("the holder writes its record");
 
   assert_eq!(name, HELD_VARIABLE);
-  assert_eq!((holder.place.as_deref(), holder.command.as_str()), (Some("place-3"), "a check"));
+  assert_eq!(
+    (holder.scope.as_deref(), holder.command.as_str()),
+    (Some("/scopes/scope-3/"), "a check")
+  );
   assert!(inside_held_turn(&lock, &Env::from([(HELD_VARIABLE.to_owned(), pid.clone())])));
   assert!(matches!(
     take_turn(&ask(&lock, Env::from([(HELD_VARIABLE.to_owned(), pid)]))),
@@ -156,10 +159,10 @@ fn a_turn_held_writes_its_record_and_a_command_under_it_runs_inside() {
 fn a_turn_not_had_within_its_wait_says_who_holds_it() {
   let dir = tempfile::tempdir().unwrap();
   let lock = lock_in(dir.path());
-  let first = take_turn(&ask(&lock, Env::from([("BMO_AGENT_PLACE".to_owned(), "place-3".to_owned())])));
+  let first = take_turn(&ask(&lock, Env::from([("BMO_TESTBED_SCOPE".to_owned(), "place-3".to_owned())])));
   let second = take_turn(&ask(&lock, Env::new()));
   let holder = TurnEntry {
-    place: Some("place-3".to_owned()),
+    scope: Some("place-3".to_owned()),
     checkout: "/checkout".to_owned(),
     command: "a check".to_owned(),
     ..TurnEntry::default()

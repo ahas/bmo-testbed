@@ -70,11 +70,11 @@ make their own databases names neither, and its tests are handed the server alon
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `quick` | list of strings | `[]` | The quick checks run: any of `wording`, `dashes`, `korean`, `layout`, `dependencies` |
+| `quick` | list of strings | `[]` | The quick checks run: any of `wording`, `dashes`, `language` (or `korean`, the same check), `layout`, `dependencies`, `cargo-profile` |
 | `wording_document` | path | none | The document holding the banned terms and their allowed uses; required by `wording` |
 | `wording_files` | list of globs | every file | The files `wording` holds to the document |
 | `people_text` | list of globs | `[]` | The files whose literals are text for a person; read by `dashes` |
-| `korean_ledger` | path | none | The ledger of Korean lines allowed per code file; required by `korean` |
+| `language_ledger` | path | none | The ledger of lines holding letters that are not English allowed per code file; required by `language`. `korean_ledger` names the same key, and a declaration naming both is refused |
 | `base_libraries` | list of strings | `[]` | The dependencies from other repositories the `dependencies` check allows beside registry ones |
 | `main` | string | `main` | The main branch, the default base of a change |
 

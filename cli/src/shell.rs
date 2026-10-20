@@ -1,11 +1,11 @@
 //! A shell line read the way the shell splits it, for the `classify` verb (docs/testbed.md, 「A shell hook
-//! sends a job's heavy command to it」). Each simple command comes out as its words with their quoting kept
+//! sends a harness's heavy command to it」). Each simple command comes out as its words with their quoting kept
 //! as written and the words its redirects name apart from them; the text of every command and process
 //! substitution comes out beside them, since the shell runs it as commands of its own; and every heredoc's
 //! body is kept out, since a body is text a command carries rather than commands. What a script file hides
 //! is out of its sight.
 //!
-//! The reading is brush-parser's tokenizer and word parser, which read the bash grammar a job's line is
+//! The reading is brush-parser's tokenizer and word parser, which read the bash grammar a harness's line is
 //! written in almost always. A line they cannot read, a quote left open or a construct of zsh's alone,
 //! reads as no command at all: the shell refuses the first, and the second is out of this reading's sight
 //! as a script file is.

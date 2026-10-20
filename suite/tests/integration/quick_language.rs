@@ -1,21 +1,22 @@
-//! Korean in the code (docs/checks.md, 「The quick checks」): which files are code, what holds each Korean
-//! line, the report by kind, and the ledger the repository declares, which only ever comes down.
+//! Letters that are not English in the code (docs/checks.md, 「The quick checks」): which files are code,
+//! what holds each such line, the report by kind, and the ledger the repository declares, which only ever
+//! comes down. Whether a line is English is bmo-text's verdict, so the letters here only show it reached.
 
-use bmo_testbed_suite::quick::korean::{
-  KoreanInCode, Ledger, Settled, checkout_korean_in_code, is_code, korean_line_count, korean_lines,
-  korean_report, ledger_text, read_ledger, settle,
+use bmo_testbed_suite::quick::language::{
+  LanguageInCode, Ledger, Settled, checkout_language_in_code, foreign_line_count, foreign_lines, is_code,
+  language_report, ledger_text, read_ledger, settle,
 };
-use bmo_testbed_suite::quick::korean_check;
+use bmo_testbed_suite::quick::language_check;
 
 use crate::quick::{checkout, env, repository, write};
 
-// A Korean word, which the check reads and the ledger counts.
+// A Korean word, which the check reads as a line that is not English and the ledger counts.
 const WORD: &str = "보류";
 
 fn kinds(path: &str, text: &str, people: &[&str]) -> Vec<(usize, &'static str)> {
   let people: Vec<String> = people.iter().map(|glob| (*glob).to_owned()).collect();
 
-  korean_lines(path, text, &people)
+  foreign_lines(path, text, &people)
     .into_iter()
     .map(|(line, kind)| (line, kind.name()))
     .collect()
@@ -146,7 +147,7 @@ fn the_report_gives_a_row_to_each_area_or_to_each_file_under_a_prefix_the_larges
   let people = ["app/bot/two.ts".to_owned()];
 
   assert_eq!(
-    korean_report(dir.path(), None, &people),
+    language_report(dir.path(), None, &people),
     [
       "3 areas  5  comment 2, test 0, people 1, literal 1, unread 1",
       "app/bot  3  comment 1, test 0, people 1, literal 1, unread 0",
@@ -155,7 +156,7 @@ fn the_report_gives_a_row_to_each_area_or_to_each_file_under_a_prefix_the_larges
     ]
   );
   assert_eq!(
-    korean_report(dir.path(), Some("app/"), &people),
+    language_report(dir.path(), Some("app/"), &people),
     [
       "2 files  3  comment 1, test 0, people 1, literal 1, unread 0",
       "app/bot/one.ts  2  comment 1, test 0, people 0, literal 1, unread 0",
@@ -164,16 +165,17 @@ fn the_report_gives_a_row_to_each_area_or_to_each_file_under_a_prefix_the_larges
   );
 }
 
-// "a line is counted once, however much Korean it holds"
+// "a line is counted once, however many letters that are not English it holds, of any script"
 #[test]
-fn a_line_is_counted_once_however_much_korean_it_holds() {
-  assert_eq!(korean_line_count(&format!("// {WORD}\nlet a = \"{WORD} {WORD}\";\nlet b = 1;\n")), 2);
-  assert_eq!(korean_line_count("ㄱ\nᄀ\nplain"), 2);
+fn a_line_is_counted_once_however_many_letters_that_are_not_english_it_holds() {
+  assert_eq!(foreign_line_count(&format!("// {WORD}\nlet a = \"{WORD} {WORD}\";\nlet b = 1;\n")), 2);
+  assert_eq!(foreign_line_count("ㄱ\nᄀ\nplain"), 2);
+  assert_eq!(foreign_line_count("Привет\nかな\ncafé — 5 µs"), 2);
 }
 
-// "a Hangul character named by its escape is Korean, in every shape and wherever it stands"
+// "a letter named by its escape is not English all the same, in every shape and wherever it stands"
 #[test]
-fn a_hangul_character_named_by_its_escape_is_korean_in_every_shape_and_wherever_it_stands() {
+fn a_letter_named_by_its_escape_is_not_english_all_the_same_in_every_shape_and_wherever_it_stands() {
   let text = r#"let a = "\u{bcf4}";
 let b = "\uBCF4";
 let c = "\U0000bcf4";
@@ -182,7 +184,7 @@ let d = Regex::new(r"\x{3131}");
 let e = "\u{2014}\u00e9\U0001F600";
 "#;
 
-  assert_eq!(korean_line_count(text), 5);
+  assert_eq!(foreign_line_count(text), 5);
   assert_eq!(kinds("src/one.rs", text, &[])[3..], [(4, "literal"), (5, "comment")]);
 }
 
@@ -201,9 +203,10 @@ fn a_ledger_not_yet_written_allows_none_and_one_that_does_not_read_is_said_to() 
   );
 }
 
-// "refuses a file holding more Korean lines than the ledger allows, a file it does not name included"
+// "refuses a file holding more lines that are not English than the ledger allows, a file it does not name
+// included"
 #[test]
-fn refuses_a_file_holding_more_korean_lines_than_the_ledger_allows_a_file_it_does_not_name_included() {
+fn refuses_a_file_holding_more_foreign_lines_than_the_ledger_allows_a_file_it_does_not_name_included() {
   let dir = checkout(&[
     ("app/grown.ts", &format!("const a = \"{WORD}\";\nconst b = \"{WORD}\";\n")),
     ("app/new.ts", &format!("// {WORD}\n")),
@@ -211,12 +214,12 @@ fn refuses_a_file_holding_more_korean_lines_than_the_ledger_allows_a_file_it_doe
     ("docs/note.md", &format!("{WORD}\n")),
     ("ledger.json", &ledger(&[("app/grown.ts", 1), ("app/kept.ts", 1)])),
   ]);
-  let over = "lines hold Korean where the ledger allows";
+  let over = "lines hold letters that are not English where the ledger allows";
   let fix = "write it in English, or move it out of the code";
 
   assert_eq!(
-    checkout_korean_in_code(dir.path(), &dir.path().join("ledger.json"), "ledger.json").unwrap(),
-    KoreanInCode {
+    checkout_language_in_code(dir.path(), &dir.path().join("ledger.json"), "ledger.json").unwrap(),
+    LanguageInCode {
       files: 3,
       findings: vec![format!("app/grown.ts: 2 {over} 1: {fix}"), format!("app/new.ts: 1 {over} 0: {fix}"),],
       below: 0,
@@ -239,11 +242,11 @@ fn passes_a_file_holding_fewer_counts_it_below_and_settling_lowers_it_and_never_
   let at = dir.path().join("ledger.json");
 
   assert_eq!(
-    checkout_korean_in_code(dir.path(), &at, "ledger.json").unwrap(),
-    KoreanInCode {
+    checkout_language_in_code(dir.path(), &at, "ledger.json").unwrap(),
+    LanguageInCode {
       files: 2,
       findings: vec![
-        "app/grown.ts: 2 lines hold Korean where the ledger allows 1: write it in English, or move it out of the code"
+        "app/grown.ts: 2 lines hold letters that are not English where the ledger allows 1: write it in English, or move it out of the code"
           .to_owned()
       ],
       below: 2,
@@ -262,7 +265,8 @@ fn passes_a_file_holding_fewer_counts_it_below_and_settling_lowers_it_and_never_
   );
 }
 
-// "the check reads the ledger at the path the repository declares and says its count below it"
+// "the check reads the ledger at the path the repository declares, under its earlier names too, and says its
+// count below it"
 #[test]
 fn the_check_reads_the_ledger_at_the_path_the_repository_declares_and_says_its_count_below_it() {
   let dir = checkout(&[
@@ -273,13 +277,13 @@ fn the_check_reads_the_ledger_at_the_path_the_repository_declares_and_says_its_c
     ("app/a.ts", &format!("const a = \"{WORD}\";\n")),
     ("meta/korean.json", &ledger(&[("app/a.ts", 2)])),
   ]);
-  let checked = korean_check(&repository(&dir), &env());
+  let checked = language_check(&repository(&dir), &env());
 
   assert!(!checked.faulted);
   assert_eq!(
     checked.lines,
     [
-      "quick check: korean (meta/korean.json): 1 files within the ledger, 1 below it: bmo-testbed check korean --settle lowers it"
+      "quick check: language (meta/korean.json): 1 files within the ledger, 1 below it: bmo-testbed check language --settle lowers it"
     ]
   );
 }

@@ -1,13 +1,11 @@
-//! The testbed's `run` and `status` verbs (docs/boundary.md, 「The verbs」) over the words the binary read
-//! for them. A run is placed first where its placement sends it elsewhere; here it waits its turn behind
+//! The testbed's `run` verb and the `status` verb's lines (docs/boundary.md, 「The verbs」) over the words
+//! the binary read for them. A run is placed first where its placement sends it elsewhere; here it waits its turn behind
 //! every other heavy command of its lane on this machine, runs the command at the lane's width, keeps its
 //! whole output in a log of its own and ends on one result line, with what failed under it.
 
 use std::path::{Path, PathBuf};
 
-use serde::Serialize;
-
-use crate::close_line::{CloseEntry, CloseLine, read_close_line};
+use crate::close_line::{CloseEntry, read_close_line};
 use crate::languages::{LANGUAGES, language_for};
 use crate::placement::{PlaceAsk, Placement, runs_here};
 use crate::policy::fill_marks;
@@ -15,9 +13,9 @@ use crate::policy::lanes::LANES;
 use crate::queue::now_ms;
 use crate::run::{RunAsk, run_in_testbed};
 use crate::turn::{
-  Env, Lane, TestbedQueue, TurnAsk, TurnEntry, lane_width, lock_path, machine_threads, process_env,
-  read_queue,
+  Env, Lane, TurnAsk, TurnEntry, lane_width, lock_path, machine_threads, process_env, read_queue,
 };
+use crate::witness::RunWitness;
 
 /// The exit code of words the verb does not read.
 pub const REFUSED_EXIT_CODE: u8 = 2;
@@ -30,6 +28,8 @@ pub struct RunWords {
   pub adapter: Option<String>,
   pub guard_seconds: Option<f64>,
   pub wait_seconds: Option<f64>,
+  /// The lines go to standard error, so the binary's standard output carries the outcome alone.
+  pub json: bool,
 }
 
 impl RunWords {
@@ -114,26 +114,6 @@ pub fn status_lines(close_line: Option<&Path>) -> Vec<String> {
   lines
 }
 
-// Every lane's line by lane, and the repository's close line.
-#[derive(Serialize)]
-struct Status {
-  wide: TestbedQueue,
-  narrow: TestbedQueue,
-  close_line: Option<CloseLine>,
-}
-
-/// Every lane's line as JSON, the wide lane's first, then the close line where the caller names one.
-pub fn status_json(close_line: Option<&Path>) -> String {
-  let env = process_env();
-  let status = Status {
-    wide: read_queue(&lock_path(&env, Lane::Wide)),
-    narrow: read_queue(&lock_path(&env, Lane::Narrow)),
-    close_line: close_line.map(read_close_line),
-  };
-
-  serde_json::to_string_pretty(&status).unwrap_or_default()
-}
-
 /// The data root a run's log goes under: the one `BMO_DATA_DIR` names, or this machine's.
 pub fn data_root() -> PathBuf {
   match std::env::var_os("BMO_DATA_DIR") {
@@ -144,16 +124,37 @@ pub fn data_root() -> PathBuf {
   }
 }
 
-/// Where a run stands: the data root its log goes under, the environment it was started in, and where it
-/// goes before it takes its turn here.
+/// Where a run stands: the data root its log goes under, the environment it was started in, where it
+/// goes before it takes its turn here, and whoever keeps the record of it.
 pub struct VerbGround<'a> {
   pub data_root: PathBuf,
   pub env: Env,
   pub place: &'a dyn Placement,
+  pub witness: &'a dyn RunWitness,
 }
 
-/// A run of the command its words name; the code it ends with.
-pub fn run(words: &RunWords, ground: &VerbGround<'_>) -> u8 {
+/// What a run came to: the code it ends with, and where it ran here, its log, its wait, its time and the
+/// test run its witness kept.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct RunOutcome {
+  pub code: u8,
+  pub log: Option<PathBuf>,
+  pub waited_seconds: f64,
+  pub seconds: f64,
+  pub test_run: Option<i64>,
+}
+
+impl RunOutcome {
+  fn ended(code: u8) -> Self {
+    Self {
+      code,
+      ..Self::default()
+    }
+  }
+}
+
+/// A run of the command its words name, and what it came to.
+pub fn run(words: &RunWords, ground: &VerbGround<'_>) -> RunOutcome {
   let said = &LANES.verb;
   let language = match language_for(&LANGUAGES, &words.command, words.adapter.as_deref()) {
     Ok(language) => language,
@@ -162,7 +163,7 @@ pub fn run(words: &RunWords, ground: &VerbGround<'_>) -> u8 {
 
       eprintln!("{}", fill_marks(&said.no_language, &[("name", name), ("names", &names.join(", "))]));
 
-      return REFUSED_EXIT_CODE;
+      return RunOutcome::ended(REFUSED_EXIT_CODE);
     }
   };
   let env = ground.env.clone();
@@ -179,7 +180,7 @@ pub fn run(words: &RunWords, ground: &VerbGround<'_>) -> u8 {
     };
 
     if let Some(code) = ground.place.place(&ask) {
-      return code;
+      return RunOutcome::ended(code);
     }
   }
 
@@ -202,34 +203,45 @@ pub fn run(words: &RunWords, ground: &VerbGround<'_>) -> u8 {
       poll: None,
       notice_seconds: None,
     },
+    witness: ground.witness,
   };
   let result = match run_in_testbed(&ask) {
     Ok(result) => result,
     Err(why) => {
       eprintln!("{why}");
 
-      return 1;
+      return RunOutcome::ended(1);
+    }
+  };
+  let print = |line: String| {
+    if words.json {
+      eprintln!("{line}");
+    } else {
+      println!("{line}");
     }
   };
   let run = &LANES.run;
   let most = LANES.numbers.failure_lines;
 
-  println!("{}", result.line());
+  print(result.line());
 
   if !result.failures.is_empty() {
-    println!(
-      "{}",
-      if result.failures.len() >= most {
-        fill_marks(&run.failures_first, &[("count", &most.to_string())])
-      } else {
-        run.failures.clone()
-      }
-    );
+    print(if result.failures.len() >= most {
+      fill_marks(&run.failures_first, &[("count", &most.to_string())])
+    } else {
+      run.failures.clone()
+    });
 
     for line in &result.failures {
-      println!("{}", fill_marks(&run.failure, &[("line", line)]));
+      print(fill_marks(&run.failure, &[("line", line)]));
     }
   }
 
-  result.exit_code()
+  RunOutcome {
+    code: result.exit_code(),
+    log: result.log.clone(),
+    waited_seconds: result.waited_seconds,
+    seconds: result.seconds,
+    test_run: result.test_run,
+  }
 }

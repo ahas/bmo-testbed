@@ -9,6 +9,7 @@ use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::queue::{LockWait, take_lock};
 use bmo_testbed_core::run::{RunAsk, TestbedResult, run_in_testbed};
 use bmo_testbed_core::turn::{Env, Lane, NOT_RUN_EXIT_CODE, TurnAsk};
+use bmo_testbed_core::witness::Unwitnessed;
 
 fn quiet(_: &str) {}
 
@@ -33,6 +34,7 @@ fn ask<'a>(dir: &Path, command: &[&str], languages: &'a [&'static dyn Language])
       notice_seconds: None,
     },
     command,
+    witness: &Unwitnessed,
   }
 }
 

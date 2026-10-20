@@ -173,6 +173,10 @@
   the run's own judgement, with the reason beside it.
 - **A run that dies leaves the record unended.** Its process gone, a reader takes it as cut off; the
   next run writes over it.
+- **The testbed's record holds the same,** written with every change of the progress record as the
+  deployment the HTTP service answers, with every line the run says as one of its log lines, and,
+  before every unit the run stops or restarts, a restart naming the unit and why, for the unit to read
+  as it starts again (`docs/boundary.md`, 「The record」).
 
 ## A deployment cut off in the middle
 
@@ -213,7 +217,7 @@
 
 ## What it refuses
 
-- **A job's shell.** A process a job runner started, `CLAUDE_PID` set, is refused before anything is
+- **A harness's shell.** A process a harness started, `CLAUDE_PID` set, is refused before anything is
   done.
 - **A checkout with uncommitted changes to tracked files,** where the run takes the checkout's own
   `HEAD`; a run handed `--commit` reads nothing of the open files.

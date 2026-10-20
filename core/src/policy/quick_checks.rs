@@ -13,7 +13,8 @@ pub struct QuickChecks {
   pub unreadable: String,
   pub wording: Wording,
   pub dashes: Dashes,
-  pub korean: Korean,
+  pub language: LanguageWords,
+  pub cargo_profile: CargoProfileWords,
   pub layout: Layout,
   pub dependencies: Dependencies,
 }
@@ -42,7 +43,7 @@ pub struct Dashes {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Korean {
+pub struct LanguageWords {
   pub clean: String,
   pub below: String,
   pub over: String,
@@ -82,3 +83,15 @@ pub struct Dependencies {
 }
 
 super::part!(pub QUICK_CHECKS: QuickChecks = "quick-checks.toml");
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CargoProfileWords {
+  pub manifest: String,
+  pub clean: String,
+  pub differs: String,
+  pub missing: String,
+  pub not_manifest: String,
+  /// Each profile's settings by key, as the manifest writes them.
+  pub wanted: std::collections::BTreeMap<String, std::collections::BTreeMap<String, toml::Value>>,
+}

@@ -1,5 +1,5 @@
 # What the daily whole run says (docs/suite.md, 「The daily whole run」): the lines it writes into its
-# log, and the summary its `full-suite-failed` event carries (docs/boundary.md, 「Events」). A job or the
+# log, and the summary its `full-suite-failed` event carries (docs/boundary.md, 「Events」). A harness or the
 # event's reader reads them, so they are English. Each `{name}` is filled in with what it names.
 
 # The tree the run stands in.

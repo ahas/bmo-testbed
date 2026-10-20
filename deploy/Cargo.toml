@@ -6,7 +6,9 @@ edition.workspace = true
 publish.workspace = true
 
 [dependencies]
+bmo-testbed-client = { path = "../client", default-features = false }
 bmo-testbed-core = { path = "../core" }
+bmo-testbed-record = { path = "../record" }
 chrono = { workspace = true, features = ["clock"] }
 glob.workspace = true
 libc.workspace = true

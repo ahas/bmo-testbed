@@ -3,6 +3,7 @@
 //! the suite crate's; this is the verb's side of them.
 
 use std::path::{Path, PathBuf};
+use std::time::Instant;
 
 use bmo_testbed_core::declaration::{QuickCheck, Repository};
 use bmo_testbed_core::policy::fill_marks;
@@ -10,12 +11,12 @@ use bmo_testbed_core::policy::verbs::VERBS;
 use bmo_testbed_core::turn::{Env, process_env};
 use bmo_testbed_core::verb::{REFUSED_EXIT_CODE, data_root};
 use bmo_testbed_suite::check::{CheckAsk, default_log, plan, run_check, run_step};
-use bmo_testbed_suite::quick::korean::{korean_report, settle};
-use bmo_testbed_suite::quick::rewrite::without_dashes;
+use bmo_testbed_suite::quick::language::{language_report, settle};
 use bmo_testbed_suite::quick::{Checked, enabled_checks, quick_check};
 use bmo_testbed_suite::test_server::test_server_up;
 
 use crate::own::{called_from, run_own};
+use crate::recorded::command_run;
 use crate::said::Said;
 use crate::suite::repository;
 use crate::words::{CheckArgs, CheckPart};
@@ -32,13 +33,20 @@ pub fn check(args: CheckArgs) -> u8 {
 
   match args.part {
     Some(part) => checked_part(part, &repo, &env, &called_from()).print(),
-    None => change(args.since, args.files, args.log, &repo),
+    None => change(args.since, args.files, args.log, args.json, &repo),
   }
 }
 
 // The change check over the files named, or every path changed since the commit named.
-fn change(since: Option<String>, files: Vec<String>, log: Option<PathBuf>, repo: &Repository) -> u8 {
+fn change(
+  since: Option<String>,
+  files: Vec<String>,
+  log: Option<PathBuf>,
+  json: bool,
+  repo: &Repository,
+) -> u8 {
   let said = &VERBS.check;
+  let started = Instant::now();
   let ask = CheckAsk {
     since,
     files: files.iter().map(|file| file.trim_start_matches("./").to_owned()).collect(),
@@ -67,7 +75,17 @@ fn change(since: Option<String>, files: Vec<String>, log: Option<PathBuf>, repo:
   let checked = run_check(&repo.root, &plan, &log, &run_step);
 
   for line in &checked.lines {
-    println!("{line}");
+    if json {
+      eprintln!("{line}");
+    } else {
+      println!("{line}");
+    }
+  }
+
+  if json {
+    let seconds = started.elapsed().as_secs_f64();
+
+    println!("{}", command_run(checked.code, Some(&log), checked.waited_seconds, seconds, None));
   }
 
   checked.code
@@ -90,7 +108,8 @@ pub fn checked_part(part: CheckPart, repo: &Repository, env: &Env, base: &Path) 
     CheckPart::Wording => QuickCheck::Wording,
     CheckPart::Layout => QuickCheck::Layout,
     CheckPart::Dependencies => QuickCheck::Dependencies,
-    CheckPart::Korean { .. } => QuickCheck::Korean,
+    CheckPart::Language { .. } => QuickCheck::Language,
+    CheckPart::CargoProfile => QuickCheck::CargoProfile,
     CheckPart::Dashes { .. } => QuickCheck::Dashes,
   };
 
@@ -103,9 +122,9 @@ pub fn checked_part(part: CheckPart, repo: &Repository, env: &Env, base: &Path) 
   }
 
   match part {
-    CheckPart::Korean { settle: true, .. } => settled(repo, env),
-    CheckPart::Korean { kinds, prefix, .. } if kinds || prefix.is_some() => Said {
-      out: korean_report(&repo.root, prefix.as_deref(), &repo.declaration.check.people_text),
+    CheckPart::Language { settle: true, .. } => settled(repo, env),
+    CheckPart::Language { kinds, prefix, .. } if kinds || prefix.is_some() => Said {
+      out: language_report(&repo.root, prefix.as_deref(), &repo.declaration.check.people_text),
       ..Said::default()
     },
     CheckPart::Dashes { files, write } => dashes(&files, base, write),
@@ -113,10 +132,10 @@ pub fn checked_part(part: CheckPart, repo: &Repository, env: &Env, base: &Path) 
   }
 }
 
-// The Korean ledger lowered to what each file holds now.
+// The language ledger lowered to what each file holds now.
 fn settled(repo: &Repository, env: &Env) -> Said {
   let said = &VERBS.check;
-  let named = repo.declaration.check.korean_ledger.clone().unwrap_or_default();
+  let named = repo.declaration.check.language_ledger.clone().unwrap_or_default();
   let ledger = repo.path(&named, env);
 
   match settle(&repo.root, &ledger, &named.to_string_lossy()) {
@@ -168,7 +187,7 @@ pub fn dashes(paths: &[String], base: &Path, write: bool) -> Said {
         return answer;
       }
     };
-    let after = without_dashes(&before);
+    let after = bmo_text::dashes::without_dashes(&before, true);
 
     if after == before {
       continue;

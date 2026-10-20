@@ -1,4 +1,4 @@
-//! The `classify` verb (docs/boundary.md, 「The verbs」; docs/testbed.md, 「A shell hook sends a job's heavy
+//! The `classify` verb (docs/boundary.md, 「The verbs」; docs/testbed.md, 「A shell hook sends a harness's heavy
 //! command to it」): a heavy command found wherever the shell puts it and answered with the line that runs
 //! it in the testbed, and a light one, a run of the testbed and a command taking the turn itself let
 //! through.

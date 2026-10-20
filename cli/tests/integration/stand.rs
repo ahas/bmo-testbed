@@ -1,5 +1,5 @@
 //! What the binary's tests stand on: the binary run in a directory of the test's own, its lanes, logs and
-//! close line there, standing for no job, inside no turn and placed nowhere unless the test names an
+//! close line there, standing for no harness, inside no turn and placed nowhere unless the test names an
 //! endpoint; and a git checkout made for a test.
 
 use std::path::Path;
@@ -26,7 +26,9 @@ pub fn testbed(dir: &Path, data: &Path, args: &[&str]) -> Command {
     .env("XDG_RUNTIME_DIR", data)
     .env_remove("DBUS_SESSION_BUS_ADDRESS")
     .env_remove("CLAUDE_PID")
-    .env_remove("BMO_AGENT_PLACE")
+    .env_remove("BMO_TESTBED_SCOPE")
+    .env_remove("BMO_TESTBED_SERVICE")
+    .env_remove("BMO_TESTBED_TOKEN")
     .env_remove("BMO_TESTBED_HELD")
     .env_remove("BMO_TESTBED_FRONT")
     .env_remove("BMO_TESTBED_NEXT")

@@ -151,11 +151,11 @@ manifest = "manifest.toml"
 check_key = "build.check"
 
 [check]
-quick = ["wording", "dashes", "korean", "layout", "dependencies"]
+quick = ["wording", "dashes", "language", "layout", "dependencies", "cargo-profile"]
 wording_document = "docs/wording.md"
 wording_files = ["src/**"]
 people_text = ["src/**/*.ts"]
-korean_ledger = "docs/ledger.json"
+language_ledger = "docs/ledger.json"
 base_libraries = ["shared-library"]
 main = "trunk"
 
@@ -239,9 +239,10 @@ timeout_seconds = 5
     [
       QuickCheck::Wording,
       QuickCheck::Dashes,
-      QuickCheck::Korean,
+      QuickCheck::Language,
       QuickCheck::Layout,
-      QuickCheck::Dependencies
+      QuickCheck::Dependencies,
+      QuickCheck::CargoProfile
     ]
   );
   assert_eq!(declaration.check.wording_files.as_deref(), Some(&["src/**".to_owned()][..]));
@@ -297,8 +298,8 @@ fn a_key_the_schema_does_not_name_is_refused_naming_the_key_and_its_table() {
 // "a quick check enabled without the input it reads is refused, naming the check and the input"
 #[test]
 fn a_quick_check_enabled_without_the_input_it_reads_is_refused_naming_the_check_and_the_input() {
-  let refusal = refused(&declared("[check]\nquick = [\"korean\"]\n"));
-  assert!(refusal.contains("the quick check korean reads korean_ledger"), "{refusal}");
+  let refusal = refused(&declared("[check]\nquick = [\"language\"]\n"));
+  assert!(refusal.contains("the quick check language reads language_ledger"), "{refusal}");
 
   let refusal = refused(&declared("[check]\nquick = [\"dashes\", \"wording\"]\n"));
   assert!(refusal.contains("the quick check wording reads wording_document"), "{refusal}");
@@ -360,10 +361,10 @@ fn a_quick_check_without_the_input_it_reads_is_refused_naming_the_input() {
   assert!(refusal.contains("check.quick"), "{refusal}");
   assert!(refusal.contains("wording_document"), "{refusal}");
 
-  let refusal = refused(&declared("[check]\nquick = [\"dashes\", \"korean\"]\n"));
-  assert!(refusal.contains("korean_ledger"), "{refusal}");
+  let refusal = refused(&declared("[check]\nquick = [\"dashes\", \"language\"]\n"));
+  assert!(refusal.contains("language_ledger"), "{refusal}");
 
-  assert!(parse(&declared("[check]\nquick = [\"korean\"]\nkorean_ledger = \"ledger.json\"\n")).is_ok());
+  assert!(parse(&declared("[check]\nquick = [\"language\"]\nlanguage_ledger = \"ledger.json\"\n")).is_ok());
   assert!(parse(&declared("[check]\nquick = [\"dashes\", \"layout\", \"dependencies\"]\n")).is_ok());
 }
 
@@ -453,8 +454,31 @@ fn this_repositorys_own_declaration_reads() {
   assert!(declaration.test.database.is_some());
   assert_eq!(
     declaration.check.quick,
-    [QuickCheck::Dashes, QuickCheck::Korean, QuickCheck::Layout, QuickCheck::Dependencies]
+    [
+      QuickCheck::Dashes,
+      QuickCheck::Language,
+      QuickCheck::Layout,
+      QuickCheck::Dependencies,
+      QuickCheck::CargoProfile
+    ]
   );
   assert_eq!(declaration.build.binaries.as_deref(), Some(&["bmo-testbed".to_owned()][..]));
   assert!(declaration.deploy.root.is_some());
+}
+
+// "the language check and its ledger are read under their earlier names too, and both ledger keys at once
+// are refused"
+#[test]
+fn the_language_check_and_its_ledger_are_read_under_their_earlier_names() {
+  let earlier =
+    parse(&declared("[check]\nquick = [\"korean\"]\nkorean_ledger = \"ledger.json\"\n")).unwrap();
+
+  assert_eq!(earlier.check.quick, [QuickCheck::Language]);
+  assert_eq!(earlier.check.language_ledger.as_deref(), Some(std::path::Path::new("ledger.json")));
+
+  let refusal = refused(&declared(
+    "[check]\nquick = [\"language\"]\nlanguage_ledger = \"a.json\"\nkorean_ledger = \"b.json\"\n",
+  ));
+
+  assert!(refusal.contains("ledger"), "{refusal}");
 }

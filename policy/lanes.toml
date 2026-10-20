@@ -1,6 +1,6 @@
 # What the machine's turn for heavy commands says and the numbers it keeps to (docs/testbed.md, 「The
 # turn」): the lines a waiter writes while it stands in a lane's line, and what a caller says once its
-# turn is settled. A job reads the words, so they are English. Each `{name}` is filled in with what it names.
+# turn is settled. A harness reads the words, so they are English. Each `{name}` is filled in with what it names.
 
 # Every lane's turn, by lane.
 [lanes]
@@ -9,17 +9,17 @@ narrow = "the narrow lane's turn"
 
 # The turn's and the run's own numbers (docs/testbed.md, 「The turn」 and 「The result」).
 [numbers]
-# How long a caller inside a job's call waits for the turn, and how long one no job's call bounds.
-job_wait_seconds = 180
+# How long a caller inside a harness's call waits for the turn, and how long one no harness's call bounds.
+harness_wait_seconds = 180
 unit_wait_seconds = 1500
 # How much longer a caller waits while a caller at the front holds the lane or stands ahead of it.
 front_allowance_seconds = 360
-# How long a job's place in the line is kept once its wait has run out.
+# How long a harness's place in the line is kept once its wait has run out.
 kept_place_seconds = 600
 # How often a waiter says where it stands, and how often a waiter looks at the line.
 notice_seconds = 30
 poll_milliseconds = 500
-# How often the watch on a job holding a turn looks whether the job is still there, and how long the
+# How often the watch on a harness holding a turn looks whether the harness is still there, and how long the
 # holder and what runs under it are given once asked to stop.
 watch_seconds = 2
 stop_grace_seconds = 5
@@ -51,7 +51,7 @@ nobody = "nobody holding it yet"
 # Who holds the turn, {who} as `entry` names it.
 held_by = "held by {who}"
 
-# Where an entry stands: its job's place, its checkout and its command joined by `joiner`, or `pid` where
+# Where an entry stands: its harness's place, its checkout and its command joined by `joiner`, or `pid` where
 # it names none of them.
 [entry]
 joiner = " · "
@@ -119,7 +119,7 @@ waiting = "  waiting {at}: {who}"
 age = " ({seconds}s)"
 front = " (at the front)"
 next = " (next after the front)"
-kept = " (place kept for a job coming back)"
+kept = " (place kept for a harness coming back)"
 close_line = "the close line:"
 
 # The `run` verb's refusal of a language it does not know, {name} the name given and {names} the ones

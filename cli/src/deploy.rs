@@ -12,7 +12,7 @@ use bmo_testbed_core::policy::deploy_steps::DeployStep as OwnStep;
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::verbs::VERBS;
 use bmo_testbed_core::queue::{LockWait, take_lock};
-use bmo_testbed_core::turn::{Env, FRONT_VARIABLE, NOT_RUN_EXIT_CODE, job_pid, process_env};
+use bmo_testbed_core::turn::{Env, FRONT_VARIABLE, NOT_RUN_EXIT_CODE, harness_pid, process_env};
 use bmo_testbed_core::verb::{REFUSED_EXIT_CODE, data_root};
 use bmo_testbed_deploy::deployment::{
   DeployAsk, DeployPlaces, Gate, GateAsk, GateOutcome, GateStep, Machine, Passed, deploy as deploy_run,
@@ -25,11 +25,12 @@ use bmo_testbed_deploy::upload::{
   AwsHands, BackupNames, Remote, send_backups, upload_failed_detail, upload_failed_summary,
 };
 use bmo_testbed_suite::once_more::run_judged;
-use bmo_testbed_suite::run::{SuiteWords, ask_of};
+use bmo_testbed_suite::run::{SuiteAsk, SuiteWords, ask_of};
 use bmo_testbed_suite::static_check::{check_steps, run_static_check, spawn_step};
 
+use crate::recorded::suite_record;
 use crate::suite::repository;
-use crate::words::DeployArgs;
+use crate::words::{BINARY, DeployArgs};
 
 /// The gate a deployment passes: the declared static check over the range from what was live, then the
 /// suite over the same range, what failed run once more.
@@ -70,8 +71,18 @@ impl Gate for SuiteGate<'_> {
       ..SuiteWords::default()
     };
     let started = Instant::now();
-    let (code, flaky) =
-      run_judged(self.repo, &ask_of(&words, &self.repo.declaration.test), &data_root(), self.hook);
+    let command = [BINARY, "suite", "--again"]
+      .into_iter()
+      .map(str::to_owned)
+      .chain(ask.since.iter().flat_map(|since| ["--since".to_owned(), (*since).to_owned()]))
+      .collect::<Vec<_>>()
+      .join(" ");
+    let judged = SuiteAsk {
+      record: Some(suite_record(&data_root(), self.repo, command)),
+      ..ask_of(&words, &self.repo.declaration.test)
+    };
+    let (ended, flaky) = run_judged(self.repo, &judged, &data_root(), self.hook);
+    let code = ended.code;
 
     steps.push(GateStep {
       name: OwnStep::Tests.name().to_owned(),
@@ -134,8 +145,8 @@ pub fn deploy(args: &DeployArgs) -> u8 {
     Err(why) => return refused(&why),
   };
 
-  if job_pid(&env).is_some() {
-    return refused(&DEPLOY.run.job);
+  if harness_pid(&env).is_some() {
+    return refused(&DEPLOY.run.harness);
   }
 
   let unit = deploy_unit_of_process();
@@ -168,6 +179,7 @@ pub fn deploy(args: &DeployArgs) -> u8 {
     before_start: args.before_start.clone(),
     unit,
     upload: Some(upload),
+    record: Some(data_root()),
   };
   let suite = SuiteGate {
     repo: &repo,

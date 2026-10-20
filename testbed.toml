@@ -14,10 +14,12 @@ setup = ["cd testkit && bun install --frozen-lockfile"]
 [test.database]
 
 [check]
-quick = ["dashes", "korean", "layout", "dependencies"]
+quick = ["dashes", "language", "layout", "dependencies", "cargo-profile"]
 # The text a person reads: the verbs' words in the policy, and the literals of the crates and the kit.
 people_text = ["policy/*.toml", "*/src/**/*.rs", "testkit/*.ts"]
-korean_ledger = "docs/korean-in-code-ledger.json"
+language_ledger = "docs/language-ledger.json"
+# The base library whose verdicts the quick checks take.
+base_libraries = ["bmo-text"]
 
 [build]
 binaries = ["bmo-testbed"]

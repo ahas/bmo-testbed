@@ -1,9 +1,20 @@
 # The boundary: what the testbed promises its callers
 
 Everything a caller may rely on stands here: the binary's verbs and their exit codes, the structure
-`--json` answers carry, the environment the verbs read and hand on, the declaration, the events, the
-placement endpoint and the crates' public roles. What is not here is internal and may change in any
-release. The version rules at the end are over this document.
+`--json` answers carry, the environment the verbs read and hand on, the declaration, the event hook,
+the HTTP service and its routes, the harness plugin and its tools, the placement endpoint and the
+crates' public roles. What is not here is internal and may change in any release. The version rules
+at the end are over this document.
+
+- **The testbed is an upstream** in the sense of bmo-chat's `docs/conventions.md`: a harness takes it
+  as its first entry point through its MCP server, with no other unit running. Its routes, members,
+  tools and verbs name no caller; who stands in a lane is the caller's opaque `scope`.
+- **The wire format and the API design are the conventions' own,** and are not restated here: keys
+  in camelCase, times in epoch milliseconds, the error shape of `code` and `error`, pages of `items`
+  and `more`, and one event stream.
+- **`docs/openapi.json` is the contract of the routes and the tools,** generated from the client
+  crate's types and the plugin's tool table; a test fails where the committed document differs from
+  what the code generates.
 
 ## The binary
 
@@ -37,7 +48,7 @@ release. The version rules at the end are over this document.
 ### `run`
 
 ```
-bmo-testbed run [--narrow] [--adapter <name>] [--guard <seconds>] [--wait <seconds>] -- <command…>
+bmo-testbed run [--narrow] [--adapter <name>] [--guard <seconds>] [--wait <seconds>] [--json] -- <command…>
 ```
 
 - Runs the command in the wide lane's turn, or the narrow lane's with `--narrow`, read by the language
@@ -45,7 +56,11 @@ bmo-testbed run [--narrow] [--adapter <name>] [--guard <seconds>] [--wait <secon
   replaces the thirty-minute run guard, `--wait` the wait for the turn; both take positive whole
   seconds.
 - Placed first where the placement endpoint answers so (「Placement」), unless inside a held turn.
+- Every run that is not placed elsewhere is a test run of kind `command` in the record (「The
+  record」), written as its turn comes and ended with its counts.
 - Prints the waits, the one `testbed:` result line, and under a failure at most sixty failure lines.
+- **`--json`** prints those lines on standard error instead, and on standard output one command run
+  (「Members」) once the run has ended; the exit code is the same.
 - Exits 0 where it passed, the command's own code where it failed, 75 where it was not run, 2 where its
   words do not read (no `--`, no command, a flag missing its value, an unknown adapter, which the line
   names with the adapters there are), and 1 on an internal error.
@@ -59,25 +74,10 @@ bmo-testbed status [--json]
 - Prints each lane, its width, its holder or nobody, and its waiters in order with their age and their
   front, next and kept marks; then the close line of the repository it is run in. Exits 0.
 - **`--json`** prints one object:
-  - `wide`, `narrow`: each a queue, with `holder` (an entry or null) and `waiting` (a list of entries,
-    in the order they will be served);
-  - `close_line`: the repository's close line, with `holder` (a close entry or null) and `waiting`, or
-    null outside a repository.
-- **An entry** carries:
-
-  | Field | Type | Meaning |
-  |---|---|---|
-  | `place` | string or null | The agent place of the job that started it, from `BMO_AGENT_PLACE` |
-  | `checkout` | string | The checkout it was started in |
-  | `command` | string | The command, as one line |
-  | `asked` | integer | When it asked for the turn, milliseconds since the epoch |
-  | `since` | integer, optional | When the turn came; present on a holder |
-  | `pid` | integer | Its process |
-  | `kept` | boolean, optional | A place kept for a run that ended not run; absent means false |
-  | `front` | boolean, optional | Standing at the front; absent means false |
-  | `next` | boolean, optional | Standing next after the front; absent means false |
-
-- **A close entry** carries `place`, `checkout`, `asked`, `since` and `pid` as an entry does.
+  - `queues`: the page of both lanes exactly as `GET /queues` answers it (「Members」);
+  - `closeLine`: the repository's close line, with `holder` (a close entry or null) and `waiting` (a
+    list of close entries, in the order they will be served), or null outside a repository.
+- **A close entry** carries `scope`, `checkout`, `askedAt`, `heldAt` and `pid` as a queue entry does.
 
 ### `classify`
 
@@ -86,7 +86,7 @@ bmo-testbed classify [--json] [--takes-turn <command>]… <shell line>
 ```
 
 - Reads one shell line, given whole as one word, as the shell splits it (`docs/testbed.md`, 「A shell
-  hook sends a job's heavy command to it」), and answers whether it holds a heavy command started
+  hook sends a harness's heavy command to it」), and answers whether it holds a heavy command started
   outside the testbed.
 - **`--takes-turn`** names a command that takes the turn itself, as its program and the words it opens
   with, one shell line, say `"tool cargo"`; a command opening that way is let through, with
@@ -100,14 +100,18 @@ bmo-testbed classify [--json] [--takes-turn <command>]… <shell line>
 ### `suite`
 
 ```
-bmo-testbed suite [--since <commit>] [--again] [--guard <seconds>] [--file-guard <seconds>] [--turn-wait <seconds>] [<word>…]
+bmo-testbed suite [--since <commit>] [--again] [--guard <seconds>] [--file-guard <seconds>] [--turn-wait <seconds>] [--json] [<word>…]
 ```
 
 - Runs the repository's units (`docs/suite.md`): all of them, or those the change since `--since`
   reaches. A word naming a path narrows the files; a word that is a unit's name exactly picks that
   unit; every other word goes to each file's runner. `--again` runs what failed or never started once
   more.
-- Writes its `suite:` lines and each unit's output to standard error, to be redirected to a file.
+- Writes its `suite:` lines and each unit's output to standard error, to be redirected to a file, and
+  the same to a log of its own under the data root's `testbed/`.
+- Every run is a test run of kind `suite` in the record (「The record」), its log the run's own.
+- **`--json`** prints one command run (「Members」) on standard output once the run has ended, its log
+  the run's own; the exit code is the same.
 - **With `--again`,** a first run that failed or left units unstarted says `suite: once more`, naming
   them, runs them once more by name and ends as that second run ends; the tests that passed only the
   second time are written down and sent as a `suite-flaky` event (`docs/suite.md`, 「What failed runs
@@ -149,19 +153,22 @@ bmo-testbed template make|drop|sweep <name>
 ### `check`
 
 ```
-bmo-testbed check [--since <commit>] [--log <path>] [<file…>]
+bmo-testbed check [--since <commit>] [--log <path>] [--json] [<file…>]
 bmo-testbed check quick
-bmo-testbed check wording|layout|dependencies
-bmo-testbed check korean [--kinds] [--settle] [<prefix>]
+bmo-testbed check wording|layout|dependencies|cargo-profile
+bmo-testbed check language [--kinds] [--settle] [<prefix>]
 bmo-testbed check dashes <file…> [--write]
 ```
 
 - With no part named, the change check (`docs/checks.md`, 「The change check」): exits 1 where any step
-  failed, 2 where the change could not be read.
-- With a part named, that quick check alone, or every enabled one for `quick`. `korean --settle` lowers
-  the ledger; `dashes <file…>` rewrites the dashes between words in the markdown files named, only with
-  `--write`, and otherwise prints each line it would change. Each exits 1 where it finds anything, and
-  2 where the declaration does not enable it or names none of its inputs.
+  failed, 2 where the change could not be read. **`--json`** prints its lines on standard error
+  instead, and on standard output one command run (「Members」) once the check has ended: its log, the
+  waits of its steps added up, and its whole time.
+- With a part named, that quick check alone, or every enabled one for `quick`. `language --settle`
+  lowers the ledger, and `korean` names the same part; `dashes <file…>` rewrites the dashes between
+  words in the markdown files named, only with `--write`, and otherwise prints each line it would
+  change. Each exits 1 where it finds anything, and 2 where the declaration does not enable it or
+  names none of its inputs.
 
 ### `imports`
 
@@ -222,20 +229,46 @@ bmo-testbed backups
 - Sends and rotates the backups (`docs/deploy.md`, 「Sending backups away」). Exits 1 where any backup
   failed to send, the rest sent all the same.
 
+### `serve`
+
+```
+bmo-testbed serve [--listen <address>] [--token <token>]
+```
+
+- Serves the HTTP service (「The HTTP service」) at the address, the policy's loopback address where
+  none is named, behind the bearer token, `BMO_TESTBED_TOKEN` where `--token` names none. It runs
+  until it is stopped, and exits 0 on a stop signal.
+- Exits 2 where no token is named or the address does not read, and 1 where the address cannot be
+  bound or the record cannot be opened.
+
+### `mcp`
+
+```
+bmo-testbed mcp [--service <url>] [--token <token>]
+```
+
+- Serves the harness plugin's MCP server on standard input and output (「The harness plugin」): the
+  reading tools call the HTTP service at the address, `BMO_TESTBED_SERVICE` where `--service` names
+  none and the policy's loopback address where neither does, behind the token, `BMO_TESTBED_TOKEN`
+  where `--token` names none; the running tools start this same binary's verbs.
+- Exits 0 when the harness closes the session, and 1 where it ends in a failure.
+
 ## The environment
 
 | Variable | Read by | Meaning |
 |---|---|---|
-| `BMO_DATA_DIR` | every verb | The testbed's data root: logs under `testbed/`, locks under `locks/`. Default `$HOME/.local/share/bmo/data` |
+| `BMO_DATA_DIR` | every verb | The testbed's data root: logs and the record under `testbed/`, locks under `locks/`. Default `$HOME/.local/share/bmo/data` |
 | `TMPDIR` | the turn | Where the lane locks stand. Default `/tmp` |
 | `BMO_TESTBED_LOCK` | the turn | Another wide lane lock, the narrow one beside it |
 | `BMO_TESTBED_HELD` | the turn | Set by a holder for its children: its process number. A command finding it holding its lane runs at once |
-| `BMO_TESTBED_FRONT` | the turn | `1` stands the caller at the front, unless it is inside a job's call |
+| `BMO_TESTBED_FRONT` | the turn | `1` stands the caller at the front, unless it is inside a harness's call |
 | `BMO_TESTBED_NEXT` | the turn | `1` stands the caller next after the front |
 | `BMO_TESTBED_TIMES` | the turn | A file each turn taken adds a line to: the command, its lane, its wait and its run |
 | `BMO_TEST_PARALLEL` | the turn, the suite | The wide lane's width; set by the turn for a language's runner |
-| `CLAUDE_PID` | the turn, `deploy` | The job's agent process: a caller with one is inside a job's call, its holder is watched, and `deploy` refuses it |
-| `BMO_AGENT_PLACE` | the turn | The agent place a ticket names |
+| `CLAUDE_PID` | the turn, `deploy` | The process of the harness whose call the caller runs in: a caller with one is inside a harness's call, its holder is watched, and `deploy` refuses it |
+| `BMO_TESTBED_SCOPE` | the turn, the record | The caller's opaque scope, which a ticket, a holder and a test run carry and the testbed never reads |
+| `BMO_TESTBED_TOKEN` | `serve`, `mcp` | The HTTP service's bearer token |
+| `BMO_TESTBED_SERVICE` | `mcp` | The HTTP service's address the reading tools call |
 | `BMO_TESTBED_PLACEMENT` | `run`, `suite` | The placement endpoint, over the declaration's |
 | `BMO_TESTBED_EVENT_HOOK` | every verb that sends events | The event hook, over the declaration's, and the hook for a verb run outside a repository |
 | `BMO_SUITE_MEMORY_GB` | the suite | The fence's memory ceiling |
@@ -274,7 +307,7 @@ keep (`docs/deploy.md`, 「The unit links」).
 
 ## Events
 
-- **What the testbed tells instead of telling anyone itself.** A fact a person or an agent should hear,
+- **What the testbed tells instead of telling anyone itself.** A fact the caller should hear,
   a deployment failed, a backup did not send, goes to the event hook; what the hook does with it is the
   consumer's.
 - **The hook** is the command `BMO_TESTBED_EVENT_HOOK` or the declaration's `[events] hook` names, run
@@ -308,6 +341,136 @@ keep (`docs/deploy.md`, 「The unit links」).
   | `cargo-target-over-ceiling` | `bytes`, `ceiling_bytes`, `checkouts` |
   | `full-suite-failed` | `head`, `log`, `step` (the failing setup or static step, or null), `failures`, each with `unit` and `package` |
   | `suite-flaky` | `tests`, each with `test` and `unit`, `units`, `log` |
+
+## The record
+
+- **What the verbs did is written into one record** on the machine, `record/record.sqlite` under the
+  data root's `testbed/`, which every verb writes and the HTTP service reads: the test runs, the
+  deployments with their steps and log lines, the restarts, and the events of each.
+- **A test run** is written by every `run` that is not placed elsewhere, kind `command`, and by every
+  `suite`, kind `suite`, a deployment's gate and the daily whole run among them. It is written once
+  its turn has come and ended with its counts; a run ending not run from there on, a suite leaving
+  units unstarted and failing nothing, ends `not-run`. A run placed elsewhere is written by the
+  machine it runs on.
+- **A deployment** is written as the deploy run begins its progress record and changed with it
+  (`docs/deploy.md`, 「What a deployment says of itself as it runs」), and every line the deploy run
+  says is one of its log lines.
+- **A restart** is written by a deployment for every unit it stops or restarts, before it does: the
+  unit, the deployment, and one English sentence of why, so the unit reads why it was stopped as it
+  starts again.
+- **Writing the record never changes a verb's outcome.** A record that cannot be opened or written is
+  said on one line of standard error and the verb goes on.
+- **What it keeps:** test runs, deployments, their log lines and restarts for the policy's days, and
+  events for the policy's window; older ones go as the next one is written.
+
+## The HTTP service
+
+- **It only reads.** Running anything is the verbs'; the routes serve what the record holds and the
+  lanes as they stand. `serve` starts it (「`serve`」).
+- **Every route takes the bearer token,** `GET /health` included, and answers 401 `unauthorized`
+  without it.
+
+### Routes
+
+| Method and path | Answers | Codes beside `unauthorized` |
+|---|---|---|
+| `GET /health` | the health | |
+| `GET /events` | the event stream, or a page of events to `Accept: application/json` | `bad-request`, `gone` |
+| `GET /queues` | a page of the two lanes, the wide one first | `bad-request` |
+| `GET /test-runs` | a page of test runs, newest first, narrowed by `checkout` | `bad-request` |
+| `GET /test-runs/{testRunId}` | one test run | `not-found` |
+| `GET /deployments` | a page of deployments, newest first | `bad-request` |
+| `GET /deployments/{deploymentId}` | one deployment | `not-found` |
+| `GET /deployments/{deploymentId}/log-lines` | a page of the deployment's log lines, oldest first | `bad-request`, `not-found` |
+| `GET /restarts` | a page of restarts, newest first, narrowed by `unitName` | `bad-request` |
+
+- **A list pages by `after` and `limit`.** `after` is the id of the last item of the page before, so
+  a list newest first goes on to older ids and one oldest first to newer ones; `limit` is the policy's
+  default where none is named and never more than its ceiling. The lanes are always two, and answer
+  whole up to the limit.
+- **A path that names no route** answers 404 `no-route`; a service failure 500 `failed`.
+
+### Members
+
+Every member has one shape wherever it is answered: alone, in a page, inside an event.
+
+- **Health:** `ready` (boolean), `reason` (string or null, null when ready), `version` (the
+  workspace's). It is not ready while the record cannot be opened.
+- **Queue:** `name` (`wide` or `narrow`), `width` (integer), `holder` (a queue entry or null),
+  `waiting` (a list of queue entries, in the order they will be served).
+- **Queue entry:** `scope` (string or null, the caller's opaque scope from `BMO_TESTBED_SCOPE`),
+  `checkout`, `command` (one line), `pid`, `askedAt`, `heldAt` (null while waiting), and the booleans
+  `kept`, `front` and `next`.
+- **Test run:** `id`, `kind` (`suite` or `command`), `checkout`, `repositoryName` (string or null),
+  `commit` (string or null), `command` (the words run, as one line), `scope` (string or null),
+  `unitName` (the unit it runs in, from `BMO_DEPLOY_UNIT`, or null), `pid`, `state`, `passedCount`,
+  `failedCount`, `skippedCount`, `logPath`, `startedAt`, `endedAt` (null while it runs).
+  - Its `state` is `running`, then one of `passed`, `failed` or `not-run`; a run whose process went
+    without ending it is answered `gone`.
+- **Deployment:** `id`, `repositoryName` (string or null), `unitName` (the deployment's unit, or
+  null), `pid`, `commit` (string or null), `state`, `plan` (the stages it means to pass), `stages`
+  (each with `stage` and `startedAt`), `steps`, `rolledBack` (boolean), `stoppedFor` (string or null),
+  `reason` (string or null), `startedAt`, `endedAt` (null while it runs).
+  - Its `state` is `running`, then one of `live`, `rolled-back`, `failed` or `stopped`; a run whose
+    process went without ending it is answered `gone`.
+  - `stoppedFor` is the code of why it did not go live: the stage it stopped in (`check`, `backup`,
+    `tree`, `build`, `before`, `restart`, `stay-up`), or `refused` for a refusal; null while it runs
+    and once it went live. `reason` is the sentence beside its outcome.
+- **Deployment step:** `name` (its declared English id), `stage` (string or null), `part` (`snapshot`,
+  `pack`, `check` or null), `state` (`ahead`, `running` or `ended`), `exitCode`, `waitedMs`, `spentMs`
+  (each null until it ended), `startedAt` (null while ahead), `endedAt` (null until it ended).
+- **Log line:** `id`, `at`, `text`.
+- **Restart:** `id`, `unitName`, `deploymentId`, `reason`, `at`.
+- **Command run,** what `run`, `check` and `suite` print with `--json` and the running tools answer:
+  `exitCode`, `logPath` (empty for a run placed elsewhere, whose log stands on that machine),
+  `waitedMs`, `spentMs`, and `testRunId` (the test run it wrote, or null for a check or a run placed
+  elsewhere).
+
+### The event stream
+
+- **`GET /events` is the service's one stream,** of these kinds, each event's data the member as a
+  `GET` answers it at the time:
+
+  | Kind | Data |
+  |---|---|
+  | `queue.changed` | the queue whose holder or line changed |
+  | `test-run.created` | the test run as it began |
+  | `test-run.ended` | the test run as it ended |
+  | `deployment.created` | the deployment as it began |
+  | `deployment.changed` | the deployment after each change of its record |
+  | `restart.created` | the restart |
+
+- **A lane's change is seen by the service itself,** which reads the lanes every second of the
+  policy's and writes a `queue.changed` event where a holder or a line differs from the last reading.
+- **A reader resumes** with `Last-Event-ID` or `after`, and narrows with `kinds`, a comma-separated
+  list. The window is the policy's; a resume from before it answers 410 `gone`.
+- **To `Accept: application/json`** the same events are a page by `after` and `limit`.
+- **A comment line every fifteen seconds** keeps the stream open.
+
+## The harness plugin
+
+- **`bmo-testbed mcp` is the MCP server and `ahas-testbed` its skill,** under `plugin/skills/`, telling
+  a harness when and how to use it. A harness's first use is to run its heavy test or build command
+  through `testbed_run`, so it waits in the machine's one queue, and to read the run's counts and log
+  with `testbed_test_run`.
+- **Its tools are exactly these,** each a thin call through the client or of one verb, their inputs and
+  outputs stated under `x-tools` in `docs/openapi.json`:
+
+  | Tool | Calls | Answers |
+  |---|---|---|
+  | `testbed_queues` | `GET /queues` | a page of queues |
+  | `testbed_test_runs` | `GET /test-runs` | a page of test runs |
+  | `testbed_test_run` | `GET /test-runs/{testRunId}` | a test run |
+  | `testbed_deployments` | `GET /deployments` | a page of deployments |
+  | `testbed_deployment` | `GET /deployments/{deploymentId}` | a deployment |
+  | `testbed_run` | `bmo-testbed run --json --`, in the checkout named, in the narrow lane where `queue` names it | a command run |
+  | `testbed_check` | `bmo-testbed check --json`, in the checkout named, from `since` where named | a command run |
+  | `testbed_suite` | `bmo-testbed suite --json`, in the checkout named | a command run |
+
+- **A tool that fails** answers a tool error whose text is JSON: `status` where a route answered,
+  `code` and `error`. Arguments that are not the tool's shape are `bad-request`; a service nothing
+  answers at is an error with no `code`.
+- **It sends no notifications,** since the service keeps no subscriptions.
 
 ## Placement
 
@@ -369,12 +532,20 @@ keep (`docs/deploy.md`, 「The unit links」).
   checkout, so a consumer holding the line and `status` reading it meet in one file.
 - **`cli`:** the `bmo-testbed` binary: each verb's words read and handed to the crates, the
   classification of a shell line, and the HTTP placement.
+- **`client`:** `bmo-testbed-client`, the published client: every member, page, query and error code
+  of the HTTP service as its types, and the HTTP client calling each route. Its HTTP part is the
+  default `http` feature, so a crate taking the types alone builds without it.
+- **`record`:** the record (「The record」): opened from a data root, written by the verbs, read by
+  the service, each row read back as the client's member.
+- **`service`:** the HTTP service over the record and the lanes, which `serve` starts.
+- **`plugin`:** the harness plugin: the tool table, the MCP server `mcp` starts, the OpenAPI document
+  generated from the client's types and the tool table, and the `ahas-testbed` skill.
 - **`suite`:** the whole-suite run, change selection, the static and quick checks, the Cargo verb, the
   superseded removal and the prune.
 - **`deploy`:** releases, the link flip, unit links, the deploy run, the progress record, rollback
   through the tree's and the services' hands, backups. The run asks its gate through a trait of its
   own, which the binary answers with the suite crate's static check and suite, so `deploy` depends on
-  no other crate of the testbed but `core`.
+  no other crate of the testbed but `core` and `record`.
 - **`scratch-database`:** per-test databases copied from a template the migrator a test hands in
   makes (`docs/suite.md`, 「The test database」): a scratch database dropped with its guard, its
   address and connection, and the test server's address; a consumer's crate may take it as a
@@ -393,15 +564,21 @@ keep (`docs/deploy.md`, 「The unit links」).
 
 ## Versions
 
-- **One version, the workspace's,** in semantic versioning, over everything this document states.
-- **A major release** removes or renames a verb, a flag or an environment variable; changes what an
-  exit code, a status field, an event, a payload field or a declaration key means; removes a status
-  field, an event, a payload field or a declaration key; makes an optional declaration key required;
-  or changes the placement endpoint's request or answer incompatibly.
-- **A minor release** adds a verb, a flag, an environment variable, an optional declaration key, a
-  status field, an event, a payload field, a language or a quick check, or widens what a verb accepts.
-- **A patch release** changes nothing this document states.
+- **One version, the workspace's,** over everything this document states: the crates, the binary, the
+  health's `version`, the OpenAPI document and the MCP server all answer it.
+- **Before its first release the testbed is `0.1.0` and counts revisions,** by the conventions'
+  rule: `0.1.0` is the base and no revision, and every later version is one revision more, written
+  `0.1.0-rev.<n>`, whatever the change, a breaking one included. Major, minor and patch never move
+  before the first release.
+- **From the first release on, the version moves by semver.** A major release removes or renames a
+  verb, a flag, an environment variable, a route, a member's field or a tool; changes what an exit
+  code, a field, an event, a payload field or a declaration key means; removes an event, a payload
+  field or a declaration key; makes an optional declaration key or a field required; or changes the
+  placement endpoint's request or answer incompatibly. A minor release adds a verb, a flag, an
+  environment variable, an optional declaration key, a route, a field, an event, a tool, a payload
+  field, a language or a quick check, or widens what a verb accepts. A patch release changes nothing
+  this document states.
 - **The declaration names its major** in `testbed`; a testbed of another major refuses it with exit
-  code 2, naming both, and accepts a declaration of its own major whatever minor wrote it, refusing
-  only keys it does not know.
+  code 2, naming both, and accepts a declaration of its own major whatever revision or minor wrote it,
+  refusing only keys it does not know.
 - **The payload's `version`** moves only with a major release.

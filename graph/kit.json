@@ -13,7 +13,7 @@
     "needs": [
       "core/policy-loader"
     ],
-    "base": "a77b4bf9e85365752d6413c539955efad43fc51c"
+    "base": "d562ea2c953f6b0b9384c92324f9038550fb2ab6"
   },
   {
     "id": "kit/test-kit",
@@ -38,6 +38,6 @@
     ],
     "aliases": [],
     "needs": [],
-    "base": "f211fba9705f180cb46a50ae034c1d83b65caec0"
+    "base": "d562ea2c953f6b0b9384c92324f9038550fb2ab6"
   }
 ]

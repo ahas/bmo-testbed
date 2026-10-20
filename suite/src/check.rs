@@ -212,11 +212,13 @@ pub fn plan(repo: &Repository, ask: &CheckAsk) -> Result<CheckPlan, String> {
   })
 }
 
-/// What a call came to: the lines it prints and the code it ends with.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// What a call came to: the lines it prints, the code it ends with, and how long its steps waited for their
+/// turns, added up.
+#[derive(Clone, Debug, PartialEq)]
 pub struct Checked {
   pub lines: Vec<String>,
   pub code: u8,
+  pub waited_seconds: f64,
 }
 
 /// Every step of the plan run to its end through `run`, each one's output appended to `log`; then, where the
@@ -243,9 +245,12 @@ pub fn run_check(
   )];
   let mut failed = false;
   let mut written = String::new();
+  let mut waited_seconds = 0.0;
 
   for step in &plan.steps {
     let done = run(root, step);
+
+    waited_seconds += done.waited_seconds.max(0.0);
     let logged = fill_shown(
       &words.logged,
       &[("name", &step.name), ("command", &step.step.command.join(" ")), ("code", &done.code)],
@@ -298,6 +303,7 @@ pub fn run_check(
 
   Checked {
     lines,
+    waited_seconds,
     code: u8::from(failed),
   }
 }

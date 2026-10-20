@@ -13,7 +13,7 @@ pub struct LaneWords {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Numbers {
-  pub job_wait_seconds: u64,
+  pub harness_wait_seconds: u64,
   pub unit_wait_seconds: u64,
   pub front_allowance_seconds: u64,
   pub kept_place_seconds: u64,

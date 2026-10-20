@@ -8,6 +8,7 @@ use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use bmo_testbed_client::{DeploymentState, PageQuery, RestartsQuery};
 use bmo_testbed_core::declaration::Repository;
 use bmo_testbed_core::events::Hook;
 use bmo_testbed_core::turn::Env;
@@ -19,6 +20,7 @@ use bmo_testbed_deploy::progress::{Outcome, read_deploy_progress};
 use bmo_testbed_deploy::release::{LiveProcess, release_dir};
 use bmo_testbed_deploy::run::{Ran, run_quiet};
 use bmo_testbed_deploy::tree::read_deploy_record;
+use bmo_testbed_record::Record;
 use serde_json::Value;
 
 use crate::stand::must;
@@ -250,7 +252,11 @@ fn a_commit_goes_live_with_its_bot_restarted_and_watched() {
   let scene = Scene::new();
   let hands = Hands::default();
   let head = must(&["rev-parse", "HEAD"], &scene.source);
-  let code = scene.run(&hands);
+  let recorded = DeployAsk {
+    record: Some(scene.at("testbed-data")),
+    ..DeployAsk::default()
+  };
+  let code = scene.run_with(&recorded, &Told(true), &hands, &scene.env());
   let release = release_dir(&scene.deploy_dir(), &head);
 
   assert_eq!(code, 0, "{}", said(&hands));
@@ -290,6 +296,29 @@ fn a_commit_goes_live_with_its_bot_restarted_and_watched() {
     read_deploy_progress(std::fs::read_to_string(scene.at("data/deploy-progress.json")).ok().as_deref());
 
   assert_eq!(progress.unwrap().ending.unwrap().outcome, Outcome::Live);
+
+  // The testbed's record holds the deployment as it went live, the lines it said, and why it restarted its
+  // bot service.
+  let record = Record::open(&scene.at("testbed-data")).unwrap();
+  let deployment = record.deployments(&PageQuery::default()).unwrap().items.remove(0);
+  let restarts = record.restarts(&RestartsQuery::default()).unwrap().items;
+
+  assert_eq!(
+    (deployment.state, deployment.commit.as_deref()),
+    (DeploymentState::Live, Some(head.as_str()))
+  );
+  assert!(
+    !record
+      .log_lines(deployment.id, &PageQuery::default())
+      .unwrap()
+      .unwrap()
+      .items
+      .is_empty()
+  );
+  assert!(
+    restarts.iter().any(|one| one.unit_name == "app" && one.deployment_id == deployment.id),
+    "{restarts:?}"
+  );
 }
 
 // "a second commit goes live beside the first, the binary that changed placed and the first release kept"

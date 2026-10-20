@@ -15,6 +15,10 @@
   - `check`: a command checking a part of the package that is not covered by its runner, run inside the
     package's folder through `sh`, as one unit of the suite where the package is marked and as one step
     of the change check where a changed path is the package's or matches its `reads`.
+- **A project of its own declares its browser test files** in the same `bmo` section of its own
+  manifest, as `browser`: globs from the project's folder. Where the suite marks the project, each file
+  they reach is a unit of its own in the suite's browser lane, beside the project's check
+  (`docs/suite.md`, 「Browser files run in a lane of one」).
 - **A project of its own** is a directory carrying its own package manifest and the lockfile a declared
   language names (`docs/testbed.md`, 「Languages」) that the root workspace does not list; a
   repository declaring no such language has none to find. The directory declares itself by its two
@@ -75,38 +79,31 @@
 - **Recorded input and installed packages are never read:** a file under a `fixtures/` or a
   `node_modules/` folder holds words somebody else wrote. `wording` and `dashes` also pass over a test
   file, a `.test.` file, a file under a `tests/` or `test/` folder or a `tests.rs`, whose words are made
-  up; `korean` counts its lines as test input.
+  up; `language` counts its lines as test input.
 - **`wording`:** no tracked or new file the declaration's `wording_files` reach, the wording document
   itself aside, uses a term the document bans, and no allowed use in it has gone stale; a file that is
-  not UTF-8 text holds no words to read. The document is markdown, and its sections are its level-two
-  headings: `Banned terms`, each item `<language> · <term> → <what to write>`, optionally followed by
-  ` — <when>`; `Uses in the word's own sense`, each item `<language> · <term> · <phrase holding it> —
-  <why>`, the term passing inside that phrase; and `Allowed uses`, each item `<language> · <term> ·
-  <path> · <excerpt> — <why>`. A term is found a line at a time, on lines of its own language, told by
-  the script the line is written in (`ko`, `ja` or `en`); a Korean term another syllable runs into
-  from the left is part of a longer word. A use is allowed in the file it names, on a line holding its
-  excerpt.
+  not UTF-8 text holds no words to read. The document's shape, how a banned term is found on a line of
+  its own language and what an allowed use covers are bmo-text's wording (bmo-text's `docs/api.md`,
+  `wording`); which files are read is the testbed's.
 - **`dashes`:** no text the code writes for a person holds a dash between words. People's text is
   every literal in the files the declaration names as people's text. Comments, regular expressions,
   a Rust test module and a literal that is one dash and nothing else pass. Each language is read by
   its own parser: TypeScript by oxc, a single-file component by the tree-sitter HTML grammar with oxc
   for its scripts, Rust by the tree-sitter Rust grammar, YAML and TOML by their serde readers.
   - **`check dashes <file…>`** rewrites a markdown file's dashes between words the way a person types
-    the same sentence: a name and its explanation get a colon, an aside between two dashes gets commas,
-    or brackets where it holds commas of its own, any further dash in the sentence a comma, and a dash
-    between two digits is a range, `~`. The file is read by the markdown parser, and only its
-    paragraphs, headings and table cells are prose: code, quotations, links, web addresses, words in
-    double quotes and a dash standing alone at either end of a piece keep theirs.
-- **`korean`:** no code file holds more lines with Korean in them than the repository's ledger allows
-  it, and a file the ledger does not name is allowed none; a ledger file not yet written allows none
-  anywhere. A line holds Korean where it holds a Hangul character, or an escape naming one written in
-  any of the shapes the code languages share, `\u{…}`, `\uXXXX`, `\UXXXXXXXX` or a pattern's `\x{…}`,
-  in a comment as much as in a literal: Korean a file cannot do without, the Hangul ranges of a check
-  that reads Korean or the input of its tests, is written as Korean and stands in the ledger. The
-  ledger is a JSON object from each file's path to its count. `--settle` lowers the
-  ledger to what each file holds now and never raises it; `--kinds` reads each area's Korean lines by
-  what holds them: a comment, test input, people's text, another literal, or a line of a language no
-  parser here reads.
+    the same sentence, as bmo-text's `without_dashes` rewrites a wrapped text (bmo-text's
+    `docs/api.md`, `dashes`).
+- **`language`:** no code file holds more lines with a letter that is not English in them than the
+  repository's ledger allows it, and a file the ledger does not name is allowed none; a ledger file not
+  yet written allows none anywhere. Whether a line holds such a letter, written as itself or named by an
+  escape, in a comment as much as in a literal, is bmo-text's verdict (bmo-text's `docs/api.md`,
+  `english`): a letter of any script but Latin. A language a file cannot do without, the letters of a
+  check that reads them or the input of its tests, is written as itself and stands in the ledger. The
+  ledger is a JSON object from each file's path to its count. `--settle` lowers the ledger to what each
+  file holds now and never raises it; `--kinds` reads each area's such lines by what holds them: a
+  comment, test input, people's text, another literal, or a line of a language no parser here reads.
+  `korean` names the same check, in the declaration and as the verb's part, and `korean_ledger` the
+  same ledger.
 - **`layout`:** the README's folder table, the table whose first header cell is `Folder`, names every
   top-level folder and no other; no folder of the top two levels is named for a language outside a
   project of its own; and every folder holding a `Cargo.toml` or a `package.json` is a member of its
@@ -119,6 +116,11 @@
   the declared base libraries, or where it is a dev-dependency on the testbed's test kit: the
   package `@bmo-testbed/testkit`, or the crates `bmo-testbed-test-support` and
   `bmo-testbed-scratch-database` (`docs/boundary.md`, 「The crates」).
+- **`cargo-profile`:** the repository's root `Cargo.toml` holds every profile setting that keeps each
+  build's output small: `[profile.dev]` with `debug = "line-tables-only"`, `split-debuginfo =
+  "unpacked"` and `incremental = false`, and `[profile.release]` with `debug = false` and `strip =
+  "debuginfo"`. A setting left out or set otherwise is named with what it should be; a repository with no
+  root `Cargo.toml` has nothing to hold. Setting them is each repository's own change.
 - **`quick` runs every enabled one** and prints a line for each, ending non-zero where any failed.
 
 ## The change check

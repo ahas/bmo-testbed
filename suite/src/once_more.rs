@@ -15,7 +15,7 @@ use serde_json::json;
 use crate::log::{
   FailedTest, failed_files_of, failed_tests_of, failures_of, unstarted_of, verdict_of, warnings_of,
 };
-use crate::run::{SuiteAsk, run_saying};
+use crate::run::{SuiteAsk, SuiteEnded, run_saying};
 use crate::workspace::git_lines;
 
 /// A suite's run: its exit code, and what its log says of it.
@@ -220,9 +220,9 @@ fn own_log() -> String {
 /// The suite run with `--again` (docs/suite.md, 「What failed runs once more」): run once, and where it failed
 /// or left units unstarted, run once more over what it named, judged on that second run. What passed only
 /// the second time is written down under the data root and sent to the hook as `suite-flaky`. Every line
-/// both runs write goes to standard error as it comes. The exit code the judgement ends with, and what was
-/// flaky.
-pub fn run_judged(repo: &Repository, ask: &SuiteAsk, data_root: &Path, hook: &Hook) -> (u8, Flaky) {
+/// both runs write goes to standard error as it comes. What the run the judgement stands on came to, its code
+/// the judgement's, and what was flaky.
+pub fn run_judged(repo: &Repository, ask: &SuiteAsk, data_root: &Path, hook: &Hook) -> (SuiteEnded, Flaky) {
   let said = &SUITE.again;
   let heard = Mutex::new(String::new());
   let say = |line: &str| {
@@ -234,9 +234,9 @@ pub fn run_judged(repo: &Repository, ask: &SuiteAsk, data_root: &Path, hook: &Ho
     }
   };
   let taken = || heard.lock().map(|mut heard| std::mem::take(&mut *heard)).unwrap_or_default();
-  let code = run_saying(repo, ask, &say);
-  let first = SuiteRun::of_log(i64::from(code), &taken());
-  let mut last = code;
+  let first_ended = run_saying(repo, ask, &say);
+  let first = SuiteRun::of_log(i64::from(first_ended.code), &taken());
+  let mut last = first_ended.clone();
   let runs = run_once_more(first, |named| {
     say(&format!(
       "\n{}",
@@ -256,11 +256,11 @@ pub fn run_judged(repo: &Repository, ask: &SuiteAsk, data_root: &Path, hook: &Ho
     };
 
     last = run_saying(repo, &again, &say);
-    SuiteRun::of_log(i64::from(last), &taken())
+    SuiteRun::of_log(i64::from(last.code), &taken())
   });
 
   if runs.again.is_none() {
-    return (code, Flaky::default());
+    return (first_ended, Flaky::default());
   }
 
   if !runs.passed() {
