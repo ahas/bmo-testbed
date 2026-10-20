@@ -11,12 +11,13 @@
     "symbols": [],
     "aliases": [],
     "needs": [],
-    "base": "45332e08134fa2ecb86de60b6b1a24c854d34448",
-    "changed": 1792498875428,
+    "base": "bc0df588009be7d649792ae7c422d3dab8edb2d0",
+    "changed": 1792534545134,
     "boundary": {
       "side": "calls",
       "repository": "bmo-text",
-      "api": "api/crate"
+      "api": "api/crate",
+      "build": true
     }
   }
 ]
