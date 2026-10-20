@@ -1,0 +1,7 @@
+repository = "bmo-testbed"
+base = false
+
+[coverage]
+# Every Cargo package's src/, but the crate roots that only list their modules.
+layout = "bmo-next"
+unindexed = ["core/src/lib.rs", "deploy/src/lib.rs", "suite/src/lib.rs"]

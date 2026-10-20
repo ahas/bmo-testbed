@@ -46,7 +46,7 @@ and a release-based deployment of a repository onto the machine it runs on.
 | `units/` | The user units this repository's deployment keeps: the Cargo build directory's prune and its timer |
 | `policy/` | The testbed's own fixed numbers and words, read by `core`'s policy loader |
 | `docs/` | The documents above |
-| `graph/` | The code dependency graph: one JSON file per area, a node per feature with its files and the features it needs, written by the graph tool and never by hand |
+| `.graph/` | The code dependency graph: one JSON file per area, a node per feature with its files and the features it needs, and a boundary node for each API exposed or called, written by `bmo-graph` and never by hand |
 
 At the root stand the Cargo workspace manifest, which holds the version, and its lockfile, the
 formatter's settings, this repository's own `testbed.toml`, and `CLAUDE.md`.

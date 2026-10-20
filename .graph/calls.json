@@ -1,0 +1,22 @@
+[
+  {
+    "id": "calls/bmo-text",
+    "title": "Text readings library",
+    "what": "The bmo-text crate's readings the quick checks call: dashes rewritten as a person types them, wording checked against a glossary, and text judged English or not, at the workspace's pinned version.",
+    "files": [
+      "cli/src/check.rs",
+      "suite/src/quick/wording.rs",
+      "suite/src/quick/language.rs"
+    ],
+    "symbols": [],
+    "aliases": [],
+    "needs": [],
+    "base": "76e3f04107e25a01cd2eb3d4dc0be685b313e955",
+    "changed": 1792498875428,
+    "boundary": {
+      "side": "calls",
+      "repository": "bmo-text",
+      "api": "api/crate"
+    }
+  }
+]

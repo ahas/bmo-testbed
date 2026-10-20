@@ -13,7 +13,8 @@
     "needs": [
       "core/policy-loader"
     ],
-    "base": "9b88d096b4e911668481c944e19b53774e7636ed"
+    "base": "76e3f04107e25a01cd2eb3d4dc0be685b313e955",
+    "changed": 1792498861656
   },
   {
     "id": "core/close-line",
@@ -30,7 +31,8 @@
       "core/lanes-and-turn",
       "core/policy-loader"
     ],
-    "base": "a77b4bf9e85365752d6413c539955efad43fc51c"
+    "base": "76e3f04107e25a01cd2eb3d4dc0be685b313e955",
+    "changed": 1792498861660
   },
   {
     "id": "core/declaration",
@@ -49,7 +51,8 @@
       "core/lanes-and-turn",
       "core/policy-loader"
     ],
-    "base": "f211fba9705f180cb46a50ae034c1d83b65caec0"
+    "base": "76e3f04107e25a01cd2eb3d4dc0be685b313e955",
+    "changed": 1792498861664
   },
   {
     "id": "core/event-hook",
@@ -65,7 +68,8 @@
       "core/declaration",
       "core/policy-loader"
     ],
-    "base": "9b88d096b4e911668481c944e19b53774e7636ed"
+    "base": "76e3f04107e25a01cd2eb3d4dc0be685b313e955",
+    "changed": 1792498861668
   },
   {
     "id": "core/lanes-and-turn",
@@ -84,7 +88,8 @@
     "needs": [
       "core/policy-loader"
     ],
-    "base": "a77b4bf9e85365752d6413c539955efad43fc51c"
+    "base": "76e3f04107e25a01cd2eb3d4dc0be685b313e955",
+    "changed": 1792498861673
   },
   {
     "id": "core/languages",
@@ -102,7 +107,8 @@
     "symbols": [],
     "aliases": [],
     "needs": [],
-    "base": "a77b4bf9e85365752d6413c539955efad43fc51c"
+    "base": "76e3f04107e25a01cd2eb3d4dc0be685b313e955",
+    "changed": 1792498861678
   },
   {
     "id": "core/placement",
@@ -120,7 +126,8 @@
       "core/lanes-and-turn",
       "core/policy-loader"
     ],
-    "base": "9b88d096b4e911668481c944e19b53774e7636ed"
+    "base": "76e3f04107e25a01cd2eb3d4dc0be685b313e955",
+    "changed": 1792498861682
   },
   {
     "id": "core/policy-loader",
@@ -170,7 +177,8 @@
     "symbols": [],
     "aliases": [],
     "needs": [],
-    "base": "9b88d096b4e911668481c944e19b53774e7636ed"
+    "base": "76e3f04107e25a01cd2eb3d4dc0be685b313e955",
+    "changed": 1792498861687
   },
   {
     "id": "core/run-verb-and-status",
@@ -195,6 +203,7 @@
       "core/close-line",
       "core/policy-loader"
     ],
-    "base": "9b88d096b4e911668481c944e19b53774e7636ed"
+    "base": "76e3f04107e25a01cd2eb3d4dc0be685b313e955",
+    "changed": 1792498861690
   }
 ]

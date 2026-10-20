@@ -23,7 +23,8 @@
       "suite/change-selection",
       "core/policy-loader"
     ],
-    "base": "f211fba9705f180cb46a50ae034c1d83b65caec0"
+    "base": "76e3f04107e25a01cd2eb3d4dc0be685b313e955",
+    "changed": 1792498861731
   },
   {
     "id": "suite/change-check",
@@ -46,9 +47,11 @@
       "suite/test-log",
       "core/declaration",
       "core/lanes-and-turn",
-      "core/policy-loader"
+      "core/policy-loader",
+      "calls/bmo-text"
     ],
-    "base": "f211fba9705f180cb46a50ae034c1d83b65caec0"
+    "base": "76e3f04107e25a01cd2eb3d4dc0be685b313e955",
+    "changed": 1792498861735
   },
   {
     "id": "suite/change-selection",
@@ -73,7 +76,8 @@
       "core/languages",
       "core/policy-loader"
     ],
-    "base": "a77b4bf9e85365752d6413c539955efad43fc51c"
+    "base": "76e3f04107e25a01cd2eb3d4dc0be685b313e955",
+    "changed": 1792498861740
   },
   {
     "id": "suite/moved-imports",
@@ -92,7 +96,8 @@
       "suite/change-selection",
       "core/policy-loader"
     ],
-    "base": "f211fba9705f180cb46a50ae034c1d83b65caec0"
+    "base": "76e3f04107e25a01cd2eb3d4dc0be685b313e955",
+    "changed": 1792498861744
   },
   {
     "id": "suite/quick-checks",
@@ -115,17 +120,16 @@
       "suite/tests/integration/quick_cargo_profile.rs"
     ],
     "symbols": [],
-    "aliases": [
-      "korean inspector",
-      "코드 언어 검사"
-    ],
+    "aliases": [],
     "needs": [
       "core/declaration",
       "suite/change-selection",
       "core/answer-ceiling",
-      "core/policy-loader"
+      "core/policy-loader",
+      "calls/bmo-text"
     ],
-    "base": "4922d4039e072bbb8c12da72c0e05220f8497ab3"
+    "base": "76e3f04107e25a01cd2eb3d4dc0be685b313e955",
+    "changed": 1792498861748
   },
   {
     "id": "suite/static-check",
@@ -146,7 +150,8 @@
       "core/lanes-and-turn",
       "core/policy-loader"
     ],
-    "base": "a77b4bf9e85365752d6413c539955efad43fc51c"
+    "base": "76e3f04107e25a01cd2eb3d4dc0be685b313e955",
+    "changed": 1792498861753
   },
   {
     "id": "suite/suite-run",
@@ -165,9 +170,7 @@
       "cli/tests/integration/suite_verb.rs"
     ],
     "symbols": [],
-    "aliases": [
-      "브라우저 레인"
-    ],
+    "aliases": [],
     "needs": [
       "core/declaration",
       "core/languages",
@@ -179,7 +182,8 @@
       "core/policy-loader",
       "core/run-verb-and-status"
     ],
-    "base": "4922d4039e072bbb8c12da72c0e05220f8497ab3"
+    "base": "76e3f04107e25a01cd2eb3d4dc0be685b313e955",
+    "changed": 1792498861758
   },
   {
     "id": "suite/test-count",
@@ -197,7 +201,8 @@
     "needs": [
       "core/policy-loader"
     ],
-    "base": "a77b4bf9e85365752d6413c539955efad43fc51c"
+    "base": "76e3f04107e25a01cd2eb3d4dc0be685b313e955",
+    "changed": 1792498861763
   },
   {
     "id": "suite/test-log",
@@ -215,7 +220,8 @@
       "core/answer-ceiling",
       "core/policy-loader"
     ],
-    "base": "a77b4bf9e85365752d6413c539955efad43fc51c"
+    "base": "76e3f04107e25a01cd2eb3d4dc0be685b313e955",
+    "changed": 1792498861768
   },
   {
     "id": "suite/test-template",
@@ -234,6 +240,7 @@
       "core/declaration",
       "core/policy-loader"
     ],
-    "base": "f211fba9705f180cb46a50ae034c1d83b65caec0"
+    "base": "76e3f04107e25a01cd2eb3d4dc0be685b313e955",
+    "changed": 1792498861772
   }
 ]

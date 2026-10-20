@@ -13,7 +13,8 @@
     "needs": [
       "core/policy-loader"
     ],
-    "base": "d562ea2c953f6b0b9384c92324f9038550fb2ab6"
+    "base": "76e3f04107e25a01cd2eb3d4dc0be685b313e955",
+    "changed": 1792498861708
   },
   {
     "id": "kit/test-kit",
@@ -29,15 +30,10 @@
       "test-support/src/lib.rs",
       "docs/suite.md"
     ],
-    "symbols": [
-      "setUpTestHome",
-      "scratchDir",
-      "standInModule",
-      "refused",
-      "OWNER_ID"
-    ],
+    "symbols": [],
     "aliases": [],
     "needs": [],
-    "base": "d562ea2c953f6b0b9384c92324f9038550fb2ab6"
+    "base": "76e3f04107e25a01cd2eb3d4dc0be685b313e955",
+    "changed": 1792498861712
   }
 ]

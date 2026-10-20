@@ -12,7 +12,9 @@
       "docs/boundary.md",
       "README.md",
       "cli/tests/integration/own.rs",
-      "cli/tests/integration/nouns.rs"
+      "cli/tests/integration/nouns.rs",
+      "cli/src/main.rs",
+      "suite/src/own_binary.rs"
     ],
     "symbols": [],
     "aliases": [],
@@ -35,7 +37,8 @@
       "service/http-service",
       "plugin/harness-plugin"
     ],
-    "base": "9b88d096b4e911668481c944e19b53774e7636ed"
+    "base": "76e3f04107e25a01cd2eb3d4dc0be685b313e955",
+    "changed": 1792498861635
   },
   {
     "id": "cli/classify",
@@ -53,7 +56,8 @@
       "core/languages",
       "core/policy-loader"
     ],
-    "base": "a77b4bf9e85365752d6413c539955efad43fc51c"
+    "base": "76e3f04107e25a01cd2eb3d4dc0be685b313e955",
+    "changed": 1792498861639
   },
   {
     "id": "cli/daily-full-run",
@@ -76,6 +80,7 @@
       "core/lanes-and-turn",
       "core/policy-loader"
     ],
-    "base": "a77b4bf9e85365752d6413c539955efad43fc51c"
+    "base": "76e3f04107e25a01cd2eb3d4dc0be685b313e955",
+    "changed": 1792498861643
   }
 ]
