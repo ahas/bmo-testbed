@@ -4,6 +4,7 @@ description = "The testbed's harness plugin: the tool table, the MCP server the 
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
+license.workspace = true
 
 [dependencies]
 bmo-testbed-client = { path = "../client" }

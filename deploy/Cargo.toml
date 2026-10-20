@@ -4,6 +4,7 @@ description = "A repository's releases on the machine it runs on: the link flip,
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
+license.workspace = true
 
 [dependencies]
 bmo-testbed-client = { path = "../client", default-features = false }

@@ -21,6 +21,7 @@ members = [
 version = "0.1.0-rev.3"
 edition = "2024"
 publish = false
+license = "MIT"
 
 [workspace.dependencies]
 # The base library whose verdicts the quick checks take: whether a line is English, the wording

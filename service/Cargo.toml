@@ -4,6 +4,7 @@ description = "The testbed's HTTP service: the record and the lanes served read-
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
+license.workspace = true
 
 [dependencies]
 axum.workspace = true

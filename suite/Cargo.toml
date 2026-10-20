@@ -4,6 +4,7 @@ description = "A repository's suite: which units a change reaches, and a run of 
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
+license.workspace = true
 
 [dependencies]
 bmo-testbed-core = { path = "../core" }

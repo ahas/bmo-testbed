@@ -4,6 +4,7 @@ description = "The testbed's published client: the HTTP service's members, pages
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
+license.workspace = true
 
 [features]
 default = ["http"]

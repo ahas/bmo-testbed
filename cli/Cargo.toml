@@ -4,6 +4,7 @@ description = "The bmo-testbed binary: each verb's words read and handed to the 
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
+license.workspace = true
 
 [lib]
 name = "bmo_testbed_cli"

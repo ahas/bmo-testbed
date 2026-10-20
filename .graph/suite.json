@@ -23,7 +23,7 @@
       "suite/change-selection",
       "core/policy-loader"
     ],
-    "base": "db2586b0c040f4b879a10c631aa219f2ab5fecf8",
+    "base": "5e955f94545d613b245e997b5b2e197509b07d4c",
     "changed": 1792505134665
   },
   {
@@ -50,7 +50,7 @@
       "core/policy-loader",
       "calls/bmo-text"
     ],
-    "base": "76e3f04107e25a01cd2eb3d4dc0be685b313e955",
+    "base": "45332e08134fa2ecb86de60b6b1a24c854d34448",
     "changed": 1792498861735
   },
   {
@@ -76,7 +76,7 @@
       "core/languages",
       "core/policy-loader"
     ],
-    "base": "76e3f04107e25a01cd2eb3d4dc0be685b313e955",
+    "base": "45332e08134fa2ecb86de60b6b1a24c854d34448",
     "changed": 1792498861740
   },
   {
@@ -96,7 +96,7 @@
       "suite/change-selection",
       "core/policy-loader"
     ],
-    "base": "76e3f04107e25a01cd2eb3d4dc0be685b313e955",
+    "base": "45332e08134fa2ecb86de60b6b1a24c854d34448",
     "changed": 1792498861744
   },
   {
@@ -128,7 +128,7 @@
       "core/policy-loader",
       "calls/bmo-text"
     ],
-    "base": "76e3f04107e25a01cd2eb3d4dc0be685b313e955",
+    "base": "45332e08134fa2ecb86de60b6b1a24c854d34448",
     "changed": 1792498861748
   },
   {
@@ -150,7 +150,7 @@
       "core/lanes-and-turn",
       "core/policy-loader"
     ],
-    "base": "76e3f04107e25a01cd2eb3d4dc0be685b313e955",
+    "base": "45332e08134fa2ecb86de60b6b1a24c854d34448",
     "changed": 1792498861753
   },
   {
@@ -182,7 +182,7 @@
       "core/policy-loader",
       "core/run-verb-and-status"
     ],
-    "base": "76e3f04107e25a01cd2eb3d4dc0be685b313e955",
+    "base": "45332e08134fa2ecb86de60b6b1a24c854d34448",
     "changed": 1792498861758
   },
   {
@@ -201,7 +201,7 @@
     "needs": [
       "core/policy-loader"
     ],
-    "base": "76e3f04107e25a01cd2eb3d4dc0be685b313e955",
+    "base": "45332e08134fa2ecb86de60b6b1a24c854d34448",
     "changed": 1792498861763
   },
   {
@@ -220,7 +220,7 @@
       "core/answer-ceiling",
       "core/policy-loader"
     ],
-    "base": "76e3f04107e25a01cd2eb3d4dc0be685b313e955",
+    "base": "45332e08134fa2ecb86de60b6b1a24c854d34448",
     "changed": 1792498861768
   },
   {
@@ -240,7 +240,7 @@
       "core/declaration",
       "core/policy-loader"
     ],
-    "base": "76e3f04107e25a01cd2eb3d4dc0be685b313e955",
+    "base": "45332e08134fa2ecb86de60b6b1a24c854d34448",
     "changed": 1792498861772
   }
 ]

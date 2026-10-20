@@ -4,6 +4,7 @@ description = "A Rust test's own database: a copy of the template its test binar
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
+license.workspace = true
 
 [dependencies]
 # The policy loader its names and numbers are read through.
