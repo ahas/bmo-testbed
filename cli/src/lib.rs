@@ -9,6 +9,7 @@ pub mod classify;
 pub mod deploy;
 pub mod full;
 pub mod imports;
+pub mod nouns;
 pub mod own;
 pub mod placement;
 pub mod recorded;
@@ -32,7 +33,10 @@ use bmo_testbed_core::verb::{self, REFUSED_EXIT_CODE, RunWords, VerbGround, data
 use crate::classify::{TakesTurn, answer, heavy_command};
 use crate::placement::HttpPlacement;
 use crate::recorded::{Recorded, command_run};
-use crate::words::{ClassifyArgs, RunArgs, Verb};
+use crate::words::{
+  CargoArgs, CargoWord, ClassifyArgs, CountArgs, DeployArgs, DeployWord, LogArgs, RunArgs, TestArgs,
+  TestWord, Verb,
+};
 
 /// The placement a run started in a directory asks: the endpoint named for it, or the local one.
 pub fn placement_of(env: &Env, dir: &Path) -> Box<dyn Placement> {
@@ -121,9 +125,55 @@ pub fn openapi_document() -> String {
   use clap::CommandFactory as _;
 
   let command = words::Words::command();
-  let verbs: Vec<&str> = command.get_subcommands().map(clap::Command::get_name).collect();
+  // `nouns` is the protocol's word and `test` the platform's name for verbs already listed.
+  let verbs: Vec<&str> = command
+    .get_subcommands()
+    .map(clap::Command::get_name)
+    .filter(|name| !matches!(*name, "nouns" | "test"))
+    .collect();
 
   bmo_testbed_plugin::openapi_json(&verbs)
+}
+
+fn run_count(args: CountArgs) -> u8 {
+  suite::count(&args, &std::env::current_dir().unwrap_or_default()).print()
+}
+
+fn run_log(args: LogArgs) -> u8 {
+  suite::log(&args, &own::called_from()).print()
+}
+
+fn run_test(args: TestArgs) -> u8 {
+  match args.word {
+    TestWord::Suite(args) => suite::suite(args),
+    TestWord::Count(args) => run_count(args),
+    TestWord::Log(args) => run_log(args),
+    TestWord::Template(args) => suite::template(&args),
+    TestWord::Full(args) => full::full(&args),
+  }
+}
+
+fn run_cargo(args: CargoArgs) -> u8 {
+  match args.word {
+    Some(CargoWord::Prune(args)) => cargo::prune(&args),
+    None => cargo::cargo(&args.words),
+  }
+}
+
+fn run_deploy(args: DeployArgs) -> u8 {
+  match args.word {
+    Some(DeployWord::Commit(flags)) => deploy::deploy(&flags),
+    Some(DeployWord::Backups) => deploy::backups(),
+    None => deploy::deploy(&args.flags),
+  }
+}
+
+fn print_nouns() -> u8 {
+  for noun in nouns::lines() {
+    println!("{noun}");
+  }
+
+  0
 }
 
 /// The binary over its words; the code it ends with.
@@ -141,20 +191,22 @@ pub fn main(args: impl IntoIterator<Item = OsString>) -> u8 {
     Verb::Status(args) => status(args.json),
     Verb::Classify(args) => classify(args),
     Verb::Suite(args) => suite::suite(args),
-    Verb::Count(args) => suite::count(&args, &std::env::current_dir().unwrap_or_default()).print(),
-    Verb::Log(args) => suite::log(&args, &own::called_from()).print(),
+    Verb::Count(args) => run_count(args),
+    Verb::Log(args) => run_log(args),
     Verb::Template(args) => suite::template(&args),
     Verb::Check(args) => check::check(args),
     Verb::Imports(args) => match suite::repository() {
       Ok(repo) => imports::imports_in(&args.files, args.fix, &repo, &own::called_from()).print(),
       Err(code) => code,
     },
-    Verb::Cargo(args) => cargo::cargo(&args.words),
+    Verb::Cargo(args) => run_cargo(args),
     Verb::Prune(args) => cargo::prune(&args),
     Verb::Full(args) => full::full(&args),
-    Verb::Deploy(args) => deploy::deploy(&args),
+    Verb::Deploy(args) => run_deploy(args),
     Verb::Backups => deploy::backups(),
     Verb::Serve(args) => serve::serve(&args, &data_root(), process_env()),
     Verb::Mcp(args) => serve::mcp(&args),
+    Verb::Nouns => print_nouns(),
+    Verb::Test(args) => run_test(args),
   }
 }

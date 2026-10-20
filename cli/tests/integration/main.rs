@@ -4,6 +4,7 @@ mod deploy_verbs;
 mod full;
 mod imports;
 mod log;
+mod nouns;
 mod own;
 mod placement;
 mod plugin;

@@ -18,8 +18,8 @@ at the end are over this document.
 
 ## The binary
 
-- **One binary, `bmo-testbed`,** whose first word is the verb. `--help` or `-h`, alone or after a
-  verb, prints the usage and exits 0.
+- **One binary, `bmo-testbed`,** whose first word is the verb, or a noun `bmo` dispatches to it
+  (「The nouns `bmo` serves」). `--help` or `-h`, alone or after a verb, prints the usage and exits 0.
 - **Every verb's answer is English,** thin by default; `--json`, where a verb takes it, gives the
   structure instead, and no verb carries a third width between the two.
 - **A verb handed the wrong thing** names that one thing in a line, points at `--help`, and exits 2.
@@ -252,6 +252,27 @@ bmo-testbed mcp [--service <url>] [--token <token>]
   none and the policy's loopback address where neither does, behind the token, `BMO_TESTBED_TOKEN`
   where `--token` names none; the running tools start this same binary's verbs.
 - Exits 0 when the harness closes the session, and 1 where it ends in a failure.
+
+### The nouns `bmo` serves
+
+`bmo-testbed nouns` prints the nouns `bmo` dispatches to this binary, one a line, each the words a
+caller types after `bmo` (bmo-cli's `docs/api.md`, 「The unit command」). A noun is the platform's
+name for a verb: `bmo` hands the noun's words on whole, so the binary takes them where it takes the
+verb's own name, and each noun takes what that verb takes.
+
+| Noun | Takes | Verb it runs |
+|---|---|---|
+| `test suite` | the words `suite` takes | `suite` |
+| `test count` | the words `count` takes | `count` |
+| `test log` | the words `log` takes | `log` |
+| `test template` | the words `template` takes | `template` |
+| `test full` | the words `full` takes | `full` |
+| `check` | the words `check` takes | `check` |
+| `imports` | the words `imports` takes | `imports` |
+| `cargo` | the words `cargo` takes | `cargo` |
+| `cargo prune` | the words `prune` takes | `prune` |
+| `deploy commit` | the words `deploy` takes | `deploy` |
+| `deploy backups` | the words `backups` takes | `backups` |
 
 ## The environment
 

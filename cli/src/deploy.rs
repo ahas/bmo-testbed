@@ -30,7 +30,7 @@ use bmo_testbed_suite::static_check::{check_steps, run_static_check, spawn_step}
 
 use crate::recorded::suite_record;
 use crate::suite::repository;
-use crate::words::{BINARY, DeployArgs};
+use crate::words::{BINARY, DeployFlags};
 
 /// The gate a deployment passes: the declared static check over the range from what was live, then the
 /// suite over the same range, what failed run once more.
@@ -134,7 +134,7 @@ fn refused(line: &str) -> u8 {
 
 /// `deploy`: outside a deployment's unit it starts one and ends; inside it, the run. A refusal and a dry
 /// run stay in the caller's process.
-pub fn deploy(args: &DeployArgs) -> u8 {
+pub fn deploy(args: &DeployFlags) -> u8 {
   let env = process_env();
   let repo = match repository() {
     Ok(repo) => repo,

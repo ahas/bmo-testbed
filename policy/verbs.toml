@@ -16,13 +16,19 @@ log       what a suite's or a single run's log came to
 template  the suite's template database made, dropped or swept
 check     the check of a change, or one of the quick checks
 imports   the relative imports a move left broken, and where they go
-cargo     Cargo over the shared build directory, in the machine's turn where it compiles
+cargo     Cargo over the shared build directory, in the machine's turn where it compiles;
+          `cargo prune` removes what no build reads
 prune     what no build reads any more, removed from the shared Cargo build directory
 full      the daily whole run of the repository's suite, in a unit of its own
-deploy    a commit of the repository put live, in a unit of its own
-backups   the backups a deployment took, sent away and rotated
+deploy    a commit of the repository put live, in a unit of its own; `deploy commit` as
+          the platform names it
+backups   the backups a deployment took, sent away and rotated; `deploy backups` as the
+          platform names it
 serve     the HTTP service: the record and the lanes, read-only behind a token
 mcp       the harness plugin's MCP server, on standard input and output
+nouns     the nouns `bmo` dispatches to this binary, one a line
+test      the platform's names for the suite verbs: test suite, test count, test log,
+          test template and test full
 
 {verb} <verb> --help prints that verb's own usage (docs/boundary.md)."""
 run = """

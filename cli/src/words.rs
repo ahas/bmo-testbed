@@ -42,6 +42,10 @@ pub enum Verb {
   Backups,
   Serve(ServeArgs),
   Mcp(McpArgs),
+  /// The nouns `bmo` dispatches to this binary, one a line.
+  Nouns,
+  /// The platform's names for the suite verbs.
+  Test(TestArgs),
 }
 
 // A word that names something: not empty, and not a flag.
@@ -64,8 +68,18 @@ pub struct FullArgs {
   pub due: Option<chrono::NaiveTime>,
 }
 
+/// `deploy`, or the platform's `deploy commit` and `deploy backups`.
 #[derive(Debug, Args)]
+#[command(args_conflicts_with_subcommands = true, disable_help_subcommand = true)]
 pub struct DeployArgs {
+  #[command(subcommand)]
+  pub word: Option<DeployWord>,
+  #[command(flatten)]
+  pub flags: DeployFlags,
+}
+
+#[derive(Debug, Args)]
+pub struct DeployFlags {
   #[arg(long, value_parser = named)]
   pub commit: Option<String>,
   #[arg(long)]
@@ -74,6 +88,14 @@ pub struct DeployArgs {
   pub no_check: bool,
   #[arg(long, value_parser = named)]
   pub before_start: Option<String>,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum DeployWord {
+  /// The deployment itself, as `deploy` runs it.
+  Commit(DeployFlags),
+  /// The backups a deployment took, sent away and rotated.
+  Backups,
 }
 
 // A positive whole number of seconds.
@@ -218,11 +240,36 @@ pub struct ImportsArgs {
   pub fix: bool,
 }
 
-/// Cargo's own words, every one of them handed on.
+/// Cargo's own words, every one of them handed on, but `prune`, which is the testbed's own removal.
 #[derive(Debug, Args)]
+#[command(subcommand_negates_reqs = true, disable_help_subcommand = true)]
 pub struct CargoArgs {
+  #[command(subcommand)]
+  pub word: Option<CargoWord>,
   #[arg(trailing_var_arg = true, allow_hyphen_values = true, required = true)]
   pub words: Vec<String>,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum CargoWord {
+  /// What no build reads any more, removed from the shared Cargo build directory.
+  Prune(PruneArgs),
+}
+
+/// The platform's names for the suite verbs: `test` followed by one of them.
+#[derive(Debug, Args)]
+pub struct TestArgs {
+  #[command(subcommand)]
+  pub word: TestWord,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum TestWord {
+  Suite(SuiteArgs),
+  Count(CountArgs),
+  Log(LogArgs),
+  Template(TemplateArgs),
+  Full(FullArgs),
 }
 
 #[derive(Debug, Args)]
@@ -292,13 +339,30 @@ pub fn read(args: impl IntoIterator<Item = OsString>) -> Result<Words, clap::Err
       })
     })
     .mut_subcommand("imports", |verb| verb.override_help(usage(&said.imports)))
-    .mut_subcommand("cargo", |verb| verb.override_help(usage(&said.cargo)))
+    .mut_subcommand("cargo", |verb| {
+      verb
+        .override_help(usage(&said.cargo))
+        .mut_subcommand("prune", |word| word.override_help(usage(&said.prune)))
+    })
     .mut_subcommand("prune", |verb| verb.override_help(usage(&said.prune)))
     .mut_subcommand("full", |verb| verb.override_help(usage(&said.full)))
-    .mut_subcommand("deploy", |verb| verb.override_help(usage(&said.deploy)))
+    .mut_subcommand("deploy", |verb| {
+      verb
+        .override_help(usage(&said.deploy))
+        .mut_subcommand("commit", |word| word.override_help(usage(&said.deploy)))
+        .mut_subcommand("backups", |word| word.override_help(usage(&said.backups)))
+    })
     .mut_subcommand("backups", |verb| verb.override_help(usage(&said.backups)))
     .mut_subcommand("serve", |verb| verb.override_help(usage(&said.serve)))
-    .mut_subcommand("mcp", |verb| verb.override_help(usage(&said.mcp)));
+    .mut_subcommand("mcp", |verb| verb.override_help(usage(&said.mcp)))
+    .mut_subcommand("test", |verb| {
+      verb
+        .mut_subcommand("suite", |word| word.override_help(usage(&said.suite)))
+        .mut_subcommand("count", |word| word.override_help(usage(&said.count)))
+        .mut_subcommand("log", |word| word.override_help(usage(&said.log)))
+        .mut_subcommand("template", |word| word.override_help(usage(&said.template)))
+        .mut_subcommand("full", |word| word.override_help(usage(&said.full)))
+    });
   let matches = command.try_get_matches_from(args)?;
 
   Words::from_arg_matches(&matches)
