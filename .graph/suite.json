@@ -113,8 +113,8 @@
       "개인정보 금지"
     ],
     "needs": [],
-    "base": "2d539d0a3b94c94d96bf0dab386a8c02f8b3eeba",
-    "changed": 1792533576054
+    "base": "3f517b909bac2ec983965a1657e50719736c9e5d",
+    "changed": 1792534245935
   },
   {
     "id": "suite/quick-checks",
