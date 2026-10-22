@@ -1,0 +1,21 @@
+[
+  {
+    "id": "client/members-and-client",
+    "title": "Client: members and HTTP client",
+    "what": "The published client crate bmo-testbed-client: every member, page, query and error code of the HTTP service as serde and JSON Schema types, and behind its http feature the client calling each route.",
+    "files": [
+      "client/src/lib.rs",
+      "client/src/members.rs",
+      "client/src/queries.rs",
+      "client/src/error.rs",
+      "client/src/client.rs",
+      "client/Cargo.toml",
+      "docs/boundary.md"
+    ],
+    "symbols": [],
+    "aliases": [],
+    "needs": [],
+    "base": "f0ea222081d9134d939b3c4528f01c62dfabfc7c",
+    "changed": 1792530535582
+  }
+]

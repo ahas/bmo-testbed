@@ -1,0 +1,209 @@
+[
+  {
+    "id": "core/answer-ceiling",
+    "title": "Answer ceiling",
+    "what": "The cut every verb's answer takes at 30,000 characters, keeping whole items and saying what was cut and how to ask for the rest.",
+    "files": [
+      "core/src/answer.rs",
+      "docs/boundary.md",
+      "core/tests/integration/answer.rs"
+    ],
+    "symbols": [],
+    "aliases": [],
+    "needs": [
+      "core/policy-loader"
+    ],
+    "base": "f0ea222081d9134d939b3c4528f01c62dfabfc7c",
+    "changed": 1792530535601
+  },
+  {
+    "id": "core/close-line",
+    "title": "Close line",
+    "what": "One line per repository on a machine in which every close of that repository stands, keyed by its common git directory, holding the wide lane through each part of its check.",
+    "files": [
+      "core/src/close_line.rs",
+      "docs/testbed.md",
+      "core/tests/integration/close_line.rs"
+    ],
+    "symbols": [],
+    "aliases": [],
+    "needs": [
+      "core/lanes-and-turn",
+      "core/policy-loader"
+    ],
+    "base": "45332e08134fa2ecb86de60b6b1a24c854d34448",
+    "changed": 1792498861660
+  },
+  {
+    "id": "core/declaration",
+    "title": "Declaration reader",
+    "what": "Reads a repository's root testbed.toml into typed tables (test, projects, tools, check, build, deploy, runner, events), refusing unknown keys and another major, and finds the repository's root and paths.",
+    "files": [
+      "core/src/declaration.rs",
+      "testbed.toml",
+      "docs/declaration.md",
+      "core/tests/integration/declaration.rs"
+    ],
+    "symbols": [],
+    "aliases": [],
+    "needs": [
+      "core/languages",
+      "core/lanes-and-turn",
+      "core/policy-loader"
+    ],
+    "base": "5e955f94545d613b245e997b5b2e197509b07d4c",
+    "changed": 1792505134653
+  },
+  {
+    "id": "core/event-hook",
+    "title": "Event hook",
+    "what": "Sends a verb's event (deployed, deploy-failed, full-suite-failed, suite-flaky and the like) to the hook the environment or the declaration names, through sh with a JSON body; it never changes the verb's outcome.",
+    "files": [
+      "core/src/events.rs",
+      "docs/boundary.md"
+    ],
+    "symbols": [],
+    "aliases": [],
+    "needs": [
+      "core/declaration",
+      "core/policy-loader"
+    ],
+    "base": "f0ea222081d9134d939b3c4528f01c62dfabfc7c",
+    "changed": 1792530535621
+  },
+  {
+    "id": "core/lanes-and-turn",
+    "title": "Lanes and turn",
+    "what": "The machine's wide and narrow lanes, each one queue lock in the temporary directory: taking a turn, the front and next ranks, held turns, kept places, the width a lane runs at, and the memory turn that retries a command killed for want of memory.",
+    "files": [
+      "core/src/turn.rs",
+      "core/src/queue.rs",
+      "core/src/memory.rs",
+      "docs/testbed.md",
+      "core/tests/integration/turn.rs",
+      "core/tests/integration/memory.rs"
+    ],
+    "symbols": [],
+    "aliases": [],
+    "needs": [
+      "core/policy-loader"
+    ],
+    "base": "45332e08134fa2ecb86de60b6b1a24c854d34448",
+    "changed": 1792498861673
+  },
+  {
+    "id": "core/languages",
+    "title": "Languages",
+    "what": "The language type in core and its members bun, node, cargo, browser and plain: what each claims as heavy, how it widens a command, reads a log, names and runs test files, and which configuration, root files and lockfile it answers for.",
+    "files": [
+      "core/src/languages/mod.rs",
+      "core/src/languages/bun.rs",
+      "core/src/languages/node.rs",
+      "core/src/languages/cargo.rs",
+      "core/src/languages/browser.rs",
+      "docs/testbed.md",
+      "core/tests/integration/languages.rs"
+    ],
+    "symbols": [],
+    "aliases": [],
+    "needs": [],
+    "base": "45332e08134fa2ecb86de60b6b1a24c854d34448",
+    "changed": 1792498861678
+  },
+  {
+    "id": "core/placement",
+    "title": "Placement",
+    "what": "Where a run goes: here by default, or on another machine the declared placement endpoint names, its bench made ready over ssh and its output read back as an event stream.",
+    "files": [
+      "core/src/placement.rs",
+      "cli/src/placement.rs",
+      "docs/boundary.md",
+      "cli/tests/integration/placement.rs"
+    ],
+    "symbols": [],
+    "aliases": [],
+    "needs": [
+      "core/lanes-and-turn",
+      "core/policy-loader"
+    ],
+    "base": "f0ea222081d9134d939b3c4528f01c62dfabfc7c",
+    "changed": 1792530535641
+  },
+  {
+    "id": "core/policy-loader",
+    "title": "Policy loader",
+    "what": "The testbed's own fixed numbers and words, one TOML part per file under policy/, compiled into core and read once into deny_unknown_fields structs; fill_marks and fill_shown fill a line's {name} marks.",
+    "files": [
+      "core/src/policy/mod.rs",
+      "core/src/policy/answer.rs",
+      "core/src/policy/backups.rs",
+      "core/src/policy/close_line.rs",
+      "core/src/policy/count.rs",
+      "core/src/policy/daily.rs",
+      "core/src/policy/declaration.rs",
+      "core/src/policy/deploy.rs",
+      "core/src/policy/deploy_steps.rs",
+      "core/src/policy/events.rs",
+      "core/src/policy/lanes.rs",
+      "core/src/policy/plugin.rs",
+      "core/src/policy/prune.rs",
+      "core/src/policy/quick_checks.rs",
+      "core/src/policy/record.rs",
+      "core/src/policy/service.rs",
+      "core/src/policy/static_check.rs",
+      "core/src/policy/suite.rs",
+      "core/src/policy/verbs.rs",
+      "policy/answer.toml",
+      "policy/backups.toml",
+      "policy/close-line.toml",
+      "policy/count.toml",
+      "policy/daily.toml",
+      "policy/declaration.toml",
+      "policy/deploy-steps.toml",
+      "policy/deploy.toml",
+      "policy/events.toml",
+      "policy/lanes.toml",
+      "policy/plugin.toml",
+      "policy/prune.toml",
+      "policy/quick-checks.toml",
+      "policy/record.toml",
+      "policy/scratch-database.toml",
+      "policy/service.toml",
+      "policy/static-check.toml",
+      "policy/suite.toml",
+      "policy/verbs.toml",
+      "core/tests/integration/policy.rs"
+    ],
+    "symbols": [],
+    "aliases": [],
+    "needs": [],
+    "base": "9f2e4a307c3f3b9e7d161034b1a18e6b126ad094",
+    "changed": 1792535517897
+  },
+  {
+    "id": "core/run-verb-and-status",
+    "title": "Run verb and status",
+    "what": "The run verb, which runs one heavy command in its lane's turn or places it elsewhere, tells a run witness as it begins and ends, and ends on one result line or one command run; and the status verb's lines over each lane and the close line.",
+    "files": [
+      "core/src/run.rs",
+      "core/src/verb.rs",
+      "core/src/witness.rs",
+      "docs/testbed.md",
+      "docs/boundary.md",
+      "core/tests/integration/run.rs",
+      "core/tests/integration/verb.rs",
+      "cli/tests/integration/verb.rs"
+    ],
+    "symbols": [],
+    "aliases": [],
+    "needs": [
+      "core/lanes-and-turn",
+      "core/languages",
+      "core/placement",
+      "core/close-line",
+      "core/policy-loader"
+    ],
+    "base": "f0ea222081d9134d939b3c4528f01c62dfabfc7c",
+    "changed": 1792530535660
+  }
+]

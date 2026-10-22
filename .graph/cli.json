@@ -1,0 +1,86 @@
+[
+  {
+    "id": "cli/binary-and-verbs",
+    "title": "Binary and verbs",
+    "what": "The bmo-testbed binary: its words read by clap into each verb and the nouns bmo dispatches to it, the answers it prints, and a checkout of the testbed handing suite, check and template over to its own built binary.",
+    "files": [
+      "cli/src/lib.rs",
+      "cli/src/words.rs",
+      "cli/src/nouns.rs",
+      "cli/src/said.rs",
+      "cli/src/own.rs",
+      "docs/boundary.md",
+      "README.md",
+      "cli/tests/integration/own.rs",
+      "cli/tests/integration/nouns.rs",
+      "cli/src/main.rs",
+      "suite/src/own_binary.rs"
+    ],
+    "symbols": [],
+    "aliases": [],
+    "needs": [
+      "core/declaration",
+      "core/run-verb-and-status",
+      "cli/classify",
+      "suite/suite-run",
+      "suite/change-check",
+      "suite/test-count",
+      "suite/test-log",
+      "suite/test-template",
+      "suite/cargo-verb-and-prune",
+      "suite/moved-imports",
+      "deploy/deploy-run",
+      "deploy/backups-and-upload",
+      "cli/daily-full-run",
+      "core/policy-loader",
+      "record/record",
+      "service/http-service",
+      "plugin/harness-plugin"
+    ],
+    "base": "3f517b909bac2ec983965a1657e50719736c9e5d",
+    "changed": 1792534245925
+  },
+  {
+    "id": "cli/classify",
+    "title": "Classify",
+    "what": "The classify verb a job's shell hook asks: reads a shell line with a shell parser, eval and -c text included, and says whether a declared language claims a heavy command in it and the line that runs it in the testbed.",
+    "files": [
+      "cli/src/classify.rs",
+      "cli/src/shell.rs",
+      "cli/tests/integration/classify.rs",
+      "cli/tests/integration/shell.rs"
+    ],
+    "symbols": [],
+    "aliases": [],
+    "needs": [
+      "core/languages",
+      "core/policy-loader"
+    ],
+    "base": "45332e08134fa2ecb86de60b6b1a24c854d34448",
+    "changed": 1792498861639
+  },
+  {
+    "id": "cli/daily-full-run",
+    "title": "Daily full run",
+    "what": "The full verb: the declared main branch's head in a tree of its own, its setup, the static check and every unit of the suite, in a transient unit, once a day with --due, failures sent to the event hook.",
+    "files": [
+      "cli/src/full.rs",
+      "docs/suite.md",
+      "cli/tests/integration/full.rs"
+    ],
+    "symbols": [],
+    "aliases": [],
+    "needs": [
+      "core/declaration",
+      "suite/static-check",
+      "suite/suite-run",
+      "suite/test-log",
+      "core/event-hook",
+      "deploy/deploy-run",
+      "core/lanes-and-turn",
+      "core/policy-loader"
+    ],
+    "base": "45332e08134fa2ecb86de60b6b1a24c854d34448",
+    "changed": 1792498861643
+  }
+]

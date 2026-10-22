@@ -47,7 +47,7 @@ and a release-based deployment of a repository onto the machine it runs on.
 | `units/` | The user units this repository's deployment keeps: the Cargo build directory's prune and its timer |
 | `policy/` | The testbed's own fixed numbers and words, read by `core`'s policy loader |
 | `docs/` | The documents above |
-| `.graph/` | The code dependency graph: one JSON file per area, a node per feature with its files and the features it needs, and a boundary node for each API exposed or called, written by `bmo-graph` and never by hand. Its area files are generated in the checkout and untracked, so a fresh checkout builds them again, while `settings.toml` is the repository's configuration and stays tracked |
+| `.graph/` | The code dependency graph: one JSON file per area, a node per feature with its files and the features it needs, and a boundary node for each API exposed or called, written by `bmo-graph` and never by hand. Its area files are committed with the code they describe, so a change that moves a node carries the graph with it, while `settings.toml` is the repository's configuration |
 
 At the root stand the Cargo workspace manifest, which holds the version, and its lockfile, the
 formatter's settings, this repository's own `testbed.toml`, and `CLAUDE.md`.
