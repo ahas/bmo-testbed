@@ -58,7 +58,7 @@ fn a_checkout_with_no_declaration_has_every_default_and_its_directorys_name() {
       declaration.test.test_timeout_seconds,
       declaration.test.memory_gb
     ),
-    (240, 90, 30, 8)
+    (240, 90, 30, 12)
   );
   assert!(declaration.test.database.is_none());
   assert!(declaration.projects.discover);

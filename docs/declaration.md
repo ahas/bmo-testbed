@@ -35,7 +35,7 @@
 | `guard_seconds` | integer | 240 | The whole-run guard |
 | `file_guard_seconds` | integer | 90 | The per-file guard |
 | `test_timeout_seconds` | integer | 30 | The per-test timeout handed to the runner |
-| `memory_gb` | integer | 8 | The fence's memory ceiling, which `BMO_SUITE_MEMORY_GB` overrides |
+| `memory_gb` | integer | 12 | The fence's memory ceiling, which `BMO_SUITE_MEMORY_GB` overrides |
 | `setup` | list of commands | `[]` | Run in order to set up a fresh tree: a release, the daily whole run's tree, a bench copy on another machine |
 
 ### `[test.database]`: the test database
