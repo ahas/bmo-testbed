@@ -147,3 +147,91 @@ fn a_dependency_inside_the_tree_and_a_tree_with_no_workspace_are_left_alone() {
   std::fs::create_dir_all(&plain).unwrap();
   lay_outside_trees(&plain, &checkout).unwrap();
 }
+
+// A command run in a folder, its output both streams, as the deployment runs one.
+fn runner() -> impl Fn(&[String], &Path) -> bmo_testbed_deploy::run::Ran {
+  move |line: &[String], cwd: &Path| {
+    let out = std::process::Command::new(&line[0])
+      .args(&line[1..])
+      .current_dir(cwd)
+      .env("GIT_AUTHOR_NAME", "test")
+      .env("GIT_AUTHOR_EMAIL", "test@example.com")
+      .env("GIT_COMMITTER_NAME", "test")
+      .env("GIT_COMMITTER_EMAIL", "test@example.com")
+      .output();
+
+    match out {
+      Ok(ran) => bmo_testbed_deploy::run::Ran {
+        ok: ran.status.success(),
+        out: String::from_utf8_lossy(&ran.stdout).into_owned() + &String::from_utf8_lossy(&ran.stderr),
+      },
+      Err(why) => bmo_testbed_deploy::run::Ran {
+        ok: false,
+        out: why.to_string(),
+      },
+    }
+  }
+}
+
+fn commit(dir: &Path, text: &str) -> String {
+  std::fs::write(dir.join("src/lib.rs"), text).unwrap();
+  let run = runner();
+
+  assert!(run(&["git".to_owned(), "add".to_owned(), "-A".to_owned()], dir).ok);
+  assert!(run(&["git".to_owned(), "commit".to_owned(), "-m".to_owned(), text.to_owned()], dir).ok);
+
+  run(&["git".to_owned(), "rev-parse".to_owned(), "HEAD".to_owned()], dir)
+    .out
+    .trim()
+    .to_owned()
+}
+
+fn tree_at<'a>(
+  source: &'a Path,
+  tree: &Path,
+  data_root: &'a Path,
+  head: &'a str,
+) -> bmo_testbed_deploy::expansion::BuildTree<'a> {
+  bmo_testbed_deploy::expansion::BuildTree {
+    source,
+    tree: tree.to_path_buf(),
+    head,
+    data_root,
+  }
+}
+
+// "the build tree is stamped where its commit moved"
+#[test]
+fn a_commit_moved_in_the_build_tree_stamps_the_paths_it_changed() {
+  use bmo_testbed_deploy::expansion::put_build_tree;
+  use std::time::{Duration, SystemTime};
+
+  let root = tempfile::tempdir().unwrap();
+  let source = root.path().join("source");
+  let tree = root.path().join("deploy-expand");
+  let run = runner();
+
+  std::fs::create_dir_all(source.join("src")).unwrap();
+  std::fs::write(
+    source.join("Cargo.toml"),
+    "[package]\nname = \"app\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+  )
+  .unwrap();
+  assert!(run(&["git".to_owned(), "init".to_owned()], &source).ok);
+
+  let one = commit(&source, "one\n");
+  let two = commit(&source, "two\n");
+  put_build_tree(&tree_at(&source, &tree, root.path(), &one), &run).unwrap();
+
+  // A build from the commit before is what a warm tree holds: the file the next commit moves stands older
+  // than it, and the move leaves it newer than that build.
+  let file = tree.join("src/lib.rs");
+  let old = SystemTime::now() - Duration::from_secs(3600);
+
+  std::fs::File::open(&file).unwrap().set_modified(old).unwrap();
+  put_build_tree(&tree_at(&source, &tree, root.path(), &two), &run).unwrap();
+
+  let stamped = std::fs::metadata(&file).unwrap().modified().unwrap();
+
+  assert!(stamped > old, "the file the commit moved stands newer than the build before it");
+}

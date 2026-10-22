@@ -43,9 +43,16 @@ fn git(run: CommandRun<'_>, args: &[&str], cwd: &Path) -> Ran {
 }
 
 /// Puts the build tree at the commit, made where it is not there yet, with the submodules the commit pins
-/// brought to their pins.
+/// brought to their pins, and every file the commit moved made new to the clock a build reads.
 pub fn put_build_tree(build: &BuildTree<'_>, run: CommandRun<'_>) -> Result<(), String> {
   let tree = &build.tree;
+  let before = if tree.join(".git").exists() {
+    let read = git(run, &["rev-parse", "HEAD"], tree);
+
+    read.ok.then(|| read.out.trim().to_owned()).filter(|head| !head.is_empty())
+  } else {
+    None
+  };
   let placed = if tree.join(".git").exists() {
     git(run, &["checkout", "--force", "--detach", build.head], tree)
   } else {
@@ -66,7 +73,39 @@ pub fn put_build_tree(build: &BuildTree<'_>, run: CommandRun<'_>) -> Result<(), 
     ));
   }
 
+  if let Some(before) = &before.filter(|before| before.as_str() != build.head) {
+    refresh(tree, before, build.head, run)?;
+  }
+
   bring_submodules(tree, build.data_root, run)
+}
+
+// Every path the commit moved in the tree, stamped with the moment the tree was put at it: a build reads a
+// source by its modification time against what it built before, and a file the checkout leaves older than
+// that build is one the build counts as built already. A path the commit removed, and a folder standing for
+// a submodule, have nothing to stamp.
+fn refresh(tree: &Path, from: &str, to: &str, run: CommandRun<'_>) -> Result<(), String> {
+  let moved = git(run, &["diff", "--name-only", from, to], tree);
+
+  if !moved.ok {
+    return Err(fill_shown(
+      &DEPLOY.expansion.failed,
+      &[
+        ("what", &"the files the commit moved"),
+        ("said", &first_chars(&moved.out, DEPLOY.numbers.quoted_chars)),
+      ],
+    ));
+  }
+
+  let now = std::time::SystemTime::now();
+
+  for name in moved.out.lines().map(str::trim).filter(|name| !name.is_empty()) {
+    if let Ok(file) = std::fs::OpenOptions::new().write(true).open(tree.join(name)) {
+      let _ = file.set_modified(now);
+    }
+  }
+
+  Ok(())
 }
 
 /// Every submodule a tree's commit pins brought to its pin, whatever was changed in it discarded. A folder

@@ -49,6 +49,10 @@
 - **A release is finished before anything serves from it.** Prepared and built while the live release
   goes on serving; the deploy tree's link is then moved onto it by a new link written beside the old
   one and renamed over it, so every reader sees one release or the other and never a tree half moved.
+- **The build tree is stamped where its commit moved.** A build reads a source by its modification
+  time against what it built before, and the build tree is kept warm between deployments. Every path
+  the new commit changed is therefore stamped with the moment the tree is put at it, so a build the
+  commit moves is a build that runs; a path the commit removed is none to stamp.
 - **A binary is placed into a release once.** A binary whose bytes equal the previous release's is
   hard-linked to that file; a binary that differs is copied in. What differs is what the deployment
   restarts (「The unit links」).
