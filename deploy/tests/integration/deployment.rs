@@ -103,15 +103,7 @@ struct Scene {
 
 impl Scene {
   fn new() -> Self {
-    let dir = tempfile::tempdir().unwrap();
-    let origin = dir.path().join("origin.git");
-    let source = dir.path().join("source");
-
-    must(&["init", "--quiet", "--bare", "-b", "main", &origin.to_string_lossy()], dir.path());
-    must(&["clone", "--quiet", &origin.to_string_lossy(), &source.to_string_lossy()], dir.path());
-    std::fs::create_dir_all(dir.path().join("data")).unwrap();
-
-    let scene = Self { dir, source };
+    let scene = Self::empty();
 
     scene.write(
       "units/app.service",
@@ -120,6 +112,19 @@ impl Scene {
     scene.declare("v1", "true");
     scene.push("first");
     scene
+  }
+
+  // A repository with a remote and a data root, nothing in it yet.
+  fn empty() -> Self {
+    let dir = tempfile::tempdir().unwrap();
+    let origin = dir.path().join("origin.git");
+    let source = dir.path().join("source");
+
+    must(&["init", "--quiet", "--bare", "-b", "main", &origin.to_string_lossy()], dir.path());
+    must(&["clone", "--quiet", &origin.to_string_lossy(), &source.to_string_lossy()], dir.path());
+    std::fs::create_dir_all(dir.path().join("data")).unwrap();
+
+    Self { dir, source }
   }
 
   fn at(&self, path: &str) -> PathBuf {
@@ -172,6 +177,66 @@ phase = "after-health"
         after = self.at("after-ran").display(),
       ),
     );
+  }
+
+  // A repository whose one Cargo workspace names a base library outside it, the checkout carrying the
+  // library and nothing under the deploy root standing where either tree will read it.
+  fn over_an_outside_tree() -> Self {
+    let scene = Self::empty();
+
+    scene.write(
+      "Cargo.toml",
+      "[workspace]\nresolver = \"2\"\nmembers = [\"app\"]\n\n[workspace.dependencies]\nbase-lib = { path = \"../base/text\" }\n",
+    );
+    scene.write(
+      "app/Cargo.toml",
+      "[package]\nname = \"app\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]\nbase-lib = { workspace = true }\n",
+    );
+    scene.write("app/src/main.rs", "fn main() {}\n");
+    scene.write(
+      "units/app.service",
+      "[Service]\nExecStart=%h/live/deploy/bin/app\n\n[Install]\nX-BMO-Deploy=bot\n",
+    );
+    scene.write(
+      "testbed.toml",
+      &format!(
+        r#"testbed = 0
+name = "sample"
+
+[deploy]
+root = "{live}"
+data_root = "{data}"
+health = "true"
+health_wait_seconds = 0
+stay_up_seconds = 0
+
+[deploy.backup]
+"#,
+        live = scene.at("live").display(),
+        data = scene.at("data").display(),
+      ),
+    );
+
+    let base = scene.at("base/text");
+
+    std::fs::create_dir_all(base.join("src")).unwrap();
+    std::fs::write(
+      base.join("Cargo.toml"),
+      "[package]\nname = \"base-lib\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    )
+    .unwrap();
+    std::fs::write(base.join("src/lib.rs"), "").unwrap();
+
+    let lock = std::process::Command::new("cargo")
+      .args(["generate-lockfile", "--offline"])
+      .current_dir(&scene.source)
+      .output()
+      .unwrap();
+
+    assert!(lock.status.success(), "{}", String::from_utf8_lossy(&lock.stderr));
+
+    scene.push("first");
+    scene
   }
 
   fn push(&self, message: &str) -> String {
@@ -242,6 +307,13 @@ phase = "after-health"
 
 fn said(hands: &Hands) -> String {
   hands.said.borrow().join("\n")
+}
+
+fn symlink(at: &Path) -> Option<PathBuf> {
+  std::fs::symlink_metadata(at)
+    .ok()
+    .filter(|meta| meta.file_type().is_symlink())
+    .and_then(|_| std::fs::read_link(at).ok())
 }
 
 // "a commit goes live: built into a release of its own, flipped onto, its bot restarted and watched"
@@ -317,6 +389,30 @@ fn a_commit_goes_live_with_its_bot_restarted_and_watched() {
     restarts.iter().any(|one| one.unit_name == "app" && one.deployment_id == deployment.id),
     "{restarts:?}"
   );
+}
+
+// "a first deployment lays the base-library tree beside the release and the build tree, from the checkout"
+#[test]
+fn a_first_deployment_lays_the_trees_outside_the_workspace_from_the_checkout() {
+  let scene = Scene::over_an_outside_tree();
+  let hands = Hands::default();
+  let code = scene.run(&hands);
+  let library = std::fs::canonicalize(scene.at("base/text")).unwrap();
+
+  assert_eq!(code, 0, "{}", said(&hands));
+  assert_eq!(
+    symlink(&scene.at("live/deploy-releases/base/text")),
+    Some(library.clone()),
+    "the tree the release names outside it stands as a link from the checkout: {}",
+    said(&hands)
+  );
+  assert_eq!(
+    symlink(&scene.at("live/base/text")),
+    Some(library),
+    "the tree the build tree names outside it stands as a link from the checkout: {}",
+    said(&hands)
+  );
+  assert!(scene.at("live/deploy/bin/app").exists(), "{}", said(&hands));
 }
 
 // "the records stand under the deploy root, and a data root another deployment records into is left alone"
