@@ -96,6 +96,8 @@ make their own databases names neither, and its tests are handed the server alon
 | `binaries` | list of strings | every binary target of the Cargo workspace | The binaries placed into a release's `bin/` |
 | `cargo_profile` | string | `release` | The profile the release build uses |
 
+The Cargo release build covers every package in the workspace, not the root package alone.
+
 ### `[[build.step]]`: one build step each, in order
 
 Run in the build tree at the commit being deployed, after the Cargo release build where the

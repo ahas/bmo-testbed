@@ -386,6 +386,16 @@ pub fn workspace_binaries(metadata: &str) -> Result<Vec<String>, String> {
   Ok(found)
 }
 
+/// The Cargo release build of every package in the workspace, at the profile and target directory the
+/// declaration names.
+pub fn release_build(profile: &str, target: &Path) -> Vec<String> {
+  let mut command =
+    words(["cargo", "build", "--workspace", "--locked", "--profile", profile, "--target-dir"]);
+
+  command.push(target.to_string_lossy().into_owned());
+  command
+}
+
 // The services, through the run's hands.
 struct Services<'a> {
   run: &'a Laying<'a>,
@@ -675,13 +685,9 @@ impl<'a> Laying<'a> {
     };
 
     if cargo {
-      let mut command = words(["cargo", "build", "--locked", "--profile", profile, "--target-dir"]);
-
-      command.push(target.to_string_lossy().into_owned());
-
       let ask = StepAsk {
         id: OwnStep::CargoRelease.name().to_owned(),
-        command,
+        command: release_build(profile, &target),
         cwd: tree.clone(),
         lane: Some(Lane::Wide),
         timeout: None,

@@ -14,7 +14,7 @@ use bmo_testbed_core::events::Hook;
 use bmo_testbed_core::turn::Env;
 use bmo_testbed_deploy::deployment::{
   DeployAsk, DeployHands, DeployPlaces, Gate, GateAsk, GateOutcome, Machine, StepAsk, StepRan, deploy,
-  workspace_binaries,
+  release_build, workspace_binaries,
 };
 use bmo_testbed_deploy::progress::{Outcome, read_deploy_progress};
 use bmo_testbed_deploy::release::{LiveProcess, release_dir};
@@ -610,6 +610,24 @@ fn the_binaries_of_a_workspace_are_its_bin_targets() {
 
   assert_eq!(workspace_binaries(metadata).unwrap(), ["agent", "tool"]);
   assert!(workspace_binaries("warning: not json").is_err());
+}
+
+// "The Cargo release build covers every package in the workspace, not the root package alone"
+#[test]
+fn the_release_build_covers_every_package_of_the_workspace() {
+  assert_eq!(
+    release_build("release", Path::new("/build/target")),
+    [
+      "cargo",
+      "build",
+      "--workspace",
+      "--locked",
+      "--profile",
+      "release",
+      "--target-dir",
+      "/build/target"
+    ]
+  );
 }
 
 // "a first deployment whose service will not restart is not rolled back, and fails"
