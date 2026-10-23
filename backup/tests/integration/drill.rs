@@ -177,3 +177,20 @@ fn a_drill_with_no_snapshot_anywhere_fails() {
   assert_eq!(outcome.failed.len(), 1, "{:?}", outcome.failed);
   assert_eq!(outcome.failed[0].step, "find");
 }
+
+#[test]
+fn a_scratch_database_a_gone_drill_left_is_swept() {
+  let left = format!("{}999999999_0", BACKUP.names.drill_database);
+  let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+
+  runtime.block_on(statements(
+    &server(),
+    &[&format!("DROP DATABASE IF EXISTS \"{left}\""), &format!("CREATE DATABASE \"{left}\"")],
+  ));
+
+  let standing = runtime.block_on(bmo_testbed_backup::dump::sweep_scratch(&server())).unwrap();
+  let names = runtime.block_on(bmo_testbed_backup::dump::databases(&server())).unwrap();
+
+  assert!(standing.is_empty(), "{standing:?}");
+  assert!(!names.contains(&left), "{left} still stands");
+}

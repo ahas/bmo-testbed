@@ -99,7 +99,10 @@
   2. Its files are downloaded into `<staging>/drill/`, and each held to the manifest's size and SHA-256.
   3. Each dump is restored by `pg_restore` into a scratch database of the drill's own on the declared
      server, every table's rows counted and held to the manifest's counts, and the scratch database
-     dropped, whatever came of it.
+     dropped, whatever came of it. The drop asks the server to stop its own maintenance on the database
+     rather than end it by force, which a role that is no superuser may not, and is asked again a few
+     times; one still standing fails the drill.
+  The drill first drops every scratch database of its own a drill no longer running left behind.
   4. The data archive is read through whole, and its entries held to the manifest's count.
   5. The downloads are removed.
 - **It ends 0 where everything matched,** and 1 otherwise with a `restore-drill-failed` event naming each

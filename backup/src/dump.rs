@@ -119,12 +119,62 @@ pub async fn dump(address: &str, file: &Path) -> Result<Tables, String> {
   Ok(counted)
 }
 
-/// What a restore came to: the restored database's rows, and what `pg_restore` complained of, where it
-/// did, said by how many errors it counted and never by its own lines, which may quote a row.
+/// What a restore came to: the restored database's rows; what `pg_restore` complained of, where it did,
+/// said by how many errors it counted and never by its own lines, which may quote a row; and why the
+/// scratch database still stands, where it does.
 #[derive(Debug, Default)]
 pub struct Restored {
   pub tables: Tables,
   pub complaint: Option<String>,
+  pub left: Option<String>,
+}
+
+/// A scratch database dropped. The drop is not forced: a forced one must end every session on it, and a
+/// role that is no superuser may not end the server's own maintenance, which a plain drop asks to stop.
+/// It is asked again while that maintenance stops.
+pub async fn drop_scratch(server: &str, scratch: &str) -> Result<(), String> {
+  let numbers = &BACKUP.numbers;
+  let statement = format!("DROP DATABASE IF EXISTS {}", identifier(scratch));
+  let mut last = String::new();
+
+  for _ in 0..numbers.drop_tries.max(1) {
+    let mut admin = connect(server).await?;
+    let dropped = admin.execute(statement.as_str()).await;
+    let _ = admin.close().await;
+
+    match dropped {
+      Ok(_) => return Ok(()),
+      Err(why) => last = why.to_string(),
+    }
+
+    tokio::time::sleep(std::time::Duration::from_millis(numbers.drop_pause_milliseconds)).await;
+  }
+
+  Err(fill_shown(&BACKUP.words.not_dropped, &[("database", &scratch), ("why", &last)]))
+}
+
+/// Every scratch database of the drill's own whose drill is no longer running, dropped; the names of those
+/// that still stand.
+pub async fn sweep_scratch(server: &str) -> Result<Vec<String>, String> {
+  let prefix = &BACKUP.names.drill_database;
+  let names = databases(server).await?;
+  let mut left = Vec::new();
+
+  for name in names {
+    let Some(pid) = name.strip_prefix(prefix.as_str()).and_then(|rest| rest.split('_').next()) else {
+      continue;
+    };
+
+    if std::path::Path::new("/proc").join(pid).exists() {
+      continue;
+    }
+
+    if drop_scratch(server, &name).await.is_err() {
+      left.push(name);
+    }
+  }
+
+  Ok(left)
 }
 
 /// A dump restored into a new scratch database of the given name, its rows counted, and the scratch
@@ -137,13 +187,15 @@ pub async fn restore_and_count(server: &str, scratch: &str, file: &Path) -> Resu
     .await
     .map_err(|why| why.to_string())?;
 
-  let restored = restore_into(server, scratch, file).await;
-  let _ = admin
-    .execute(format!("DROP DATABASE IF EXISTS {} WITH (FORCE)", identifier(scratch)).as_str())
-    .await;
   let _ = admin.close().await;
 
-  restored
+  let restored = restore_into(server, scratch, file).await;
+  let dropped = drop_scratch(server, scratch).await;
+
+  restored.map(|restored| Restored {
+    left: dropped.err(),
+    ..restored
+  })
 }
 
 async fn restore_into(server: &str, scratch: &str, file: &Path) -> Result<Restored, String> {
@@ -177,5 +229,6 @@ async fn restore_into(server: &str, scratch: &str, file: &Path) -> Result<Restor
   Ok(Restored {
     tables: tables?,
     complaint,
+    left: None,
   })
 }

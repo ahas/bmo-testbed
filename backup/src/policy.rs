@@ -50,6 +50,8 @@ pub struct Numbers {
   pub pack_level: u32,
   pub dump_compress: String,
   pub restore_jobs: u32,
+  pub drop_tries: u32,
+  pub drop_pause_milliseconds: u64,
   pub quoted_chars: usize,
 }
 
@@ -91,6 +93,7 @@ pub struct Words {
   pub count_mismatch: String,
   pub restore_complained: String,
   pub table_missing: String,
+  pub not_dropped: String,
   pub table_extra: String,
   pub entries_mismatch: String,
   pub unstarted: String,

@@ -46,6 +46,10 @@ pack_level = 3
 dump_compress = "zstd:1"
 # How many jobs pg_restore restores a dump with.
 restore_jobs = 4
+# How often a scratch database's drop is asked, and how long apart, while the server's maintenance on
+# the restored database stops.
+drop_tries = 15
+drop_pause_milliseconds = 2000
 # How much of what a command said a line quotes.
 quoted_chars = 300
 
@@ -87,6 +91,7 @@ not_listed = "{key} is not listed after it was sent"
 count_mismatch = "{database}: {table} restored {restored} rows where the dump counted {expected}"
 restore_complained = "pg_restore exited {code} with {errors} error line(s); restore the dump by hand to read them"
 table_missing = "{database}: {table} did not restore"
+not_dropped = "the scratch database {database} could not be dropped: {why}"
 table_extra = "{database}: {table} restored but the dump counted no such table"
 entries_mismatch = "{file} holds {read} entries where the manifest says {expected}"
 unstarted = "{what} could not be started: {why}"

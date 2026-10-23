@@ -9,7 +9,7 @@ use bmo_testbed_core::policy::fill_shown;
 use bmo_testbed_deploy::remove::remove_tree;
 use chrono::{DateTime, Local};
 
-use crate::dump::restore_and_count;
+use crate::dump::{restore_and_count, sweep_scratch};
 use crate::manifest::{Manifest, Tables};
 use crate::outcome::Outcome;
 use crate::pack::{digest, entries};
@@ -171,6 +171,23 @@ pub fn drill(plan: &Plan, now: DateTime<Local>, say: Say<'_>) -> Outcome {
 
   let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build();
 
+  if let Ok(runtime) = &runtime {
+    match runtime.block_on(sweep_scratch(&plan.server)) {
+      Ok(left) => {
+        for name in left {
+          let line = fill_shown(&words.not_dropped, &[("database", &name), ("why", &"it still stands")]);
+
+          say(&line);
+          outcome.fail("drop", &name, line);
+        }
+      }
+      Err(why) => {
+        say(&why);
+        outcome.fail("sweep", &plan.server, why);
+      }
+    }
+  }
+
   for (index, database) in manifest.databases.iter().enumerate() {
     if !whole.contains(&database.file) {
       continue;
@@ -185,6 +202,11 @@ pub fn drill(plan: &Plan, now: DateTime<Local>, say: Say<'_>) -> Outcome {
 
     match runtime.block_on(restore_and_count(&plan.server, &scratch, &dir.join(&database.file))) {
       Ok(restored) => {
+        if let Some(left) = restored.left {
+          say(&left);
+          outcome.fail("drop", &scratch, left);
+        }
+
         if let Some(complaint) = restored.complaint {
           say(&complaint);
           outcome.fail("restore", &database.name, complaint);
