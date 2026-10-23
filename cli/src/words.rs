@@ -40,6 +40,7 @@ pub enum Verb {
   Full(FullArgs),
   Deploy(DeployArgs),
   Backups,
+  Backup(BackupArgs),
   Serve(ServeArgs),
   Mcp(McpArgs),
   /// The nouns `bmo` dispatches to this binary, one a line.
@@ -96,6 +97,32 @@ pub enum DeployWord {
   Commit(DeployFlags),
   /// The backups a deployment took, sent away and rotated.
   Backups,
+}
+
+/// `backup` and the word naming what it does (docs/backup.md).
+#[derive(Debug, Args)]
+#[command(disable_help_subcommand = true)]
+pub struct BackupArgs {
+  #[command(subcommand)]
+  pub word: BackupWord,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum BackupWord {
+  /// The databases dumped and the data folders packed, sent and rotated.
+  Snapshot,
+  /// The media and the large files packed and sent.
+  Media,
+  /// The newest snapshot restored and counted.
+  Drill,
+  /// The rotation alone.
+  Prune(BackupPruneArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct BackupPruneArgs {
+  #[arg(long)]
+  pub dry_run: bool,
 }
 
 // A positive whole number of seconds.
@@ -353,6 +380,13 @@ pub fn read(args: impl IntoIterator<Item = OsString>) -> Result<Words, clap::Err
         .mut_subcommand("backups", |word| word.override_help(usage(&said.backups)))
     })
     .mut_subcommand("backups", |verb| verb.override_help(usage(&said.backups)))
+    .mut_subcommand("backup", |verb| {
+      ["snapshot", "media", "drill", "prune"]
+        .iter()
+        .fold(verb.override_help(usage(&said.backup)), |verb, word| {
+          verb.mut_subcommand(word, |word| word.override_help(usage(&said.backup)))
+        })
+    })
     .mut_subcommand("serve", |verb| verb.override_help(usage(&said.serve)))
     .mut_subcommand("mcp", |verb| verb.override_help(usage(&said.mcp)))
     .mut_subcommand("test", |verb| {

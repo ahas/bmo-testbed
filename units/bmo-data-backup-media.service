@@ -1,0 +1,16 @@
+[Unit]
+Description=Data backup of the media: each media set and the large files packed and sent to every destination
+# docs/backup.md, 「How the media run runs」. Started by its timer, which every deployment of this
+# repository links with this unit and starts (docs/deploy.md, 「The unit links」). It holds a lock of its
+# own, so the hourly snapshot goes on beside it.
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/.local/share/bmo-testbed/deploy
+ExecStart=%h/.local/share/bmo-testbed/deploy/bin/bmo-testbed backup media
+Environment=PATH=%h/.local/bin:%h/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+SuccessExitStatus=75
+Nice=10
+IOSchedulingClass=idle

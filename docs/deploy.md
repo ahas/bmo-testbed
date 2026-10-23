@@ -7,6 +7,7 @@
   watched, and rolled back where they do not stay up. What the repository builds, which services it
   runs and how its health is read are its declaration's (`docs/declaration.md`).
 - **The `backups` verb** sends the backups deployments took to remote storage and keeps them rotated.
+  A machine's runtime data apart from any deployment is the data backup's (`docs/backup.md`).
 - **One repository, one deploy tree.** Every place below is the declaration's, relative to the
   repository's declared deploy root.
 

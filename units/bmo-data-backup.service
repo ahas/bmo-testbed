@@ -1,0 +1,16 @@
+[Unit]
+Description=Data backup: the databases dumped and the data folders packed, sent to every destination and rotated
+# docs/backup.md, 「How a snapshot runs」. Started by its timer, which every deployment of this repository
+# links with this unit and starts (docs/deploy.md, 「The unit links」). What it backs up and where are the
+# settings file's under the data root. A run that finds another going ends with 75 and changes nothing.
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/.local/share/bmo-testbed/deploy
+ExecStart=%h/.local/share/bmo-testbed/deploy/bin/bmo-testbed backup snapshot
+Environment=PATH=%h/.local/bin:%h/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+SuccessExitStatus=75
+Nice=10
+IOSchedulingClass=idle

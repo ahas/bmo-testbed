@@ -1,0 +1,16 @@
+[Unit]
+Description=Restore drill: the newest data backup restored into scratch databases and counted against its manifest
+# docs/backup.md, 「The restore drill」. Started by its timer, which every deployment of this repository
+# links with this unit and starts (docs/deploy.md, 「The unit links」). A mismatch sends an event to the
+# hook its environment or the declaration names.
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/.local/share/bmo-testbed/deploy
+ExecStart=%h/.local/share/bmo-testbed/deploy/bin/bmo-testbed backup drill
+Environment=PATH=%h/.local/bin:%h/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+SuccessExitStatus=75
+Nice=10
+IOSchedulingClass=idle

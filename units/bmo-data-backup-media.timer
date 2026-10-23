@@ -1,0 +1,13 @@
+[Unit]
+Description=Data backup of the media, every week
+# docs/backup.md, 「How the media run runs」.
+
+[Timer]
+OnCalendar=Sun *-*-* 03:30:00
+Persistent=true
+RandomizedDelaySec=600
+
+[Install]
+WantedBy=timers.target
+# Linked with its service, enabled and started by every deployment (docs/deploy.md, 「The unit links」).
+X-BMO-Deploy=timer

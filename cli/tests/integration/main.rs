@@ -1,3 +1,4 @@
+mod backup;
 mod check;
 mod classify;
 mod deploy_verbs;

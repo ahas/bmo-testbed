@@ -1,0 +1,12 @@
+[Unit]
+Description=Restore drill of the data backup, every day
+# docs/backup.md, 「The restore drill」.
+
+[Timer]
+OnCalendar=*-*-* 05:40:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+# Linked with its service, enabled and started by every deployment (docs/deploy.md, 「The unit links」).
+X-BMO-Deploy=timer

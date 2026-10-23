@@ -16,6 +16,7 @@ path = "src/main.rs"
 
 [dependencies]
 axum.workspace = true
+bmo-testbed-backup = { path = "../backup" }
 bmo-testbed-client = { path = "../client" }
 bmo-testbed-core = { path = "../core" }
 bmo-testbed-deploy = { path = "../deploy" }

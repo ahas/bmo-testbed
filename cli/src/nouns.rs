@@ -3,7 +3,7 @@
 //! `nouns` prints it.
 
 /// The nouns `bmo` dispatches to this binary, one a line, as `nouns` prints them.
-pub const NOUNS: [&str; 11] = [
+pub const NOUNS: [&str; 15] = [
   "test suite",
   "test count",
   "test log",
@@ -15,6 +15,10 @@ pub const NOUNS: [&str; 11] = [
   "cargo prune",
   "deploy commit",
   "deploy backups",
+  "backup snapshot",
+  "backup media",
+  "backup drill",
+  "backup prune",
 ];
 
 /// What `nouns` prints.

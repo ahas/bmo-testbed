@@ -24,6 +24,7 @@ and a release-based deployment of a repository onto the machine it runs on.
 | `docs/suite.md` | The whole-suite run: sweep, lanes, guards, fence, the test database, what failed runs once more, the daily whole run |
 | `docs/checks.md` | Which tests a change runs, the static check, the quick checks, the change check, imports, the test count |
 | `docs/deploy.md` | Releases, adoption, unit marks, the deploy run, progress, rollback, refusals, backups, the Cargo build directory |
+| `docs/backup.md` | The data backup: what is backed up, where, how often, the rotation, the restore drill, restoring by hand, the settings |
 | `docs/declaration.md` | The `testbed.toml` schema |
 | `docs/boundary.md` | Every verb, exit code, status field, environment variable, event, the record, the HTTP service, the harness plugin, the placement endpoint and the version rules |
 | `docs/openapi.json` | The HTTP service's routes and members and the harness plugin's tools, generated from the code |
@@ -36,6 +37,7 @@ and a release-based deployment of a repository onto the machine it runs on.
 | `core/` | The queue, the lanes, the turn, the run and its result, the languages, memory limits, the declaration reader and the policy loader |
 | `suite/` | The whole-suite runner, change selection, the static check, the quick checks, the Cargo verb and the build directory prune |
 | `deploy/` | Releases, the deploy tree link, unit links, the deploy run, progress, rollback and backups |
+| `backup/` | The data backup: a machine's databases and data folders dumped, packed, sent to its destinations, rotated and restored by a drill |
 | `cli/` | The `bmo-testbed` binary: reading the words of each verb and handing them to the crates |
 | `client/` | The published client: the HTTP service's members, queries and error codes, and the client calling each route |
 | `record/` | The record every verb writes and the service reads: test runs, deployments, log lines, restarts and events |
@@ -44,7 +46,7 @@ and a release-based deployment of a repository onto the machine it runs on.
 | `test-support/` | The fixed ids a Rust test names its people, rooms and units by, the same as the test kit's |
 | `scratch-database/` | Per-test PostgreSQL databases cloned from a template a consumer's migrator makes |
 | `testkit/` | The TypeScript test kit a consumer preloads: the test home and the stand-ins |
-| `units/` | The user units this repository's deployment keeps: the Cargo build directory's prune and its timer |
+| `units/` | The user units this repository's deployment keeps: the Cargo build directory's prune, the data backup's snapshot, media and drill, and their timers |
 | `policy/` | The testbed's own fixed numbers and words, read by `core`'s policy loader |
 | `docs/` | The documents above |
 | `.graph/` | The code dependency graph: one JSON file per area, a node per feature with its files and the features it needs, and a boundary node for each API exposed or called, written by `bmo-graph` and never by hand. Its area files are committed with the code they describe, so a change that moves a node carries the graph with it, while `settings.toml` is the repository's configuration |

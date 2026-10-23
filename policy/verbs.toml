@@ -24,6 +24,8 @@ deploy    a commit of the repository put live, in a unit of its own; `deploy com
           the platform names it
 backups   the backups a deployment took, sent away and rotated; `deploy backups` as the
           platform names it
+backup    the machine's databases and data folders backed up to its destinations, and the
+          restore drill: backup snapshot, backup media, backup drill and backup prune
 serve     the HTTP service: the record and the lanes, read-only behind a token
 mcp       the harness plugin's MCP server, on standard input and output
 nouns     the nouns `bmo` dispatches to this binary, one a line
@@ -182,6 +184,24 @@ usage: {verb} backups
 Sends every backup a deployment took and the remote does not yet hold, reads each back to match its
 size and checksum, and rotates them there and here (docs/deploy.md). Exits 1 where any failed to
 send, the rest sent all the same."""
+backup = """
+usage: {verb} backup snapshot
+       {verb} backup media
+       {verb} backup drill
+       {verb} backup prune [--dry-run]
+
+Backs up the databases and data folders the settings file names (docs/backup.md), the file being
+backup.toml under the data root's env folder.
+
+snapshot   every database dumped and the data folders packed, sent to each destination's hourly
+           slot and the day's folder, the release archives beside them, then the rotation
+media      each media set and the large files packed as an archive of its own and sent
+drill      the newest snapshot any destination holds restored into scratch databases, its rows
+           counted against its manifest
+prune      the rotation alone; --dry-run says what it would remove
+
+Exits 1 where any step failed, the rest done all the same, 2 where the settings do not read, and 75
+where another run of the same word holds the lock."""
 serve = """
 usage: {verb} serve [--listen <address>] [--token <token>]
 

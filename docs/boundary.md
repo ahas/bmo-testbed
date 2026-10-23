@@ -234,6 +234,24 @@ bmo-testbed backups
 - Sends and rotates the backups (`docs/deploy.md`, 「Sending backups away」). Exits 1 where any backup
   failed to send, the rest sent all the same.
 
+### `backup`
+
+```
+bmo-testbed backup snapshot
+bmo-testbed backup media
+bmo-testbed backup drill
+bmo-testbed backup prune [--dry-run]
+```
+
+- Backs up what the settings file under the data root names (`docs/backup.md`): `snapshot` the
+  databases and the data folders, sent and rotated; `media` the media sets and the large files; `drill`
+  the newest snapshot restored and counted; `prune` the rotation alone, `--dry-run` saying what it would
+  remove.
+- Thin: a line for each dump, archive, send and removal, with its bytes and seconds, and one closing line.
+- Exits 0 where every step passed, 1 where any failed, the rest done all the same, 2 where the settings
+  file is missing or does not read, and 75 where another run of the same word holds its lock; `prune`
+  shares the snapshot's.
+
 ### `serve`
 
 ```
@@ -278,12 +296,16 @@ verb's own name, and each noun takes what that verb takes.
 | `cargo prune` | the words `prune` takes | `prune` |
 | `deploy commit` | the words `deploy` takes | `deploy` |
 | `deploy backups` | the words `backups` takes | `backups` |
+| `backup snapshot` | nothing | `backup snapshot` |
+| `backup media` | nothing | `backup media` |
+| `backup drill` | nothing | `backup drill` |
+| `backup prune` | the words `backup prune` takes | `backup prune` |
 
 ## The environment
 
 | Variable | Read by | Meaning |
 |---|---|---|
-| `BMO_DATA_DIR` | every verb | The testbed's data root: logs and the record under `testbed/`, locks under `locks/`. Default `$HOME/.local/share/bmo/data` |
+| `BMO_DATA_DIR` | every verb | The testbed's data root: logs and the record under `testbed/`, locks under `locks/`, the data backup's settings under `env/`. Default `$HOME/.local/share/bmo/data` |
 | `TMPDIR` | the turn | Where the lane locks stand. Default `/tmp` |
 | `BMO_TESTBED_LOCK` | the turn | Another wide lane lock, the narrow one beside it |
 | `BMO_TESTBED_HELD` | the turn | Set by a holder for its children: its process number. A command finding it holding its lane runs at once |
@@ -363,6 +385,8 @@ keep (`docs/deploy.md`, 「The unit links」).
   | `deploy-failed` | `commit`, `stage`, `reason`, `rolled_back` (boolean), `journal` |
   | `deploy-rolled-back` | `failed_commit`, `back_to`, `reason`, `answers` (boolean), `journal` |
   | `backup-upload-failed` | `backups`, each with `name`, `step` and `said` |
+| `data-backup-failed` | `verb` (`snapshot`, `media` or `prune`), `failures`, each with `step`, `target` and `said` |
+| `restore-drill-failed` | `verb` (`drill`), `failures`, each with `step`, `target` and `said`, a count mismatch naming its database, table and both counts |
   | `releases-pinned` | `releases`, each with `release` and `processes`, each with `pid`, `unit` and `command` |
   | `cargo-target-over-ceiling` | `bytes`, `ceiling_bytes`, `checkouts` |
   | `full-suite-failed` | `head`, `log`, `step` (the failing setup or static step, or null), `failures`, each with `unit` and `package` |
@@ -572,6 +596,9 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   through the tree's and the services' hands, backups. The run asks its gate through a trait of its
   own, which the binary answers with the suite crate's static check and suite, so `deploy` depends on
   no other crate of the testbed but `core` and `record`.
+- **`backup`:** the data backup (`docs/backup.md`): the settings read into a plan, the stores a
+  destination is reached through, the dumps and their counts, the archives, the snapshot, the media,
+  the rotation and the drill.
 - **`scratch-database`:** per-test databases copied from a template the migrator a test hands in
   makes (`docs/suite.md`, 「The test database」): a scratch database dropped with its guard, its
   address and connection, and the test server's address; a consumer's crate may take it as a

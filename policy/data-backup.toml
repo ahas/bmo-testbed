@@ -1,0 +1,99 @@
+# The data backup's own numbers, names and words (docs/backup.md). A caller and the event's reader read the
+# words, so they are English. Each `{name}` is filled in with what it names.
+
+# The defaults a settings file may set otherwise (docs/backup.md, 「The settings」).
+[defaults]
+# A file over this goes to the weekly large-files archive instead of the hourly one: 64 MiB.
+large_file_bytes = 67108864
+server = "postgres:///postgres?host=/var/run/postgresql"
+staging = "~/.local/state/bmo-testbed/backup"
+prefix = "data-backup"
+hourly_slots = 4
+daily_days = 7
+releases_kept = 2
+drill_max_age_hours = 3
+# What a destination's disk keeps free after a send, where the destination names its disk: 10 GiB.
+room_floor_bytes = 10737418240
+s3_command = "aws"
+rclone_command = "rclone"
+
+# The names the backup's own files, keys and scratch databases go by.
+[names]
+settings_file = "backup.toml"
+manifest = "manifest.json"
+data_archive = "data.tar.zst"
+dump_suffix = ".pgdump"
+archive_suffix = ".tar.zst"
+large_files = "large-files"
+# What the drill's scratch databases' names begin with, ahead of its process and the dump's ordinal; no
+# snapshot ever dumps one.
+drill_database = "testbed_drill_"
+# The sets' folders under the prefix.
+hourly = "hourly"
+daily = "daily"
+media = "media"
+releases = "deploy"
+# The staging area's folders: the snapshot being made, the newest whole one, and the drill's downloads.
+next = "next"
+latest = "latest"
+drill = "drill"
+
+[numbers]
+manifest_version = 1
+# The zstd level the archives are packed at.
+pack_level = 3
+# pg_dump's compression of a custom-format dump.
+dump_compress = "zstd:1"
+# How many jobs pg_restore restores a dump with.
+restore_jobs = 4
+# How much of what a command said a line quotes.
+quoted_chars = 300
+
+# What the verb says: {path} and {why} where the settings do not read, {destination}, {key}, {bytes} and
+# {seconds} what was sent where, {database}, {tables} and {rows} a dump or a restore, {count}, {failed} and
+# the other marks what each line names.
+[words]
+no_settings = "backup: no settings at {path}, so nothing is backed up (docs/backup.md, 「The settings」)"
+settings_unread = "backup: the settings {path} do not read: {why}"
+settings_wrong = "backup: the settings are wrong: {why}"
+locked = "backup: another {holder} run holds the lock, so this one did nothing; the next runs as usual"
+snapshot_holder = "backup snapshot"
+media_holder = "backup media"
+drill_holder = "backup drill"
+prune_holder = "backup prune"
+dumped = "dumped {database}: {bytes} bytes, {tables} tables, {rows} rows, {seconds}s"
+packed = "packed the data folders: {entries} entries, {bytes} bytes, {seconds}s"
+packed_media = "packed {name}: {bytes} bytes, {seconds}s"
+left_out = "left {count} file(s) over {over} bytes out of the hourly archive, {bytes} bytes, for the weekly large-files archive"
+missing_folder = "{path} does not exist, so it is not backed up"
+sent = "sent to {destination}: {key}, {bytes} bytes, {seconds}s"
+release_sent = "sent to {destination}: {key}, {bytes} bytes, {seconds}s"
+no_room = "{destination}: not sent, since its disk has {free} bytes free and {bytes} bytes would leave less than {floor}"
+removed = "removed from {destination}: {key}"
+would_remove = "would remove from {destination}: {key}"
+nothing_to_remove = "nothing to remove"
+snapshot_done = "snapshot into slot {slot}: {failed} step(s) failed, {seconds}s"
+media_done = "media: {failed} step(s) failed, {seconds}s"
+drill_from = "drill: the newest snapshot is {destination}: {key}, taken {taken_at}"
+drill_database = "restored {database}: {tables} tables, {rows} rows, {seconds}s"
+drill_data = "read {file} through: {entries} entries, as the manifest says"
+drill_passed = "drill passed: {seconds}s"
+drill_failed = "drill failed: {failed} mismatch(es) or step(s), {seconds}s"
+no_snapshot = "no destination holds a snapshot"
+too_old = "the newest snapshot was taken {taken_at}, more than {hours} hours ago"
+sha_mismatch = "{file} did not download whole: its size or SHA-256 differs from the manifest's"
+size_mismatch = "{key} stands with {there} bytes where the local file has {here}"
+not_listed = "{key} is not listed after it was sent"
+count_mismatch = "{database}: {table} restored {restored} rows where the dump counted {expected}"
+restore_complained = "pg_restore exited {code} with {errors} error line(s); restore the dump by hand to read them"
+table_missing = "{database}: {table} did not restore"
+table_extra = "{database}: {table} restored but the dump counted no such table"
+entries_mismatch = "{file} holds {read} entries where the manifest says {expected}"
+unstarted = "{what} could not be started: {why}"
+exited = "{what} exited {code}: {said}"
+listing_unread = "the listing could not be read: {why}"
+manifest_unread = "the manifest {key} could not be read: {why}"
+# The summary lines of the `data-backup-failed` and `restore-drill-failed` events, {count} how many steps
+# failed.
+failed_summary = "{count} step(s) of the data backup failed."
+drill_failed_summary = "The restore drill failed: {count} mismatch(es) or step(s)."

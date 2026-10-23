@@ -36,6 +36,10 @@ fn the_nouns_are_printed_one_a_line() {
       "cargo prune",
       "deploy commit",
       "deploy backups",
+      "backup snapshot",
+      "backup media",
+      "backup drill",
+      "backup prune",
     ]
   );
 }
@@ -56,6 +60,10 @@ fn every_noun_hands_its_words_to_the_verb_it_names() {
     (&["cargo", "prune"], "prune"),
     (&["deploy", "commit"], "deploy"),
     (&["deploy", "backups"], "backups"),
+    (&["backup", "snapshot"], "backup"),
+    (&["backup", "media"], "backup"),
+    (&["backup", "drill"], "backup"),
+    (&["backup", "prune"], "backup"),
   ] {
     let words: Vec<&str> = noun.iter().copied().chain(["--help"]).collect();
     let usage = ran(&mut testbed(dir.path(), dir.path(), &words));
