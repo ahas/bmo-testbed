@@ -69,6 +69,8 @@ pub struct Settings {
   #[serde(default)]
   pub exclude_databases: Vec<String>,
   pub server: Option<String>,
+  #[serde(default)]
+  pub address_files: std::collections::BTreeMap<String, String>,
   pub staging: Option<String>,
   pub prefix: Option<String>,
   pub hourly_slots: Option<u64>,
@@ -114,6 +116,7 @@ pub struct Plan {
   pub databases: Vec<Pattern>,
   pub exclude_databases: Vec<Pattern>,
   pub server: String,
+  pub address_files: std::collections::BTreeMap<String, PathBuf>,
   pub staging: PathBuf,
   pub prefix: String,
   pub hourly_slots: u64,
@@ -255,6 +258,11 @@ impl Plan {
       databases: patterns(&settings.databases)?,
       exclude_databases: patterns(&settings.exclude_databases)?,
       server: settings.server.unwrap_or_else(|| defaults.server.clone()),
+      address_files: settings
+        .address_files
+        .iter()
+        .map(|(database, file)| (database.clone(), expanded(file, home)))
+        .collect(),
       staging: expanded(settings.staging.as_deref().unwrap_or(&defaults.staging), home),
       prefix,
       hourly_slots: settings.hourly_slots.unwrap_or(defaults.hourly_slots),
@@ -280,6 +288,17 @@ impl Plan {
       .chain(parts.iter().copied())
       .collect::<Vec<_>>()
       .join("/")
+  }
+
+  /// The address a database is dumped through: what its address file holds, or the server's address with
+  /// its name in place of the listing database's.
+  pub fn address_of(&self, database: &str) -> Result<String, String> {
+    match self.address_files.get(database) {
+      Some(file) => std::fs::read_to_string(file)
+        .map(|text| text.trim().to_owned())
+        .map_err(|why| format!("{}: {why}", file.display())),
+      None => crate::dump::address_in(&self.server, database),
+    }
   }
 
   /// Whether a database is one to dump: a `databases` glob matches it, no `exclude_databases` glob does,

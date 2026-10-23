@@ -72,11 +72,10 @@ pub async fn count_tables(connection: &mut PgConnection) -> Result<Tables, Strin
   Ok(counts)
 }
 
-/// One database dumped into the file, from a snapshot exported by a transaction that counts its rows in
-/// that same snapshot while the dump runs.
-pub async fn dump(server: &str, database: &str, file: &Path) -> Result<Tables, String> {
-  let address = address_in(server, database)?;
-  let mut connection = connect(&address).await?;
+/// One database dumped through its address into the file, from a snapshot exported by a transaction that
+/// counts its rows in that same snapshot while the dump runs.
+pub async fn dump(address: &str, file: &Path) -> Result<Tables, String> {
+  let mut connection = connect(address).await?;
 
   connection
     .execute("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
@@ -103,6 +102,8 @@ pub async fn dump(server: &str, database: &str, file: &Path) -> Result<Tables, S
   let done = child.wait_with_output().await.map_err(|why| why.to_string())?;
   let _ = connection.execute("COMMIT").await;
   let _ = connection.close().await;
+  // A count that failed aborted the transaction, and the dump with it, so its reason comes first.
+  let counted = counted?;
 
   if !done.status.success() {
     return Err(fill_shown(
@@ -115,7 +116,7 @@ pub async fn dump(server: &str, database: &str, file: &Path) -> Result<Tables, S
     ));
   }
 
-  counted
+  Ok(counted)
 }
 
 /// What a restore came to: the restored database's rows, and what `pg_restore` complained of, where it

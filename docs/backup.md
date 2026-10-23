@@ -24,7 +24,10 @@
 | Releases | The newest release archives of each declared release folder | Every hour, where a new one stands | `<prefix>/deploy/<folder>/<archive>` |
 
 - **The databases** are every database on the server whose name one of `databases` matches and none of
-  `exclude_databases` does, and never one of the drill's own scratch databases. Each is dumped by `pg_dump` in custom format, compressed as the policy says.
+  `exclude_databases` does, and never one of the drill's own scratch databases. Each is dumped by
+  `pg_dump` in custom format, compressed as the policy says, through the server's address with its own
+  name in place of the listing database's, or through the address the file `address_files` names for it
+  holds, where a database is reached as a role of its own.
 - **A dump and its row counts are one moment.** Before each dump a transaction is opened at repeatable
   read and its snapshot exported; `pg_dump` dumps that snapshot while the same transaction counts every
   table's rows, so the manifest's counts are the dump's exactly. A table an extension owns is left out
@@ -127,7 +130,8 @@ key the testbed does not know refuses the run.
 | `large_file_bytes` | 67108864 | A file over this goes to the weekly `large-files` archive instead of the hourly one |
 | `databases` | none, required | Globs of the database names to dump |
 | `exclude_databases` | none | Globs of database names never dumped |
-| `server` | `postgres:///postgres?host=/var/run/postgresql` | The database server, its address with the database to list the others from |
+| `server` | `postgres:///postgres?host=/var/run/postgresql` | The database server, its address with the database to list the others from; the drill restores through it |
+| `address_files` | none | A table from a database's name to a file holding the address it is dumped through, so a role and any password stand in that file and never in the settings |
 | `staging` | `~/.local/state/bmo-testbed/backup` | The local folder snapshots are made in and the newest kept in |
 | `prefix` | `data-backup` | The folder every key at a destination stands under |
 | `hourly_slots` | 4 | How many hourly snapshots a destination keeps |

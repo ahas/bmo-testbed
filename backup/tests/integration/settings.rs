@@ -64,7 +64,10 @@ fn a_destination_missing_what_its_kind_needs_is_refused() {
 
 #[test]
 fn a_tilde_stands_for_the_home_directory() {
-  assert_eq!(expanded("~/.local/state", Path::new("/home/user")), Path::new("/home/user/.local/state"));
+  assert_eq!(
+    expanded("~/.local/state", Path::new("/home/user")),
+    Path::new("/home/user/.local/state")
+  );
   assert_eq!(expanded("~", Path::new("/home/user")), Path::new("/home/user"));
   assert_eq!(expanded("/srv/store", Path::new("/home/user")), Path::new("/srv/store"));
   assert_eq!(
@@ -86,4 +89,27 @@ fn a_plan_dumps_what_its_globs_name_and_never_the_drills_own() {
   assert!(!plan.dumps("app_copy_1234"));
   assert!(!plan.dumps("other"));
   assert!(!plan.dumps(&format!("{}app", BACKUP.names.drill_database)));
+}
+
+#[test]
+fn a_database_with_an_address_file_is_dumped_through_what_the_file_holds() {
+  let ground = Ground::new();
+  let file = ground.path("app-address");
+
+  std::fs::write(&file, "postgres:///app?host=/run/db&user=app_role\n").unwrap();
+
+  let plan = ground.plan(&ground.settings(&format!(
+    "folders = []\ndatabases = [\"app\", \"other\"]\nserver = \"postgres:///postgres?host=/run/db\"\n\
+     address_files = {{ app = \"{}\" }}",
+    file.display()
+  )));
+
+  assert_eq!(plan.address_of("app").unwrap(), "postgres:///app?host=/run/db&user=app_role");
+  assert_eq!(plan.address_of("other").unwrap(), "postgres:///other?host=/run/db");
+  assert!(
+    ground
+      .plan(&ground.settings("folders = []\ndatabases = []\naddress_files = { app = \"/nowhere\" }"))
+      .address_of("app")
+      .is_err()
+  );
 }

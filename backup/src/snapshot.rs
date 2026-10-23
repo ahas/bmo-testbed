@@ -265,7 +265,11 @@ fn dump_databases(plan: &Plan, dir: &Path, say: Say<'_>, outcome: &mut Outcome) 
     let started = Instant::now();
     let file = format!("{database}{}", BACKUP.names.dump_suffix);
 
-    match runtime.block_on(dump(&plan.server, &database, &dir.join(&file))) {
+    let dumped_now = plan
+      .address_of(&database)
+      .map(|address| runtime.block_on(dump(&address, &dir.join(&file))));
+
+    match dumped_now.and_then(|dumped| dumped) {
       Ok(tables) => {
         let size = std::fs::metadata(dir.join(&file)).map(|meta| meta.len()).unwrap_or_default();
 
