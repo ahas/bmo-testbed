@@ -18,7 +18,7 @@ use bmo_testbed_core::turn::{
 use crate::cargo::cargo_verb_line;
 use crate::crates::workspace_crates;
 use crate::own_binary::testbed_line;
-use crate::selection::{changed_paths, glob_matches, select_crates};
+use crate::selection::{Layout, changed_paths, glob_matches, select_crates};
 
 /// One command of the check, run in a directory of the tree being checked, with `env` over the caller's: in
 /// the lane it names, run again after an out-of-memory kill where it asks to be, or at once where it names
@@ -87,15 +87,15 @@ fn changed_since(root: &Path, since: Option<&str>) -> Option<Vec<String>> {
 
 /// Whether a change of `changed` marks any crate of the Cargo workspace. A checkout with no workspace marks
 /// none; every path changed, and a workspace that cannot be read, mark them all.
-pub fn cargo_selected(root: &Path, changed: Option<&[String]>) -> bool {
-  if !root.join("Cargo.toml").exists() {
+pub fn cargo_selected(repo: &Repository, changed: Option<&[String]>) -> bool {
+  if !repo.root.join("Cargo.toml").exists() {
     return false;
   }
 
   let Some(changed) = changed else { return true };
 
-  match workspace_crates(root) {
-    Ok(crates) => !select_crates(&crates, changed).is_empty(),
+  match workspace_crates(&repo.root) {
+    Ok(crates) => !select_crates(&Layout::of_parts(repo, crates), changed).is_empty(),
     Err(_) => true,
   }
 }
@@ -127,7 +127,7 @@ pub fn check_steps(repo: &Repository, since: Option<&str>) -> Vec<CheckStep> {
   let changed = changed.as_deref();
   let mut steps = declared_steps(repo, changed);
 
-  if cargo_selected(&repo.root, changed) {
+  if cargo_selected(repo, changed) {
     steps.extend([cargo_format(), cargo_lint()]);
   }
 

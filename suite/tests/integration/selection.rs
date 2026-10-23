@@ -555,7 +555,12 @@ mod the_crates {
   }
 
   fn crates_marked(changed: &[&str]) -> BTreeMap<String, MarkReason> {
-    first_reasons(select_crates(&crates(), &strings(changed)))
+    let layout = Layout {
+      crates: crates(),
+      ..Layout::default()
+    };
+
+    first_reasons(select_crates(&layout, &strings(changed)))
   }
 
   // "a path inside a crate marks that crate, and the crates that depend on it after"

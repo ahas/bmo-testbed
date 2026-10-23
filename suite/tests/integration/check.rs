@@ -542,6 +542,137 @@ fn a_project_whose_manifest_names_no_check_script_fails_its_step_with_why() {
   assert_eq!(done.output.trim(), fill_marks(&SUITE.file.no_check, &[("script", "check")]));
 }
 
+// A service's own checkout: a crate at the workspace's root, with its tests and their shared module, and a
+// crate of its own folder it depends on; a TypeScript project of its own listing a package of its own
+// workspace, whose check the declaration names; test files in a folder of their runner's configuration,
+// loading that package by its name; and one declared step.
+const SERVICE: &str = r#"
+testbed = 0
+
+[test]
+languages = ["cargo", "bun"]
+
+[projects]
+check_script = "check:types"
+
+[check]
+quick = ["layout", "dependencies"]
+
+[[check.step]]
+id = "lint"
+command = "cargo clippy --workspace --all-targets -- -D warnings"
+lane = "wide"
+"#;
+
+fn service_checkout() -> tempfile::TempDir {
+  let dir = tempfile::tempdir().unwrap();
+  let root = dir.path();
+
+  for (path, text) in [
+    ("testbed.toml", SERVICE),
+    (
+      "Cargo.toml",
+      "[package]\nname = \"service\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\npart = { path = \"part\" }\n\n[workspace]\nmembers = [\"part\"]\n",
+    ),
+    ("src/lib.rs", "pub use part::one;\n"),
+    (
+      "tests/service.rs",
+      "mod support;\n\n#[test]\nfn one() {\n  assert_eq!(support::one(), 1);\n}\n",
+    ),
+    ("tests/support/mod.rs", "pub fn one() -> u8 {\n  service::one()\n}\n"),
+    ("docs/service.md", "# The service\n"),
+    (
+      "part/Cargo.toml",
+      "[package]\nname = \"part\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    ),
+    ("part/src/lib.rs", "pub fn one() -> u8 {\n  1\n}\n"),
+    (
+      "ts/package.json",
+      r#"{ "name": "service-ts", "workspaces": ["agent"], "scripts": { "check:types": "tsc --noEmit" } }"#,
+    ),
+    ("ts/bun.lock", "{}\n"),
+    ("ts/agent/package.json", r#"{ "name": "@service/agent" }"#),
+    ("ts/agent/harness.ts", "export const harness = 1;\n"),
+    ("ts/agent/pane.ts", "export const pane = 1;\n"),
+    ("tests/ts/bunfig.toml", ""),
+    ("tests/ts/setup.ts", "export const setUp = true;\n"),
+    (
+      "tests/ts/harness.test.ts",
+      "import { harness } from \"@service/agent/harness\";\n\nconsole.log(harness);\n",
+    ),
+  ] {
+    write(root, path, text);
+  }
+
+  git(root, &["init", "-q", "-b", "main"]);
+  git(root, &["add", "-A"]);
+  git(root, &["commit", "-qm", "base"]);
+
+  dir
+}
+
+// "the checkout's own declaration is the only source of its checks: a change runs exactly the quick checks
+// and the steps it declares, the crates the change marks, the root crate's included, the test files that
+// load what it changed, and the declared check script of the project it reaches"
+#[test]
+fn a_service_checkout_s_change_runs_exactly_what_its_own_declaration_and_layout_owe() {
+  let dir = service_checkout();
+  let repo = repo(dir.path());
+  let given = |file: &str| plan(&repo, &files(&[file])).unwrap();
+  let quick = DeployStep::Quick.name();
+
+  // A path of the crate standing at the root, its tests' shared module and a document no other unit holds
+  // are the root crate's own: checked and tested.
+  for file in ["src/lib.rs", "tests/support/mod.rs", "docs/service.md"] {
+    let planned = given(file);
+
+    assert_eq!(names(&planned), [quick, "lint", "cargo check", "cargo test"], "{file}");
+    assert_eq!(planned.touched.checked_crates, ["service"], "{file}");
+    assert_eq!(planned.touched.tested_crates, ["service"], "{file}");
+    assert!(planned.touched.tests.is_empty(), "{file}");
+  }
+
+  let tested = given("src/lib.rs");
+
+  assert!(
+    tested
+      .steps
+      .last()
+      .unwrap()
+      .step
+      .command
+      .ends_with(&["-p".to_owned(), "service".to_owned()]),
+    "{:?}",
+    tested.steps.last().unwrap().step.command
+  );
+
+  // A crate of its own folder is tested itself, and the root crate depending on it is checked.
+  let part = given("part/src/lib.rs");
+
+  assert_eq!(part.touched.checked_crates, ["part", "service"]);
+  assert_eq!(part.touched.tested_crates, ["part"]);
+
+  // A module of the project's own workspace package reaches the test file loading it by the package's
+  // name, run from its runner's folder, and the project's declared check script; no crate.
+  let harness = given("ts/agent/harness.ts");
+
+  assert_eq!(names(&harness), [quick, "lint", "bun test in tests/ts", "ts/ check:types"]);
+  assert_eq!(harness.touched.tests, ["tests/ts/harness.test.ts"]);
+  assert!(harness.touched.checked_crates.is_empty());
+  assert_eq!(harness.steps.last().unwrap().step.command, ["bun", "run", "check:types"]);
+  assert_eq!(harness.steps.last().unwrap().step.dir, Path::new("ts"));
+
+  // A module no test loads owes the project's check alone.
+  assert_eq!(names(&given("ts/agent/pane.ts")), [quick, "lint", "ts/ check:types"]);
+
+  // The runner's folder and its test files are the runner's, not the root crate's.
+  for file in ["tests/ts/harness.test.ts", "tests/ts/setup.ts"] {
+    assert!(given(file).touched.checked_crates.is_empty(), "{file}");
+  }
+
+  assert_eq!(given("tests/ts/harness.test.ts").touched.tests, ["tests/ts/harness.test.ts"]);
+}
+
 #[test]
 fn a_log_left_unnamed_is_one_file_per_checkout_under_the_data_root() {
   let data = Path::new("/data");

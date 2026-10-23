@@ -44,6 +44,10 @@
   6. **Always:** every package declaring `always` is marked.
 - **A path of a Cargo workspace marks crates:**
   - a path inside a crate's directory marks that crate;
+  - a crate standing at the workspace's root holds every path that no other crate's directory holds and
+    no other unit holds: a project of its own, a workspace package, a tool checked by its manifest, a
+    folder below the root where a declared language's runner reads its configuration, and a test file a
+    declared language runs. Such a path marks it as its own, beside any crate whose `reads` match it;
   - the root `Cargo.toml`, `Cargo.lock` and `rustfmt.toml`, and anything under `.cargo/`, mark every
     crate;
   - a path matching a crate's `reads` marks that crate, and the mark stops there;
@@ -53,6 +57,9 @@
 - **The changed paths** are the commits of the range the caller names, with every file in the working
   tree that is modified or not yet tracked. With no range the run takes everything.
 - **The run says why.** Its first lines name every marked unit and the rule that marked it.
+- **An import is followed** where it names a file by a relative path, or by the name of a workspace
+  package and a module inside it: a package the root's workspaces list, or one a project of its own lists
+  in its own manifest. An alias a configuration defines names nothing followed.
 - **What it cannot see:** a launch whose path is assembled from pieces, and an import no static reading
   finds. The daily whole run catches both (`docs/suite.md`).
 

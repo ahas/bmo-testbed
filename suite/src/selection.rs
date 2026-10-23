@@ -10,7 +10,9 @@ use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::suite::SUITE;
 
 use crate::crates::{CrateDeclaration, is_cargo_path, is_workspace_path, owning_crate, workspace_crates};
+use crate::files::checkout_files;
 use crate::imports::{CODE_EXTENSIONS, WorkspacePackage, module_specifiers, resolve_import};
+use crate::run::file_languages;
 use crate::tool_checks::{CheckedTool, checked_tool_of, checked_tools};
 use crate::workspace::{
   OwnProject, PackageDeclaration, git_lines, own_project_of, own_projects, owning_package,
@@ -27,6 +29,15 @@ pub struct Layout {
   pub tools: Vec<CheckedTool>,
   /// The root's own configuration, which every package stands on: the files each declared language names.
   pub root_configuration: Vec<&'static str>,
+  /// The folders below the root where a declared language's runner reads its configuration, each the
+  /// folder its test files run from.
+  pub runner_dirs: Vec<String>,
+  /// The globs naming the test files the declared languages run: the declaration's own, or else each
+  /// language's own naming.
+  pub test_naming: Vec<String>,
+  /// The workspace packages each project of its own lists in its own manifest, by their directories from
+  /// the root, which an import names as it names one of the root's.
+  pub project_packages: Vec<WorkspacePackage>,
 }
 
 impl Layout {
@@ -52,18 +63,76 @@ impl Layout {
     root_configuration.sort_unstable();
     root_configuration.dedup();
 
+    let project_packages = projects
+      .iter()
+      .flat_map(|project| {
+        workspace_declarations(&repo.root.join(&project.dir))
+          .into_iter()
+          .map(|one| WorkspacePackage {
+            dir: format!("{}/{}", project.dir, one.dir),
+            name: one.name,
+          })
+      })
+      .collect();
+    let test = &repo.declaration.test;
+    let languages = file_languages(test);
+    let configurations: Vec<String> = languages
+      .iter()
+      .filter_map(|language| language.configuration_file())
+      .map(|name| format!("/{name}"))
+      .collect();
+    let mut runner_dirs: Vec<String> = if configurations.is_empty() {
+      Vec::new()
+    } else {
+      checkout_files(&repo.root)
+        .into_iter()
+        .filter(|path| !path.starts_with("node_modules/") && !path.contains("/node_modules/"))
+        .filter_map(|path| {
+          configurations
+            .iter()
+            .find_map(|name| path.strip_suffix(name.as_str()).map(str::to_owned))
+        })
+        .collect()
+    };
+
+    runner_dirs.sort();
+    runner_dirs.dedup();
+
+    let test_naming = test.files.clone().unwrap_or_else(|| {
+      languages
+        .iter()
+        .flat_map(|language| language.test_naming().iter().map(|naming| (*naming).to_owned()))
+        .collect()
+    });
+
     Self {
       packages,
       projects,
       crates,
       tools,
       root_configuration,
+      runner_dirs,
+      test_naming,
+      project_packages,
     }
   }
 
   /// The package a path belongs to.
   pub fn owner_of(&self, path: &str) -> Option<&PackageDeclaration> {
     owning_package(&self.packages, path)
+  }
+
+  /// Whether a unit other than a crate holds a path: a project of its own, a workspace package, the root's
+  /// configuration a declared language names, a tool checked by its manifest, a folder below the root where
+  /// a declared language's runner reads its configuration, or a test file a declared language runs. What
+  /// none of them holds, nor another crate's directory, is the crate standing at the workspace's root.
+  pub fn held_beside_crates(&self, path: &str) -> bool {
+    own_project_of(&self.projects, path).is_some()
+      || self.root_configuration.contains(&path)
+      || self.owner_of(path).is_some()
+      || checked_tool_of(&self.tools, path).is_some()
+      || self.runner_dirs.iter().any(|dir| path.starts_with(&format!("{dir}/")))
+      || self.test_naming.iter().any(|glob| glob_matches(glob, path))
   }
 }
 
@@ -148,8 +217,8 @@ pub fn glob_matches(pattern: &str, path: &str) -> bool {
 }
 
 /// The files one file loads, itself included, followed through every import this reading can resolve: a
-/// relative path, or a workspace package's name and module. `cache` is shared across the launched files of
-/// one selection.
+/// relative path, or the name and module of a workspace package, the root's or one a project of its own
+/// lists. `cache` is shared across the launched files of one selection.
 pub fn import_closure(
   root: &Path,
   file: &str,
@@ -163,6 +232,7 @@ pub fn import_closure(
       dir: one.dir.clone(),
       name: one.name.clone(),
     })
+    .chain(layout.project_packages.iter().cloned())
     .collect();
   let mut seen: Vec<String> = Vec::new();
   let mut waiting = vec![file.to_owned()];
@@ -236,8 +306,11 @@ fn mark_dependents<'a>(
 
 /// The crates a set of changed paths marks: a path inside a crate marks that crate wherever the crate
 /// stands, the workspace's root files mark every crate, a path no crate holds marks a crate whose `reads`
-/// match it, and a crate depending on a crate marked by any rule but `reads` is marked in turn.
-pub fn select_crates(crates: &[CrateDeclaration], changed: &[String]) -> BTreeMap<String, Vec<MarkReason>> {
+/// match it and, where nothing else of the layout holds it, the crate standing at the workspace's root, and
+/// a crate depending on a crate marked by any rule but `reads` is marked in turn.
+pub fn select_crates(layout: &Layout, changed: &[String]) -> BTreeMap<String, Vec<MarkReason>> {
+  let crates = layout.crates.as_slice();
+  let at_root = crates.iter().find(|one| one.dir.is_empty());
   let mut marked = BTreeMap::new();
   let mut passing = HashSet::new();
 
@@ -257,6 +330,10 @@ pub fn select_crates(crates: &[CrateDeclaration], changed: &[String]) -> BTreeMa
 
           mark(&mut marked, &mut passing, &one.name, reason, false);
         }
+      }
+
+      if let Some(owner) = at_root.filter(|_| !layout.held_beside_crates(path)) {
+        mark(&mut marked, &mut passing, &owner.name, MarkReason::Owner { path: path.clone() }, true);
       }
 
       continue;
@@ -299,7 +376,7 @@ pub fn select_packages(root: &Path, layout: &Layout, changed: &[String]) -> Sele
     }
   }
 
-  selection.crates = select_crates(&layout.crates, &in_repository);
+  selection.crates = select_crates(layout, &in_repository);
 
   for path in in_repository.iter().filter(|path| !is_workspace_path(&layout.crates, path)) {
     if let Some(owner) = layout.owner_of(path) {

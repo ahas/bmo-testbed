@@ -40,9 +40,8 @@ fn touched_itself(reasons: &[MarkReason]) -> bool {
 /// What a change of these paths touches in the repository's checkout.
 pub fn touched(repo: &Repository, changed: &[String]) -> Touched {
   let root = repo.root.as_path();
-  let crates = workspace_crates(root).unwrap_or_default();
-  let marked = select_crates(&crates, changed);
-  let layout = Layout::of_parts(repo, crates);
+  let layout = Layout::of_parts(repo, workspace_crates(root).unwrap_or_default());
+  let marked = select_crates(&layout, changed);
   let tools = layout
     .tools
     .iter()

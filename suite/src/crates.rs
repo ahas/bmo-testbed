@@ -344,11 +344,13 @@ fn of_kind(target: &Value, kinds: &[&str]) -> bool {
     .is_some_and(|named| named.iter().any(|kind| kind.as_str().is_some_and(|kind| kinds.contains(&kind))))
 }
 
-/// The crate a path lies in, the one whose directory is the longest that holds it; none where none does.
+/// The crate a path lies in, the one whose directory is the longest that holds it; none where none does. A
+/// crate standing at the workspace's root has no directory of its own here: it holds what nothing else of
+/// the layout holds, which is the selection's rule.
 pub fn owning_crate<'a>(crates: &'a [CrateDeclaration], path: &str) -> Option<&'a CrateDeclaration> {
   crates
     .iter()
-    .filter(|one| path.starts_with(&format!("{}/", one.dir)))
+    .filter(|one| !one.dir.is_empty() && path.starts_with(&format!("{}/", one.dir)))
     .max_by_key(|one| one.dir.len())
 }
 

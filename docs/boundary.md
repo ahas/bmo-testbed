@@ -20,6 +20,11 @@ at the end are over this document.
 
 - **One binary, `bmo-testbed`,** whose first word is the verb, or a noun `bmo` dispatches to it
   (「The nouns `bmo` serves」). `--help` or `-h`, alone or after a verb, prints the usage and exits 0.
+- **Every deployment links `bmo-testbed` into `.local/bin` under the home directory,** before the flip,
+  making the folder where it does not stand and replacing whatever stood under that name. `bmo` finds a
+  unit command beside itself there first (bmo-cli's `docs/api.md`, 「The unit command」), so every noun
+  below is served wherever `bmo` is. The link names the deploy tree's own link, which stands across
+  releases, so it names whichever release is live and never dangles once an older one is pruned.
 - **Every verb's answer is English,** thin by default; `--json`, where a verb takes it, gives the
   structure instead, and no verb carries a third width between the two.
 - **A verb handed the wrong thing** names that one thing in a line, points at `--help`, and exits 2.

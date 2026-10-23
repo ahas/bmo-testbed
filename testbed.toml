@@ -29,3 +29,15 @@ root = "~/.local/share/bmo-testbed"
 data_root = "~/.local/share/bmo-testbed/data"
 # The prune of the shared Cargo build directory and its timer, kept by every deployment by their marks.
 units = ["units/*.service", "units/*.timer"]
+
+# The binary, linked into `.local/bin` under the home directory beside `bmo`, which serves the nouns this
+# binary declares from there (docs/boundary.md, 「The binary」). The link names the deploy tree's own link,
+# which stands across releases.
+[[deploy.step]]
+id = "link-command"
+phase = "before-flip"
+command = '''
+set -eu
+mkdir -p "$HOME/.local/bin"
+ln -sfn "$HOME/.local/share/bmo-testbed/deploy/bin/bmo-testbed" "$HOME/.local/bin/bmo-testbed"
+'''
