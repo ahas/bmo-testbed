@@ -11,8 +11,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use bmo_testbed_core::policy::prune::PRUNE;
 use bmo_testbed_suite::crates::{CHECKOUT_RECORD_NAME, checkout_target_name};
 use bmo_testbed_suite::prune::{
-  CARGO_LOCK_NAME, Ceiling, DAY_MS, HOUR_MS, PrunePlan, UnitFingerprint, ceiling, hand_profile_dirs,
-  plan_clear, read_fingerprint, take_prune_locks,
+  CARGO_LOCK_NAME, Ceiling, DAY_MS, HOUR_MS, PrunePlan, UnitFingerprint, ceiling, plan_clear,
+  read_fingerprint, take_prune_locks,
 };
 use bmo_testbed_suite::superseded::{BUILT_UNITS_NAME, CARGO_BUILD_LOCK_NAME};
 
@@ -291,15 +291,15 @@ fn a_clear_removes_everything_but_the_profile_directories_locks_live_checkouts_a
 }
 
 #[test]
-fn a_live_checkouts_own_target_loses_the_work_a_build_typed_by_hand_left_there_once_unused_its_binaries_kept()
- {
+fn a_live_checkouts_own_target_is_a_stray_the_prune_takes_away_whole() {
   let scratch = tempfile::tempdir().unwrap();
   let now = now();
   let old = now - (PRUNE.older_than_days + 1) * DAY_MS;
   let recent = now - HOUR_MS;
   let root = scratch.path().join("hand");
   let checkout = scratch.path().join("hand-checkout");
-  let hand_profile = checkout.join("target").join("debug");
+  let own_target = checkout.join("target");
+  let profile = own_target.join("debug");
 
   std::fs::create_dir_all(root.join("debug").join(".fingerprint")).unwrap();
   std::fs::create_dir_all(&checkout).unwrap();
@@ -308,32 +308,21 @@ fn a_live_checkouts_own_target_loses_the_work_a_build_typed_by_hand_left_there_o
     &checkout.to_string_lossy(),
     recent,
   );
-  unit(&hand_profile, 12, "hand_old", old, &[]);
-  write(&hand_profile.join("incremental/hand_old-0abc/s-old/dep-graph.bin"), "", old);
-
-  for dir in ["incremental", "deps", ".fingerprint"] {
-    date_dirs(&hand_profile.join(dir), old);
-  }
-
-  write(&hand_profile.join("service-core"), "", old);
-  write(&hand_profile.join(CARGO_LOCK_NAME), "", old);
-  write(&hand_profile.join("build/script-0000000000000000/output"), "", recent);
+  // Whatever a build typed outside the Cargo verb left in the checkout's own target/, old or recent: every
+  // build belongs to the shared directory, so the whole target/ goes.
+  unit(&profile, 12, "hand_old", old, &[]);
+  write(&profile.join("service-core"), "", old);
+  write(&profile.join("build/script-0000000000000000/output"), "", recent);
 
   let plan = plan_prune(&root, now);
 
-  assert_eq!(
-    sorted(plan.hand_built.clone()),
-    vec![
-      hand_profile.join(".fingerprint"),
-      hand_profile.join("deps"),
-      hand_profile.join("incremental")
-    ]
-  );
-  assert_eq!(hand_profile_dirs(&root), vec![hand_profile.clone()]);
+  assert_eq!(plan.stray_targets, vec![own_target.clone()]);
+  assert!(plan.bytes > 0);
 
   plan.apply();
 
-  assert_eq!(names_in(&hand_profile), [CARGO_LOCK_NAME, "build", "service-core"]);
+  assert!(!own_target.exists());
+  assert!(checkout.exists());
 }
 
 #[test]
@@ -413,7 +402,8 @@ fn a_checkouts_own_unit_goes_once_no_record_names_it_however_lately_it_was_read_
   read_now(&loose);
 
   // The checkout's own crate: the unit its record names, an earlier one read lately, one built within the
-  // grace, and one a build typed by hand handed back into the checkout's own target/.
+  // grace, and one a build typed outside the verb handed back into the checkout's own target/. The checkout's
+  // own target/ is a stray the prune takes away, so the hard link in it keeps nothing.
   let named = unit(&profile, 22, "own_crate", before_grace, &[&under]);
   let earlier = unit(&profile, 23, "own_crate", before_grace, &[]);
 
@@ -438,9 +428,22 @@ fn a_checkouts_own_unit_goes_once_no_record_names_it_however_lately_it_was_read_
   std::fs::create_dir_all(checkout.join("target").join("debug")).unwrap();
   std::fs::hard_link(library(&profile, &handed), checkout.join("target/debug/libown_crate.rlib")).unwrap();
 
-  let gone: Vec<String> = plan_prune(&root, now).units.into_iter().map(|one| one.hash).collect();
+  let plan = plan_prune(&root, now);
+  let gone: Vec<String> = {
+    let mut hashes: Vec<String> = plan.units.iter().map(|one| one.hash.clone()).collect();
 
-  assert_eq!(gone, [earlier.hash]);
+    hashes.sort();
+    hashes
+  };
+
+  // The earlier own unit goes, and the one handed into the checkout's own target/ goes with it: that target/
+  // is a stray, so its hard link protects nothing.
+  let mut expected = vec![earlier.hash, handed.hash];
+
+  expected.sort();
+
+  assert_eq!(gone, expected);
+  assert_eq!(plan.stray_targets, vec![checkout.join("target")]);
 }
 
 #[test]
@@ -490,26 +493,17 @@ fn the_ceiling_counts_the_live_checkouts_that_record_their_builds_and_no_other()
 }
 
 #[test]
-fn the_locks_are_cargos_own_in_each_profile_and_a_hand_builds_in_a_live_checkouts_target_held_until_let_go()
-{
+fn the_locks_are_cargos_own_build_lock_in_each_profile_directory_held_until_let_go() {
   let scratch = tempfile::tempdir().unwrap();
   let root = scratch.path().join("locks");
-  let checkout = scratch.path().join("locks-checkout");
 
   std::fs::create_dir_all(root.join("debug").join(".fingerprint")).unwrap();
   std::fs::create_dir_all(root.join("release").join(".fingerprint")).unwrap();
-  std::fs::create_dir_all(checkout.join("target/debug/.fingerprint")).unwrap();
-  write(
-    &root.join("checkouts").join(checkout_target_name(&checkout)).join(CHECKOUT_RECORD_NAME),
-    &checkout.to_string_lossy(),
-    now(),
-  );
 
   let held = take_prune_locks(&root, 1.0).unwrap();
   let build_lock = root.join("debug").join(CARGO_BUILD_LOCK_NAME);
 
-  assert_eq!(held.len(), 3);
-  assert!(checkout.join("target/debug").join(CARGO_LOCK_NAME).exists());
+  assert_eq!(held.len(), 2);
 
   // A second taker waits behind the holder and is refused once its wait runs out.
   assert_eq!(take_prune_locks(&root, 0.0).err(), Some(root.join("debug")));
@@ -517,5 +511,5 @@ fn the_locks_are_cargos_own_in_each_profile_and_a_hand_builds_in_a_live_checkout
   drop(held);
 
   assert!(build_lock.exists());
-  assert_eq!(take_prune_locks(&root, 1.0).map(|held| held.len()).ok(), Some(3));
+  assert_eq!(take_prune_locks(&root, 1.0).map(|held| held.len()).ok(), Some(2));
 }

@@ -83,6 +83,9 @@ pub struct DeployArgs {
 pub struct DeployFlags {
   #[arg(long, value_parser = named)]
   pub commit: Option<String>,
+  /// Why this deploy is made, written into the record and the event; the commit's subject where none.
+  #[arg(long, value_parser = named)]
+  pub message: Option<String>,
   #[arg(long)]
   pub dry_run: bool,
   #[arg(long)]

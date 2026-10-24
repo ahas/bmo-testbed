@@ -19,7 +19,7 @@
 | Releases | `deploy-releases/` beside the link, one release per deployed commit, named by its first twelve hex digits |
 | Build tree | `deploy-expand` beside the link, a detached worktree moved to each commit, where the release build runs, its target directory kept warm between deployments |
 | Data root | The repository's runtime data, inside no checkout and inside no release |
-| Deployment record | `deployed.json` under the deploy root, naming the commit that runs, its subject, when it was laid down and the backup behind it |
+| Deployment record | `deployed.json` under the deploy root, naming the commit that runs, its subject, the reason it was deployed, the release's version, when it was laid down and the backup behind it |
 | Deployment log | `deployed.log` under the deploy root, one line per deployment |
 | Progress record | `deploy-progress.json` under the deploy root, where a run stands while it runs |
 | Backup directory | `<deploy root>/backups` unless the declaration names another, where the deployment's backup is written, readable by the user alone, inside neither the data root nor a git work tree |
@@ -156,7 +156,11 @@
    build that fails stops the deployment with every service untouched.
 7. **The steps before the flip,** declared under `[deploy]` with that phase: each runs in the release;
    one that fails stops the deployment with nothing flipped.
-8. **Record it** in `deployed.json` and `deployed.log` under the deploy root.
+8. **Record it** in `deployed.json` and `deployed.log` under the deploy root. The record names, beside
+   the commit, its subject, when it was laid down and the backup, the reason the deploy was made and
+   the release's version: the reason is `--message` where the caller gave one, else the commit's
+   subject; the version is the commit's `VERSION` file content, empty where it carries none. A
+   relaunched session reads the reason and the version to say which unit was deployed and why.
 9. **Flip the deploy tree:** confirm every unit link will resolve in the release, write a new link
    beside the deploy tree and rename it over the old one.
 10. **Restart:** relink the dangling unit links, link the marked units, reload, restart the `restart`
@@ -298,6 +302,10 @@
   verb, `~/.local/share/bmo/cargo-target` unless `BMO_CARGO_TARGET_DIR` names another, so dependencies
   compile once rather than once per checkout. Each checkout's own crates build under names of their
   own, and its target directory under `checkouts/` holds what its builds hand back.
+- **Every build goes through the Cargo verb,** which sets the build directory for whatever checkout it
+  runs in, a scratch clone as much as a repository of the umbrella. A build typed outside the verb,
+  plain `cargo`, lands in the checkout's own `target/` and shares nothing; such a `target/` is a
+  stray the prune takes away.
 - **Removing what a build superseded.** After a build, check, lint, test, bench or run the Cargo verb
   carried has passed, the units of the checkout's own crates that its earlier builds left and this one
   replaced go. What a build stands on is Cargo's own word, its JSON messages. A record in the
@@ -311,13 +319,16 @@
   - any other unit no build has read for two days, or `--older-than` days, never a day or less;
   - incremental state unchanged for three hours, or `--incremental-older-than` hours;
   - the target directory of a checkout that no longer exists;
+  - the whole `target/` directory of a live checkout, a stray a build typed outside the Cargo verb
+    left, where it stands apart from the shared directory and no Cargo process is working in it;
   - never a unit a live checkout's current outputs or record stand on, nor anything Cargo does not name
-    by a unit hash.
+    by a unit hash, nor a `target/` a Cargo process is working in or that is the shared directory
+    itself.
 - **Where a lock does not come within its wait,** nothing is removed and it exits 75.
 - **`--dry-run`** says what it would remove; **`--all`** clears the whole directory but Cargo's lock
   files, run by hand only.
-- **Its ceiling is 40 GB, and 8 GB more for each live checkout that records its builds.** A timed prune
+- **Its ceiling is 120 GB, and 8 GB more for each live checkout that records its builds.** A timed prune
   that leaves it over sends a `cargo-target-over-ceiling` event, each run it stays over.
-- **What it says:** how many units, incremental directories, loose files and target directories it
-  removed, about how much disk they held, the disk's free space before and after, and what the
-  directory holds against its ceiling.
+- **What it says:** how many units, incremental directories, loose files, checkout target directories and
+  stray checkout `target/` directories it removed, about how much disk they held, the disk's free space
+  before and after, and what the directory holds against its ceiling.

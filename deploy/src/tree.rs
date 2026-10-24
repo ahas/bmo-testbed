@@ -20,6 +20,14 @@ pub struct DeployRecord {
   pub commit: String,
   /// That commit's subject line.
   pub subject: String,
+  /// Why this deploy was made, which a relaunched session reads: the caller's reason, or the commit's
+  /// subject where it named none. A record written before this field was kept reads it empty.
+  #[serde(default)]
+  pub message: String,
+  /// The release's `VERSION` file content, empty where the commit carries none, and empty where the record
+  /// was written before this field was kept.
+  #[serde(default)]
+  pub version: String,
   /// When it was laid down, in ISO.
   pub at: String,
   /// The backup taken before it.

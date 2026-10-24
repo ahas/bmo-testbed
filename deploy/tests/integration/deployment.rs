@@ -336,7 +336,13 @@ fn a_commit_goes_live_with_its_bot_restarted_and_watched() {
   );
   assert_eq!(std::fs::read_to_string(release.join("bin/app")).unwrap(), "echo v1\n");
   assert_eq!(std::fs::read_to_string(release.join("bin/built-from")).unwrap().trim(), head);
-  assert_eq!(read_deploy_record(&scene.at("live/deployed.json")).unwrap().commit, head);
+  let written = read_deploy_record(&scene.at("live/deployed.json")).unwrap();
+
+  assert_eq!(written.commit, head);
+  // No reason was named, so the record's message is the commit's subject, and the commit carries no
+  // VERSION file.
+  assert_eq!(written.message, "first");
+  assert_eq!(written.version, "");
   assert_eq!(
     std::fs::read_link(scene.unit_link()).unwrap(),
     scene.deploy_dir().join("units/app.service")
@@ -357,6 +363,7 @@ fn a_commit_goes_live_with_its_bot_restarted_and_watched() {
   let events = scene.events();
 
   assert_eq!(scene.names(), ["deployed"]);
+  assert_eq!(events[0]["detail"]["message"], "first");
   assert_eq!(
     events[0]["detail"]["flaky"],
     serde_json::json!([{ "test": "a test", "unit": "a.test.ts" }])
@@ -389,6 +396,36 @@ fn a_commit_goes_live_with_its_bot_restarted_and_watched() {
     restarts.iter().any(|one| one.unit_name == "app" && one.deployment_id == deployment.id),
     "{restarts:?}"
   );
+}
+
+// "the reason a deploy is made and the release's version are written into the record and the event"
+#[test]
+fn the_message_overrides_the_subject_and_the_version_file_is_recorded() {
+  let scene = Scene::new();
+  let hands = Hands::default();
+
+  scene.write("VERSION", "3.4.0\n");
+  let head = scene.push("a later commit subject");
+
+  let ask = DeployAsk {
+    record: Some(scene.at("testbed-data")),
+    message: Some("hotfix for the placement bug".to_owned()),
+    ..DeployAsk::default()
+  };
+  let code = scene.run_with(&ask, &Told(true), &hands, &scene.env());
+
+  assert_eq!(code, 0, "{}", said(&hands));
+
+  let written = read_deploy_record(&scene.at("live/deployed.json")).unwrap();
+
+  assert_eq!(written.commit, head);
+  assert_eq!(written.subject, "a later commit subject");
+  assert_eq!(written.message, "hotfix for the placement bug");
+  assert_eq!(written.version, "3.4.0");
+
+  let events = scene.events();
+
+  assert_eq!(events.last().unwrap()["detail"]["message"], "hotfix for the placement bug");
 }
 
 // "a first deployment lays the base-library tree beside the release and the build tree, from the checkout"

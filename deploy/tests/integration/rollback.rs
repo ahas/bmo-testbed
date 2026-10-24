@@ -145,12 +145,16 @@ fn failure(live: &str, failed: &str) -> FailedDeploy {
     previous: Some(DeployRecord {
       commit: live.to_owned(),
       subject: "live".to_owned(),
+      message: "the live reason".to_owned(),
+      version: "1.0.0".to_owned(),
       at: "2026-09-25T05:00:00.000Z".to_owned(),
       backup: "old-backup".to_owned(),
     }),
     written: DeployRecord {
       commit: failed.to_owned(),
       subject: "failed".to_owned(),
+      message: "the failed reason".to_owned(),
+      version: "1.1.0".to_owned(),
       at: "2026-09-25T06:59:00.000Z".to_owned(),
       backup: "new-backup".to_owned(),
     },
@@ -202,6 +206,8 @@ async fn a_failed_deployment_is_flipped_back_relinked_recorded_and_restarted() {
     DeployRecord {
       commit: at.live.clone(),
       subject: "live".to_owned(),
+      message: "the live reason".to_owned(),
+      version: "1.0.0".to_owned(),
       at: "2026-09-25T07:00:00.000Z".to_owned(),
       backup: "new-backup".to_owned(),
     }

@@ -44,6 +44,13 @@ These rules hold every change to this repository.
 - A verb's answer is English, thin by default, with `--json` for structure, cut at 30,000 characters
   with every cut said (`docs/boundary.md`).
 
+## Building
+
+- **Run Cargo only through `bmo-testbed cargo`,** never plain `cargo`. The verb builds in the one
+  shared build directory (`docs/deploy.md`, 「The Cargo build directory」; `docs/checks.md`), so
+  dependencies compile once across every checkout and scratch clone. A plain `cargo` lands in the
+  checkout's own `target/`, which shares nothing and which the prune takes away.
+
 ## The stages of a change
 
 1. **Writing:** the only check is `cargo check --workspace --all-targets`, on the narrowest crate that

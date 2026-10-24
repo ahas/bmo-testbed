@@ -17,7 +17,7 @@ use bmo_testbed_core::policy::prune::PRUNE;
 use bmo_testbed_core::queue::{HeldLock, LockWait, Rank, take_lock};
 use serde_json::Value;
 
-use crate::crates::{CHECKOUT_RECORD_NAME, checkout_target_name};
+use crate::crates::{CHECKOUT_RECORD_NAME, checkout_target_name, resolved};
 use crate::superseded::{
   BUILT_UNITS_NAME, CARGO_BUILD_LOCK_NAME, UNIT_DIRS, read_record, recorded_units, unit_hash,
 };
@@ -29,9 +29,6 @@ pub const DAY_MS: i64 = 24 * HOUR_MS;
 /// The lock a Cargo run holds in a profile directory of its target directory for its whole build, where it has
 /// no build directory apart from it.
 pub const CARGO_LOCK_NAME: &str = ".cargo-lock";
-
-// The directories of a profile directory a build hands nothing back into, only works in.
-const WORK_DIRS: [&str; 4] = [".fingerprint", "deps", "build", "incremental"];
 
 /// One unit a prune removes: its hash and every path in the build directory that carries it.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -53,9 +50,10 @@ pub struct PrunePlan {
   pub checkouts: Vec<PathBuf>,
   /// Everything else a clear of the whole directory removes; a prune by age leaves it empty.
   pub cleared: Vec<PathBuf>,
-  /// What a build typed by hand on a commit whose configuration names no shared build directory left in a live
-  /// checkout's own `target/`: its compiled units, fingerprints, build scripts' output and incremental state.
-  pub hand_built: Vec<PathBuf>,
+  /// The whole `target/` directory of a live checkout, which every build belongs to the shared directory
+  /// rather than: a build typed outside the Cargo verb left it, and no build reads it any more. Never the
+  /// shared directory itself, and never one a Cargo process is working in.
+  pub stray_targets: Vec<PathBuf>,
   /// About how much disk they hold: each file's allocated size, counted once however many links it has.
   pub bytes: u64,
 }
@@ -70,7 +68,7 @@ impl PrunePlan {
       .chain(&self.incremental)
       .chain(&self.loose)
       .chain(&self.cleared)
-      .chain(&self.hand_built)
+      .chain(&self.stray_targets)
       .map(PathBuf::as_path)
       .collect()
   }
@@ -256,38 +254,75 @@ fn checkout_gone(dir: &Path, cutoff: i64) -> bool {
   }
 }
 
-// A live checkout's own `target/`, by the path its target directory under `root` records.
-fn hand_targets(root: &Path) -> Vec<PathBuf> {
-  entries_of(&root.join("checkouts"))
+/// A live checkout's own `target/` where it stands apart from the shared build directory at `shared`, or none:
+/// every build belongs to the shared directory, so a checkout's own `target/` is a stray a build typed outside
+/// the Cargo verb left. Never the shared directory itself, nor one containing or contained by it, nor one a
+/// Cargo process is working in.
+fn stray_target(checkout_root: &Path, shared: &Path) -> Option<PathBuf> {
+  let target = checkout_root.join("target");
+  let resolved_target = resolved(&target);
+
+  if !target.is_dir() {
+    return None;
+  }
+
+  if resolved_target == *shared
+    || shared.starts_with(&resolved_target)
+    || resolved_target.starts_with(shared)
+  {
+    return None;
+  }
+
+  (!cargo_running_in(checkout_root)).then_some(target)
+}
+
+/// Whether a Cargo process is working in the checkout at `root`, so its `target/` is left alone: a process
+/// the program `cargo` runs whose working directory is at or under the checkout, as `/proc` says of it.
+fn cargo_running_in(root: &Path) -> bool {
+  let root = resolved(root);
+  let Ok(procs) = std::fs::read_dir("/proc") else {
+    return false;
+  };
+
+  for entry in procs.flatten() {
+    let name = entry.file_name();
+    let Some(pid) = name.to_str().filter(|pid| pid.bytes().all(|byte| byte.is_ascii_digit())) else {
+      continue;
+    };
+    let base = Path::new("/proc").join(pid);
+    let first = std::fs::read(base.join("cmdline")).unwrap_or_default();
+    let program = first.split(|byte| *byte == 0).next().unwrap_or_default();
+    let is_cargo = Path::new(&*String::from_utf8_lossy(program))
+      .file_name()
+      .is_some_and(|program| program.to_string_lossy() == "cargo");
+
+    if is_cargo
+      && std::fs::read_link(base.join("cwd")).is_ok_and(|cwd| cwd == root || cwd.starts_with(&root))
+    {
+      return true;
+    }
+  }
+
+  false
+}
+
+/// The `target/` directories of the live checkouts recorded under `root`, each a stray the prune removes
+/// where it stands apart from the shared directory and no build is working in it.
+fn stray_targets(root: &Path) -> Vec<PathBuf> {
+  let shared = resolved(root);
+  let mut strays: Vec<PathBuf> = entries_of(&root.join("checkouts"))
     .iter()
     .filter_map(|entry| {
       let recorded = recorded_checkout(&entry.path())?;
 
-      records_live(&recorded, &name_of(entry)).then(|| Path::new(&recorded).join("target"))
+      records_live(&recorded, &name_of(entry))
+        .then(|| stray_target(Path::new(&recorded), &shared))
+        .flatten()
     })
-    .collect()
-}
+    .collect();
 
-/// The profile directories a build typed by hand made in a live checkout's own `target/`, each holding
-/// fingerprints: where its lock is taken and its work directories go.
-pub fn hand_profile_dirs(root: &Path) -> Vec<PathBuf> {
-  let mut dirs: Vec<PathBuf> = hand_targets(root).iter().flat_map(|target| profile_dirs(target)).collect();
-
-  dirs.sort();
-  dirs
-}
-
-// A hand-built profile's work directories, those unused within the span or, with no span, all of them.
-fn plan_hand_built(root: &Path, cutoff: Option<i64>, plan: &mut PrunePlan) {
-  for profile in hand_profile_dirs(root) {
-    for dir in WORK_DIRS {
-      let path = profile.join(dir);
-
-      if path.exists() && cutoff.is_none_or(|cutoff| last_use(&path) < cutoff) {
-        plan.hand_built.push(path);
-      }
-    }
-  }
+  strays.sort();
+  strays
 }
 
 /// The profile directories of the build directory: each one holding fingerprints, outside `checkouts/`.
@@ -501,11 +536,6 @@ pub fn plan_prune(root: &Path, older_than_ms: i64, now: i64, incremental_older_t
     }
   }
 
-  // What a build typed by hand handed back into a live checkout's own `target/`.
-  for target in hand_targets(root) {
-    hold_links(&target);
-  }
-
   let standing = Standing {
     live_inodes,
     recorded,
@@ -516,7 +546,9 @@ pub fn plan_prune(root: &Path, older_than_ms: i64, now: i64, incremental_older_t
     plan_profile(&profile, cutoff, now - incremental_older_than_ms, &standing, &mut plan);
   }
 
-  plan_hand_built(root, Some(cutoff), &mut plan);
+  // Every build belongs to the shared directory, so a live checkout's own `target/` is a stray the prune takes
+  // away whole, unless a build is working in it.
+  plan.stray_targets.extend(stray_targets(root));
   plan.measured()
 }
 
@@ -533,7 +565,7 @@ pub fn plan_clear(root: &Path) -> PrunePlan {
   let mut plan = PrunePlan::default();
 
   // Read before the checkouts' target directories, whose records name them, are planned away.
-  plan_hand_built(root, None, &mut plan);
+  plan.stray_targets.extend(stray_targets(root));
 
   let profiles: HashSet<PathBuf> = profile_dirs(root).into_iter().collect();
 
@@ -617,14 +649,10 @@ pub fn directory_bytes(root: &Path) -> u64 {
   bytes
 }
 
-/// Cargo's build lock in each profile directory of the build directory at `root`, and the lock a build typed by
-/// hand holds in a live checkout's own `target/` where such a build left work there, each taken at the front of
+/// Cargo's build lock in each profile directory of the build directory at `root`, each taken at the front of
 /// its line and waited on for `wait_seconds`; the profile directory whose lock did not come where one did not.
 pub fn take_prune_locks(root: &Path, wait_seconds: f64) -> Result<Vec<HeldLock>, PathBuf> {
-  let paths = profile_dirs(root)
-    .into_iter()
-    .map(|profile| profile.join(CARGO_BUILD_LOCK_NAME))
-    .chain(hand_profile_dirs(root).into_iter().map(|profile| profile.join(CARGO_LOCK_NAME)));
+  let paths = profile_dirs(root).into_iter().map(|profile| profile.join(CARGO_BUILD_LOCK_NAME));
   let mut held = Vec::new();
 
   for path in paths {

@@ -75,6 +75,11 @@
   `cargo clippy --workspace --all-targets --locked` with every warning an error, both through the
   Cargo verb, in the wide lane, run again where the kernel killed it for want of memory; formatting
   compiles nothing and runs at once.
+- **Cargo runs only through `bmo-testbed cargo`,** never plain `cargo`. The verb sets the shared build
+  directory (`docs/deploy.md`, 「The Cargo build directory」) so dependencies compile once; a plain
+  `cargo` lands in the checkout's own `target/`, which shares nothing and which the prune takes away.
+  The harness hook refuses a plain heavy `cargo` and names the verb line to run instead
+  (`docs/testbed.md`).
 - **Every step runs to its end,** a failing one stopping none after it, and each says its exit code,
   how long it waited for its turn and how long it ran.
 

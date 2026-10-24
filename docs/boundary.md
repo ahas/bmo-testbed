@@ -217,10 +217,12 @@ bmo-testbed full [--due <HH:MM>]
 ### `deploy`
 
 ```
-bmo-testbed deploy [--commit <sha>] [--dry-run] [--no-check] [--before-start <command>]
+bmo-testbed deploy [--commit <sha>] [--message <why>] [--dry-run] [--no-check] [--before-start <command>]
 ```
 
-- Puts the commit live (`docs/deploy.md`). Outside a deployment's unit it starts one, prints its name
+- Puts the commit live (`docs/deploy.md`). `--message` is the reason the deploy is made, written into
+  the record and the `deployed` event; the commit's subject stands where none is given. Outside a
+  deployment's unit it starts one, prints its name
   and the command that reads its journal, and exits 0; inside it, it runs and exits 0 where the commit
   went live, 1 where it failed or was rolled back. Its refusals exit 2 in the caller's own process.
   `--dry-run` says in the caller's own process what it would do, changes nothing and starts no unit.
@@ -381,7 +383,7 @@ keep (`docs/deploy.md`, 「The unit links」).
 
   | Event | `detail` |
   |---|---|
-  | `deployed` | `commit`, `previous`, `flaky` (tests with `test` and `unit`), `warnings` (lines) |
+  | `deployed` | `commit`, `message` (the reason, the commit's subject where none was given), `previous`, `flaky` (tests with `test` and `unit`), `warnings` (lines) |
   | `deploy-failed` | `commit`, `stage`, `reason`, `rolled_back` (boolean), `journal` |
   | `deploy-rolled-back` | `failed_commit`, `back_to`, `reason`, `answers` (boolean), `journal` |
   | `backup-upload-failed` | `backups`, each with `name`, `step` and `said` |

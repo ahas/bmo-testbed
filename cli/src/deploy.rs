@@ -174,6 +174,7 @@ pub fn deploy(args: &DeployFlags) -> u8 {
     .collect();
   let ask = DeployAsk {
     commit: args.commit.clone(),
+    message: args.message.clone(),
     dry_run: args.dry_run,
     no_check: args.no_check,
     before_start: args.before_start.clone(),

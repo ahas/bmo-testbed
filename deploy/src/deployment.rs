@@ -120,6 +120,8 @@ impl DeployPlaces {
 pub struct DeployAsk {
   /// The commit to put live; none is the checkout's `HEAD`.
   pub commit: Option<String>,
+  /// Why the deploy is made, written into the record and the event; none takes the commit's subject.
+  pub message: Option<String>,
   pub dry_run: bool,
   /// The gate left out, where the caller already ran it.
   pub no_check: bool,
@@ -451,6 +453,8 @@ struct Laying<'a> {
   progress: Option<DeployRun>,
   commit: String,
   subject: String,
+  /// The release's `VERSION` file content at the commit, empty where it carries none.
+  version: String,
   previous: Option<DeployRecord>,
   restarted_at: std::cell::Cell<i64>,
   /// Whether the run is rolling back, whose wait for the service is no stage of its own.
@@ -973,6 +977,7 @@ pub async fn deploy(
     progress: None,
     commit: String::new(),
     subject: String::new(),
+    version: String::new(),
     previous: None,
     restarted_at: std::cell::Cell::new(0),
     rolling_back: std::cell::Cell::new(false),
@@ -1026,6 +1031,9 @@ pub async fn deploy(
   }
 
   run.subject = run.git(&["log", "-1", "--format=%s", &run.commit], source).out.trim().to_owned();
+  // The release's version, as the commit's `VERSION` file holds it; a commit with none deploys all the same.
+  let shown_version = run.git(&["show", &format!("{}:VERSION", run.commit)], source);
+  run.version = if shown_version.ok { shown_version.out.trim().to_owned() } else { String::new() };
   run.previous = read_deploy_record(&places.record);
 
   let commit = run.commit.clone();
@@ -1315,9 +1323,12 @@ pub async fn deploy(
   }
 
   // 8. The record, written just before the flip.
+  let message = run.ask.message.clone().unwrap_or_else(|| run.subject.clone());
   let record = DeployRecord {
     commit: commit.clone(),
     subject: run.subject.clone(),
+    message,
+    version: run.version.clone(),
     at: iso(hands.now_ms()),
     backup: backup.clone(),
   };
@@ -1636,6 +1647,7 @@ pub async fn deploy(
     summary: fill_marks(&said.deployed_summary, &[("commit", &shown), ("repository", &repo.name())]),
     detail: json!({
       "commit": commit,
+      "message": run.ask.message.clone().unwrap_or_else(|| run.subject.clone()),
       "previous": run.previous.as_ref().map(|previous| previous.commit.clone()),
       "flaky": flaky.iter().map(|(test, unit)| json!({ "test": test, "unit": unit })).collect::<Vec<_>>(),
       "warnings": warnings,

@@ -20,7 +20,7 @@ own_grace_hours = 12
 
 # What the build directory holds in its normal standing apart from the checkouts, in bytes: every
 # dependency compiled once in each profile, the deployment's release build, and the projects of their own.
-shared_ceiling_bytes = 40_000_000_000
+shared_ceiling_bytes = 120_000_000_000
 
 # What one live checkout's own crates hold in the build directory in their normal standing, in bytes: one
 # generation, its builds, tests and lints.

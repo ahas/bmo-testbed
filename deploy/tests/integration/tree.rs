@@ -25,6 +25,8 @@ fn the_record_is_written_whole_and_read_back_and_none_stands_for_no_record() {
   let record = DeployRecord {
     commit: "b".to_owned(),
     subject: "s".to_owned(),
+    message: "why this was deployed".to_owned(),
+    version: "0.2.0".to_owned(),
     at: "2026-09-21T00:00:00Z".to_owned(),
     backup: "x".to_owned(),
   };
@@ -34,6 +36,25 @@ fn the_record_is_written_whole_and_read_back_and_none_stands_for_no_record() {
   assert_eq!(read_deploy_record(&path), None);
   write_deploy_record(&path, &record).unwrap();
   assert_eq!(read_deploy_record(&path), Some(record));
+
+  // A record written before the reason and the version were kept still reads, both empty.
+  std::fs::write(
+    &path,
+    "{\n  \"commit\": \"old\",\n  \"subject\": \"old subject\",\n  \"at\": \"2026-01-01T00:00:00Z\",\n  \"backup\": \"old-backup\"\n}\n",
+  )
+  .unwrap();
+
+  assert_eq!(
+    read_deploy_record(&path),
+    Some(DeployRecord {
+      commit: "old".to_owned(),
+      subject: "old subject".to_owned(),
+      message: String::new(),
+      version: String::new(),
+      at: "2026-01-01T00:00:00Z".to_owned(),
+      backup: "old-backup".to_owned(),
+    })
+  );
 }
 
 #[test]

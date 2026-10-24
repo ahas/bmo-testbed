@@ -138,6 +138,8 @@ pub async fn roll_back(
   let back = DeployRecord {
     commit: previous.commit.clone(),
     subject: previous.subject.clone(),
+    message: previous.message.clone(),
+    version: previous.version.clone(),
     at: services.now_iso(),
     backup: failed.written.backup.clone(),
   };

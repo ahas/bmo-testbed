@@ -78,7 +78,7 @@ fn said_of(
         ("checkouts", &plan.checkouts.len().to_string()),
         ("named", &named),
         ("cleared", &cleared),
-        ("hand_built", &plan.hand_built.len().to_string()),
+        ("stray", &plan.stray_targets.len().to_string()),
       ],
     ),
     fill_marks(&said.bytes, &[("size", &gigabytes(plan.bytes))]),
