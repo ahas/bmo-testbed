@@ -167,7 +167,7 @@ and exits 1 where it failed; a second run meeting one at work is refused with 2.
 
 --due  start only where no run started since that time of day, local time"""
 deploy = """
-usage: {verb} deploy [--commit <sha>] [--dry-run] [--no-check] [--before-start <command>]
+usage: {verb} deploy [--commit <sha>] [--message <why>] [--dry-run] [--no-check] [--before-start <command>]
 
 Puts a commit of the repository live (docs/deploy.md): the checkout's HEAD, or the commit named,
 gated by the static check and the suite, backed up, built into a release of its own, flipped onto,
@@ -175,6 +175,8 @@ its services restarted and watched, and rolled back where they do not stay up. O
 deployment's unit it starts one, prints its name and how to read its journal, and exits 0.
 
 --commit        the commit to put live, which the remote must hold
+--message       the reason this deploy is made, written into the record and the event; the commit's
+                subject where none is given
 --dry-run       say what would be done, here, and change nothing
 --no-check      leave the gate out, where the caller already ran it
 --before-start  a command run between the bot service's stop and its start"""
