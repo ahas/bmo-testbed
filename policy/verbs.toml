@@ -11,6 +11,7 @@ run       a heavy test or build command, run in the machine's turn
 status    each lane and the repository's close line: who holds it, and who waits behind
 classify  whether a shell line holds a heavy command started outside the testbed
 suite     the repository's units, every one or those a change reaches
+dependents  the checkouts that build on this repository, listed or each one's suite run
 count     the tests a range removed, each accounted for or not, and the tests the tree holds
 log       what a suite's or a single run's log came to
 template  the suite's template database made, dropped or swept
@@ -82,6 +83,15 @@ it, and every other word goes to each file's runner. The verb's own flags come b
 --file-guard  seconds one unit may take (default the declaration's)
 --turn-wait   seconds to wait for the turn
 --json        one command run on standard output once the run has ended, its log the run's own"""
+dependents = """
+usage: {verb} dependents [--run]
+
+Lists the checkouts on this machine whose declarations name the repository it is run in among their
+upstreams, each by its declared name and root (docs/suite.md, 「The dependents of a major change」).
+
+--run  run each consumer's suite in turn through the suite runner, one repository at a time in the wide
+       lane, and end non-zero where one failed
+"""
 count = """
 usage: {verb} count [--since <commit>]
 

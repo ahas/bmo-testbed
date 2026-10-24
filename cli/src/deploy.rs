@@ -98,6 +98,24 @@ impl Gate for SuiteGate<'_> {
       steps,
     }
   }
+
+  fn dependents(&self, _: &GateAsk<'_>) -> GateOutcome {
+    let started = Instant::now();
+    let ended = crate::dependents::ended(self.repo, true);
+    let step = GateStep {
+      name: "dependents".to_owned(),
+      code: i64::from(ended.code),
+      waited_seconds: 0.0,
+      ran_seconds: started.elapsed().as_secs_f64(),
+    };
+
+    GateOutcome {
+      passed: ended.code == 0,
+      reason: ended.line,
+      steps: vec![step],
+      ..GateOutcome::default()
+    }
+  }
 }
 
 // The variables a unit of the run is handed so it aims at what this caller aimed at: the places resolved,
@@ -118,7 +136,13 @@ fn handed(places: &DeployPlaces, env: &Env) -> Vec<(String, String)> {
     handed.push(("BMO_BACKUP_DIR".to_owned(), shown(backups)));
   }
 
-  for name in ["BMO_UNIT", "BMO_TESTBED_EVENT_HOOK", "BMO_CARGO_TARGET_DIR", "BMO_TESTBED_LOCK"] {
+  for name in [
+    "BMO_UNIT",
+    "BMO_TESTBED_EVENT_HOOK",
+    "BMO_CARGO_TARGET_DIR",
+    "BMO_TESTBED_LOCK",
+    "BMO_TESTBED_CHECKOUTS",
+  ] {
     if let Some(value) = env.get(name).filter(|value| !value.is_empty()) {
       handed.push((name.to_owned(), value.clone()));
     }

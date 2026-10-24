@@ -147,6 +147,11 @@
    leaves it out where the caller already ran it, and so does a declaration with `gate = false`. The
    deployment asks the gate through a hand of its own, which the binary answers with the suite's
    static check and run, so a test stands in for it.
+   - **A major change runs its consumer's suites as well.** The major of the commit's `VERSION` is
+     compared with the version in the deployment record of the release live before it; where they
+     differ, the deployment runs `dependents --run` (`docs/suite.md`, 「The dependents of a major
+     change」) after the gate and before the backup. A consumer's failure stops the deployment with
+     nothing changed. `--no-check` leaves the gate out but not this run.
 4. **Take the backup,** before anything changes (「Backups」).
 5. **Prepare the release,** pruning the releases first. A release of that commit still standing whose
    `bin/built-from` names it is taken as it stands; otherwise it is made afresh.

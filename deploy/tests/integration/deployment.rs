@@ -14,7 +14,7 @@ use bmo_testbed_core::events::Hook;
 use bmo_testbed_core::turn::Env;
 use bmo_testbed_deploy::deployment::{
   DeployAsk, DeployHands, DeployPlaces, Gate, GateAsk, GateOutcome, Machine, StepAsk, StepRan, deploy,
-  release_build, workspace_binaries,
+  major_change, release_build, version_major, workspace_binaries,
 };
 use bmo_testbed_deploy::progress::{Outcome, read_deploy_progress};
 use bmo_testbed_deploy::release::{LiveProcess, release_dir};
@@ -77,6 +77,27 @@ impl DeployHands for Hands {
 
   fn live_processes(&self) -> Option<Vec<LiveProcess>> {
     Some(Vec::new())
+  }
+}
+
+// A gate that counts the dependent runs it is asked for.
+#[derive(Default)]
+struct Counted(RefCell<usize>);
+
+impl Gate for Counted {
+  fn pass(&self, _: &GateAsk<'_>) -> GateOutcome {
+    GateOutcome {
+      passed: true,
+      ..GateOutcome::default()
+    }
+  }
+
+  fn dependents(&self, _: &GateAsk<'_>) -> GateOutcome {
+    *self.0.borrow_mut() += 1;
+    GateOutcome {
+      passed: true,
+      ..GateOutcome::default()
+    }
   }
 }
 
@@ -679,4 +700,40 @@ fn a_first_deployment_whose_service_will_not_restart_fails_unrolled() {
   assert_eq!(scene.run(&hands), 1, "{}", said(&hands));
   assert_eq!(scene.names(), ["deploy-failed"]);
   assert_eq!(scene.events()[0]["detail"]["rolled_back"], false);
+}
+
+// "a change is major where the version's major differs from the release before it"
+#[test]
+fn a_change_is_major_only_where_both_versions_name_a_major_and_they_differ() {
+  assert_eq!(version_major("0.1.0-rev.7"), Some(0));
+  assert_eq!(version_major("v12.4.1"), Some(12));
+  assert_eq!(version_major("not a version"), None);
+
+  assert!(major_change("2.0.0", "1.9.9"));
+  assert!(!major_change("1.6.0", "1.9.9"));
+  assert!(!major_change("2.0.0", ""));
+  assert!(!major_change("", "1.9.9"));
+}
+
+// "a major change runs its consumers' suites, and a change of the same major does not"
+#[test]
+fn a_major_change_runs_the_dependents_and_a_minor_one_does_not() {
+  let scene = Scene::new();
+  let hands = Hands::default();
+
+  scene.write("VERSION", "1.0.0\n");
+  scene.push("the first release");
+  assert_eq!(scene.run_with(&DeployAsk::default(), &Told(true), &hands, &scene.env()), 0);
+
+  scene.write("VERSION", "1.1.0\n");
+  scene.push("the same major");
+  let counted = Counted::default();
+  assert_eq!(scene.run_with(&DeployAsk::default(), &counted, &hands, &scene.env()), 0);
+  assert_eq!(*counted.0.borrow(), 0);
+
+  scene.write("VERSION", "2.0.0\n");
+  scene.push("the next major");
+  let counted = Counted::default();
+  assert_eq!(scene.run_with(&DeployAsk::default(), &counted, &hands, &scene.env()), 0);
+  assert_eq!(*counted.0.borrow(), 1);
 }

@@ -49,6 +49,7 @@ fn a_checkout_with_no_declaration_has_every_default_and_its_directorys_name() {
   assert_eq!(canonical(&repository.root), canonical(dir.path()));
   assert_eq!(repository.name(), dir.path().file_name().unwrap().to_string_lossy());
   assert_eq!(declaration.testbed, own_major());
+  assert!(declaration.upstreams.is_empty());
   assert!(declaration.test.languages.is_empty());
   assert_eq!(declaration.test.files, None);
   assert_eq!(
@@ -124,6 +125,7 @@ fn every_key_of_the_schema_reads() {
   let declaration = parse(&declared(
     r#"
 name = "example"
+upstreams = ["shared-library", "other-upstream"]
 
 [test]
 languages = ["bun", "cargo", "node", "browser"]
@@ -157,6 +159,7 @@ wording_files = ["src/**"]
 people_text = ["src/**/*.ts"]
 language_ledger = "docs/ledger.json"
 base_libraries = ["shared-library"]
+upstreams = ["beside-upstream"]
 main = "trunk"
 
 [[check.step]]
@@ -225,6 +228,7 @@ timeout_seconds = 5
   .unwrap();
 
   assert_eq!(declaration.name.as_deref(), Some("example"));
+  assert_eq!(declaration.upstreams, ["shared-library", "other-upstream"]);
   assert_eq!(
     declaration.test.languages().iter().map(|language| language.name()).collect::<Vec<_>>(),
     ["bun", "cargo", "node", "browser"]
@@ -246,6 +250,7 @@ timeout_seconds = 5
     ]
   );
   assert_eq!(declaration.check.wording_files.as_deref(), Some(&["src/**".to_owned()][..]));
+  assert_eq!(declaration.check.upstreams, ["beside-upstream"]);
   assert_eq!(declaration.check.steps.len(), 2);
   assert_eq!(declaration.check.steps[0].lane, Some(Lane::Narrow));
   assert_eq!(declaration.check.steps[0].when.as_deref(), Some(&["site/**".to_owned()][..]));

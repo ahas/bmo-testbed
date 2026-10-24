@@ -6,6 +6,7 @@ pub mod cargo;
 pub mod check;
 pub mod count;
 pub mod crates;
+pub mod dependents;
 pub mod fence;
 pub mod files;
 pub mod imports;

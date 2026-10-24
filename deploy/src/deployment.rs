@@ -165,6 +165,15 @@ pub struct GateOutcome {
 /// The gate a deployment passes before anything changes: the declared static check and the suite.
 pub trait Gate {
   fn pass(&self, ask: &GateAsk<'_>) -> GateOutcome;
+
+  /// The suites of the repositories that build on this one, run where the change is major. A gate that keeps
+  /// none passes.
+  fn dependents(&self, _: &GateAsk<'_>) -> GateOutcome {
+    GateOutcome {
+      passed: true,
+      ..GateOutcome::default()
+    }
+  }
 }
 
 /// The gate a caller that already ran it hands in: passed.
@@ -955,6 +964,25 @@ fn place_refusal(repo: &Repository, places: &DeployPlaces, env: &Env) -> Option<
   })
 }
 
+/// The major of a version: its leading whole number, or none where it does not begin with one.
+pub fn version_major(version: &str) -> Option<u64> {
+  let version = version.trim().strip_prefix('v').unwrap_or(version.trim());
+  let major = version.split('.').next()?;
+
+  (!major.is_empty() && major.bytes().all(|byte| byte.is_ascii_digit()))
+    .then(|| major.parse().ok())
+    .flatten()
+}
+
+/// Whether a version is a major change from the one before it: both name a major and the majors differ. A
+/// version absent on either side, as a first deployment has none before it, is not known to be major.
+pub fn major_change(version: &str, before: &str) -> bool {
+  matches!(
+    (version_major(version), version_major(before)),
+    (Some(now), Some(before)) if now != before
+  )
+}
+
 /// The deploy run over a repository's declaration, in the places handed it; the code it ends with: 0 where
 /// the commit went live, or would on a dry run, 1 where it failed or was rolled back, 2 where it was refused
 /// with nothing changed.
@@ -1166,6 +1194,31 @@ pub async fn deploy(
     }
 
     flaky = passed.flaky;
+  }
+
+  // A major change runs the suites of the repositories that build on this one, before anything changes.
+  let previous_version = run.previous.as_ref().map(|previous| previous.version.clone()).unwrap_or_default();
+
+  if major_change(&run.version, &previous_version) {
+    run.say(&fill_marks(&said.major, &[("version", &run.version), ("previous", &previous_version)]));
+
+    let passed = gate.dependents(&GateAsk {
+      root: source,
+      commit: &commit,
+      since: run.previous.as_ref().map(|previous| previous.commit.as_str()),
+    });
+
+    for step in &passed.steps {
+      run.step_done(&step.name, None, step.code, step.waited_seconds, step.ran_seconds);
+    }
+
+    if !passed.passed {
+      return run.failed(
+        Stage::Check,
+        fill_marks(&said.gate_failed, &[("commit", &shown), ("reason", &passed.reason)]),
+        Outcome::Stopped,
+      );
+    }
   }
 
   // 4. The backup, before anything changes.

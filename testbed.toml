@@ -3,6 +3,8 @@
 
 testbed = 0
 name = "bmo-testbed"
+# The base library whose major changes run this repository's suite.
+upstreams = ["bmo-text"]
 
 [test]
 # The Cargo workspace's crates, and the test kit: a project of its own, whose check script bun runs,

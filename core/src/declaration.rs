@@ -51,6 +51,9 @@ pub struct Declaration {
   pub testbed: u64,
   /// The repository's name, when it is not the root directory's.
   pub name: Option<String>,
+  /// The repositories this one builds on, by the names their declarations give them.
+  #[serde(default)]
+  pub upstreams: Vec<String>,
   #[serde(default)]
   pub test: Test,
   #[serde(default)]
@@ -75,6 +78,7 @@ impl Default for Declaration {
     Self {
       testbed: own_major(),
       name: None,
+      upstreams: Vec::new(),
       test: Test::default(),
       projects: Projects::default(),
       tools: Tools::default(),
@@ -267,6 +271,10 @@ pub struct Check {
   pub language_ledger: Option<PathBuf>,
   #[serde(default)]
   pub base_libraries: Vec<String>,
+  /// The same upstream repositories as the top level, for a declaration that keeps its dependency words
+  /// together; a declaration naming both adds them.
+  #[serde(default)]
+  pub upstreams: Vec<String>,
   #[serde(default = "Check::main")]
   pub main: String,
   /// `[[check.step]]`, in order.

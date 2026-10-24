@@ -24,6 +24,7 @@
 |---|---|---|---|
 | `testbed` | integer | required | The major version of the testbed this declaration is written for. A testbed of another major refuses it, naming both |
 | `name` | string | the root directory's name | The repository's name, used in unit names, backup names and events |
+| `upstreams` | list of strings | `[]` | The repositories this one builds on, by their declared names. A major change to one of them runs this repository's suite through `dependents` (`docs/suite.md`, 「The dependents of a major change」). `[check] upstreams` names the same list beside the dependency check, and a declaration naming both adds them |
 
 ## `[test]`: how the suite runs
 
@@ -76,6 +77,7 @@ make their own databases names neither, and its tests are handed the server alon
 | `people_text` | list of globs | `[]` | The files whose literals are text for a person; read by `dashes` |
 | `language_ledger` | path | none | The ledger of lines holding letters that are not English allowed per code file; required by `language`. `korean_ledger` names the same key, and a declaration naming both is refused |
 | `base_libraries` | list of strings | `[]` | The dependencies from other repositories the `dependencies` check allows beside registry ones |
+| `upstreams` | list of strings | `[]` | The same upstream repositories as the top level, for a declaration that keeps its dependency words here; both lists are read |
 | `main` | string | `main` | The main branch, the default base of a change |
 
 ### `[[check.step]]`: one static step each, in order

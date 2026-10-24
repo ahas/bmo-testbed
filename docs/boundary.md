@@ -124,6 +124,20 @@ bmo-testbed suite [--since <commit>] [--again] [--guard <seconds>] [--file-guard
 - Exits 0 where it passed, 1 where anything failed or was cut, 75 where it was not run or left units
   unstarted and failed nothing, 2 where its words or the declaration do not read.
 
+### `dependents`
+
+```
+bmo-testbed dependents [--run]
+```
+
+- Lists the checkouts in the machine's registry whose declarations name this repository in `upstreams`
+  (`docs/suite.md`, 「The dependents of a major change」), each by its declared name and root.
+- **`--run`** runs each consumer's suite in turn through the suite runner, one repository at a time in
+  the wide lane, with that consumer's own declaration, log and test run.
+- Exits 0 where every consumer passed or there is none, 1 where any consumer's suite failed or was cut,
+  75 where none failed but a consumer's suite did not run, and 2 where the registry or a consumer's
+  declaration does not read.
+
 ### `count`
 
 ```
@@ -320,6 +334,7 @@ verb's own name, and each noun takes what that verb takes.
 | `BMO_TESTBED_TOKEN` | `serve`, `mcp` | The HTTP service's bearer token |
 | `BMO_TESTBED_SERVICE` | `mcp` | The HTTP service's address the reading tools call |
 | `BMO_TESTBED_PLACEMENT` | `run`, `suite` | The placement endpoint, over the declaration's |
+| `BMO_TESTBED_CHECKOUTS` | `dependents`, `deploy` | The machine's registry of checkouts, over the data root's `testbed/checkouts.toml` |
 | `BMO_TESTBED_EVENT_HOOK` | every verb that sends events | The event hook, over the declaration's, and the hook for a verb run outside a repository |
 | `BMO_SUITE_MEMORY_GB` | the suite | The fence's memory ceiling |
 | `BMO_TEST_POSTGRES` | the suite, `template`, `scratch-database` | The test database server's address; set by the suite for every process it starts |
@@ -342,6 +357,7 @@ verb's own name, and each noun takes what that verb takes.
 `testbed.toml` at the repository's root, its whole schema in `docs/declaration.md`. In short:
 
 - `testbed`: the major targeted;
+- `upstreams`: the repositories this one builds on, by their declared names;
 - `[test]` with `[test.database]`: the languages, files, guards, fence and setup of the suite;
 - `[projects]` and `[tools]`: units found by their own files;
 - `[check]` with `[[check.step]]`: the quick checks enabled and their inputs, and the static steps;

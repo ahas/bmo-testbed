@@ -62,6 +62,7 @@ pub struct RunWords {
   pub remote: String,
   pub deploying: String,
   pub again: String,
+  pub major: String,
   pub unit_faults: String,
   pub dry: String,
   pub nothing_live: String,
