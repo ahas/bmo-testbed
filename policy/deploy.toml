@@ -54,6 +54,8 @@ journal_lines = 40
 step_poll_ms = 100
 # How long a step that overran its time, and what it started, are given to go once asked, in seconds.
 step_stop_grace_seconds = 1
+# How long the wait for quiet rests between asks of the declared `quiet` command, in milliseconds.
+quiet_poll_ms = 15000
 
 # What the deploy run says as it goes (docs/deploy.md, 「What the deploy run does, in order」): {commit} a
 # short commit, {release}, {path}, {dir} and {data} places, {unit} and {name} units, {said} and {why}
@@ -118,6 +120,10 @@ before_start = "running before the start: {command}"
 # The id the command run before the start is written under in the progress record.
 before_start_step = "before-start"
 before_start_failed = "the command run before the start failed: {said}; {unit} is stopped, and a deployment with --before-start is not rolled back by itself"
+quiet_asking = "asking `{quiet}` whether work stands under way that the restart would cut, for up to {seconds}s"
+quiet_live = "work stands under way, waiting: {said}"
+quiet_refused = "work still stands under way after {seconds}s, so nothing was flipped: {said}; --force-live goes on past it"
+quiet_forced = "work still stands under way after {seconds}s, and --force-live goes on, cutting it: {said}"
 waiting = "waiting up to {seconds}s for `{health}` to answer"
 watching = "watching {unit} stay up for {seconds}s"
 stayed = "{unit} came up and stayed up"

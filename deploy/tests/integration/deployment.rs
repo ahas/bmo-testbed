@@ -680,3 +680,54 @@ fn a_first_deployment_whose_service_will_not_restart_fails_unrolled() {
   assert_eq!(scene.names(), ["deploy-failed"]);
   assert_eq!(scene.events()[0]["detail"]["rolled_back"], false);
 }
+
+// "the deployment waits for quiet just before the record: work still under way stops it with nothing flipped,
+// unless it was asked to go on past it"
+#[test]
+fn work_under_way_stops_the_deployment_before_the_flip_unless_asked_to_go_on() {
+  let scene = Scene::new();
+  let busy = scene.at("busy");
+  let declared = std::fs::read_to_string(scene.source.join("testbed.toml")).unwrap();
+
+  scene.write(
+    "testbed.toml",
+    &declared.replace(
+      "stay_up_seconds = 0\n",
+      &format!(
+        "stay_up_seconds = 0\nquiet = \"sh -c 'if test -f {0}; then echo a turn under way; exit 1; fi'\"\nquiet_wait_seconds = 0\n",
+        busy.display()
+      ),
+    ),
+  );
+  scene.push("a quiet check");
+  std::fs::write(&busy, "").unwrap();
+
+  let hands = Hands::default();
+
+  assert_eq!(scene.run(&hands), 1, "{}", said(&hands));
+  assert!(!scene.deploy_dir().exists(), "nothing was flipped");
+  assert!(
+    !hands.systemctl.borrow().iter().any(|asked| asked.starts_with("restart ")),
+    "no service was touched"
+  );
+  assert!(read_deploy_record(&scene.at("live/deployed.json")).is_none(), "nothing was recorded");
+  assert!(said(&hands).contains("a turn under way"), "the line names the work: {}", said(&hands));
+  assert_eq!(scene.events().last().unwrap()["detail"]["stage"], "before");
+
+  let forced = Hands::default();
+  let asked = DeployAsk {
+    force_live: true,
+    ..DeployAsk::default()
+  };
+
+  assert_eq!(scene.run_with(&asked, &Told(true), &forced, &scene.env()), 0, "{}", said(&forced));
+  assert!(said(&forced).contains("--force-live goes on"), "{}", said(&forced));
+  assert!(scene.deploy_dir().exists(), "it went live past the work");
+
+  std::fs::remove_file(&busy).unwrap();
+
+  let quiet = Hands::default();
+
+  assert_eq!(scene.run(&quiet), 0, "{}", said(&quiet));
+  assert!(!said(&quiet).contains("waiting:"), "a quiet answer waits for nothing: {}", said(&quiet));
+}

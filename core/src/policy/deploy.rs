@@ -43,6 +43,7 @@ pub struct Numbers {
   pub journal_lines: usize,
   pub step_poll_ms: u64,
   pub step_stop_grace_seconds: u64,
+  pub quiet_poll_ms: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -104,6 +105,10 @@ pub struct RunWords {
   pub before_start: String,
   pub before_start_step: String,
   pub before_start_failed: String,
+  pub quiet_asking: String,
+  pub quiet_live: String,
+  pub quiet_refused: String,
+  pub quiet_forced: String,
   pub waiting: String,
   pub watching: String,
   pub stayed: String,

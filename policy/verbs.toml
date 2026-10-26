@@ -167,7 +167,7 @@ and exits 1 where it failed; a second run meeting one at work is refused with 2.
 
 --due  start only where no run started since that time of day, local time"""
 deploy = """
-usage: {verb} deploy [--commit <sha>] [--message <why>] [--dry-run] [--no-check] [--before-start <command>]
+usage: {verb} deploy [--commit <sha>] [--message <why>] [--dry-run] [--no-check] [--before-start <command>] [--force-live]
 
 Puts a commit of the repository live (docs/deploy.md): the checkout's HEAD, or the commit named,
 gated by the static check and the suite, backed up, built into a release of its own, flipped onto,
@@ -179,7 +179,8 @@ deployment's unit it starts one, prints its name and how to read its journal, an
                 subject where none is given
 --dry-run       say what would be done, here, and change nothing
 --no-check      leave the gate out, where the caller already ran it
---before-start  a command run between the bot service's stop and its start"""
+--before-start  a command run between the bot service's stop and its start
+--force-live    go on past the declared quiet command where work still stands under way after its wait"""
 backups = """
 usage: {verb} backups
 

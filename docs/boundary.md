@@ -217,7 +217,7 @@ bmo-testbed full [--due <HH:MM>]
 ### `deploy`
 
 ```
-bmo-testbed deploy [--commit <sha>] [--message <why>] [--dry-run] [--no-check] [--before-start <command>]
+bmo-testbed deploy [--commit <sha>] [--message <why>] [--dry-run] [--no-check] [--before-start <command>] [--force-live]
 ```
 
 - Puts the commit live (`docs/deploy.md`). `--message` is the reason the deploy is made, written into
@@ -226,6 +226,8 @@ bmo-testbed deploy [--commit <sha>] [--message <why>] [--dry-run] [--no-check] [
   and the command that reads its journal, and exits 0; inside it, it runs and exits 0 where the commit
   went live, 1 where it failed or was rolled back. Its refusals exit 2 in the caller's own process.
   `--dry-run` says in the caller's own process what it would do, changes nothing and starts no unit.
+  `--force-live` goes on past a declared `quiet` command that still names work under way once its wait is
+  over (`docs/deploy.md`, 「What the deploy run does, in order」), saying the work it cuts.
 
 ### `backups`
 

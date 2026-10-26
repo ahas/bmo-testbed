@@ -116,6 +116,8 @@ step that fails stops the deployment with every service untouched.
 | `health` | command | none | Answers 0 once the `bot` service is healthy; asked until it does, at most `health_wait_seconds` |
 | `health_wait_seconds` | integer | 300 | The longest wait for the health |
 | `stay_up_seconds` | integer | 30 | How long the `bot` service is watched staying up |
+| `quiet` | command | none | Run from the release just before the record and the flip: answers 0 where no work stands under way that a restart would cut, and any other code where some does, its output naming it; asked again until it answers 0, at most `quiet_wait_seconds` |
+| `quiet_wait_seconds` | integer | 300 | The longest wait for the `quiet` command to answer 0 |
 | `gate` | boolean | `true` | Run the static check and the suite before deploying |
 
 ### `[[deploy.step]]`: one declared step each, in order

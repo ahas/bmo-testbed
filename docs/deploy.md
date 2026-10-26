@@ -156,14 +156,21 @@
    build that fails stops the deployment with every service untouched.
 7. **The steps before the flip,** declared under `[deploy]` with that phase: each runs in the release;
    one that fails stops the deployment with nothing flipped.
-8. **Record it** in `deployed.json` and `deployed.log` under the deploy root. The record names, beside
+8. **Wait for quiet,** where the declaration names a `quiet` command: run from the release, it answers 0
+   where no work stands under way that a restart would cut. Where it answers anything else, the line
+   says so with what the command named, and it is asked again every few seconds (the testbed's policy)
+   for at most `quiet_wait_seconds`. Still not quiet, the deployment stops as a failed step before the flip
+   does, with nothing flipped and the release kept for the next run, unless it was asked with `--force-live`, which says the work it
+   cuts and goes on. This is the last step before the record, so the moment it answers 0 is seconds
+   before the services stop.
+9. **Record it** in `deployed.json` and `deployed.log` under the deploy root. The record names, beside
    the commit, its subject, when it was laid down and the backup, the reason the deploy was made and
    the release's version: the reason is `--message` where the caller gave one, else the commit's
    subject; the version is the commit's `VERSION` file content, empty where it carries none. A
    relaunched session reads the reason and the version to say which unit was deployed and why.
-9. **Flip the deploy tree:** confirm every unit link will resolve in the release, write a new link
+10. **Flip the deploy tree:** confirm every unit link will resolve in the release, write a new link
    beside the deploy tree and rename it over the old one.
-10. **Restart:** relink the dangling unit links, link the marked units, reload, restart the `restart`
+11. **Restart:** relink the dangling unit links, link the marked units, reload, restart the `restart`
     units and the `binary` units whose binaries changed, then the `bot` service.
     - With `--before-start <command>`, stop the `bot` service, run the command, then start it.
     - Wait until the declared health answers, at most five minutes, then watch the `bot` service stay
@@ -172,11 +179,11 @@
     - A unit that will not restart, a health that does not answer, or a service that does not stay up
       is rolled back (「Rollback」).
     - Then the `retire` units go.
-11. **The steps after the health,** declared with that phase, in order. One that fails or overruns its
+12. **The steps after the health,** declared with that phase, in order. One that fails or overruns its
     time is a warning in the deploy output and never fails the deployment; the next deployment runs it
     again, so a step is written to do only what is due.
-12. **Prune the releases.** A release that cannot be removed is a warning.
-13. **Start the backup upload,** where the declaration names a remote, as a transient user unit of its
+13. **Prune the releases.** A release that cannot be removed is a warning.
+14. **Start the backup upload,** where the declaration names a remote, as a transient user unit of its
     own, `bmo-backup-upload-<stamp>`, running the `backups` verb, and end without waiting for it.
 
 - **The deployment ends** with a `deployed` event naming the commit, the flaky tests its gate found, and

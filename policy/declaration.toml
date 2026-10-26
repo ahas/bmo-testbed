@@ -32,6 +32,7 @@ cargo_profile = "release"
 link = "deploy"
 health_wait_seconds = 300
 stay_up_seconds = 30
+quiet_wait_seconds = 300
 step_timeout_seconds = 1200
 
 [defaults.backup]

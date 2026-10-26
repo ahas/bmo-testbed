@@ -50,6 +50,7 @@ pub struct DeployDefaults {
   pub link: String,
   pub health_wait_seconds: u64,
   pub stay_up_seconds: u64,
+  pub quiet_wait_seconds: u64,
   pub step_timeout_seconds: u64,
 }
 

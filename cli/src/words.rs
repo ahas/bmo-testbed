@@ -92,6 +92,8 @@ pub struct DeployFlags {
   pub no_check: bool,
   #[arg(long, value_parser = named)]
   pub before_start: Option<String>,
+  #[arg(long)]
+  pub force_live: bool,
 }
 
 #[derive(Debug, Subcommand)]

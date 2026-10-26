@@ -178,6 +178,7 @@ pub fn deploy(args: &DeployFlags) -> u8 {
     dry_run: args.dry_run,
     no_check: args.no_check,
     before_start: args.before_start.clone(),
+    force_live: args.force_live,
     unit,
     upload: Some(upload),
     record: Some(data_root()),

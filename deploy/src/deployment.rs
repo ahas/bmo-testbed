@@ -127,6 +127,8 @@ pub struct DeployAsk {
   pub no_check: bool,
   /// A command run between the `bot` service's stop and its start.
   pub before_start: Option<String>,
+  /// Go on past the declared `quiet` command where work still stands under way once its wait is over.
+  pub force_live: bool,
   /// The deployment's own unit, which its progress record names.
   pub unit: Option<String>,
   /// What the backup upload's unit is started with after `systemd-run`'s own words: its options, then the
@@ -1322,7 +1324,41 @@ pub async fn deploy(
     }
   }
 
-  // 8. The record, written just before the flip.
+  // 8. The wait for quiet, the last step before the record, so its answer stands seconds before the stop.
+  if let Some(quiet) = &repo.declaration.deploy.quiet {
+    let seconds = repo.declaration.deploy.quiet_wait_seconds;
+    let line = shell_words(quiet);
+    let until = hands.now_ms() + i64::try_from(seconds * 1000).unwrap_or(i64::MAX);
+
+    run.say(&fill_marks(&said.quiet_asking, &[("quiet", quiet), ("seconds", &seconds.to_string())]));
+
+    loop {
+      let asked = hands.run(&line, &release);
+
+      if asked.ok {
+        break;
+      }
+
+      let named = first_chars(asked.out.trim(), DEPLOY.numbers.quoted_chars);
+
+      if hands.now_ms() >= until {
+        let marks = [("seconds", seconds.to_string()), ("said", named)];
+        let marks: Vec<(&str, &str)> = marks.iter().map(|(key, value)| (*key, value.as_str())).collect();
+
+        if run.ask.force_live {
+          run.warn(fill_marks(&said.quiet_forced, &marks));
+          break;
+        }
+
+        return run.failed(Stage::Before, fill_marks(&said.quiet_refused, &marks), Outcome::Failed);
+      }
+
+      run.say(&fill_marks(&said.quiet_live, &[("said", &named)]));
+      tokio::time::sleep(Duration::from_millis(DEPLOY.numbers.quiet_poll_ms)).await;
+    }
+  }
+
+  // 9. The record, written just before the flip.
   let message = run.ask.message.clone().unwrap_or_else(|| run.subject.clone());
   let record = DeployRecord {
     commit: commit.clone(),
@@ -1358,7 +1394,7 @@ pub async fn deploy(
 
   run.say(&fill_marks(&said.recorded, &[("path", &record_path.to_string_lossy())]));
 
-  // 9. The flip, every link into the deploy tree first confirmed to resolve in the release.
+  // 10. The flip, every link into the deploy tree first confirmed to resolve in the release.
   let relinked: Vec<&str> = relinks.iter().map(|one| one.name.as_str()).collect();
   let unresolved: Vec<String> = links
     .iter()
@@ -1404,7 +1440,7 @@ pub async fn deploy(
     );
   }
 
-  // 10. The units linked, and the services restarted.
+  // 11. The units linked, and the services restarted.
   run.stage(Stage::Restart);
 
   let deploy_dir = &places.deploy_dir;

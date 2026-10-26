@@ -355,6 +355,10 @@ pub struct Deploy {
   pub health_wait_seconds: u64,
   #[serde(default = "Deploy::stay_up_seconds")]
   pub stay_up_seconds: u64,
+  /// Answers 0 where no work stands under way that a restart would cut; asked just before the record and the flip.
+  pub quiet: Option<String>,
+  #[serde(default = "Deploy::quiet_wait_seconds")]
+  pub quiet_wait_seconds: u64,
   #[serde(default = "yes")]
   pub gate: bool,
   /// `[[deploy.step]]`, in order.
@@ -374,6 +378,10 @@ impl Deploy {
 
   fn stay_up_seconds() -> u64 {
     DECLARATION.defaults.deploy.stay_up_seconds
+  }
+
+  fn quiet_wait_seconds() -> u64 {
+    DECLARATION.defaults.deploy.quiet_wait_seconds
   }
 }
 
