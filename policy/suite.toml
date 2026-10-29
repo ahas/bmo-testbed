@@ -38,6 +38,22 @@ superseded_lock_poll_ms = 200
 # How many lines of a failing static step's output the change check prints; the rest is in its log.
 check_shown_lines = 40
 
+# The variables no test unit inherits (docs/suite.md, 「What a test unit is handed」): the deployment's own,
+# naming the live data root, the backups, the deployment record and the markers of the run underneath it. A
+# test reads its own environment; what the deployment was handed reaches the suite's process alone. A
+# variable the suite names for a unit itself — the turn it holds, the test server, the template — is handed
+# after this list is taken away.
+[environment]
+stripped = [
+  "BMO_DATA_DIR",
+  "BMO_BACKUP_DIR",
+  "BMO_DEPLOY_PROGRESS",
+  "BMO_DEPLOY_UNIT",
+  "BMO_TESTBED_EVENT_HOOK",
+  "BMO_TESTBED_FRONT",
+  "BMO_UNIT",
+]
+
 # What a run is named in the machine's line.
 [run]
 whole = "the whole suite"

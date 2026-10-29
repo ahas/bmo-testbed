@@ -99,6 +99,41 @@ fn verdict(outcome: &str, note: &str) -> String {
   )
 }
 
+// A test file that fails when any of the deployment's own variables reaches it.
+const STRIPPED: &str = r#"import { expect, test } from "bun:test";
+
+test("the deployment's variables do not reach a test", () => {
+  expect(process.env.BMO_DATA_DIR).toBeUndefined();
+  expect(process.env.BMO_DEPLOY_PROGRESS).toBeUndefined();
+  expect(process.env.BMO_DEPLOY_UNIT).toBeUndefined();
+  expect(process.env.BMO_TESTBED_FRONT).toBeUndefined();
+});
+"#;
+
+// "the deployment's own variables are taken away from every test": the suite runs in a deployment's
+// environment, and the test file it runs reads none of it.
+#[test]
+fn the_deployments_own_variables_are_taken_away_from_every_test() {
+  let dir = tempfile::tempdir().unwrap();
+  let repo = dir.path().join("repo");
+
+  checkout(&repo, "testbed = 0\n\n[test]\nlanguages = [\"bun\"]\n");
+  std::fs::write(repo.join("environment.test.ts"), STRIPPED).unwrap();
+
+  let mut command = testbed(&repo, dir.path(), &["suite"]);
+
+  command
+    .env("BMO_DEPLOY_PROGRESS", dir.path().join("deploy-progress.json"))
+    .env("BMO_DEPLOY_UNIT", "bmo-deploy-1")
+    .env("BMO_TESTBED_FRONT", "1");
+
+  std::os::unix::process::CommandExt::process_group(&mut command, 0);
+  let run = command.spawn().unwrap();
+  let done = ended(run);
+
+  assert_eq!(done.code, 0, "{}", done.err);
+}
+
 // "a run of the suite waits for the turn another run holds before it starts anything": a run started while
 // another holds the turn starts nothing until the turn is let go, and only then does its own clock start.
 #[test]

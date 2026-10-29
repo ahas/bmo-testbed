@@ -745,9 +745,11 @@ fn run_held(
   );
   let unit_command = |file: &String| -> UnitCommand {
     // No unit inherits what a Cargo running this suite set for its own package: a unit that runs Cargo would
-    // build as though for that package (docs/deploy.md, 「The Cargo build directory」).
+    // build as though for that package (docs/deploy.md, 「The Cargo build directory」). Nor does it inherit the
+    // deployment's own variables, which name the live data rather than the test's (docs/suite.md, 「What a test
+    // unit is handed」); what the suite names for the unit itself is handed after them.
     let base: Vec<(String, String)> = std::env::vars()
-      .filter(|(name, _)| !set_by_cargo(name))
+      .filter(|(name, _)| !set_by_cargo(name) && !SUITE.environment.stripped.contains(name))
       .chain(handed.iter().cloned())
       .collect();
 

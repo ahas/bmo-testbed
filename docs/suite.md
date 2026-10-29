@@ -140,6 +140,16 @@
 - **A selected run keeps only the units its change reaches** (`docs/checks.md`), and a word naming a
   path narrows that further.
 
+## What a test unit is handed
+
+- **The deployment's own variables are taken away from every test.** A suite run by a deployment's gate
+  carries the deployment's environment, naming the live data root, the backups, the deployment record and the
+  markers of the run underneath it. Those names stand under `[environment] stripped` in `policy/suite.toml`
+  and are removed from every unit's environment — a project's check script, a tool's check and a crate's
+  tests alike — so a test reads its own environment and never the deployment's.
+- **What the suite names for a unit itself is handed after that list is taken away:** the turn it holds, the
+  test server and its template, and the Cargo jobs and target the build reads.
+
 ## The test database
 
 - **A repository that declares a test database** (`docs/declaration.md`) has its database tests run

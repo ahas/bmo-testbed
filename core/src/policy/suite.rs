@@ -175,10 +175,19 @@ pub struct CargoWords {
   pub stood_up_elsewhere: String,
 }
 
+/// What no test unit inherits: the deployment's own variables, which name the live data rather than the
+/// test's (docs/suite.md, 「What a test unit is handed」).
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Environment {
+  pub stripped: Vec<String>,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Suite {
   pub numbers: Numbers,
+  pub environment: Environment,
   pub run: RunWords,
   pub reasons: ReasonWords,
   pub selection: SelectionWords,
