@@ -66,6 +66,13 @@ Both answer a command run as `testbed_run` does; the suite's `testRunId` reads b
   step with its exit code and times, and `stoppedFor`, the stage a deployment stopped in where it did not go
   live.
 
+## Putting a commit live
+
+The `deploy` verb refuses a harness's shell. A session the tool host serves puts a commit live with the
+hosted tool `testbed/deploy` instead, through `bmo use`, naming the repository, the commit, already pushed,
+and why in English. It waits for the deployment to end and answers `live:` with the commit, or an error with
+the deployment's journal; `--async` leaves the turn free and wakes it with the same answer.
+
 ## When a tool answers an error
 
 A tool error's text is JSON: `status` where the service answered, `code` and `error`, the service's English

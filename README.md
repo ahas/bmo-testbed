@@ -7,10 +7,12 @@ and a release-based deployment of a repository onto the machine it runs on.
 - **What it knows is mechanism.** It knows no repository by name. A repository that uses it declares
   how it is tested, checked, built and deployed in one file at its root, `testbed.toml`
   (`docs/declaration.md`), and everything that differs between repositories stands there.
-- **What it offers is one binary,** `bmo-testbed`, and the crates it is built from. The verbs, their
+- **What it offers is one binary,** `bmo-testbed`, the crates it is built from, and one tool the tool
+  host runs, `testbed/deploy`, through which a harness's session puts a commit live. The verbs, their
   exit codes, the environment they read, the declaration they read, the events they send, the HTTP
-  service `serve` starts, the harness plugin `mcp` starts and the placement endpoint they ask are its
-  whole boundary (`docs/boundary.md`), the routes and tools stated in `docs/openapi.json`.
+  service `serve` starts, the harness plugin `mcp` starts, the hosted deploy tool and the placement
+  endpoint they ask are its whole boundary (`docs/boundary.md`), the routes and tools stated in
+  `docs/openapi.json`.
 - **It is an upstream:** a harness takes it as its first entry point through its MCP server and the
   `bmo-testbed` skill, with nothing else running.
 - **It depends on no other repository** but the base libraries `bmo-chat`, `bmo-chat-client`,
@@ -23,10 +25,10 @@ and a release-based deployment of a repository onto the machine it runs on.
 | `docs/testbed.md` | The queue: lanes, turns, the front and the next, waiting, width, the result line, languages, placement |
 | `docs/suite.md` | The whole-suite run: sweep, lanes, guards, fence, the test database, what failed runs once more, the daily whole run |
 | `docs/checks.md` | Which tests a change runs, the static check, the quick checks, the change check, imports, the test count |
-| `docs/deploy.md` | Releases, adoption, unit marks, the deploy run, progress, rollback, refusals, backups, the Cargo build directory |
+| `docs/deploy.md` | Releases, adoption, unit marks, the deploy run, progress, the hosted deploy tool, rollback, refusals, backups, the Cargo build directory |
 | `docs/backup.md` | The data backup: what is backed up, where, how often, the rotation, the restore drill, restoring by hand, the settings |
 | `docs/declaration.md` | The `testbed.toml` schema |
-| `docs/boundary.md` | Every verb, exit code, status field, environment variable, event, the record, the HTTP service, the harness plugin, the placement endpoint and the version rules |
+| `docs/boundary.md` | Every verb, exit code, status field, environment variable, event, the record, the HTTP service, the harness plugin, the hosted deploy tool, the placement endpoint and the version rules |
 | `docs/openapi.json` | The HTTP service's routes and members and the harness plugin's tools, generated from the code |
 | `docs/PERSONAL-DATA.md` | What may never stand in this repository: a person's name, address, path, device or network details, an agent's or product's name, and the check that holds it |
 
@@ -43,6 +45,7 @@ and a release-based deployment of a repository onto the machine it runs on.
 | `record/` | The record every verb writes and the service reads: test runs, deployments, log lines, restarts and events |
 | `service/` | The HTTP service over the record and the lanes, with its event stream |
 | `plugin/` | The harness plugin: the MCP server's tools, the OpenAPI document and the `bmo-testbed` skill |
+| `tools/` | The tools the tool host runs, each a crate beside its manifest and input schema: `deploy`, which puts a commit live for a harness's session |
 | `test-support/` | The fixed ids a Rust test names its people, rooms and units by, the same as the test kit's |
 | `scratch-database/` | Per-test PostgreSQL databases cloned from a template a consumer's migrator makes |
 | `testkit/` | The TypeScript test kit a consumer preloads: the test home and the stand-ins |

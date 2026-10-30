@@ -278,7 +278,8 @@
   `[[checkout]]` tables, names each checkout's path, as a string or as a table with a `path`. A path is
   absolute, begins with `~/`, or is read against the registry file's folder. The file is
   `checkouts.toml` under the data root's `testbed/` unless `BMO_TESTBED_CHECKOUTS` names another. A registry
-  that does not stand holds no checkouts; one that does not read is refused.
+  that does not stand holds no checkouts; one that does not read is refused. The hosted deploy tool finds the
+  checkout it deploys from in the same registry (`docs/deploy.md`, 「The hosted deploy tool」).
 - **The `dependents` verb** reads the registry and answers every checkout whose declaration names the current
   repository in `upstreams`, each by its declared name and root. It answers the direct consumers only; it
   does not follow a consumer's own consumers.

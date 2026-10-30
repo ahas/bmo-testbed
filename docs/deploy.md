@@ -6,6 +6,8 @@
   beside the one serving, flipped onto in one rename, with its declared services restarted and
   watched, and rolled back where they do not stay up. What the repository builds, which services it
   runs and how its health is read are its declaration's (`docs/declaration.md`).
+- **The hosted deploy tool** puts a commit live for a session the verb refuses, through the tool host
+  (「The hosted deploy tool」).
 - **The `backups` verb** sends the backups deployments took to remote storage and keeps them rotated.
   A machine's runtime data apart from any deployment is the data backup's (`docs/backup.md`).
 - **One repository, one deploy tree.** Every place below is the declaration's, relative to the
@@ -135,6 +137,58 @@
 - **A dry run and a refusal stay in the caller's process:** a refusal exits 2 there, and `--dry-run`
   says there what the run would do, changing nothing and starting no unit.
 
+## The hosted deploy tool
+
+- **A session the verb refuses puts a commit live through the tool host.** A harness's session carries
+  `CLAUDE_PID`, so `deploy` refuses it (「What it refuses」). The testbed therefore provides a hosted
+  tool, which the tool host runs outside every harness (bmo-pocket's `docs/mcp-host.md`, 「Placed
+  tools」), and a session calls it through `bmo use`, waiting for its answer, or with `--async` going on
+  and woken by it once the deployment has ended.
+- **Its full name is `testbed/deploy`:** the namespace `testbed` and the entry `deploy`, shown only to a
+  session whose record holds the capability `deploy`. The entry acts, so the toolbook reaches it by
+  `act`. A call is allowed an hour, since a deployment whose suite is long runs past twenty minutes.
+- **Its arguments,** stated by the input schema beside its manifest:
+
+  | Argument | Type | Meaning |
+  |---|---|---|
+  | `repository` | string, required | The repository to deploy, by the `name` its checkout's declaration names, with or without a leading `bmo-` |
+  | `commit` | string, required | The commit to put live, by its hexadecimal name, whole or shortened; it must be on the remote |
+  | `why` | string, required | Why the deploy is made, in English, handed to the verb as `--message` |
+  | `dry_run` | boolean, optional | Say what the deployment would do, changing nothing and starting no unit |
+
+- **The checkout comes from the machine's registry** (`docs/suite.md`, 「The dependents of a major
+  change」): the file `BMO_TESTBED_CHECKOUTS` names, or `checkouts.toml` under the `testbed/` of the
+  data root `BMO_DATA_DIR` names, which the tool host hands every call from the session's record. Each
+  checkout the registry lists has its declaration read, and the one whose `name` is the repository asked
+  for, a leading `bmo-` taken off both, is the checkout.
+- **It runs the verb in that checkout** with the commit, the reason and `--dry-run` where asked, its
+  environment the call's with `CLAUDE_PID` and `BMO_DEPLOY_UNIT` taken out, so the verb starts its unit
+  as it does for any caller outside a harness. The binary is the one of the release the tool is placed
+  from, its `bin/bmo-testbed`, or `bmo-testbed` on the path where the tool runs from anywhere else.
+- **It waits the deployment out:** it reads the unit's name off the line the verb prints, asks the
+  service manager every few seconds whether the unit is still active, and once it is not, reads the
+  deployment record under the repository's deploy root. A unit still active as the call's hour runs out
+  is answered as an error naming the unit and the command that reads its journal.
+- **What it answers:**
+  - **live:** where the record names the commit asked for and was written after the call began, a first
+    line `live:` with the commit and its subject, then the commit live before it, the reason and the
+    unit;
+  - **not live:** otherwise, an error answer naming the unit and what the record names, with the last
+    thirty lines of the unit's journal;
+  - **a refusal of the verb,** which ends 2, a verb that ends with any other failure, and a verb that
+    names no unit: an error answer carrying what the verb said;
+  - **a dry run:** what the verb said.
+- **What it refuses,** as an error answer before the verb runs:
+  - arguments that are not its shape, a required one empty, or a commit that is not a hexadecimal name;
+  - a registry that does not stand, or does not read, named by its path;
+  - a repository no checkout of the registry declares, naming the names the registry's checkouts
+    declare and the checkouts whose declaration does not read;
+  - a repository two checkouts declare, naming both;
+  - a repository whose declaration deploys nothing.
+- **The testbed's own deployment places it,** before the flip: the tool's executable, its manifest and
+  its input schema are copied into the release's `tools/deploy/.placed/`, which is put into the tool
+  host's registry for the service `testbed` with the capability `deploy` allowed.
+
 ## What the deploy run does, in order
 
 1. **Check the data root and the backup directory,** and stop where either stands where it may not
@@ -247,7 +301,7 @@
 ## What it refuses
 
 - **A harness's shell.** A process a harness started, `CLAUDE_PID` set, is refused before anything is
-  done.
+  done. A harness's session deploys through the hosted tool (「The hosted deploy tool」).
 - **A checkout with uncommitted changes to tracked files,** where the run takes the checkout's own
   `HEAD`; a run handed `--commit` reads nothing of the open files.
 - **A commit the remote has never seen.** A commit only on this machine can never be fetched again if

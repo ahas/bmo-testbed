@@ -17,14 +17,16 @@ setup = ["cd testkit && bun install --frozen-lockfile"]
 
 [check]
 quick = ["dashes", "language", "layout", "dependencies", "cargo-profile"]
-# The text a person reads: the verbs' words in the policy, and the literals of the crates and the kit.
-people_text = ["policy/*.toml", "*/src/**/*.rs", "testkit/*.ts"]
+# The text a person reads: the verbs' words in the policy, and the literals of the crates, the hosted tools
+# and the kit.
+people_text = ["policy/*.toml", "*/src/**/*.rs", "tools/*/src/**/*.rs", "testkit/*.ts"]
 language_ledger = "docs/language-ledger.json"
 # The base library whose verdicts the quick checks take.
 base_libraries = ["bmo-text"]
 
 [build]
-binaries = ["bmo-testbed"]
+# The binary, and the hosted deploy tool's executable, which the step that places the tool copies.
+binaries = ["bmo-testbed", "deploy-tool"]
 
 [deploy]
 root = "~/.local/share/bmo-testbed"
@@ -42,4 +44,18 @@ command = '''
 set -eu
 mkdir -p "$HOME/.local/bin"
 ln -sfn "$HOME/.local/share/bmo-testbed/deploy/bin/bmo-testbed" "$HOME/.local/bin/bmo-testbed"
+'''
+
+# The hosted deploy tool is placed in its folder's .placed/, the folder the tool host reads (docs/deploy.md,
+# 「The hosted deploy tool」): the executable the release's bin/ holds, its manifest and its input schema,
+# put into the tool host's registry for this service with the capability its entry asks for allowed.
+[[deploy.step]]
+id = "place-deploy-tool"
+phase = "before-flip"
+command = '''
+set -eu
+rm -rf tools/deploy/.placed
+mkdir -p tools/deploy/.placed
+cp bin/deploy-tool tools/deploy/tool.toml tools/deploy/deploy.json tools/deploy/.placed/
+bmo-pocket put tools/deploy/.placed --placed --service testbed --allow deploy
 '''

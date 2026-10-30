@@ -472,7 +472,10 @@ fn this_repositorys_own_declaration_reads() {
       QuickCheck::CargoProfile
     ]
   );
-  assert_eq!(declaration.build.binaries.as_deref(), Some(&["bmo-testbed".to_owned()][..]));
+  assert_eq!(
+    declaration.build.binaries.as_deref(),
+    Some(&["bmo-testbed".to_owned(), "deploy-tool".to_owned()][..])
+  );
   assert!(declaration.deploy.root.is_some());
 }
 

@@ -12,6 +12,7 @@ pub mod declaration;
 pub mod dependents;
 pub mod deploy;
 pub mod deploy_steps;
+pub mod deploy_tool;
 pub mod events;
 pub mod lanes;
 pub mod plugin;

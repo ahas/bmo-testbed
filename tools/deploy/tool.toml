@@ -1,0 +1,23 @@
+# The hosted deploy tool: a session the deploy verb refuses puts a commit live through the tool host, which
+# runs this executable outside every harness (docs/deploy.md, 「The hosted deploy tool」).
+[tool]
+name = "deploy"
+protocol = 1
+language = "rust"
+build = 'cargo build --release -p deploy-tool && cp "$BMO_CARGO_TARGET/release/deploy-tool" "$BMO_TOOL_OUT/"'
+check = 'bmo-testbed cargo test -p deploy-tool'
+run = ["deploy-tool"]
+timeout = 3600
+
+[[entry]]
+namespace = "testbed"
+name = "deploy"
+title = "Deploy a commit"
+description = "Put a pushed commit of a repository live on this machine through the testbed's deploy verb, wait for the deployment to end, and answer whether it went live. The repository is named as its checkout's testbed.toml names it, and the reason is written in English."
+input = "deploy.json"
+capabilities = ["deploy"]
+
+[entry.hints]
+read_only = false
+destructive = true
+open_world = true
