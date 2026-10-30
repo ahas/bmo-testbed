@@ -7,6 +7,7 @@ pub mod backup;
 pub mod cargo;
 pub mod check;
 pub mod classify;
+pub mod dependents;
 pub mod deploy;
 pub mod full;
 pub mod imports;
@@ -192,6 +193,7 @@ pub fn main(args: impl IntoIterator<Item = OsString>) -> u8 {
     Verb::Status(args) => status(args.json),
     Verb::Classify(args) => classify(args),
     Verb::Suite(args) => suite::suite(args),
+    Verb::Dependents(args) => dependents::dependents(&args),
     Verb::Count(args) => run_count(args),
     Verb::Log(args) => run_log(args),
     Verb::Template(args) => suite::template(&args),

@@ -8,6 +8,7 @@ use bmo_testbed_core::policy::daily::DAILY;
 use bmo_testbed_core::policy::declaration::DECLARATION;
 use bmo_testbed_core::policy::deploy::DEPLOY;
 use bmo_testbed_core::policy::deploy_steps::{DEPLOY_STEPS, DeployStep};
+use bmo_testbed_core::policy::deploy_tool::DEPLOY_TOOL;
 use bmo_testbed_core::policy::events::EVENTS;
 use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::policy::plugin::PLUGIN;
@@ -32,6 +33,7 @@ fn every_part_reads_as_its_type() {
   LazyLock::force(&DAILY);
   LazyLock::force(&DEPLOY);
   LazyLock::force(&DEPLOY_STEPS);
+  LazyLock::force(&DEPLOY_TOOL);
   LazyLock::force(&BACKUPS);
   LazyLock::force(&DECLARATION);
   LazyLock::force(&QUICK_CHECKS);

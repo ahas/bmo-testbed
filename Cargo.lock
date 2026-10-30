@@ -299,7 +299,7 @@ dependencies = [
 
 [[package]]
 name = "bmo-testbed-backup"
-version = "0.1.0-rev.7"
+version = "0.1.0-rev.9"
 dependencies = [
  "bmo-testbed-core",
  "bmo-testbed-deploy",
@@ -319,7 +319,7 @@ dependencies = [
 
 [[package]]
 name = "bmo-testbed-cli"
-version = "0.1.0-rev.7"
+version = "0.1.0-rev.9"
 dependencies = [
  "axum",
  "bmo-testbed-backup",
@@ -348,7 +348,7 @@ dependencies = [
 
 [[package]]
 name = "bmo-testbed-client"
-version = "0.1.0-rev.7"
+version = "0.1.0-rev.9"
 dependencies = [
  "reqwest",
  "schemars",
@@ -359,7 +359,7 @@ dependencies = [
 
 [[package]]
 name = "bmo-testbed-core"
-version = "0.1.0-rev.7"
+version = "0.1.0-rev.9"
 dependencies = [
  "chrono",
  "libc",
@@ -374,7 +374,7 @@ dependencies = [
 
 [[package]]
 name = "bmo-testbed-deploy"
-version = "0.1.0-rev.7"
+version = "0.1.0-rev.9"
 dependencies = [
  "bmo-testbed-client",
  "bmo-testbed-core",
@@ -393,7 +393,7 @@ dependencies = [
 
 [[package]]
 name = "bmo-testbed-plugin"
-version = "0.1.0-rev.7"
+version = "0.1.0-rev.9"
 dependencies = [
  "bmo-testbed-client",
  "bmo-testbed-core",
@@ -407,7 +407,7 @@ dependencies = [
 
 [[package]]
 name = "bmo-testbed-record"
-version = "0.1.0-rev.7"
+version = "0.1.0-rev.9"
 dependencies = [
  "bmo-testbed-client",
  "bmo-testbed-core",
@@ -419,7 +419,7 @@ dependencies = [
 
 [[package]]
 name = "bmo-testbed-scratch-database"
-version = "0.1.0-rev.7"
+version = "0.1.0-rev.9"
 dependencies = [
  "bmo-testbed-core",
  "sea-orm",
@@ -432,7 +432,7 @@ dependencies = [
 
 [[package]]
 name = "bmo-testbed-service"
-version = "0.1.0-rev.7"
+version = "0.1.0-rev.9"
 dependencies = [
  "axum",
  "bmo-testbed-client",
@@ -448,7 +448,7 @@ dependencies = [
 
 [[package]]
 name = "bmo-testbed-suite"
-version = "0.1.0-rev.7"
+version = "0.1.0-rev.9"
 dependencies = [
  "bmo-testbed-core",
  "bmo-text",
@@ -465,6 +465,7 @@ dependencies = [
  "percent-encoding",
  "regex",
  "scraper",
+ "serde",
  "serde-saphyr",
  "serde_json",
  "sha2",
@@ -480,7 +481,7 @@ dependencies = [
 
 [[package]]
 name = "bmo-testbed-test-support"
-version = "0.1.0-rev.7"
+version = "0.1.0-rev.9"
 dependencies = [
  "oxc_allocator",
  "oxc_ast",
@@ -939,6 +940,19 @@ dependencies = [
  "darling_core 0.24.1",
  "quote",
  "syn 3.0.9",
+]
+
+[[package]]
+name = "deploy-tool"
+version = "0.1.0-rev.9"
+dependencies = [
+ "bmo-testbed-core",
+ "bmo-testbed-deploy",
+ "bmo-testbed-suite",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "toml",
 ]
 
 [[package]]

@@ -1,0 +1,21 @@
+# What the `dependents` verb does (docs/suite.md, 「The dependents of a major change」): the machine-level
+# registry of checkouts it reads and the lines it answers with. A harness reads the lines, so they are
+# English. Each `{name}` is filled in with what it names.
+
+# The registry's file under the data root's testbed directory; the path BMO_TESTBED_CHECKOUTS names
+# replaces it.
+registry = "checkouts.toml"
+
+[lines]
+heading = "dependents: {count} checkout(s) name {repository} among their upstreams:"
+none = "dependents: no checkout in {registry} names {repository} among its upstreams"
+unread = "dependents: the checkout registry {path} does not read: {why}"
+declaration = "dependents: {path}: {why}"
+entry = "  {name}  {root}"
+running = "dependents: {name} at {root}"
+pass = "  passed  {name}"
+fail = "  failed  {name} (exit {code}), its log: {log}"
+unstarted = "  not run  {name} (exit {code})"
+passed_all = "dependents: every consumer passed ({count})"
+failed_some = "dependents: {failed} of {count} consumers failed"
+unstarted_some = "dependents: {unstarted} of {count} consumers did not run, and none failed"

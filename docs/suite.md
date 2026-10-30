@@ -279,6 +279,33 @@
   check that failed, is told the same way with what failed. A run that passes says nothing beyond its
   log.
 
+## The dependents of a major change
+
+- **A repository names the repositories it builds on** in its declaration's `upstreams`, by the names those
+  repositories declare. An upstream names none of its consumers; the relation stands only in the consumer's
+  own declaration.
+- **A machine's checkouts stand in one registry,** a TOML file whose `checkouts` list, or whose
+  `[[checkout]]` tables, names each checkout's path, as a string or as a table with a `path`. A path is
+  absolute, begins with `~/`, or is read against the registry file's folder. The file is
+  `checkouts.toml` under the data root's `testbed/` unless `BMO_TESTBED_CHECKOUTS` names another. A registry
+  that does not stand holds no checkouts; one that does not read is refused. The hosted deploy tool finds the
+  checkout it deploys from in the same registry (`docs/deploy.md`, 「The hosted deploy tool」).
+- **The `dependents` verb** reads the registry and answers every checkout whose declaration names the current
+  repository in `upstreams`, each by its declared name and root. It answers the direct consumers only; it
+  does not follow a consumer's own consumers.
+- **With `--run`** it then runs each consumer's suite through the suite runner above, from that consumer's
+  root, one repository at a time in the wide lane, each with the consumer's own declaration, log, test run and
+  guards. A consumer whose suite fails does not stop the ones after it.
+- **Exit codes:** 0 where every consumer passed, or there is none; 1 where any consumer's suite failed or was
+  cut; 75 where none failed but a consumer's suite did not run; 2 where the registry or a consumer's
+  declaration does not read. The consumers are refused before any suite starts.
+- **How a change is known to be major:** a caller names it by running `dependents --run`. A deployment
+  decides for itself: it compares the major of the commit's `VERSION` with the version in the deployment
+  record of the release live before it, and a different major runs the same `dependents --run` after its gate
+  and before its backup (`docs/deploy.md`). A first deployment, a commit carrying no `VERSION`, and a record
+  carrying none are not known to be major by that comparison. The testbed's own versions stay at major 0
+  before its first release, so a change there is named by its caller.
+
 ## The lines the run writes about itself
 
 - **Both open with `suite:`,** so a caller holding a log full of the runners' own output can find them.

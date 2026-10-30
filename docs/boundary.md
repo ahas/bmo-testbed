@@ -2,9 +2,9 @@
 
 Everything a caller may rely on stands here: the binary's verbs and their exit codes, the structure
 `--json` answers carry, the environment the verbs read and hand on, the declaration, the event hook,
-the HTTP service and its routes, the harness plugin and its tools, the placement endpoint and the
-crates' public roles. What is not here is internal and may change in any release. The version rules
-at the end are over this document.
+the HTTP service and its routes, the harness plugin and its tools, the hosted deploy tool, the
+placement endpoint and the crates' public roles. What is not here is internal and may change in any
+release. The version rules at the end are over this document.
 
 - **The testbed is an upstream** in the sense of bmo-chat's `docs/conventions.md`: a harness takes it
   as its first entry point through its MCP server, with no other unit running. Its routes, members,
@@ -123,6 +123,20 @@ bmo-testbed suite [--since <commit>] [--again] [--guard <seconds>] [--file-guard
   once more」). The suite's own flags come before its words.
 - Exits 0 where it passed, 1 where anything failed or was cut, 75 where it was not run or left units
   unstarted and failed nothing, 2 where its words or the declaration do not read.
+
+### `dependents`
+
+```
+bmo-testbed dependents [--run]
+```
+
+- Lists the checkouts in the machine's registry whose declarations name this repository in `upstreams`
+  (`docs/suite.md`, 「The dependents of a major change」), each by its declared name and root.
+- **`--run`** runs each consumer's suite in turn through the suite runner, one repository at a time in
+  the wide lane, with that consumer's own declaration, log and test run.
+- Exits 0 where every consumer passed or there is none, 1 where any consumer's suite failed or was cut,
+  75 where none failed but a consumer's suite did not run, and 2 where the registry or a consumer's
+  declaration does not read.
 
 ### `count`
 
@@ -309,7 +323,7 @@ verb's own name, and each noun takes what that verb takes.
 
 | Variable | Read by | Meaning |
 |---|---|---|
-| `BMO_DATA_DIR` | every verb | The testbed's data root: logs and the record under `testbed/`, locks under `locks/`, the data backup's settings under `env/`. Default `$HOME/.local/share/bmo/data` |
+| `BMO_DATA_DIR` | every verb, the hosted deploy tool | The testbed's data root: logs and the record under `testbed/`, locks under `locks/`, the data backup's settings under `env/`. Default `$HOME/.local/share/bmo/data` |
 | `TMPDIR` | the turn | Where the lane locks stand. Default `/tmp` |
 | `BMO_TESTBED_LOCK` | the turn | Another wide lane lock, the narrow one beside it |
 | `BMO_TESTBED_HELD` | the turn | Set by a holder for its children: its process number. A command finding it holding its lane runs at once |
@@ -322,6 +336,7 @@ verb's own name, and each noun takes what that verb takes.
 | `BMO_TESTBED_TOKEN` | `serve`, `mcp` | The HTTP service's bearer token |
 | `BMO_TESTBED_SERVICE` | `mcp` | The HTTP service's address the reading tools call |
 | `BMO_TESTBED_PLACEMENT` | `run`, `suite` | The placement endpoint, over the declaration's |
+| `BMO_TESTBED_CHECKOUTS` | `dependents`, `deploy`, the hosted deploy tool | The machine's registry of checkouts, over the data root's `testbed/checkouts.toml` |
 | `BMO_TESTBED_EVENT_HOOK` | every verb that sends events | The event hook, over the declaration's, and the hook for a verb run outside a repository |
 | `BMO_SUITE_MEMORY_GB` | the suite | The fence's memory ceiling |
 | `BMO_TEST_POSTGRES` | the suite, `template`, `scratch-database` | The test database server's address; set by the suite for every process it starts |
@@ -344,6 +359,7 @@ verb's own name, and each noun takes what that verb takes.
 `testbed.toml` at the repository's root, its whole schema in `docs/declaration.md`. In short:
 
 - `testbed`: the major targeted;
+- `upstreams`: the repositories this one builds on, by their declared names;
 - `[test]` with `[test.database]`: the languages, files, guards, fence and setup of the suite;
 - `[projects]` and `[tools]`: units found by their own files;
 - `[check]` with `[[check.step]]`: the quick checks enabled and their inputs, and the static steps;
@@ -526,6 +542,20 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   answers at is an error with no `code`.
 - **It sends no notifications,** since the service keeps no subscriptions.
 
+## The hosted deploy tool
+
+- **One tool the tool host runs,** in bmo-pocket's call protocol 1 (bmo-pocket's `docs/mcp-host.md`,
+  「Placed tools」): the tool `deploy`, whose one entry `testbed/deploy` is shown to a session whose
+  record holds the capability `deploy`, and which puts a commit live for a session `deploy` refuses
+  (`docs/deploy.md`, 「The hosted deploy tool」). It serves no resources.
+- **Its arguments** are `repository`, `commit` and `why`, strings and required, and `dry_run`, a boolean;
+  its input schema, beside its manifest, takes no other.
+- **Its answer** is text. A deployment that went live answers a first line beginning `live:`, naming the
+  commit and its subject. A deployment that did not, a refusal and arguments that do not read answer the
+  same text marked as an error, `isError`. A dry run answers what the verb said.
+- **The testbed's own deployment places it** from the release's `tools/deploy/.placed/` into the tool
+  host's registry, for the service `testbed`.
+
 ## Placement
 
 - **Where a heavy run goes is the placement endpoint's answer;** the default is local, so a testbed
@@ -577,7 +607,8 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
 ## The crates
 
 - **Each crate's package is named for its folder** after `bmo-testbed-`: `bmo-testbed-core`,
-  `bmo-testbed-scratch-database` and so on.
+  `bmo-testbed-scratch-database` and so on. A hosted tool's crate stands under `tools/` and is named
+  for its tool with `-tool` after it, as its executable is: `deploy-tool`.
 - **`core`:** the lanes, the turn, the queue, the close line, the run and its result, the languages,
   memory limits, the placement, the declaration reader and the policy loader. Its public types are the
   ones the status fields above serialise: the lane, the queue, the entry, the close line and its entry;
@@ -615,6 +646,8 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
     programs to stand in for and the directories to name, and answers the home and its `bin`;
     the consumer's own preload calls it once.
   - `scratch` hands a test a directory taken away as its file ends; `ids` holds the fixed ids.
+- **`tools/deploy`:** `deploy-tool`, the hosted deploy tool (「The hosted deploy tool」): its call
+  read, the checkout found in the registry, the verb run and its unit waited out, and the outcome answered.
 - **`test-support`:** the fixed ids a test names a user, a room, a message, an account, a worker and a
   unit by, the same values as the test kit's `ids`; a consumer's crate may take it as a
   dev-dependency.

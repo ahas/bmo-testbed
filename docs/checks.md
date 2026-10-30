@@ -128,6 +128,9 @@
   the declared base libraries, or where it is a dev-dependency on the testbed's test kit: the
   package `@bmo-testbed/testkit`, or the crates `bmo-testbed-test-support` and
   `bmo-testbed-scratch-database` (`docs/boundary.md`, 「The crates」).
+- **What `base_libraries` is not:** the declaration's `upstreams` name the repositories whose major
+  changes run this repository's suite (`docs/suite.md`, 「The dependents of a major change」); the
+  `dependencies` check reads `base_libraries` alone.
 - **`cargo-profile`:** the repository's root `Cargo.toml` holds every profile setting that keeps each
   build's output small: `[profile.dev]` with `debug = "line-tables-only"`, `split-debuginfo =
   "unpacked"` and `incremental = false`, and `[profile.release]` with `debug = false` and `strip =

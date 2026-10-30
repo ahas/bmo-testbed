@@ -11,6 +11,7 @@ pub struct UsageWords {
   pub status: String,
   pub classify: String,
   pub suite: String,
+  pub dependents: String,
   pub count: String,
   pub log: String,
   pub template: String,

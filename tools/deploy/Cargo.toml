@@ -1,0 +1,23 @@
+[package]
+name = "deploy-tool"
+description = "The testbed's hosted deploy tool: a commit put live through the deploy verb for a session the verb refuses, the deployment waited out and its outcome answered."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "deploy-tool"
+path = "src/main.rs"
+test = false
+
+[dependencies]
+bmo-testbed-core = { path = "../../core" }
+bmo-testbed-deploy = { path = "../../deploy" }
+bmo-testbed-suite = { path = "../../suite" }
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+toml.workspace = true

@@ -1,0 +1,62 @@
+# What the hosted deploy tool does and says (docs/deploy.md, 「The hosted deploy tool」): the entry it
+# answers, how it waits a deployment out, and the lines it answers with. A session reads the lines, so they
+# are English. Each `{name}` is filled in with what it names.
+
+# The one entry the tool answers, by its full name, as its manifest declares it.
+entry = "testbed/deploy"
+# The tool host's call protocol the tool speaks.
+protocol = 1
+
+[numbers]
+# How often the deployment's unit is asked whether it is still active, in seconds.
+poll_seconds = 5
+# How long the unit is waited for, in seconds: under the manifest's hour, so the call answers before the
+# host ends it.
+wait_seconds = 3480
+# How many of the unit's journal lines a deployment that did not go live is answered with.
+journal_lines = 30
+# The fewest and the most hexadecimal digits a commit's name is taken with.
+commit_shortest = 4
+commit_longest = 64
+
+[lines]
+# A deployment that went live: its first line, then the commit before it, the reason and the unit.
+live = "live: {commit} ({subject})"
+previous = "previous: {commit} ({subject})"
+no_previous = "previous: none recorded"
+message = "message: {message}"
+unit = "unit: {unit}"
+# A deployment that did not: {recorded} is the commit the record names, or `nothing`.
+not_live = "not live: {unit} ended and the deployment record names {recorded}, not {commit}. The last lines of its journal:"
+not_written = "not live: {unit} ended and the deployment record is still the one from before this call. The last lines of its journal:"
+nothing_recorded = "nothing"
+still_running = "{unit} is still running after {seconds}s; read it with: journalctl --user -u {unit} --no-pager"
+unasked = "{unit} could not be asked whether it is still active: {why}"
+journal_unread = "its journal could not be read: {why}"
+# What the verb itself came to, {said} what it wrote.
+refused = "the deploy verb refused: {said}"
+failed = "the deploy verb ended with exit code {code}: {said}"
+# The exit code of a verb a signal ended.
+no_code = "none, a signal ended it"
+no_unit = "the deploy verb named no unit it runs in: {said}"
+not_started = "{binary} could not be started: {why}"
+# The verb's own words, cut to whole lines past the answer's ceiling.
+said_unit = "lines the deploy verb wrote"
+said_how = "run the same deploy verb from a shell outside a harness to read them all"
+# Refusals before the verb runs.
+arguments = "the arguments do not read: {why}"
+empty = "{argument} must not be empty"
+commit = "commit must be a commit's hexadecimal name of {shortest} to {longest} digits, not {commit}"
+no_registry = "the checkout registry {path} does not stand, so no checkout can be found"
+registry = "the checkout registry {path} does not read: {why}"
+unknown = "no checkout in {path} is named {repository}; the names its checkouts declare: {names}"
+unread = "the checkouts whose declaration does not read: {checkouts}"
+no_names = "none"
+ambiguous = "{repository} is the name of more than one checkout in {path}: {roots}"
+no_deploy = "{repository} at {root}: {why}"
+# Requests the tool does not answer.
+request = "the request does not read: {why}"
+protocol = "the request speaks protocol {asked}, and this tool speaks {ours}"
+other_entry = "this tool answers {ours}, not {asked}"
+no_resources = "this tool serves no resources"
+other_kind = "this tool answers calls alone"

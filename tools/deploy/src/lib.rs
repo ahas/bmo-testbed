@@ -1,0 +1,43 @@
+//! The testbed's hosted deploy tool (docs/deploy.md, 「The hosted deploy tool」; docs/boundary.md, 「The
+//! hosted deploy tool」): the tool host hands it one call of `testbed/deploy`, and it puts the commit live
+//! through the deploy verb from outside the harness the session stands in, waits the deployment out and
+//! answers what came of it.
+
+mod call;
+mod checkout;
+mod deployment;
+
+use bmo_testbed_core::policy::deploy_tool::DEPLOY_TOOL;
+use bmo_testbed_core::policy::fill_marks;
+use serde_json::{Value, json};
+
+pub use call::{Answer, Asked, Content, Handed, read_handed};
+pub use checkout::{find_checkout, same_name};
+pub use deployment::{
+  Arguments, DATA_ROOT_VARIABLE, Ground, HARNESS_VARIABLE, PLACED, TESTBED, deploy, outcome,
+  read_arguments, release_testbed, unit_of,
+};
+
+/// What a request is answered with on standard output, or why it is answered with none: a kind the tool
+/// does not serve, which the host takes as a failed call.
+pub fn answer(handed: &Handed, ground: &Ground) -> Result<Value, String> {
+  let said = &DEPLOY_TOOL.lines;
+
+  match &handed.asked {
+    Asked::Call { entry, arguments } => {
+      let answered = if *entry != DEPLOY_TOOL.entry {
+        Answer::error(fill_marks(&said.other_entry, &[("ours", &DEPLOY_TOOL.entry), ("asked", entry)]))
+      } else {
+        match read_arguments(arguments) {
+          Ok(arguments) => deploy(&arguments, ground),
+          Err(why) => Answer::error(why),
+        }
+      };
+
+      serde_json::to_value(answered).map_err(|why| why.to_string())
+    }
+    Asked::ResourcesList => Ok(json!({ "resources": [] })),
+    Asked::ResourcesRead { .. } => Ok(json!({ "error": said.no_resources })),
+    Asked::Other => Err(said.other_kind.clone()),
+  }
+}

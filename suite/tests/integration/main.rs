@@ -4,6 +4,7 @@ mod cargo;
 mod check;
 mod count;
 mod crates;
+mod dependents;
 mod log;
 mod moved_imports;
 mod once_more;

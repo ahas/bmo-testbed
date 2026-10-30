@@ -1,0 +1,26 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["repository", "commit", "why"],
+  "properties": {
+    "repository": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The repository to deploy, by the name its checkout's testbed.toml declares, with or without a leading bmo-."
+    },
+    "commit": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{4,64}$",
+      "description": "The commit to put live, by its hexadecimal name, whole or shortened. It must be on the remote."
+    },
+    "why": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Why the deploy is made, in English. It is written into the deployment record."
+    },
+    "dry_run": {
+      "type": ["boolean", "null"],
+      "description": "Say what the deployment would do, changing nothing and starting no unit."
+    }
+  }
+}

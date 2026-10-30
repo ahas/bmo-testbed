@@ -30,6 +30,7 @@ pub enum Verb {
   Status(StatusArgs),
   Classify(ClassifyArgs),
   Suite(SuiteArgs),
+  Dependents(DependentsArgs),
   Count(CountArgs),
   Log(LogArgs),
   Template(TemplateArgs),
@@ -186,6 +187,13 @@ pub struct SuiteArgs {
   pub json: bool,
   #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
   pub words: Vec<String>,
+}
+
+/// `dependents`: the checkouts that name this repository among their upstreams, and each one's suite.
+#[derive(Debug, Args)]
+pub struct DependentsArgs {
+  #[arg(long)]
+  pub run: bool,
 }
 
 #[derive(Debug, Args)]
@@ -362,6 +370,7 @@ pub fn read(args: impl IntoIterator<Item = OsString>) -> Result<Words, clap::Err
     .mut_subcommand("status", |verb| verb.override_help(usage(&said.status)))
     .mut_subcommand("classify", |verb| verb.override_help(usage(&said.classify)))
     .mut_subcommand("suite", |verb| verb.override_help(usage(&said.suite)))
+    .mut_subcommand("dependents", |verb| verb.override_help(usage(&said.dependents)))
     .mut_subcommand("count", |verb| verb.override_help(usage(&said.count)))
     .mut_subcommand("log", |verb| verb.override_help(usage(&said.log)))
     .mut_subcommand("template", |verb| verb.override_help(usage(&said.template)))

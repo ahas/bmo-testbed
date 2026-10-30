@@ -22,6 +22,7 @@ oxc_span.workspace = true
 percent-encoding.workspace = true
 regex.workspace = true
 scraper.workspace = true
+serde.workspace = true
 serde-saphyr.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
