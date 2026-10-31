@@ -41,14 +41,20 @@
   checkout of it is: its submodules brought to the commits it pins, then the declared setup steps, then
   the declared env links. Its `bin/` holds the binaries built for that commit, and its
   `bin/built-from` names that same commit.
-- **The trees the workspace names by a path outside the repository — the base libraries a release
-  build reads — are laid where each manifest names them, as links to the checkout's own trees.** A
-  worktree of the repository alone carries nothing beside it, so the release and the build tree read
-  a base library from the workspace the checkout stands in; the build tree's declared path reaches
-  the deploy root's parent, where the repositories of one workspace share one. The list of trees is
-  read from the checkout's workspace, since a worktree reads no manifest until the trees its
-  manifests name stand where they point. A tree the checkout does not carry refuses the deployment
-  before anything is built.
+- **The trees the workspace names by a path outside the repository — the base libraries and the
+  sibling repositories' crates a release build reads — are laid where each manifest names them, as
+  links to the checkout's own trees.** A worktree of the repository alone carries nothing beside it,
+  so the release and the build tree read such a tree from the workspace the checkout stands in; the
+  build tree's declared path reaches the deploy root's parent, where the repositories of one
+  workspace share one. A tree that is a member of another Cargo workspace — one Cargo, asked from the
+  checkout's copy of it, places under a workspace root above it — reads its inherited fields from
+  that root, so the link is laid at the root instead, and the named path resolves through it; every
+  tree named inside one workspace shares that one link. A standalone package is linked by itself. The
+  list of trees is read from the checkout's workspace, since a worktree reads no manifest until the
+  trees its manifests name stand where they point. A tree the checkout does not carry refuses the
+  deployment before anything is built. Where a link is to be laid, a link already on the checkout's
+  tree is left as it is, a link pointing elsewhere is moved onto it, and a folder holding nothing but folders and links, as an earlier laying
+  leaves, is replaced; any other tree standing there is left as it is.
 - **A release is finished before anything serves from it.** Prepared and built while the live release
   goes on serving; the deploy tree's link is then moved onto it by a new link written beside the old
   one and renamed over it, so every reader sees one release or the other and never a tree half moved.

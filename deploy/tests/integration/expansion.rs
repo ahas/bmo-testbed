@@ -148,6 +148,197 @@ fn a_dependency_inside_the_tree_and_a_tree_with_no_workspace_are_left_alone() {
   lay_outside_trees(&plain, &checkout).unwrap();
 }
 
+// A package whose dependencies are the trees at the paths the manifest names, one name to a path.
+fn app_on(dir: &Path, dependencies: &[(&str, &str)]) {
+  let named: String = dependencies
+    .iter()
+    .map(|(name, path)| format!("{name} = {{ path = \"{path}\" }}\n"))
+    .collect();
+
+  std::fs::create_dir_all(dir.join("src")).unwrap();
+  std::fs::write(
+    dir.join("Cargo.toml"),
+    format!(
+      "[package]\nname = \"app\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]\n{named}"
+    ),
+  )
+  .unwrap();
+  std::fs::write(dir.join("src/main.rs"), "fn main() {}\n").unwrap();
+}
+
+// A sibling repository's workspace whose member crates inherit their version and edition from its root.
+fn sibling_workspace(dir: &Path, members: &[&str]) {
+  let listed: Vec<String> = members.iter().map(|member| format!("\"crates/{member}\"")).collect();
+
+  std::fs::create_dir_all(dir).unwrap();
+  std::fs::write(
+    dir.join("Cargo.toml"),
+    format!(
+      "[workspace]\nresolver = \"2\"\nmembers = [{}]\n\n[workspace.package]\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+      listed.join(", ")
+    ),
+  )
+  .unwrap();
+
+  for member in members {
+    let crate_dir = dir.join("crates").join(member);
+
+    std::fs::create_dir_all(crate_dir.join("src")).unwrap();
+    std::fs::write(
+      crate_dir.join("Cargo.toml"),
+      format!("[package]\nname = \"{member}\"\nversion.workspace = true\nedition.workspace = true\n"),
+    )
+    .unwrap();
+    std::fs::write(crate_dir.join("src/lib.rs"), "").unwrap();
+  }
+}
+
+// Whether a tree's manifests all read, the trees they name included.
+fn reads(tree: &Path) -> bool {
+  std::process::Command::new("cargo")
+    .args(["metadata", "--no-deps", "--offline", "--format-version", "1"])
+    .current_dir(tree)
+    .output()
+    .unwrap()
+    .status
+    .success()
+}
+
+// The names standing in a folder, in order.
+fn names(folder: &Path) -> Vec<String> {
+  let mut names: Vec<String> = std::fs::read_dir(folder)
+    .unwrap()
+    .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+    .collect();
+
+  names.sort();
+  names
+}
+
+// "a tree that is a member of another Cargo workspace is laid at that workspace's root"
+#[test]
+fn a_member_crate_of_a_sibling_workspace_lays_the_siblings_root() {
+  let root = tempfile::tempdir().unwrap();
+  let sibling = root.path().join("workspace/services/sibling");
+  let checkout = root.path().join("workspace/services/app");
+  let tree = root.path().join("run/deploy-expand");
+
+  sibling_workspace(&sibling, &["client"]);
+  app_on(&checkout, &[("client", "../sibling/crates/client")]);
+  app_on(&tree, &[("client", "../sibling/crates/client")]);
+
+  lay_outside_trees(&tree, &checkout).unwrap();
+
+  assert_eq!(
+    symlink(&root.path().join("run/sibling")).as_deref(),
+    Some(std::fs::canonicalize(&sibling).unwrap().as_path()),
+    "the sibling's workspace root stands as one link"
+  );
+  assert!(reads(&tree), "the member finds the root it inherits from through the link");
+}
+
+// "every tree named inside one workspace shares that one link"
+#[test]
+fn two_members_of_one_sibling_workspace_lay_one_link() {
+  let root = tempfile::tempdir().unwrap();
+  let sibling = root.path().join("workspace/services/sibling");
+  let checkout = root.path().join("workspace/services/app");
+  let tree = root.path().join("run/deploy-expand");
+  let named = [("client", "../sibling/crates/client"), ("plugin", "../sibling/crates/plugin")];
+
+  sibling_workspace(&sibling, &["client", "plugin"]);
+  app_on(&checkout, &named);
+  app_on(&tree, &named);
+
+  lay_outside_trees(&tree, &checkout).unwrap();
+
+  assert_eq!(names(&root.path().join("run")), ["deploy-expand", "sibling"]);
+  assert!(symlink(&root.path().join("run/sibling")).is_some());
+  assert!(reads(&tree));
+}
+
+// "a standalone package is linked by itself"
+#[test]
+fn a_standalone_package_beside_a_sibling_member_is_laid_by_itself() {
+  let root = tempfile::tempdir().unwrap();
+  let base = root.path().join("workspace/base/text");
+  let sibling = root.path().join("workspace/services/sibling");
+  let checkout = root.path().join("workspace/services/app");
+  let tree = root.path().join("run/deploy-expand");
+  let named = [("bmo-text", "../../base/text"), ("client", "../sibling/crates/client")];
+
+  package(&base, "bmo-text");
+  sibling_workspace(&sibling, &["client"]);
+  app_on(&checkout, &named);
+  app_on(&tree, &named);
+
+  lay_outside_trees(&tree, &checkout).unwrap();
+
+  assert_eq!(
+    symlink(&root.path().join("base/text")).as_deref(),
+    Some(std::fs::canonicalize(&base).unwrap().as_path()),
+    "the standalone package stands as a link of its own, its folder not linked"
+  );
+  assert!(symlink(&root.path().join("base")).is_none());
+  assert!(symlink(&root.path().join("run/sibling")).is_some());
+  assert!(reads(&tree));
+}
+
+// "a link already on the checkout's tree is left as it is"
+#[test]
+fn a_link_already_on_the_checkouts_tree_is_left_alone() {
+  use std::os::unix::fs::MetadataExt;
+
+  let root = tempfile::tempdir().unwrap();
+  let sibling = root.path().join("workspace/services/sibling");
+  let checkout = root.path().join("workspace/services/app");
+  let tree = root.path().join("run/deploy-expand");
+  let link = root.path().join("run/sibling");
+
+  sibling_workspace(&sibling, &["client"]);
+  app_on(&checkout, &[("client", "../sibling/crates/client")]);
+  app_on(&tree, &[("client", "../sibling/crates/client")]);
+
+  lay_outside_trees(&tree, &checkout).unwrap();
+
+  let before = std::fs::symlink_metadata(&link).unwrap().ino();
+
+  lay_outside_trees(&tree, &checkout).unwrap();
+
+  assert_eq!(std::fs::symlink_metadata(&link).unwrap().ino(), before, "the same link, not a new one");
+  assert_eq!(symlink(&link).as_deref(), Some(std::fs::canonicalize(&sibling).unwrap().as_path()));
+}
+
+// "a folder holding nothing but folders and links, as an earlier laying leaves, is replaced; any other
+// tree standing there is left as it is"
+#[test]
+fn an_earlier_layings_folder_of_links_is_replaced_and_any_other_tree_is_kept() {
+  let root = tempfile::tempdir().unwrap();
+  let sibling = root.path().join("workspace/services/sibling");
+  let checkout = root.path().join("workspace/services/app");
+  let tree = root.path().join("run/deploy-expand");
+  let link = root.path().join("run/sibling");
+
+  sibling_workspace(&sibling, &["client"]);
+  app_on(&checkout, &[("client", "../sibling/crates/client")]);
+  app_on(&tree, &[("client", "../sibling/crates/client")]);
+  std::fs::create_dir_all(link.join("crates")).unwrap();
+  std::os::unix::fs::symlink(sibling.join("crates/client"), link.join("crates/client")).unwrap();
+
+  lay_outside_trees(&tree, &checkout).unwrap();
+
+  assert_eq!(symlink(&link).as_deref(), Some(std::fs::canonicalize(&sibling).unwrap().as_path()));
+
+  std::fs::remove_file(&link).unwrap();
+  std::fs::create_dir_all(link.join("crates")).unwrap();
+  std::fs::write(link.join("Cargo.toml"), "").unwrap();
+
+  lay_outside_trees(&tree, &checkout).unwrap();
+
+  assert!(symlink(&link).is_none(), "a tree holding a file of its own is nobody's to replace");
+  assert!(link.join("Cargo.toml").exists());
+}
+
 // A command run in a folder, its output both streams, as the deployment runs one.
 fn runner() -> impl Fn(&[String], &Path) -> bmo_testbed_deploy::run::Ran {
   move |line: &[String], cwd: &Path| {

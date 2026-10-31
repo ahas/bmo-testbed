@@ -170,25 +170,48 @@ fn empty_folder(folder: &Path, data_root: &Path) -> Result<(), String> {
   entries.flatten().try_for_each(|entry| remove_tree(&entry.path(), data_root))
 }
 
-/// A tree a workspace's manifests name by a path outside it.
-struct Outside {
-  /// The folder the package that names it stands in, from the workspace's root.
-  package: PathBuf,
-  /// The path from that package to the tree it names, as the manifest gives it.
-  relative: PathBuf,
-}
-
-/// The trees outside the repository that its manifests name by a path — the base libraries a release
-/// build reads — laid beside `tree` where those paths point, out of the checkout at the same place. A
-/// worktree of the repository carries nothing beside it, so a release built in one reads a base library
-/// from a path only the workspace around the checkout makes.
+/// The trees outside the repository that its manifests name by a path — the base libraries and the
+/// sibling repositories' crates a release build reads — laid beside `tree` where those paths point, out
+/// of the checkout at the same place. A worktree of the repository carries nothing beside it, so a
+/// release built in one reads such a tree from a path only the workspace around the checkout makes.
+///
+/// A tree that is a member of another Cargo workspace is laid at that workspace's root, through which
+/// the named path resolves and the member finds the root it inherits from; the trees named inside one
+/// workspace share that one link. A standalone package is laid by itself.
 ///
 /// The list comes from the checkout's own workspace: a release or a build tree reads no manifest until
 /// the trees its manifests name stand, and the checkout is the one place they do.
 pub fn lay_outside_trees(tree: &Path, checkout: &Path) -> Result<(), String> {
-  for one in outside_trees(tree, checkout)? {
-    let source = normalize(&checkout.join(&one.package).join(&one.relative));
-    let place = normalize(&tree.join(&one.package).join(&one.relative));
+  let mut laid: Vec<PathBuf> = Vec::new();
+
+  for named in outside_trees(tree, checkout)? {
+    let target = std::fs::canonicalize(&named).map_err(|why| {
+      fill_shown(
+        &DEPLOY.expansion.tree_absent,
+        &[("at", &named.display()), ("tree", &tree.display()), ("why", &why.to_string())],
+      )
+    })?;
+
+    laid.push(workspace_root(&named, &target, checkout));
+  }
+
+  laid.sort();
+  laid.dedup();
+
+  // A tree inside another laid one resolves through that one's link and is laid no further.
+  let mut kept: Vec<PathBuf> = Vec::new();
+
+  for one in laid {
+    if !kept.iter().any(|outer| one.starts_with(outer)) {
+      kept.push(one);
+    }
+  }
+
+  for source in kept {
+    let Some(relative) = upward(checkout, &source) else {
+      continue;
+    };
+    let place = normalize(&tree.join(relative));
     let target = std::fs::canonicalize(&source).map_err(|why| {
       fill_shown(
         &DEPLOY.expansion.tree_absent,
@@ -205,9 +228,11 @@ pub fn lay_outside_trees(tree: &Path, checkout: &Path) -> Result<(), String> {
       })?;
     }
 
-    // A tree already standing there is left as it is: what is not a link of the deployment's is nobody's
-    // to replace.
-    if std::fs::symlink_metadata(&place).is_ok_and(|meta| !meta.file_type().is_symlink()) {
+    // A tree already standing there is left as it is, unless it is an earlier laying's folder of links:
+    // what is not the deployment's own is nobody's to replace.
+    if std::fs::symlink_metadata(&place).is_ok_and(|meta| !meta.file_type().is_symlink())
+      && !links_only(&place)
+    {
       continue;
     }
 
@@ -222,10 +247,55 @@ pub fn lay_outside_trees(tree: &Path, checkout: &Path) -> Result<(), String> {
   Ok(())
 }
 
+// The tree to lay for one a manifest names: the root of the Cargo workspace it is a member of, on
+// Cargo's own word asked from the checkout's copy of it, or the tree itself when it stands alone. A root
+// that holds the checkout is no sibling's to lay, and the tree is laid by itself.
+fn workspace_root(named: &Path, target: &Path, checkout: &Path) -> PathBuf {
+  let read = command(
+    &words(["cargo", "locate-project", "--workspace", "--message-format", "plain", "--offline"]),
+    Some(target),
+  )
+  .output();
+  let Some(read) = read.ok().filter(|read| read.status.success()) else {
+    return named.to_path_buf();
+  };
+  let manifest = PathBuf::from(String::from_utf8_lossy(&read.stdout).trim());
+  let Some(root) = manifest.parent().and_then(|root| std::fs::canonicalize(root).ok()) else {
+    return named.to_path_buf();
+  };
+  let Ok(below) = target.strip_prefix(&root) else {
+    return named.to_path_buf();
+  };
+  let mut at = named.to_path_buf();
+
+  for _ in below.components() {
+    at.pop();
+  }
+
+  if checkout.starts_with(&at) {
+    return named.to_path_buf();
+  }
+
+  at
+}
+
+// Whether a folder holds nothing but folders and links, all the way down.
+fn links_only(folder: &Path) -> bool {
+  let Ok(mut entries) = std::fs::read_dir(folder) else {
+    return false;
+  };
+
+  entries.all(|entry| {
+    entry
+      .and_then(|entry| entry.file_type().map(|kind| (entry.path(), kind)))
+      .is_ok_and(|(path, kind)| kind.is_symlink() || (kind.is_dir() && links_only(&path)))
+  })
+}
+
 // Every path dependency of the checkout's Cargo workspace that points outside it, read off Cargo's own
-// word, with the package that names it and the path it names. The checkout is what is read: `tree`'s own
+// word, as the path it names from the checkout's surroundings. The checkout is what is read: `tree`'s own
 // manifests resolve nothing until the trees they name stand.
-fn outside_trees(tree: &Path, checkout: &Path) -> Result<Vec<Outside>, String> {
+fn outside_trees(tree: &Path, checkout: &Path) -> Result<Vec<PathBuf>, String> {
   if !tree.join("Cargo.toml").exists() {
     return Ok(Vec::new());
   }
@@ -255,9 +325,10 @@ fn outside_trees(tree: &Path, checkout: &Path) -> Result<Vec<Outside>, String> {
     let Some(dir) = Path::new(manifest).parent() else {
       continue;
     };
-    let Ok(from_root) = dir.strip_prefix(checkout) else {
+    if !dir.starts_with(checkout) {
       continue;
-    };
+    }
+
     let dependencies = package["dependencies"].as_array().into_iter().flatten();
 
     for dependency in dependencies {
@@ -266,18 +337,9 @@ fn outside_trees(tree: &Path, checkout: &Path) -> Result<Vec<Outside>, String> {
       };
       let at = normalize(Path::new(path));
 
-      if at.starts_with(checkout) {
-        continue;
+      if !at.starts_with(checkout) {
+        outside.push(at);
       }
-
-      let Some(relative) = upward(dir, &at).filter(|path| !path.as_os_str().is_empty()) else {
-        continue;
-      };
-
-      outside.push(Outside {
-        package: from_root.to_path_buf(),
-        relative,
-      });
     }
   }
 
