@@ -175,7 +175,8 @@ bmo-testbed template make|drop|sweep <name>
 ```
 bmo-testbed check [--since <commit>] [--log <path>] [--json] [<file…>]
 bmo-testbed check quick
-bmo-testbed check wording|layout|dependencies|cargo-profile
+bmo-testbed check wording|layout|dependencies|cargo-profile|shared-versions
+bmo-testbed check shared-versions --report
 bmo-testbed check language [--kinds] [--settle] [<prefix>]
 bmo-testbed check dashes <file…> [--write]
 ```
@@ -185,10 +186,11 @@ bmo-testbed check dashes <file…> [--write]
   instead, and on standard output one command run (「Members」) once the check has ended: its log, the
   waits of its steps added up, and its whole time.
 - With a part named, that quick check alone, or every enabled one for `quick`. `language --settle`
-  lowers the ledger, and `korean` names the same part; `dashes <file…>` rewrites the dashes between
-  words in the markdown files named, only with `--write`, and otherwise prints each line it would
-  change. Each exits 1 where it finds anything, and 2 where the declaration does not enable it or
-  names none of its inputs.
+  lowers the ledger, and `korean` names the same part; `shared-versions --report` holds every checkout of
+  the machine's registry to the shared versions and changes nothing; `dashes <file…>` rewrites the dashes
+  between words in the markdown files named, only with `--write`, and otherwise prints each line it would
+  change. Each exits 1 where it finds anything, and 2 where the declaration does not enable it or names
+  none of its inputs.
 
 ### `imports`
 
@@ -341,7 +343,7 @@ verb's own name, and each noun takes what that verb takes.
 | `BMO_TESTBED_TOKEN` | `serve`, `mcp` | The HTTP service's bearer token |
 | `BMO_TESTBED_SERVICE` | `mcp` | The HTTP service's address the reading tools call |
 | `BMO_TESTBED_PLACEMENT` | `run`, `suite` | The placement endpoint, over the declaration's |
-| `BMO_TESTBED_CHECKOUTS` | `dependents`, `deploy`, `prune`, the hosted deploy tool | The machine's registry of checkouts, over the data root's `testbed/checkouts.toml` |
+| `BMO_TESTBED_CHECKOUTS` | `dependents`, `deploy`, `prune`, `check shared-versions`, the hosted deploy tool | The machine's registry of checkouts, over the data root's `testbed/checkouts.toml` |
 | `BMO_TESTBED_EVENT_HOOK` | every verb that sends events | The event hook, over the declaration's, and the hook for a verb run outside a repository |
 | `BMO_SUITE_MEMORY_GB` | the suite | The fence's memory ceiling |
 | `BMO_TEST_POSTGRES` | the suite, `template`, `scratch-database` | The test database server's address; set by the suite for every process it starts |

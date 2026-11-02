@@ -14,8 +14,9 @@
   unless named.
 - **What keys ask of each other is held as the file is read,** and a declaration breaking it is
   refused naming the key: a language or a quick check the testbed has no member for, a quick check
-  without the input it reads, a deploy root without its data root, a test database naming only one of
-  its migrations and its migrate command, and two steps of one table under the same id. Whether a path
+  without the input it reads, an exception to the shared versions naming neither a line nor a version or
+  with no reason, a deploy root without its data root, a test database naming only one of its migrations
+  and its migrate command, and two steps of one table under the same id. Whether a path
   exists is asked by the verb that reads it, not here.
 
 ## The top level
@@ -71,7 +72,7 @@ make their own databases names neither, and its tests are handed the server alon
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `quick` | list of strings | `[]` | The quick checks run: any of `wording`, `dashes`, `language` (or `korean`, the same check), `layout`, `dependencies`, `cargo-profile` |
+| `quick` | list of strings | `[]` | The quick checks run: any of `wording`, `dashes`, `language` (or `korean`, the same check), `layout`, `dependencies`, `cargo-profile`, `shared-versions` |
 | `wording_document` | path | none | The document holding the banned terms and their allowed uses; required by `wording` |
 | `wording_files` | list of globs | every file | The files `wording` holds to the document |
 | `people_text` | list of globs | `[]` | The files whose literals are text for a person; read by `dashes` |
@@ -79,6 +80,27 @@ make their own databases names neither, and its tests are handed the server alon
 | `base_libraries` | list of strings | `[]` | The dependencies from other repositories the `dependencies` check allows beside registry ones |
 | `upstreams` | list of strings | `[]` | The same upstream repositories as the top level, for a declaration that keeps its dependency words here; both lists are read |
 | `main` | string | `main` | The main branch, the default base of a change |
+
+### `[check.shared_versions]`: the shared versions the manifests hold to
+
+Read by the `shared-versions` quick check (`docs/checks.md`, 「The quick checks」), which a declaration
+enables only with this table's `repository`.
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `repository` | string | required | The repository whose root holds `shared-versions.toml`, by its declared name, found in the machine's registry of checkouts |
+
+### `[check.shared_versions.exceptions.<crate>]`: a crate this repository takes otherwise
+
+One table for each listed crate the repository genuinely needs at another version or feature set, the
+variation standing in the repository that needs it. An exception naming neither a line nor a version, or
+with an empty reason, is refused.
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `reason` | string | required | Why the repository needs the crate otherwise, in English |
+| `line` | string | none | The line the manifests write for the crate instead of the shared one, whole, its key included |
+| `locked` | list of strings | `[]` | The versions of the crate the lock holds instead of the snapshot's |
 
 ### `[[check.step]]`: one static step each, in order
 

@@ -17,7 +17,7 @@ bmo-testbed-record = { path = "../record" }
 futures-util.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-tokio = { workspace = true, features = ["sync"] }
+tokio.workspace = true
 
 [dev-dependencies]
 bmo-testbed-client = { path = "../client" }

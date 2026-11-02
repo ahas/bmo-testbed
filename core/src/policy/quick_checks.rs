@@ -15,6 +15,7 @@ pub struct QuickChecks {
   pub dashes: Dashes,
   pub language: LanguageWords,
   pub cargo_profile: CargoProfileWords,
+  pub shared_versions: SharedVersionsWords,
   pub layout: Layout,
   pub dependencies: Dependencies,
 }
@@ -80,6 +81,45 @@ pub struct Dependencies {
   pub foreign: String,
   pub foreign_dev: String,
   pub test_kit: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SharedVersionsWords {
+  pub file: String,
+  pub lines: String,
+  pub snapshot: String,
+  pub lock: String,
+  pub registry_sources: Vec<String>,
+  pub clean: String,
+  pub unread_registry: String,
+  pub no_checkout: String,
+  pub two_checkouts: String,
+  pub not_shared: String,
+  pub not_manifest: String,
+  pub not_lock: String,
+  pub line: String,
+  pub inherited: String,
+  pub inherit: String,
+  pub inherit_optional: String,
+  pub inherit_keys: Vec<String>,
+  pub locked: String,
+  pub not_listed: String,
+  pub same_line: String,
+  pub not_locked: String,
+  pub bad_line: String,
+  pub report_clean: String,
+  pub report_differs: String,
+  pub report_lines: String,
+  pub report_locked: String,
+  pub report_version: String,
+  pub report_others: String,
+  pub report_joiner: String,
+  pub report_list_joiner: String,
+  pub report_unread: String,
+  pub report_total: String,
+  pub report_unit: String,
+  pub report_how: String,
 }
 
 super::part!(pub QUICK_CHECKS: QuickChecks = "quick-checks.toml");

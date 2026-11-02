@@ -17,6 +17,7 @@ pub mod dependencies;
 pub mod files;
 pub mod language;
 pub mod layout;
+pub mod shared_versions;
 pub mod source;
 pub mod wording;
 
@@ -158,6 +159,18 @@ pub fn cargo_profile_check(repo: &Repository) -> Checked {
   )
 }
 
+/// The shared versions check over the checkout's manifests and locks, against the shared versions its
+/// declaration names.
+pub fn shared_versions_check(repo: &Repository, env: &Env) -> Checked {
+  let found = shared_versions::checkout_shared_versions(repo, env);
+
+  Checked::of(
+    QuickCheck::SharedVersions.name(),
+    &found.findings,
+    &counted(&QUICK_CHECKS.shared_versions.clean, found.paths),
+  )
+}
+
 /// The dependency check over the checkout's manifests, against the declared base libraries.
 pub fn dependencies_check(repo: &Repository) -> Checked {
   let found = dependencies::checkout_dependencies(&repo.root, &repo.declaration.check.base_libraries);
@@ -178,6 +191,7 @@ pub fn quick_check(check: QuickCheck, repo: &Repository, env: &Env) -> Checked {
     QuickCheck::Layout => layout_check(repo),
     QuickCheck::Dependencies => dependencies_check(repo),
     QuickCheck::CargoProfile => cargo_profile_check(repo),
+    QuickCheck::SharedVersions => shared_versions_check(repo, env),
   }
 }
 

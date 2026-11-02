@@ -5,6 +5,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+use bmo_testbed_core::answer::{Cut, cap_items};
 use bmo_testbed_core::declaration::{QuickCheck, Repository};
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::verbs::VERBS;
@@ -12,6 +13,7 @@ use bmo_testbed_core::turn::{Env, process_env};
 use bmo_testbed_core::verb::{REFUSED_EXIT_CODE, data_root};
 use bmo_testbed_suite::check::{CheckAsk, default_log, plan, run_check, run_step};
 use bmo_testbed_suite::quick::language::{language_report, settle};
+use bmo_testbed_suite::quick::shared_versions::shared_versions_report;
 use bmo_testbed_suite::quick::{Checked, enabled_checks, quick_check};
 use bmo_testbed_suite::test_server::test_server_up;
 
@@ -110,6 +112,7 @@ pub fn checked_part(part: CheckPart, repo: &Repository, env: &Env, base: &Path) 
     CheckPart::Dependencies => QuickCheck::Dependencies,
     CheckPart::Language { .. } => QuickCheck::Language,
     CheckPart::CargoProfile => QuickCheck::CargoProfile,
+    CheckPart::SharedVersions { .. } => QuickCheck::SharedVersions,
     CheckPart::Dashes { .. } => QuickCheck::Dashes,
   };
 
@@ -128,7 +131,43 @@ pub fn checked_part(part: CheckPart, repo: &Repository, env: &Env, base: &Path) 
       ..Said::default()
     },
     CheckPart::Dashes { files, write } => dashes(&files, base, write),
+    CheckPart::SharedVersions { report: true } => reported(repo, env),
     _ => printed(&[quick_check(named, repo, env)]),
+  }
+}
+
+// Every checkout of the machine's registry held to the shared versions: a line each, cut to whole lines
+// under the ceiling, and the count of those that differ; 1 where any differs.
+fn reported(repo: &Repository, env: &Env) -> Said {
+  let words = &bmo_testbed_core::policy::quick_checks::QUICK_CHECKS.shared_versions;
+
+  match shared_versions_report(repo, env) {
+    Ok(report) => {
+      let render = |kept: &[String]| kept.join("\n");
+      let capped = cap_items(&report.rows, render, Cut::new(&words.report_unit, &words.report_how));
+      let mut out: Vec<String> = capped.kept.to_vec();
+
+      out.extend(capped.note);
+      out.push(fill_marks(
+        &words.report_total,
+        &[
+          ("differs", &report.differs.to_string()),
+          ("all", &report.all.to_string()),
+          ("file", &words.file),
+        ],
+      ));
+
+      Said {
+        out,
+        code: u8::from(report.differs > 0),
+        ..Said::default()
+      }
+    }
+    Err(why) => Said {
+      err: vec![why],
+      code: 1,
+      ..Said::default()
+    },
   }
 }
 

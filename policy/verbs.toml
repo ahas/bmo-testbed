@@ -111,7 +111,8 @@ sweep  every other template made more than a day ago whose pool no living proces
        pool, and every scratch database whose process is gone"""
 check = """
 usage: {verb} check [--since <commit> | <file…>] [--log <path>] [--json]
-       {verb} check quick | wording | layout | dependencies | cargo-profile
+       {verb} check quick | wording | layout | dependencies | cargo-profile | shared-versions
+       {verb} check shared-versions --report
        {verb} check language [--kinds] [--settle] [<prefix>]
        {verb} check dashes <file…> [--write]
 
@@ -125,7 +126,9 @@ output one command run once it has ended. Exits 1 where a step failed and 2 wher
 could not be read.
 
 quick         every quick check the declaration enables
-wording, layout, dependencies, cargo-profile, language  that check alone
+wording, layout, dependencies, cargo-profile, shared-versions, language  that check alone
+shared-versions --report  every checkout of the machine's registry held to the shared versions, each
+              with its own exceptions, a line each; changes nothing
 language      --settle lowers the ledger; --kinds, or a prefix, prints the lines that are not
               English by what holds them; korean names the same check
 dashes        each line of the markdown files named where a dash between words would change;

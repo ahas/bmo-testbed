@@ -255,6 +255,12 @@ pub enum CheckPart {
   Layout,
   Dependencies,
   CargoProfile,
+  /// The manifests and locks held to the shared versions; `--report` holds every checkout of the
+  /// machine's registry to them instead.
+  SharedVersions {
+    #[arg(long)]
+    report: bool,
+  },
   /// The lines that are not English; `korean` names it as well.
   #[command(alias = "korean")]
   Language {
@@ -357,7 +363,16 @@ fn usage(text: &str) -> String {
 pub fn read(args: impl IntoIterator<Item = OsString>) -> Result<Words, clap::Error> {
   let said = &VERBS.usage;
   let check = usage(&said.check);
-  let parts = ["quick", "wording", "layout", "dependencies", "cargo-profile", "language", "dashes"];
+  let parts = [
+    "quick",
+    "wording",
+    "layout",
+    "dependencies",
+    "cargo-profile",
+    "shared-versions",
+    "language",
+    "dashes",
+  ];
   let command = Words::command()
     .override_help(usage(&said.binary))
     .mut_subcommand("run", |verb| verb.override_help(usage(&said.run)))

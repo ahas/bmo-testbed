@@ -277,7 +277,8 @@
   absolute, begins with `~/`, or is read against the registry file's folder. The file is
   `checkouts.toml` under the data root's `testbed/` unless `BMO_TESTBED_CHECKOUTS` names another. A registry
   that does not stand holds no checkouts; one that does not read is refused. The hosted deploy tool finds the
-  checkout it deploys from in the same registry (`docs/deploy.md`, 「The hosted deploy tool」), and the prune
+  checkout it deploys from in the same registry (`docs/deploy.md`, 「The hosted deploy tool」), the
+  `shared-versions` quick check the repository holding the shared versions (`docs/checks.md`), and the prune
   the deploy roots whose build trees it takes (`docs/deploy.md`, 「The Cargo build directory」).
 - **The `dependents` verb** reads the registry and answers every checkout whose declaration names the current
   repository in `upstreams`, each by its declared name and root. It answers the direct consumers only; it

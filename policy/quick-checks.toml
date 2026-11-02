@@ -69,6 +69,57 @@ incremental = false
 debug = false
 strip = "debuginfo"
 
+[shared_versions]
+# The shared versions' file at the root of the repository the declaration names, and its two tables: the
+# line each listed crate is written with, and the version each crate below them is locked at.
+file = "shared-versions.toml"
+lines = "dependencies"
+snapshot = "snapshot"
+# The lock a checkout's Cargo build resolves into, and the beginnings of a registry package's source.
+lock = "Cargo.lock"
+registry_sources = ["registry+", "sparse+"]
+clean = "{count} entries hold to the shared versions"
+# Where the shared versions stand: {registry} the machine's registry of checkouts, {repository} the name the
+# declaration gives, {roots} the checkouts declaring it, {path} the file and {why} what it came to.
+unread_registry = "the registry of checkouts {registry} does not read: {why}"
+no_checkout = "no checkout in the registry {registry} declares {repository}, whose root holds the shared versions"
+two_checkouts = "more than one checkout in the registry {registry} declares {repository}: {roots}"
+not_shared = "{path} does not read as the shared versions: {why}"
+not_manifest = "{path} does not read as a Cargo manifest: {why}"
+not_lock = "{path} does not read as a Cargo lock: {why}"
+# A manifest's entry for a listed crate: {manifest}, the [{table}] it stands in, the crate {name}, the
+# entry {found} as it reads and the line {wanted} to write instead.
+line = "{manifest}: [{table}] {name} = {found}; write: {wanted}"
+inherited = "{manifest}: [{table}] {name} = {found} adds to the workspace's line; write: {wanted}"
+# The line of an entry that takes the workspace's, as it is written plainly and where it is optional.
+inherit = "{name}.workspace = true"
+inherit_optional = "{name} = { workspace = true, optional = true }"
+# The only keys an entry taking the workspace's line may hold.
+inherit_keys = ["workspace", "optional"]
+# A locked crate: {lock}, the crate {name} at {found} where the snapshot holds {wanted}.
+locked = "{lock}: {name} {found} where the snapshot holds {wanted}; run: bmo-testbed cargo update -p {name}@{found} --precise {wanted}"
+# An exception of the declaration that does not stand: the crate {name}, a {version} it names, {why} its
+# line does not read.
+not_listed = "the exception for {name} is for a crate the shared versions list no line or version of"
+same_line = "the exception for {name} writes the shared line itself"
+not_locked = "the exception for {name} names {version}, which no lock holds"
+bad_line = "the exception for {name} does not read as one line for {name}: {why}"
+# `check shared-versions --report`: a checkout by its declared {name}, how many entries it holds and how
+# many differ, the {crates} whose lines differ, the {versions} its lock holds otherwise as `{name}
+# {found}→{wanted}`, and the {others} faults; then how many checkouts differ of all read.
+report_clean = "{name}: holds to the shared versions ({count} entries)"
+report_differs = "{name}: {count} to fix: {parts}"
+report_lines = "lines {crates}"
+report_locked = "lock {versions}"
+report_version = "{name} {found}→{wanted}"
+report_others = "{count} other"
+report_joiner = "; "
+report_list_joiner = ", "
+report_unread = "{path}: {why}"
+report_total = "{differs} of {all} checkouts differ from {file}"
+report_unit = "checkouts"
+report_how = "run bmo-testbed check shared-versions in a checkout left out"
+
 [layout]
 clean = "none over {count} files"
 readme = "README.md"

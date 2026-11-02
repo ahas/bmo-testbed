@@ -30,7 +30,7 @@ license = "MIT"
 # document's terms, and the dashes a person would not type.
 bmo-text = { path = "../../base/text", version = "=0.1.0-rev.5", default-features = false }
 # The HTTP service's routes, and a stand-in placement endpoint served by the binary's tests.
-axum = "0.8.9"
+axum = { version = "0.8.9", features = ["macros", "multipart", "ws"] }
 # The shell line a heavy-command classification reads, split the way the shell splits it.
 brush-parser = "0.4.0"
 chrono = { version = "0.4.41", default-features = false, features = ["std"] }
@@ -60,8 +60,10 @@ rusqlite = { version = "0.32.1", features = ["bundled"] }
 # The JSON Schemas of the members, the tools' inputs and outputs and the OpenAPI document.
 schemars = "1.0.4"
 # The placement endpoint, asked over HTTP.
-reqwest = { version = "0.13.5", features = ["json"] }
+reqwest = { version = "0.13.5", features = ["json", "query", "stream"] }
 scraper = "0.25.0"
+# A locked version read, to tell its semver line, by the shared versions check.
+semver = "1.0.28"
 # The per-test databases and the migrator a consumer hands in.
 sea-orm = { version = "1.1.17", default-features = false, features = ["macros", "runtime-tokio-rustls", "sqlx-postgres"] }
 sea-orm-migration = { version = "1.1.17", default-features = false, features = ["runtime-tokio-rustls", "sqlx-postgres"] }
@@ -79,9 +81,11 @@ sse-stream = "0.2.6"
 strum = { version = "0.28.0", features = ["derive"] }
 sqlx = { version = "0.8.6", default-features = false, features = ["any", "postgres", "sqlite", "runtime-tokio"] }
 tempfile = "3.20.0"
-tokio = { version = "1.47.0", features = ["macros", "rt", "rt-multi-thread", "net", "time", "signal", "io-util", "process"] }
+tokio = { version = "1.53.3", features = ["fs", "io-std", "io-util", "macros", "net", "process", "rt", "rt-multi-thread", "signal", "sync", "test-util", "time"] }
 # The policy's files and a repository's declaration, read into their types.
 toml = { version = "0.8.23", default-features = false, features = ["parse"] }
+# A manifest read keeping each line as it is written, by the shared versions check.
+toml_edit = { version = "0.22.27", default-features = false, features = ["display", "parse"] }
 # A Rust file's comments, strings and test modules, and a screen's template, read by the quick checks.
 tree-sitter = "0.27.1"
 tree-sitter-html = "0.23.2"

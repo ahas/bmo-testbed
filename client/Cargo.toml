@@ -12,7 +12,7 @@ default = ["http"]
 http = ["dep:reqwest"]
 
 [dependencies]
-reqwest = { workspace = true, features = ["query"], optional = true }
+reqwest = { workspace = true, optional = true }
 schemars.workspace = true
 serde.workspace = true
 serde_json.workspace = true

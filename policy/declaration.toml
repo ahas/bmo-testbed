@@ -52,3 +52,6 @@ needs_data_root = "a deploy root needs its data root"
 half_database = "the migrations and the migrate command are named together or not at all"
 # {id} is the id two steps share.
 duplicate_step = "two steps are named {id}"
+# {name} is the crate an exception to the shared versions is for.
+no_reason = "the exception for {name} gives no reason"
+empty_exception = "the exception for {name} names neither the line written instead nor the versions locked instead"

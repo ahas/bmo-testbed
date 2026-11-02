@@ -472,8 +472,13 @@ fn this_repositorys_own_declaration_reads() {
       QuickCheck::Language,
       QuickCheck::Layout,
       QuickCheck::Dependencies,
-      QuickCheck::CargoProfile
+      QuickCheck::CargoProfile,
+      QuickCheck::SharedVersions
     ]
+  );
+  assert_eq!(
+    declaration.check.shared_versions.as_ref().map(|shared| shared.repository.as_str()),
+    Some("bmo-chat")
   );
   assert_eq!(
     declaration.build.binaries.as_deref(),
@@ -497,4 +502,35 @@ fn the_language_check_and_its_ledger_are_read_under_their_earlier_names() {
   ));
 
   assert!(refusal.contains("ledger"), "{refusal}");
+}
+
+// "the shared versions name their repository and the exceptions, and the check without the table, an
+// exception without a reason and one naming nothing are refused"
+#[test]
+fn the_shared_versions_and_their_exceptions_read_and_what_breaks_them_is_refused() {
+  let declaration = parse(&declared(
+    "[check]\nquick = [\"shared-versions\"]\n\n[check.shared_versions]\nrepository = \"base\"\n\n[check.shared_versions.exceptions.rt]\nreason = \"a dependency asks for more\"\nline = \"rt = \\\"1\\\"\"\nlocked = [\"1.0.1\"]\n",
+  ))
+  .unwrap();
+  let shared = declaration.check.shared_versions.unwrap();
+  let exception = &shared.exceptions["rt"];
+
+  assert_eq!(declaration.check.quick, [QuickCheck::SharedVersions]);
+  assert_eq!(shared.repository, "base");
+  assert_eq!(
+    (exception.line.as_deref(), exception.locked.as_slice()),
+    (Some("rt = \"1\""), &["1.0.1".to_owned()][..])
+  );
+
+  let without = refused(&declared("[check]\nquick = [\"shared-versions\"]\n"));
+  let no_reason = refused(&declared(
+    "[check.shared_versions]\nrepository = \"base\"\n\n[check.shared_versions.exceptions.rt]\nreason = \" \"\nlocked = [\"1.0.1\"]\n",
+  ));
+  let naming_nothing = refused(&declared(
+    "[check.shared_versions]\nrepository = \"base\"\n\n[check.shared_versions.exceptions.rt]\nreason = \"why\"\n",
+  ));
+
+  assert!(without.contains("shared_versions.repository"), "{without}");
+  assert!(no_reason.contains("the exception for rt gives no reason"), "{no_reason}");
+  assert!(naming_nothing.contains("the exception for rt names neither"), "{naming_nothing}");
 }

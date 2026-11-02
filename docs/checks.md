@@ -138,6 +138,31 @@
   `[profile.release]` with `debug = false` and `strip = "debuginfo"`. A setting left out or set otherwise
   is named with what it should be; a repository with no root `Cargo.toml` has nothing to hold. Setting
   them is each repository's own change.
+- **`shared-versions`:** the repository's Cargo manifests and lock hold to the shared versions, as bmo-chat's
+  `docs/conventions.md`, 「Shared versions」, states the rule. It reads files alone and runs no Cargo.
+  - **Where the shared versions stand:** `shared-versions.toml` at the root of the repository the
+    declaration's `[check.shared_versions] repository` names, found in the machine's registry of checkouts
+    (`docs/suite.md`, 「The dependents of a major change」) as the checkout whose declaration gives that name,
+    so a worker's copy and a scratch clone read the same file as the primary checkout. A registry that does
+    not read, no checkout or two declaring the name, and a file that does not read are the check's one fault.
+  - **The manifests:** every `Cargo.toml` the checkout tracks or holds new, in its
+    `[workspace.dependencies]` and in every dependency table, a target's included. An entry naming a listed
+    crate, by its key or by the package it renames, is the file's line byte for byte after its key, its
+    comments aside; an entry taken from the workspace adds nothing but `optional`. A fault names the
+    manifest, the table and the crate, the entry as it reads and the line to write instead.
+  - **The lock:** every `Cargo.lock` the checkout tracks or holds new. A registry package whose name the
+    snapshot lists, on a semver line the snapshot names, stands at the snapshot's version; one on another
+    line passes. A fault names the lock, the crate, both versions and the Cargo verb's `update --precise`
+    line that moves it.
+  - **An exception** the declaration names for a crate (`docs/declaration.md`) holds the crate's entries to
+    the exception's line instead of the file's, and lets the lock hold the versions it names. One for a
+    crate the file does not list, whose line is the file's or does not read as one line for the crate, or
+    naming a version the lock does not hold, is named.
+  - **`check shared-versions --report`** holds every checkout of the registry to the same file, each with
+    the exceptions its own declaration names, whether or not it enables the check, and changes nothing: a
+    line per checkout naming the crates whose entries differ and the lock's versions that differ, a line for
+    each checkout whose declaration does not read, and a last line counting the checkouts that differ. It
+    ends 1 where any checkout differs.
 - **`quick` runs every enabled one** and prints a line for each, ending non-zero where any failed.
 
 ## The change check

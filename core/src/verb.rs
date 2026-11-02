@@ -113,11 +113,20 @@ pub fn status_lines(close_line: Option<&Path>) -> Vec<String> {
 
 /// The data root a run's log goes under: the one `BMO_DATA_DIR` names, or this machine's.
 pub fn data_root() -> PathBuf {
-  match std::env::var_os("BMO_DATA_DIR") {
+  data_root_named(std::env::var_os("BMO_DATA_DIR").as_deref(), std::env::var_os("HOME").as_deref())
+}
+
+/// The data root the environment `env` names: its `BMO_DATA_DIR`, or the one under its `HOME`.
+pub fn data_root_of(env: &Env) -> PathBuf {
+  let named = |key: &str| env.get(key).map(std::ffi::OsStr::new);
+
+  data_root_named(named("BMO_DATA_DIR"), named("HOME"))
+}
+
+fn data_root_named(named: Option<&std::ffi::OsStr>, home: Option<&std::ffi::OsStr>) -> PathBuf {
+  match named {
     Some(named) if !named.is_empty() => PathBuf::from(named),
-    _ => std::env::var_os("HOME")
-      .map_or_else(|| PathBuf::from("/"), PathBuf::from)
-      .join(".local/share/bmo/data"),
+    _ => PathBuf::from(home.unwrap_or("/".as_ref())).join(".local/share/bmo/data"),
   }
 }
 

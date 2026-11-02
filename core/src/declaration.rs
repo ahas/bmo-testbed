@@ -3,7 +3,7 @@
 //! name, a major of another testbed's and keys that break what they ask of each other are refused as the
 //! file is read; with no file, or outside any checkout, every default stands.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
@@ -219,6 +219,7 @@ pub enum QuickCheck {
   Layout,
   Dependencies,
   CargoProfile,
+  SharedVersions,
 }
 
 impl QuickCheck {
@@ -228,7 +229,7 @@ impl QuickCheck {
     match self {
       Self::Wording => Some(("wording_document", check.wording_document.as_deref())),
       Self::Language => Some(("language_ledger", check.language_ledger.as_deref())),
-      Self::Dashes | Self::Layout | Self::Dependencies | Self::CargoProfile => None,
+      Self::Dashes | Self::Layout | Self::Dependencies | Self::CargoProfile | Self::SharedVersions => None,
     }
   }
 
@@ -241,6 +242,7 @@ impl QuickCheck {
       Self::Layout => "layout",
       Self::Dependencies => "dependencies",
       Self::CargoProfile => "cargo-profile",
+      Self::SharedVersions => "shared-versions",
     }
   }
 }
@@ -266,6 +268,9 @@ pub struct Check {
   /// together; a declaration naming both adds them.
   #[serde(default)]
   pub upstreams: Vec<String>,
+  /// What the `shared-versions` check reads: where the shared versions stand and this repository's
+  /// exceptions to them.
+  pub shared_versions: Option<SharedVersions>,
   #[serde(default = "Check::main")]
   pub main: String,
   /// `[[check.step]]`, in order.
@@ -283,6 +288,30 @@ impl Default for Check {
   fn default() -> Self {
     empty()
   }
+}
+
+/// `[check.shared_versions]`: the repository holding the shared versions, and the crates this one takes
+/// otherwise.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SharedVersions {
+  /// The repository whose root holds the shared versions, by its declared name.
+  pub repository: String,
+  /// `[check.shared_versions.exceptions.<crate>]`, by the crate's name.
+  #[serde(default)]
+  pub exceptions: BTreeMap<String, SharedException>,
+}
+
+/// One crate a repository takes otherwise than the shared versions, and why.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SharedException {
+  pub reason: String,
+  /// The line the manifests write for the crate instead of the shared one, its key included.
+  pub line: Option<String>,
+  /// The versions of the crate the lock holds instead of the snapshot's.
+  #[serde(default)]
+  pub locked: Vec<String>,
 }
 
 /// One static step of `[[check.step]]`.
@@ -548,6 +577,31 @@ impl Declaration {
         return Some((
           "check.quick",
           fill_marks(&why.needs_input, &[("name", quick.name()), ("input", input)]),
+        ));
+      }
+    }
+
+    if self.check.quick.contains(&QuickCheck::SharedVersions) && self.check.shared_versions.is_none() {
+      return Some((
+        "check.quick",
+        fill_marks(
+          &why.needs_input,
+          &[("name", QuickCheck::SharedVersions.name()), ("input", "shared_versions.repository")],
+        ),
+      ));
+    }
+
+    let exceptions = self.check.shared_versions.iter().flat_map(|shared| &shared.exceptions);
+
+    for (name, exception) in exceptions {
+      if exception.reason.trim().is_empty() {
+        return Some(("check.shared_versions.exceptions", fill_marks(&why.no_reason, &[("name", name)])));
+      }
+
+      if exception.line.is_none() && exception.locked.is_empty() {
+        return Some((
+          "check.shared_versions.exceptions",
+          fill_marks(&why.empty_exception, &[("name", name)]),
         ));
       }
     }

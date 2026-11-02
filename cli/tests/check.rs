@@ -74,3 +74,45 @@ fn dashes_shows_the_lines_it_would_change_and_writes_them_only_with_write() {
   assert_eq!(dashes(&words(&["doc.md"]), dir.path(), false).out, ["no dash to change"]);
   assert_eq!(dashes(&words(&["gone.md"]), dir.path(), false).err, ["no such file: gone.md"]);
 }
+
+// "shared-versions --report says a line for each checkout of the registry and how many differ, and ends 1
+// where any does"
+#[test]
+fn shared_versions_report_says_a_line_for_each_checkout_and_how_many_differ() {
+  let dir = tempfile::tempdir().unwrap();
+  let base = dir.path().join("base");
+  let unit = dir.path().join("unit");
+
+  checkout(&base, "testbed = 0\nname = \"shared-base\"\n");
+  std::fs::write(base.join("shared-versions.toml"), "[dependencies]\nrt = \"1.4.0\"\n").unwrap();
+  checkout(
+    &unit,
+    "testbed = 0\nname = \"unit\"\n\n[check]\nquick = [\"shared-versions\"]\n\n[check.shared_versions]\nrepository = \"shared-base\"\n",
+  );
+  std::fs::write(
+    unit.join("Cargo.toml"),
+    "[package]\nname = \"unit\"\n\n[dependencies]\nrt = \"1.3.0\"\n",
+  )
+  .unwrap();
+  std::fs::create_dir_all(dir.path().join("data/testbed")).unwrap();
+  std::fs::write(
+    dir.path().join("data/testbed/checkouts.toml"),
+    "checkouts = [\"../../base\", \"../../unit\"]\n",
+  )
+  .unwrap();
+
+  let repo = Repository::read(&unit).unwrap();
+  let env =
+    Env::from([("BMO_DATA_DIR".to_owned(), dir.path().join("data").to_string_lossy().into_owned())]);
+  let said = checked_part(CheckPart::SharedVersions { report: true }, &repo, &env, &unit);
+
+  assert_eq!(said.code, 1, "{said:?}");
+  assert_eq!(
+    said.out,
+    [
+      "shared-base: holds to the shared versions (0 entries)",
+      "unit: 1 to fix: lines rt",
+      "1 of 2 checkouts differ from shared-versions.toml",
+    ]
+  );
+}

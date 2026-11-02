@@ -16,6 +16,7 @@ mod quick_dashes;
 mod quick_dependencies;
 mod quick_language;
 mod quick_layout;
+mod quick_shared_versions;
 mod quick_source;
 mod quick_wording;
 mod selection;
