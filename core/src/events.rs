@@ -7,7 +7,6 @@ use std::io::Write as _;
 use std::os::unix::process::CommandExt as _;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use serde_json::Value;
@@ -15,7 +14,7 @@ use serde_json::Value;
 use crate::declaration::{Events, Repository};
 use crate::policy::events::EVENTS;
 use crate::policy::fill_marks;
-use crate::turn::{Env, stop_tree};
+use crate::turn::Env;
 
 /// The variable naming the event hook over the declaration's.
 pub const EVENT_HOOK_VARIABLE: &str = "BMO_TESTBED_EVENT_HOOK";
@@ -44,7 +43,6 @@ struct Payload<'a> {
 /// Where events go: the hook, its time, and the repository and tree they happen in.
 pub struct Hook {
   pub command: Option<String>,
-  pub timeout: Duration,
   pub repository: Option<String>,
   pub root: Option<PathBuf>,
 }
@@ -62,7 +60,6 @@ impl Hook {
 
     Self {
       command,
-      timeout: Duration::from_secs(declared.timeout_seconds),
       repository: repo.map(Repository::name),
       root: repo.map(|repo| repo.root.clone()),
     }
@@ -114,28 +111,11 @@ impl Hook {
       let _ = input.write_all(payload.as_bytes());
     }
 
-    let began = Instant::now();
-    let poll = Duration::from_millis(EVENTS.poll_milliseconds);
-
-    loop {
-      match child.try_wait() {
-        Ok(Some(status)) if status.success() => return,
-        Ok(Some(status)) => return failed(&status.to_string()),
-        Ok(None) if began.elapsed() < self.timeout => std::thread::sleep(poll),
-        Ok(None) => {
-          stop_tree(i64::from(child.id()), Duration::ZERO);
-          let _ = child.wait();
-          eprintln!(
-            "{}",
-            fill_marks(
-              &said.overran,
-              &[("event", event.name), ("seconds", &self.timeout.as_secs().to_string())]
-            )
-          );
-          return;
-        }
-        Err(why) => return failed(&why.to_string()),
-      }
+    // The hook is waited for until it ends, however long that takes.
+    match child.wait() {
+      Ok(status) if status.success() => {}
+      Ok(status) => failed(&status.to_string()),
+      Err(why) => failed(&why.to_string()),
     }
   }
 }

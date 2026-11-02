@@ -31,7 +31,7 @@ fn schema() -> Value {
   serde_json::from_str(&std::fs::read_to_string(folder().join(input)).unwrap()).unwrap()
 }
 
-// "the manifest names the tool for its folder, the crate's binary and an hour's timeout"
+// "the manifest names the tool for its folder and the crate's binary, and no span a call must end within"
 #[test]
 fn the_manifest_names_the_tool_for_its_folder_and_runs_the_crates_binary() {
   let manifest = toml_of(&folder().join("tool.toml"));
@@ -43,7 +43,7 @@ fn the_manifest_names_the_tool_for_its_folder_and_runs_the_crates_binary() {
   assert_eq!(manifest["tool"]["protocol"].as_integer(), Some(i64::from(DEPLOY_TOOL.protocol)));
   assert_eq!(text(&manifest, &["tool", "language"]), "rust");
   assert_eq!(words(&manifest["tool"]["run"]), [binary]);
-  assert_eq!(manifest["tool"]["timeout"].as_integer(), Some(3600));
+  assert!(manifest["tool"].get("timeout").is_none());
   assert!(text(&manifest, &["tool", "build"]).contains(&format!("-p {package} ")));
   assert!(text(&manifest, &["tool", "build"]).contains(&format!("/release/{binary}\"")));
 }

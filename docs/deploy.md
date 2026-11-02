@@ -4,7 +4,7 @@
 
 - **The `deploy` verb puts one commit of a repository live** on the machine it runs on, as a release
   beside the one serving, flipped onto in one rename, with its declared services restarted and
-  watched, and rolled back where they do not stay up. What the repository builds, which services it
+  watched, and rolled back where they do not come up. What the repository builds, which services it
   runs and how its health is read are its declaration's (`docs/declaration.md`).
 - **The hosted deploy tool** puts a commit live for a session the verb refuses, through the tool host
   (「The hosted deploy tool」).
@@ -118,7 +118,7 @@
   - `timer`: a timer, with the service of its own name beside it, linked, the timer enabled and
     started.
   - `link`: a unit something else starts, linked and nothing more.
-  - `retire`: a unit that goes; once the `bot` service has answered and stayed up, it is stopped,
+  - `retire`: a unit that goes; once the `bot` service has come up, it is stopped,
     disabled and unlinked, a timer's service with it.
 - **Before anything changes, every unit link into the deploy tree is read,** and the commit asked
   whether it has the file it points at. A link the commit would leave dangling is matched to the one
@@ -152,7 +152,7 @@
   and woken by it once the deployment has ended.
 - **Its full name is `testbed/deploy`:** the namespace `testbed` and the entry `deploy`, shown only to a
   session whose record holds the capability `deploy`. The entry acts, so the toolbook reaches it by
-  `act`. A call is allowed an hour, since a deployment whose suite is long runs past twenty minutes.
+  `act`. A call waits for its deployment however long it takes; its manifest names no span.
 - **Its arguments,** stated by the input schema beside its manifest:
 
   | Argument | Type | Meaning |
@@ -173,8 +173,7 @@
   from, its `bin/bmo-testbed`, or `bmo-testbed` on the path where the tool runs from anywhere else.
 - **It waits the deployment out:** it reads the unit's name off the line the verb prints, asks the
   service manager every few seconds whether the unit is still active, and once it is not, reads the
-  deployment record under the repository's deploy root. A unit still active as the call's hour runs out
-  is answered as an error naming the unit and the command that reads its journal.
+  deployment record under the repository's deploy root, however long the unit runs.
 - **What it answers:**
   - **live:** where the record names the commit asked for and was written after the call began, a first
     line `live:` with the commit and its subject, then the commit live before it, the reason and the
@@ -224,10 +223,9 @@
 8. **Wait for quiet,** where the declaration names a `quiet` command: run from the release, it answers 0
    where no work stands under way that a restart would cut. Where it answers anything else, the line
    says so with what the command named, and it is asked again every few seconds (the testbed's policy)
-   for at most `quiet_wait_seconds`. Still not quiet, the deployment stops as a failed step before the flip
-   does, with nothing flipped and the release kept for the next run, unless it was asked with `--force-live`, which says the work it
-   cuts and goes on. This is the last step before the record, so the moment it answers 0 is seconds
-   before the services stop.
+   until it answers 0, however long the work takes. A deployment asked with `--force-live` does not wait:
+   it says the work it cuts and goes on at once. This is the last step before the record, so the moment it
+   answers 0 is seconds before the services stop.
 9. **Record it** in `deployed.json` and `deployed.log` under the deploy root. The record names, beside
    the commit, its subject, when it was laid down and the backup, the reason the deploy was made and
    the release's version: the reason is `--message` where the caller gave one, else the commit's
@@ -238,14 +236,15 @@
 11. **Restart:** relink the dangling unit links, link the marked units, reload, restart the `restart`
     units and the `binary` units whose binaries changed, then the `bot` service.
     - With `--before-start <command>`, stop the `bot` service, run the command, then start it.
-    - Wait until the declared health answers, at most five minutes, then watch the `bot` service stay
-      up thirty seconds: active and running throughout, the same main process, no automatic restart.
-      A `bot` service with no health declared is only watched staying up.
-    - A unit that will not restart, a health that does not answer, or a service that does not stay up
-      is rolled back (「Rollback」).
+    - Wait until the declared health answers, however long that takes, or until the `bot` service gives
+      up starting: systemd holds it failed or inactive, or has restarted it since the wait began, which
+      says the process the restart started has ended. Then read the unit once: up is active and running.
+      A `bot` service with no health declared is up where that reading finds it running.
+    - A unit that will not restart, one that gives up starting before its health answers, or one not
+      read running once it came up is rolled back (「Rollback」).
     - Then the `retire` units go.
-12. **The steps after the health,** declared with that phase, in order. One that fails or overruns its
-    time is a warning in the deploy output and never fails the deployment; the next deployment runs it
+12. **The steps after the health,** declared with that phase, in order, each run until it ends. One that
+    fails is a warning in the deploy output and never fails the deployment; the next deployment runs it
     again, so a step is written to do only what is due.
 13. **Prune the releases.** A release that cannot be removed is a warning.
 14. **Start the backup upload,** where the declaration names a remote, as a transient user unit of its
@@ -286,8 +285,8 @@
 
 ## Rollback
 
-- **When:** a unit cannot be started or restarted, the health does not answer within five minutes, or
-  the service answers and then does not stay up thirty seconds.
+- **When:** a unit cannot be started or restarted, the `bot` service gives up starting before its health
+  answers, or it is not read running once it came up.
 - **What the deploy output says first,** so the reason survives the rollback: what was waited for and
   what the last ask heard; the unit as systemd holds it, its state, its main process, its restarts and
   last exit status; the machine's load and its pressure stalls; the tail of the service's journal since
@@ -299,7 +298,7 @@
   3. writes that commit back as the deployment record, with a line in the log saying it was a rollback;
   4. reloads the units and restarts the service, with the `binary` units whose binaries differ between
      the two releases;
-  5. waits for the health again and watches it stay up the same thirty seconds.
+  5. waits for the health again and reads the unit the same way.
 - **The release tree and the service manager are reached through two hands,** one for the tree and one
   for the services, so a test drives a rollback with stand-ins for both.
 - **It moves the code alone.** Data the failed release wrote stays; the backup the deployment took
@@ -350,8 +349,8 @@
 
 - **The `backups` verb,** started by every deployment as its last step in a unit of its own, and run by
   hand the same way.
-- **One at a time:** a run that finds another going waits for it, up to three hours, then works on what
-  it left.
+- **One at a time:** a run that finds another going waits for it to end, however long it takes, saying
+  so every thirty seconds, then works on what it left.
 - **What it sends:** every backup in the directory not yet confirmed, newest first, unless as many newer
   ones as are kept already stand remotely.
 - **A copy is confirmed only once read back.** The local file's SHA-256 is taken; it is uploaded with
@@ -382,8 +381,9 @@
   carried has passed, the units of the checkout's own crates that its earlier builds left and this one
   replaced go. What a build stands on is Cargo's own word, its JSON messages. A record in the
   checkout's target directory names, for each shape of build, the unit its last build stood on at each
-  place, with the generation it was built in. The removal takes Cargo's build lock for a few seconds
-  only, stands in no queue of its own, and never fails its build.
+  place, with the generation it was built in. The removal takes Cargo's build lock only where no build
+  holds it at that moment, leaving what it found to the next build otherwise; it stands in no queue of
+  its own, and never fails its build.
 - **The prune,** the `prune` verb, run every six hours by `bmo-cargo-prune.timer`, holding Cargo's own
   build lock in every profile directory and standing at the front of each lock's line, never in the
   testbed's:
@@ -396,7 +396,8 @@
   - never a unit a live checkout's current outputs or record stand on, nor anything Cargo does not name
     by a unit hash, nor a `target/` a Cargo process is working in or that is the shared directory
     itself.
-- **Where a lock does not come within its wait,** nothing is removed and it exits 75.
+- **A lock a build holds is waited for** until that build lets go, however long it takes, the prune saying
+  every thirty seconds which profile directory it waits on.
 - **`--dry-run`** says what it would remove; **`--all`** clears the whole directory but Cargo's lock
   files, run by hand only.
 - **Its ceiling is 120 GB, and 8 GB more for each live checkout that records its builds.** A timed prune

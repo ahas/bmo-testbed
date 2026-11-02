@@ -271,8 +271,8 @@ fn node_reads_node_s_vitest_s_and_jest_s_summaries_and_failures() {
   assert_eq!(Node.tally("built in 3s"), None);
 }
 
-// "a file language names its test files, runs them handed the per-test limit its own way unless the caller
-// names one, and runs a project's script"
+// "a file language names its test files, runs them with no per-test limit of its runner's own standing unless
+// the caller names one, and runs a project's script"
 #[test]
 fn a_file_language_names_runs_and_checks_its_own() {
   let one = words(&["a.test.ts"]);
@@ -280,39 +280,36 @@ fn a_file_language_names_runs_and_checks_its_own() {
 
   assert_eq!(Bun.test_naming(), ["*.test.ts", "**/*.test.ts"]);
   assert_eq!(
-    Bun.test_command(&one, &words(&["--bail"]), Some(30)),
-    Some(words(&["bun", "test", "--bail", "--timeout", "30000", "./a.test.ts"]))
+    Bun.test_command(&one, &words(&["--bail"])),
+    Some(words(&["bun", "test", "--bail", "--timeout", "0", "./a.test.ts"]))
   );
   assert_eq!(
-    Bun.test_command(&one, &words(&["--timeout=5000"]), Some(30)),
+    Bun.test_command(&one, &words(&["--timeout=5000"])),
     Some(words(&["bun", "test", "--timeout=5000", "./a.test.ts"]))
   );
   assert_eq!(
-    Bun.test_command(&two, &[], None),
-    Some(words(&["bun", "test", "--parallel", "./a.test.ts", "./b.test.ts"]))
+    Bun.test_command(&two, &[]),
+    Some(words(&["bun", "test", "--parallel", "--timeout", "0", "./a.test.ts", "./b.test.ts"]))
   );
   assert_eq!(Bun.script_command("check"), Some(words(&["bun", "run", "check"])));
 
   let js = words(&["a.test.mjs"]);
 
   assert!(Node.test_naming().contains(&"**/*.test.mjs"));
+  assert_eq!(Node.test_command(&js, &[]), Some(words(&["node", "--test", "a.test.mjs"])));
   assert_eq!(
-    Node.test_command(&js, &[], Some(30)),
-    Some(words(&["node", "--test", "--test-timeout=30000", "a.test.mjs"]))
-  );
-  assert_eq!(
-    Node.test_command(&js, &words(&["--test-timeout", "100"]), Some(30)),
+    Node.test_command(&js, &words(&["--test-timeout", "100"])),
     Some(words(&["node", "--test", "--test-timeout", "100", "a.test.mjs"]))
   );
   assert_eq!(Node.script_command("check"), Some(words(&["npm", "run", "check"])));
 
   // A browser file is a bun file, its files declared rather than named; Cargo and the plain language run none.
-  assert_eq!(Browser.test_command(&one, &[], Some(30)), Bun.test_command(&one, &[], Some(30)));
+  assert_eq!(Browser.test_command(&one, &[]), Bun.test_command(&one, &[]));
   assert!(Browser.test_naming().is_empty() && Browser.script_command("check").is_none());
 
   for language in [&Cargo as &dyn Language, PLAIN] {
     assert!(language.test_naming().is_empty(), "{}", language.name());
-    assert_eq!(language.test_command(&one, &[], None), None, "{}", language.name());
+    assert_eq!(language.test_command(&one, &[]), None, "{}", language.name());
     assert_eq!(language.script_command("check"), None, "{}", language.name());
   }
 }
@@ -321,15 +318,13 @@ fn a_file_language_names_runs_and_checks_its_own() {
 #[test]
 fn bun_hands_each_file_as_a_path_and_leaves_one_already_written_as_one() {
   assert_eq!(
-    Bun.test_command(
-      &words(&["unit/a.test.ts", "./b.test.ts", "../c.test.ts", "/abs/d.test.ts"]),
-      &[],
-      None
-    ),
+    Bun.test_command(&words(&["unit/a.test.ts", "./b.test.ts", "../c.test.ts", "/abs/d.test.ts"]), &[]),
     Some(words(&[
       "bun",
       "test",
       "--parallel",
+      "--timeout",
+      "0",
       "./unit/a.test.ts",
       "./b.test.ts",
       "../c.test.ts",

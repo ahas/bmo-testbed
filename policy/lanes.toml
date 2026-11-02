@@ -9,38 +9,27 @@ narrow = "the narrow lane's turn"
 
 # The turn's and the run's own numbers (docs/testbed.md, 「The turn」 and 「The result」).
 [numbers]
-# How long a caller inside a harness's call waits for the turn, and how long one no harness's call bounds.
-harness_wait_seconds = 180
-unit_wait_seconds = 1500
-# How much longer a caller waits while a caller at the front holds the lane or stands ahead of it.
-front_allowance_seconds = 360
-# How long a harness's place in the line is kept once its wait has run out.
-kept_place_seconds = 600
-# How often a waiter says where it stands, and how often a waiter looks at the line.
+# How often a waiter says where it stands, and how often a waiter looks at the line. A waiter waits for its
+# turn however long the line takes.
 notice_seconds = 30
 poll_milliseconds = 500
-# How often the watch on a harness holding a turn looks whether the harness is still there, and how long the
-# holder and what runs under it are given once asked to stop.
+# How often the watch on a harness holding a turn looks whether the harness is still there.
 watch_seconds = 2
-stop_grace_seconds = 5
-# How long a command may hold the machine before it is cut, how many failure lines its result keeps,
-# and how many days a run's log is kept.
-guard_seconds = 1800
+# How many failure lines a run's result keeps, and how many days a run's log is kept.
 failure_lines = 60
 log_keep_days = 7
-# How long a run waits for the placement endpoint's answer before it runs here.
-placement_answer_seconds = 5
 # The narrow lane's width: the machine's width divided by this, never less than one.
 narrow_divisor = 4
 
 # How a command killed for want of memory is run again (docs/testbed.md, 「Memory」): how long it waits
-# before it looks at the memory at all, how many gigabytes have to be available, how often and how long
-# it looks, and how many runs it is given in all, the first included.
+# before it looks at the memory at all, how many gigabytes have to be available, how often it looks, and
+# how often it says it is still waiting, and how many runs it is given in all, the first included. It waits
+# for the memory however long that takes.
 [memory_limits]
 settle_seconds = 30
 needed_gigabytes = 6
 poll_seconds = 5
-wait_seconds = 600
+notice_seconds = 600
 runs = 4
 
 [waiting]
@@ -60,11 +49,10 @@ pid = "pid {pid}"
 [settled]
 inside = "inside the turn its caller holds"
 own = "taken after {seconds}s waiting on other heavy commands on this machine"
-# A turn not had within its wait, {holder} one of `nobody` or the waiting `held_by`, and {kept} the
-# `kept` clause where its place is kept.
-queued = "not had within {seconds}s: {ahead} ahead, {holder}{kept}"
+# A turn not had because the harness its caller ran for went away while it waited, {holder} one of `nobody`
+# or the waiting `held_by`.
+queued = "not had: the harness it waited for went away after {seconds}s, {ahead} ahead, {holder}"
 nobody = "nobody holding it"
-kept = "; its place is kept for {seconds}s, so run the same command again now to wait on from there"
 
 # A heavy run placed on another machine (docs/testbed.md, 「A run on another machine」), {machine} the
 # machine the placement endpoint named.
@@ -90,14 +78,13 @@ line = "waited {waited}s, ran {ran}s"
 # A run whose turn did not come, {turn} the `settled.queued` words.
 not_run = "testbed: FAILED, not run, nothing tested: the machine's turn was {turn}"
 # A run that ran: {verdict} `ok` or `failed`, {language} the language that read it, {counts} the
-# `counts` or the `exit` words, {cut} the `cut` clause where its guard cut it, and {log} its log.
-line = "testbed: {verdict} in {seconds}s (waited {waited}s), {language}: {counts}{cut}; log: {log}"
+# `counts` or the `exit` words, and {log} its log.
+line = "testbed: {verdict} in {seconds}s (waited {waited}s), {language}: {counts}; log: {log}"
 ok = "ok"
 failed = "FAILED"
 counts = "{pass} passed, {fail} failed, {skip} skipped"
 exit = "exit {code}"
 by_signal = "by signal"
-cut = "; cut at its guard"
 # What failed, under the line: the heading, or the heading of a list cut at {count} lines, then each.
 failures = "failed:"
 failures_first = "failed (the first {count}):"
@@ -119,7 +106,6 @@ waiting = "  waiting {at}: {who}"
 age = " ({seconds}s)"
 front = " (at the front)"
 next = " (next after the front)"
-kept = " (place kept for a harness coming back)"
 close_line = "the close line:"
 
 # The `run` verb's refusal of a language it does not know, {name} the name given and {names} the ones
@@ -138,7 +124,7 @@ not_run = "{what} not run: the machine's turn was {turn}"
 took = "{what} took the machine's turn after {seconds}s waiting on other heavy commands on this machine"
 unread = "the available memory cannot be read; running {what} again"
 freed = "{available} available; running {what} again"
-short = "only {available} available after {minutes} minutes; running {what} again anyway"
+short = "only {available} available after {minutes} minutes; {what} waits for more before it runs again"
 fenced = "FAILED: {what} failed ({end}) while the kernel killed a process at the {ceiling} memory ceiling of the fence it stands in, {fence}; the same run meets the same ceiling again, so it does not run again"
 spent = "FAILED: {what} failed while the kernel killed a process for want of memory on all {runs} runs; the code was never judged, so run it again once the machine has memory to spare"
 again = "{what} failed ({end}) while the kernel killed a process for want of memory (run {run} of {runs}); this is not taken for the change failing, and it runs again once memory frees"

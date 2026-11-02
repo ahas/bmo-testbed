@@ -107,12 +107,7 @@ fn an_answer_of_local_runs_here_and_the_endpoint_is_told_the_run() {
 
   checkout(&repo, "testbed = 0\n");
 
-  let done = placed(
-    &repo,
-    dir.path(),
-    &local.base,
-    &["run", "--narrow", "--wait", "7", "--", "sh", "-c", "exit 0"],
-  );
+  let done = placed(&repo, dir.path(), &local.base, &["run", "--narrow", "--", "sh", "-c", "exit 0"]);
   let asked = local.asked.lock().unwrap().clone();
 
   assert_eq!(done.code, 0, "{}", done.err);
@@ -120,8 +115,7 @@ fn an_answer_of_local_runs_here_and_the_endpoint_is_told_the_run() {
   assert_eq!(asked.len(), 1);
   assert_eq!(asked[0]["command"], json!(["sh", "-c", "exit 0"]));
   assert_eq!(asked[0]["lane"], "narrow");
-  assert_eq!(asked[0]["wait_seconds"], 7);
-  assert_eq!(asked[0]["guard_seconds"], LANES.numbers.guard_seconds);
+  assert!(asked[0].get("wait_seconds").is_none() && asked[0].get("guard_seconds").is_none());
   assert_eq!(asked[0]["commit"], git(&repo, &["rev-parse", "HEAD"]));
   assert_eq!(asked[0]["checkout"], git(&repo, &["rev-parse", "--show-toplevel"]));
   assert_eq!(asked[0]["remote"], "");

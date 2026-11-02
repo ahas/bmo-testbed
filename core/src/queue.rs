@@ -8,18 +8,11 @@
 //! ahead of its own; the ticket stays while the lock is held and goes on release. A ticket's name sorts
 //! by when it was stood and ends with the process standing it; a front ticket's name opens with a mark
 //! sorting ahead of every time, and a next ticket's with one sorting behind the front's and ahead of every
-//! time. A ticket's file holds the name its taker stands under on its first line and, for a taker that
-//! keeps its place, the key it comes back under and, once kept, the word that says so.
-//!
-//! A taker that may come back keeps its place when its wait runs out: its ticket passes to a stand-in
-//! process living the seconds asked, and a taker asking again under the same key within them takes the
-//! ticket back where it stood. A kept place holds nobody up while its taker is away.
+//! time. A ticket's file holds the name its taker stands under.
 
 use std::fs::{File, OpenOptions};
 use std::os::fd::AsRawFd;
-use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -27,7 +20,6 @@ use crate::policy::lanes::LANES;
 
 const FRONT_MARK: &str = "0-";
 const NEXT_MARK: &str = "0.";
-const KEPT_MARK: &str = "kept";
 
 static TICKETS: AtomicU64 = AtomicU64::new(0);
 
@@ -84,19 +76,13 @@ fn ticket_pid(name: &str) -> i64 {
   name.rsplit('-').next().and_then(|pid| pid.parse().ok()).unwrap_or(0)
 }
 
-// The same place in the line, carried by another process.
-fn ticket_for(name: &str, pid: u32) -> String {
-  format!("{}{pid}", &name[..name.rfind('-').map_or(0, |at| at + 1)])
-}
-
 /// A ticket as the queue holds it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct QueueTicket {
-  /// The process standing it: the taker, or the stand-in keeping its place.
+  /// The process standing it.
   pub pid: i64,
   /// The name its taker stands under; empty where it gave none.
   pub holder: String,
-  pub kept: bool,
   pub front: bool,
   pub next: bool,
 }
@@ -137,7 +123,6 @@ pub fn queue_tickets(path: &Path) -> Vec<QueueTicket> {
       Some(QueueTicket {
         pid,
         holder: lines.first().cloned().unwrap_or_default(),
-        kept: lines.get(2).is_some_and(|word| word == KEPT_MARK),
         front: name.starts_with(FRONT_MARK),
         next: name.starts_with(NEXT_MARK),
       })
@@ -146,8 +131,7 @@ pub fn queue_tickets(path: &Path) -> Vec<QueueTicket> {
 }
 
 // The living ticket standing ahead of this one, as the name it was stood under (empty where its taker
-// gave none), or none where none stands ahead. A kept place is passed over; a ticket whose process is gone
-// is taken away.
+// gave none), or none where none stands ahead. A ticket whose process is gone is taken away.
 fn ticket_ahead(queue: &Path, ticket: &str) -> Option<String> {
   for name in sorted_names(queue)? {
     if name.as_str() >= ticket {
@@ -162,83 +146,10 @@ fn ticket_ahead(queue: &Path, ticket: &str) -> Option<String> {
     // Let go between the listing and the read: the next look finds the queue as it now is.
     let Some(lines) = ticket_lines(queue, &name) else { return Some(String::new()) };
 
-    if lines.get(2).is_none_or(|word| word != KEPT_MARK) {
-      return Some(lines.first().cloned().unwrap_or_default());
-    }
+    return Some(lines.first().cloned().unwrap_or_default());
   }
 
   None
-}
-
-/// A place kept for a taker that comes back.
-#[derive(Clone, Debug)]
-pub struct LockKeep {
-  /// What a taker coming back asks under; the same key takes back a kept ticket.
-  pub key: String,
-  /// How long a place is kept once the wait has run out.
-  pub seconds: u64,
-}
-
-fn ticket_text(holder: &str, keep: Option<&LockKeep>, kept: bool) -> String {
-  match keep {
-    None => holder.to_owned(),
-    Some(keep) if kept => format!("{holder}\n{}\n{KEPT_MARK}", keep.key),
-    Some(keep) => format!("{holder}\n{}", keep.key),
-  }
-}
-
-// The kept ticket standing under the key, taken back for this process: renamed to carry it, in the same
-// place, and its stand-in let go. None where none is kept.
-fn take_back(queue: &Path, key: &str) -> Option<String> {
-  for name in sorted_names(queue)? {
-    let Some(lines) = ticket_lines(queue, &name) else { continue };
-
-    if lines.get(1).is_none_or(|given| given != key)
-      || lines.get(2).is_none_or(|word| word != KEPT_MARK)
-      || !process_alive(ticket_pid(&name))
-    {
-      continue;
-    }
-
-    let mine = ticket_for(&name, std::process::id());
-
-    // Gone between the listing and the rename: its stand-in ended, and the place with it.
-    if std::fs::rename(queue.join(&name), queue.join(&mine)).is_err() {
-      continue;
-    }
-
-    // SAFETY: a signal to the stand-in's own process, which ends it.
-    unsafe { libc::kill(ticket_pid(&name) as i32, libc::SIGTERM) };
-
-    return Some(mine);
-  }
-
-  None
-}
-
-// The ticket handed to a stand-in that keeps the place for the seconds asked; whether it was kept.
-fn keep_place(queue: &Path, ticket: &str, holder: &str, keep: &LockKeep) -> bool {
-  let Ok(mut stand_in) = Command::new("sleep")
-    .arg(keep.seconds.to_string())
-    .stdin(Stdio::null())
-    .stdout(Stdio::null())
-    .stderr(Stdio::null())
-    .process_group(0)
-    .spawn()
-  else {
-    return false;
-  };
-  let kept = ticket_for(ticket, stand_in.id());
-  let handed = std::fs::write(queue.join(ticket), ticket_text(holder, Some(keep), true))
-    .and_then(|()| std::fs::rename(queue.join(ticket), queue.join(&kept)));
-
-  if handed.is_err() {
-    let _ = stand_in.kill();
-    let _ = stand_in.wait();
-    return false;
-  }
-
-  true
 }
 
 /// Asked once a wait has run out, with the name of the taker it waits behind: a later moment to wait until,
@@ -254,7 +165,6 @@ pub struct LockWait<'a> {
   /// held from outside the queue: a later moment to wait until, in milliseconds since the epoch, or none to
   /// give up. A wait that goes on keeps its place in the queue.
   pub wait_on: Option<WaitOn<'a>>,
-  pub keep: Option<LockKeep>,
   pub rank: Rank,
   /// How often a queued taker looks; a test sets it short.
   pub poll: Option<Duration>,
@@ -288,16 +198,12 @@ pub fn take_lock(path: &Path, wait_seconds: f64, mut wait: LockWait<'_>) -> Opti
 
   let queue = queue_dir_of(path);
   let _ = std::fs::create_dir_all(&queue);
-  let ticket = wait
-    .keep
-    .as_ref()
-    .and_then(|keep| take_back(&queue, &keep.key))
-    .unwrap_or_else(|| ticket_name(wait.rank));
+  let ticket = ticket_name(wait.rank);
   let ticket_path = queue.join(&ticket);
   let poll = wait.poll.unwrap_or(Duration::from_millis(LANES.numbers.poll_milliseconds));
   let mut deadline = now_ms() + (wait_seconds.max(0.0) * 1000.0) as i64;
 
-  let _ = std::fs::write(&ticket_path, ticket_text(&wait.holder, wait.keep.as_ref(), false));
+  let _ = std::fs::write(&ticket_path, &wait.holder);
 
   // A taker goes for the lock only while no living ticket stands ahead of its own, and only without
   // waiting on it: a taker blocked inside flock would be handed the lock by the kernel over a ticket stood
@@ -321,11 +227,7 @@ pub fn take_lock(path: &Path, wait_seconds: f64, mut wait: LockWait<'_>) -> Opti
       match later {
         Some(later) if later > now_ms() => deadline = later,
         _ => {
-          let kept = wait.keep.as_ref().is_some_and(|keep| keep_place(&queue, &ticket, &wait.holder, keep));
-
-          if !kept {
-            let _ = std::fs::remove_file(&ticket_path);
-          }
+          let _ = std::fs::remove_file(&ticket_path);
 
           return None;
         }

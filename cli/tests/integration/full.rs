@@ -224,9 +224,9 @@ mod units_a_round_never_started {
 
   fn short() -> String {
     [
-      fill_marks(
-        &SUITE.ending.unstarted_files,
-        &[("guard", "240"), ("files", &["client/a.test.ts", "core/"].join(&SUITE.ending.joiner))],
+      format!(
+        "never started within 240s: {}",
+        ["client/a.test.ts", "core/"].join(&SUITE.ending.joiner)
       ),
       verdict_line(false, 241.0, "8 of 10 files passed, 2 never started within 240s"),
     ]

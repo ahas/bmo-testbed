@@ -148,7 +148,7 @@ fn a_change_read_since_the_commit_its_branch_was_made_from_selects_the_tests_tha
   assert_eq!(names(&named), [DeployStep::Quick.name(), "types", "bun test"]);
   assert_eq!(
     named.steps.iter().find(|step| step.tests).unwrap().step.command,
-    ["bun", "test", "./packages/util/numbers.test.ts"]
+    ["bun", "test", "--timeout", "0", "./packages/util/numbers.test.ts"]
   );
 
   // Read since HEAD on the branch, nothing is changed and no test is owed.
@@ -181,7 +181,11 @@ fn touched_test_files_run_one_step_per_folder_of_their_configuration() {
     .map(|step| (step.name.clone(), step.step.dir.display().to_string(), step.step.command.clone()))
     .collect();
   let ran = |name: &str, dir: &str, file: &str| {
-    (name.to_owned(), dir.to_owned(), ["bun", "test", file].map(str::to_owned).to_vec())
+    (
+      name.to_owned(),
+      dir.to_owned(),
+      ["bun", "test", "--timeout", "0", file].map(str::to_owned).to_vec(),
+    )
   };
 
   assert_eq!(

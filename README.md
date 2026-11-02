@@ -23,7 +23,7 @@ and a release-based deployment of a repository onto the machine it runs on.
 | Document | What it states |
 |---|---|
 | `docs/testbed.md` | The queue: lanes, turns, the front and the next, waiting, width, the result line, languages, placement |
-| `docs/suite.md` | The whole-suite run: sweep, lanes, guards, fence, the test database, what failed runs once more, the daily whole run |
+| `docs/suite.md` | The whole-suite run: sweep, lanes, fence, the test database, what failed runs once more, the daily whole run |
 | `docs/checks.md` | Which tests a change runs, the static check, the quick checks, the change check, imports, the test count |
 | `docs/deploy.md` | Releases, adoption, unit marks, the deploy run, progress, the hosted deploy tool, rollback, refusals, backups, the Cargo build directory |
 | `docs/backup.md` | The data backup: what is backed up, where, how often, the rotation, the restore drill, restoring by hand, the settings |

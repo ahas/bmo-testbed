@@ -33,9 +33,9 @@
 | `languages` | list of strings | `[]` | The kinds of unit the suite gathers: `bun` (test files run by `bun test`), `node` (test files run by `node --test`), `cargo` (crates of the Cargo workspace), `browser` (test files in the browser lane) |
 | `files` | list of globs | each declared language's own naming | The test files of the file languages, each run from the folder of its runner's configuration (`docs/suite.md`, 「Which files run」) |
 | `browser` | list of globs | `[]` | Test files run one at a time in the browser lane |
-| `guard_seconds` | integer | 240 | The whole-run guard |
-| `file_guard_seconds` | integer | 90 | The per-file guard |
-| `test_timeout_seconds` | integer | 30 | The per-test timeout handed to the runner |
+| `guard_seconds` | integer | none | Read and given no effect: every unit of a run is started and runs to its end |
+| `file_guard_seconds` | integer | none | Read and given no effect: a unit runs until it ends |
+| `test_timeout_seconds` | integer | none | Read and given no effect: no per-test limit is handed to the runner, and one a runner keeps by default is lifted (`docs/suite.md`, 「Every unit runs to its end」) |
 | `memory_gb` | integer | 12 | The fence's memory ceiling, which `BMO_SUITE_MEMORY_GB` overrides |
 | `setup` | list of commands | `[]` | Run in order to set up a fresh tree: a release, the daily whole run's tree, a bench copy on another machine |
 
@@ -115,11 +115,11 @@ step that fails stops the deployment with every service untouched.
 | `data_root` | path | required with `root` | The repository's runtime data, inside no checkout |
 | `env_links` | list of tables | `[]` | Each with `link`, a path inside a release, and `target`, a file under the data root; every target must exist |
 | `units` | list of globs | every tracked `*.service` and `*.timer` | Where the commit's unit files stand |
-| `health` | command | none | Answers 0 once the `bot` service is healthy; asked until it does, at most `health_wait_seconds` |
-| `health_wait_seconds` | integer | 300 | The longest wait for the health |
-| `stay_up_seconds` | integer | 30 | How long the `bot` service is watched staying up |
-| `quiet` | command | none | Run from the release just before the record and the flip: answers 0 where no work stands under way that a restart would cut, and any other code where some does, its output naming it; asked again until it answers 0, at most `quiet_wait_seconds` |
-| `quiet_wait_seconds` | integer | 300 | The longest wait for the `quiet` command to answer 0 |
+| `health` | command | none | Answers 0 once the `bot` service is healthy; asked until it does or the unit gives up starting (`docs/deploy.md`, 「What the deploy run does, in order」), each ask waited for until it ends |
+| `health_wait_seconds` | integer | none | Read and given no effect |
+| `stay_up_seconds` | integer | none | Read and given no effect: the `bot` service is up once its health answers and it is read running |
+| `quiet` | command | none | Run from the release just before the record and the flip: answers 0 where no work stands under way that a restart would cut, and any other code where some does, its output naming it; asked again until it answers 0, however long that takes |
+| `quiet_wait_seconds` | integer | none | Read and given no effect |
 | `gate` | boolean | `true` | Run the static check and the suite before deploying |
 
 ### `[[deploy.step]]`: one declared step each, in order
@@ -128,8 +128,8 @@ step that fails stops the deployment with every service untouched.
 |---|---|---|---|
 | `id` | string | required | The step's English id |
 | `command` | command | required | What it runs, from the release |
-| `phase` | string | required | `before-flip`: after the build, before the record and the flip, a failure stops the deployment; `after-health`: once the `bot` service stays up, a failure is a warning |
-| `timeout_seconds` | integer | 1200 | Past it the step is stopped, failing as its phase says |
+| `phase` | string | required | `before-flip`: after the build, before the record and the flip, a failure stops the deployment; `after-health`: once the `bot` service is up, a failure is a warning |
+| `timeout_seconds` | integer | none | Read and given no effect: a step runs until it ends |
 
 ### `[deploy.backup]`: the backup a deployment takes
 
@@ -155,4 +155,4 @@ step that fails stops the deployment with every service untouched.
 | Key | Type | Default | Meaning |
 |---|---|---|---|
 | `hook` | command | none | Run once for each event, its name as the first argument and its payload on standard input (`docs/boundary.md`, 「Events」); `BMO_TESTBED_EVENT_HOOK` overrides it |
-| `timeout_seconds` | integer | 30 | Past it the hook is stopped |
+| `timeout_seconds` | integer | none | Read and given no effect: the hook is waited for until it ends |

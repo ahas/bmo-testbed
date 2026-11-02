@@ -8,20 +8,18 @@ use bmo_testbed_suite::log::{
 };
 use bmo_testbed_suite::run::verdict_line;
 
-// A sweep's closing lines as the run writes them, over a failing test under its file's header.
+// A sweep's closing lines over a failing test under its file's header, with the lines of a cut file and of
+// files never started that a log written by a run with guards holds, which the readers still read.
 fn closing() -> String {
   let said = &SUITE.ending;
 
   [
     "server/one.test.ts:".to_owned(),
     "(fail) one thing went wrong [2.19ms]".to_owned(),
-    fill_marks(
-      &SUITE.file.heading,
-      &[("mark", &SUITE.file.cut), ("seconds", "90.0"), ("file", "client/browser/b.test.ts")],
-    ),
-    fill_marks(&said.cut_files, &[("guard", "90"), ("files", "client/browser/b.test.ts")]),
+    "CUT  90.0s  client/browser/b.test.ts".to_owned(),
+    "did not end within 90s: client/browser/b.test.ts".to_owned(),
     fill_marks(&said.failed_files, &[("files", "server/one.test.ts, server/two.test.ts")]),
-    fill_marks(&said.unstarted_files, &[("guard", "240"), ("files", "server/three.test.ts")]),
+    "never started within 240s: server/three.test.ts".to_owned(),
     verdict_line(false, 334.0, "1 of 4 files passed"),
   ]
   .join("\n")

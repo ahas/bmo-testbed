@@ -500,16 +500,32 @@ fn the_locks_are_cargos_own_build_lock_in_each_profile_directory_held_until_let_
   std::fs::create_dir_all(root.join("debug").join(".fingerprint")).unwrap();
   std::fs::create_dir_all(root.join("release").join(".fingerprint")).unwrap();
 
-  let held = take_prune_locks(&root, 1.0).unwrap();
+  let held = take_prune_locks(&root, 0.01, &|_| {});
   let build_lock = root.join("debug").join(CARGO_BUILD_LOCK_NAME);
 
   assert_eq!(held.len(), 2);
 
-  // A second taker waits behind the holder and is refused once its wait runs out.
-  assert_eq!(take_prune_locks(&root, 0.0).err(), Some(root.join("debug")));
+  // A second taker waits behind the holder until it lets go, told which profile directory it waits on.
+  let second = {
+    let root = root.clone();
+
+    std::thread::spawn(move || {
+      let told = std::sync::Mutex::new(Vec::new());
+      let held = take_prune_locks(&root, 0.01, &|profile| told.lock().unwrap().push(profile.to_path_buf()));
+
+      (held.len(), told.into_inner().unwrap())
+    })
+  };
+
+  std::thread::sleep(std::time::Duration::from_millis(200));
+
+  assert!(!second.is_finished());
 
   drop(held);
 
+  let (taken, told) = second.join().unwrap();
+
   assert!(build_lock.exists());
-  assert_eq!(take_prune_locks(&root, 1.0).map(|held| held.len()).ok(), Some(2));
+  assert_eq!(taken, 2);
+  assert!(told.contains(&root.join("debug")), "{told:?}");
 }

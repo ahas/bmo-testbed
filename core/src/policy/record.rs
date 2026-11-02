@@ -15,7 +15,6 @@ pub struct RecordPolicy {
   pub file: String,
   pub keep_days: i64,
   pub event_window_days: i64,
-  pub busy_milliseconds: u64,
   pub default_limit: i64,
   pub limit_ceiling: i64,
   pub lines: RecordLines,

@@ -1,13 +1,13 @@
 //! The machine's turn (docs/testbed.md, 「The turn」): the queue hands a lock out in the order its takers
-//! asked, the front ahead of everyone and the next behind the front, a harness's place kept for it to come
-//! back to, and a command inside a turn its caller holds running at once.
+//! asked, the front ahead of everyone and the next behind the front, a waiter waiting until the lock is let
+//! go, and a command inside a turn its caller holds running at once.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
-use bmo_testbed_core::queue::{LockKeep, LockWait, Rank, queue_tickets, take_lock};
+use bmo_testbed_core::queue::{LockWait, Rank, now_ms, queue_tickets, take_lock};
 use bmo_testbed_core::turn::{
   Env, HELD_VARIABLE, Lane, TestbedTurn, TurnAsk, TurnEntry, inside_held_turn, lane_width, lock_path,
   read_queue, take_turn,
@@ -76,51 +76,42 @@ fn a_ticket_at_the_front_stands_ahead_of_every_ordinary_one_and_a_next_one_betwe
 }
 
 #[test]
-fn a_harness_s_place_is_kept_when_its_wait_runs_out_and_taken_back_where_it_stood() {
+fn a_waiter_waits_until_the_holder_lets_go_however_long_that_takes() {
   let dir = tempfile::tempdir().unwrap();
   let lock = lock_in(dir.path());
   let held = take_lock(&lock, 1.0, waiting(Rank::Ordinary, "holder")).unwrap();
-  let keep = || LockKeep {
-    key: "job 7".to_owned(),
-    seconds: 30,
+  let waiter = {
+    let lock = lock.clone();
+
+    std::thread::spawn(move || {
+      let mut wait_on = |_: Option<&str>| -> Option<i64> { Some(now_ms() + 10) };
+
+      take_lock(
+        &lock,
+        0.01,
+        LockWait {
+          wait_on: Some(&mut wait_on),
+          ..waiting(Rank::Ordinary, "waiter")
+        },
+      )
+      .is_some()
+    })
   };
-  let gave_up = take_lock(
-    &lock,
-    0.05,
-    LockWait {
-      keep: Some(keep()),
-      ..waiting(Rank::Ordinary, "job")
-    },
-  );
 
-  assert!(gave_up.is_none());
+  std::thread::sleep(Duration::from_millis(200));
 
-  let kept = queue_tickets(&lock);
-
-  assert!(kept.iter().any(|one| one.kept && one.holder == "job"));
-
-  let stand_in = kept.iter().find(|one| one.kept).unwrap().pid;
+  assert!(!waiter.is_finished());
+  assert!(queue_tickets(&lock).iter().any(|one| one.holder == "waiter"));
 
   drop(held);
 
-  let back = take_lock(
-    &lock,
-    1.0,
-    LockWait {
-      keep: Some(keep()),
-      ..waiting(Rank::Ordinary, "job")
-    },
-  );
-
-  assert!(back.is_some());
-  assert!(queue_tickets(&lock).iter().all(|one| one.pid != stand_in));
+  assert!(waiter.join().unwrap());
 }
 
 fn ask(lock: &Path, env: Env) -> TurnAsk<'static> {
   TurnAsk {
     command: "a check".to_owned(),
     lane: Lane::Wide,
-    wait_seconds: Some(0.05),
     say: &|_| {},
     path: Some(lock.to_path_buf()),
     env,
@@ -155,12 +146,21 @@ fn a_turn_held_writes_its_record_and_a_command_under_it_runs_inside() {
   assert!(read_queue(&lock).holder.is_none());
 }
 
+// A harness's process that has ended, so a waiter running for it leaves the line.
+fn gone_harness() -> String {
+  let mut ended = std::process::Command::new("true").spawn().unwrap();
+  let pid = ended.id();
+
+  ended.wait().unwrap();
+  pid.to_string()
+}
+
 #[test]
-fn a_turn_not_had_within_its_wait_says_who_holds_it() {
+fn a_turn_not_had_because_its_harness_went_away_says_who_holds_it() {
   let dir = tempfile::tempdir().unwrap();
   let lock = lock_in(dir.path());
   let first = take_turn(&ask(&lock, Env::from([("BMO_TESTBED_SCOPE".to_owned(), "place-3".to_owned())])));
-  let second = take_turn(&ask(&lock, Env::new()));
+  let second = take_turn(&ask(&lock, Env::from([("CLAUDE_PID".to_owned(), gone_harness())])));
   let holder = TurnEntry {
     scope: Some("place-3".to_owned()),
     checkout: "/checkout".to_owned(),

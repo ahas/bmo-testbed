@@ -7,7 +7,6 @@ use std::process::Command;
 
 use bmo_testbed_core::close_line::{close_line_path, lock_file_name};
 use bmo_testbed_core::placement::{DEPLOY_UNIT_VARIABLE, Local, PlaceAsk, Placement, runs_here};
-use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::turn::{Env, HELD_VARIABLE, Lane};
 use bmo_testbed_core::verb::{REFUSED_EXIT_CODE, RunWords, VerbGround, run};
 use bmo_testbed_core::witness::Unwitnessed;
@@ -18,12 +17,12 @@ fn words(line: &[&str]) -> Vec<String> {
 
 // A placement that answers with a code of its own, and says what it was asked.
 struct Elsewhere {
-  asked: Cell<Option<(Vec<String>, Lane, u64)>>,
+  asked: Cell<Option<(Vec<String>, Lane)>>,
 }
 
 impl Placement for Elsewhere {
   fn place(&self, ask: &PlaceAsk<'_>) -> Option<u8> {
-    self.asked.set(Some((ask.command.to_vec(), ask.lane, ask.guard_seconds)));
+    self.asked.set(Some((ask.command.to_vec(), ask.lane)));
     Some(9)
   }
 }
@@ -63,7 +62,6 @@ fn a_run_ends_with_the_code_its_placement_answers() {
   let asked = RunWords {
     command: words(&["cargo", "test"]),
     narrow: true,
-    guard_seconds: Some(60.0),
     ..RunWords::default()
   };
   // Started outside any turn and any unit, whatever turn the test itself runs in.
@@ -75,7 +73,7 @@ fn a_run_ends_with_the_code_its_placement_answers() {
   };
 
   assert_eq!(run(&asked, &ground).code, 9);
-  assert_eq!(elsewhere.asked.take(), Some((words(&["cargo", "test"]), Lane::Narrow, 60)));
+  assert_eq!(elsewhere.asked.take(), Some((words(&["cargo", "test"]), Lane::Narrow)));
 }
 
 // "a run inside a held turn or a deployment's unit runs where it stands"
@@ -94,24 +92,9 @@ fn placed(env: &Env) -> PlaceAsk<'_> {
   PlaceAsk {
     command: &[],
     lane: Lane::Wide,
-    wait_seconds: 1,
-    guard_seconds: 1,
     cwd: std::env::temp_dir(),
     env,
   }
-}
-
-// "a caller's wait is a harness's call's or a unit's where it names none, and its guard the run's own"
-#[test]
-fn the_wait_and_guard_a_placement_is_handed() {
-  let numbers = &LANES.numbers;
-  let job = Env::from([("CLAUDE_PID".to_owned(), "4242".to_owned())]);
-
-  assert_eq!(PlaceAsk::wait_of(None, &job), numbers.harness_wait_seconds);
-  assert_eq!(PlaceAsk::wait_of(None, &Env::new()), numbers.unit_wait_seconds);
-  assert_eq!(PlaceAsk::wait_of(Some(7.0), &job), 7);
-  assert_eq!(PlaceAsk::guard_of(None), numbers.guard_seconds);
-  assert_eq!(PlaceAsk::guard_of(Some(60.0)), 60);
 }
 
 // "every worktree of one repository shares its close line, and outside a repository there is none"
@@ -162,10 +145,14 @@ fn a_lock_file_name_is_safe_short_and_apart() {
   assert!(lock_file_name("::").starts_with("root-"));
 }
 
-// The usage's defaults are the policy's own numbers, each a mark the binary fills.
+// The usage names the binary by its mark, and no span of the turn's or the run's.
 #[test]
-fn the_run_usage_names_the_policys_numbers_by_their_marks() {
-  for mark in ["{verb}", "{guard}", "{harness_wait}", "{unit_wait}", "{kept}"] {
-    assert!(bmo_testbed_core::policy::verbs::VERBS.usage.run.contains(mark), "{mark}");
+fn the_run_usage_names_the_binary_by_its_mark_and_no_span() {
+  let usage = &bmo_testbed_core::policy::verbs::VERBS.usage.run;
+
+  assert!(usage.contains("{verb}"));
+
+  for mark in ["{guard}", "{harness_wait}", "{unit_wait}", "{kept}"] {
+    assert!(!usage.contains(mark), "{mark}");
   }
 }

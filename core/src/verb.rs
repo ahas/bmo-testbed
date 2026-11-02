@@ -26,8 +26,6 @@ pub struct RunWords {
   pub command: Vec<String>,
   pub narrow: bool,
   pub adapter: Option<String>,
-  pub guard_seconds: Option<f64>,
-  pub wait_seconds: Option<f64>,
   /// The lines go to standard error, so the binary's standard output carries the outcome alone.
   pub json: bool,
 }
@@ -55,7 +53,6 @@ fn entry_line(entry: &TurnEntry, now: i64) -> String {
     age(entry.since.unwrap_or(entry.asked), now),
     if entry.front { said.front.clone() } else { String::new() },
     if entry.next { said.next.clone() } else { String::new() },
-    if entry.kept { said.kept.clone() } else { String::new() },
   ]
   .concat()
 }
@@ -173,8 +170,6 @@ pub fn run(words: &RunWords, ground: &VerbGround<'_>) -> RunOutcome {
     let ask = PlaceAsk {
       command: &words.command,
       lane: words.lane(),
-      wait_seconds: PlaceAsk::wait_of(words.wait_seconds, &env),
-      guard_seconds: PlaceAsk::guard_of(words.guard_seconds),
       cwd: cwd.clone(),
       env: &env,
     };
@@ -190,12 +185,10 @@ pub fn run(words: &RunWords, ground: &VerbGround<'_>) -> RunOutcome {
     language,
     languages: &LANGUAGES,
     log_dir: ground.data_root.join("testbed"),
-    guard_seconds: words.guard_seconds,
     cwd: cwd.clone(),
     turn: TurnAsk {
       command: words.command.join(" "),
       lane: words.lane(),
-      wait_seconds: words.wait_seconds,
       say: &say,
       path: None,
       env,

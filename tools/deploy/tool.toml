@@ -7,7 +7,6 @@ language = "rust"
 build = 'cargo build --release -p deploy-tool && cp "$BMO_CARGO_TARGET/release/deploy-tool" "$BMO_TOOL_OUT/"'
 check = 'bmo-testbed cargo test -p deploy-tool'
 run = ["deploy-tool"]
-timeout = 3600
 
 [[entry]]
 namespace = "testbed"

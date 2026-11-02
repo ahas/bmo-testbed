@@ -8,7 +8,7 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
-use super::{Language, Tally, Widened, names_flag, names_option, pattern, sum_of};
+use super::{Language, Tally, Widened, names_option, pattern, sum_of};
 
 pub struct Node;
 
@@ -168,20 +168,9 @@ impl Language for Node {
     ]
   }
 
-  // The per-test limit is `node --test`'s own `--test-timeout`, in milliseconds.
-  fn test_command(
-    &self,
-    files: &[String],
-    words: &[String],
-    timeout_seconds: Option<u64>,
-  ) -> Option<Vec<String>> {
+  // `node --test` sets no per-test limit of its own, so a test runs until it ends.
+  fn test_command(&self, files: &[String], words: &[String]) -> Option<Vec<String>> {
     let mut command = vec!["node".to_owned(), "--test".to_owned()];
-
-    if let Some(seconds) = timeout_seconds
-      && !names_flag(words, "--test-timeout")
-    {
-      command.push(format!("--test-timeout={}", seconds * 1000));
-    }
 
     command.extend(words.iter().cloned());
     command.extend(files.iter().cloned());

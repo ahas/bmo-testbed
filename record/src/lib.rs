@@ -23,6 +23,11 @@ use serde::de::DeserializeOwned;
 
 const DAY_MS: i64 = 24 * 60 * 60 * 1000;
 
+/// How long a writer or a reader waits for a lock another one holds. SQLite's busy handler is told a span and
+/// counts it in an `int` of milliseconds, so this is the longest it can be told: a writer waits for the holder
+/// to let go.
+const LOCK_WAIT: Duration = Duration::from_millis(i32::MAX as u64);
+
 const SCHEMA: &str = "
   PRAGMA journal_mode = WAL;
   CREATE TABLE IF NOT EXISTS test_runs (
@@ -140,9 +145,7 @@ impl Record {
 
     let connection = Connection::open(path).map_err(failed)?;
 
-    connection
-      .busy_timeout(Duration::from_millis(RECORD.busy_milliseconds))
-      .map_err(failed)?;
+    connection.busy_timeout(LOCK_WAIT).map_err(failed)?;
     connection.execute_batch(SCHEMA).map_err(failed)?;
 
     Ok(Self { connection })

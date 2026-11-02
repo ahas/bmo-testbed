@@ -9,10 +9,11 @@ use std::path::Path;
 use bmo_testbed_core::declaration::{Repository, root_of};
 use bmo_testbed_core::events::{Event, Hook};
 use bmo_testbed_core::policy::fill_marks;
+use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::policy::prune::PRUNE;
 use bmo_testbed_core::policy::verbs::VERBS;
 use bmo_testbed_core::queue::now_ms;
-use bmo_testbed_core::turn::{NOT_RUN_EXIT_CODE, process_env};
+use bmo_testbed_core::turn::process_env;
 use bmo_testbed_core::verb::REFUSED_EXIT_CODE;
 use bmo_testbed_suite::cargo::run_cargo;
 use bmo_testbed_suite::crates::cargo_target_root;
@@ -170,22 +171,9 @@ pub fn prune_in(args: &PruneArgs, root: &Path, hook: &Hook) -> Said {
     };
   }
 
-  let locks = match take_prune_locks(root, PRUNE.lock_wait_seconds as f64) {
-    Ok(locks) => locks,
-    Err(profile) => {
-      return Said {
-        err: vec![fill_marks(
-          &said.locked,
-          &[
-            ("profile", &profile.to_string_lossy()),
-            ("seconds", &PRUNE.lock_wait_seconds.to_string()),
-          ],
-        )],
-        code: NOT_RUN_EXIT_CODE,
-        ..Said::default()
-      };
-    }
-  };
+  let locks = take_prune_locks(root, LANES.numbers.notice_seconds as f64, &|profile| {
+    eprintln!("{}", fill_marks(&said.locked, &[("profile", &profile.to_string_lossy())]));
+  });
   let before = disk_free_bytes(root);
   let planned = plan_now();
 

@@ -160,8 +160,6 @@ fn failure(live: &str, failed: &str) -> FailedDeploy {
     },
     before_start: false,
     unit: "app.service".to_owned(),
-    health_wait_seconds: 300,
-    stay_up_seconds: 30,
   }
 }
 
@@ -227,7 +225,7 @@ async fn a_failed_deployment_is_flipped_back_relinked_recorded_and_restarted() {
   assert_eq!(
     lines[0],
     format!(
-      "deployment failed: the service on {} did not answer within 300s of its restart.",
+      "deployment failed: the service on {} gave up starting before its health answered.",
       short(&at.failed)
     )
   );
@@ -375,7 +373,7 @@ async fn a_release_before_that_is_gone_or_unfinished_is_not_flipped_onto() {
 }
 
 #[tokio::test]
-async fn a_service_that_answered_and_died_is_told_by_its_stay() {
+async fn a_service_that_answered_and_was_not_running_is_told_so() {
   let at = stand();
   let failed = FailedDeploy {
     failure: BootFailure::DiedAfterStart,
@@ -386,7 +384,7 @@ async fn a_service_that_answered_and_died_is_told_by_its_stay() {
   assert_eq!(
     deploy_failure_notice(&failed, &outcome).lines().next().unwrap(),
     format!(
-      "deployment failed: the service on {} answered and then did not stay up 30s.",
+      "deployment failed: the service on {} answered and was not running when it was read.",
       short(&at.failed)
     )
   );

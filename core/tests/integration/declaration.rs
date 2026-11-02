@@ -59,7 +59,7 @@ fn a_checkout_with_no_declaration_has_every_default_and_its_directorys_name() {
       declaration.test.test_timeout_seconds,
       declaration.test.memory_gb
     ),
-    (240, 90, 30, 12)
+    (None, None, None, 12)
   );
   assert!(declaration.test.database.is_none());
   assert!(declaration.projects.discover);
@@ -76,11 +76,14 @@ fn a_checkout_with_no_declaration_has_every_default_and_its_directorys_name() {
   assert_eq!(declaration.build.cargo_profile, "release");
   assert_eq!(declaration.deploy.root, None);
   assert_eq!(declaration.deploy.link, "deploy");
-  assert_eq!((declaration.deploy.health_wait_seconds, declaration.deploy.stay_up_seconds), (300, 30));
+  assert_eq!(
+    (declaration.deploy.health_wait_seconds, declaration.deploy.stay_up_seconds),
+    (None, None)
+  );
   assert!(declaration.deploy.gate);
   assert!(declaration.deploy.backup.is_none());
   assert_eq!(declaration.runner.placement, None);
-  assert_eq!((declaration.events.hook.clone(), declaration.events.timeout_seconds), (None, 30));
+  assert_eq!((declaration.events.hook.clone(), declaration.events.timeout_seconds), (None, None));
 }
 
 // "outside any checkout the directory stands as the root, with every default"
@@ -268,11 +271,11 @@ timeout_seconds = 5
       .iter()
       .map(|step| (step.phase, step.timeout_seconds))
       .collect::<Vec<_>>(),
-    [(Phase::BeforeFlip, 1200), (Phase::AfterHealth, 60)]
+    [(Phase::BeforeFlip, None), (Phase::AfterHealth, Some(60))]
   );
   assert_eq!(declaration.deploy.backup.as_ref().unwrap().keep, 2);
   assert_eq!(declaration.runner.placement.as_deref(), Some("http://placement.invalid/place"));
-  assert_eq!(declaration.events.timeout_seconds, 5);
+  assert_eq!(declaration.events.timeout_seconds, Some(5));
 }
 
 // "a backup leaves out what has a default"

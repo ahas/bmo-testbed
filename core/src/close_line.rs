@@ -210,7 +210,6 @@ pub fn take_close_line(ask: &CloseLineAsk<'_>) -> Option<CloseTurn> {
     LockWait {
       holder: serde_json::to_string(&entry).unwrap_or_default(),
       wait_on: Some(&mut wait_on),
-      keep: None,
       rank: Rank::Ordinary,
       poll: ask.poll,
     },
@@ -269,7 +268,7 @@ impl<'a> WideStretch<'a> {
 
   /// Held, a deployment waiting at the front let in first: false where the harness ended meanwhile.
   pub fn ready(&mut self) -> bool {
-    if self.held.is_some() && queue_tickets(&self.lock()).iter().any(|one| one.front && !one.kept) {
+    if self.held.is_some() && queue_tickets(&self.lock()).iter().any(|one| one.front) {
       (self.say)(&CLOSE_LINE.stretch.front_first);
       self.release();
     }
@@ -281,7 +280,6 @@ impl<'a> WideStretch<'a> {
     let turn = turn::take_turn(&TurnAsk {
       command: CLOSE_LINE.stretch.command.clone(),
       lane: Lane::Wide,
-      wait_seconds: None,
       say: self.say,
       path: self.path.clone(),
       env: self.env.clone(),

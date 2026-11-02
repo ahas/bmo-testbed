@@ -10,8 +10,9 @@ use bmo_testbed_core::events::{Event, Hook};
 use bmo_testbed_core::policy::deploy::DEPLOY;
 use bmo_testbed_core::policy::deploy_steps::DeployStep as OwnStep;
 use bmo_testbed_core::policy::fill_marks;
+use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::policy::verbs::VERBS;
-use bmo_testbed_core::queue::{LockWait, take_lock};
+use bmo_testbed_core::queue::{LockWait, now_ms, take_lock};
 use bmo_testbed_core::turn::{Env, FRONT_VARIABLE, NOT_RUN_EXIT_CODE, harness_pid, process_env};
 use bmo_testbed_core::verb::{REFUSED_EXIT_CODE, data_root};
 use bmo_testbed_deploy::deployment::{
@@ -245,12 +246,19 @@ pub fn backups() -> u8 {
     Err(why) => return refused(&why),
   };
   let lock = data_root().join("locks").join(format!("backups-{}.lock", repo.name()));
+  // Another run's upload is waited out, however long it takes.
+  let notice = LANES.numbers.notice_seconds;
+  let mut wait_on = |_: Option<&str>| -> Option<i64> {
+    eprintln!("{}", said.locked);
+
+    Some(now_ms() + i64::try_from(notice * 1000).unwrap_or(i64::MAX))
+  };
   let wait = LockWait {
     holder: said.holder.clone(),
+    wait_on: Some(&mut wait_on),
     ..LockWait::default()
   };
-  let Some(_held) = take_lock(&lock, said.wait_seconds as f64, wait) else {
-    eprintln!("{}", fill_marks(&said.locked, &[("seconds", &said.wait_seconds.to_string())]));
+  let Some(_held) = take_lock(&lock, notice as f64, wait) else {
     return NOT_RUN_EXIT_CODE;
   };
   let mut hands = AwsHands {

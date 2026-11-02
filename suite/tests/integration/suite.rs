@@ -1,5 +1,4 @@
-//! The suite's own terms (docs/suite.md): the guards a declaration leaves at their defaults stand well above
-//! the work, every unit runs in a sweep a width at a time with the units that must run alone in lanes of
+//! The suite's own terms (docs/suite.md): no guard stands over a unit or a run, every unit runs in a sweep a width at a time with the units that must run alone in lanes of
 //! one, the run's lines open with the mark and its last line says on its own how it came out, and the fence
 //! holds it apart.
 
@@ -12,14 +11,13 @@ use std::time::Duration;
 use bmo_testbed_core::declaration::Test;
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::suite::SUITE;
-use bmo_testbed_core::turn::{NOT_RUN_EXIT_CODE, machine_width};
+use bmo_testbed_core::turn::machine_width;
 use bmo_testbed_suite::fence::{
   ClearSeams, FenceLimits, FenceSeams, clear_fence, fence_call, fence_limits, fence_suite, fence_unit,
   fenced_build_jobs,
 };
 use bmo_testbed_suite::run::{
-  SuiteWords, SweepCount, ask_of, file_groups, guards_line, runner_of, script_runner, sweep_ending,
-  verdict_line,
+  SuiteWords, SweepCount, ask_of, file_groups, runner_of, script_runner, sweep_ending, verdict_line,
 };
 use bmo_testbed_suite::sweep::{SweepPlan, largest_first, sweep};
 
@@ -30,24 +28,15 @@ fn words(given: &[&str]) -> Vec<String> {
 mod guards {
   use super::*;
 
-  // "thirty seconds per test, ninety per file and four minutes for the whole run", where a declaration
-  // leaves them at their defaults.
+  // "nothing of the suite's cuts a unit or a test": a declaration that leaves the old keys out names none.
   #[test]
-  fn are_thirty_seconds_per_test_ninety_per_file_and_four_minutes_for_the_whole_run() {
+  fn a_declaration_names_no_span_a_unit_or_a_run_must_end_within() {
     let test = Test::default();
 
-    assert_eq!(test.test_timeout_seconds, 30);
-    assert_eq!(test.file_guard_seconds, 90);
-    assert_eq!(test.guard_seconds, 4 * 60);
-  }
-
-  // "stand well above the work": the whole run lets the slowest file run its whole guard twice over.
-  #[test]
-  fn stand_well_above_the_work() {
-    let test = Test::default();
-
-    assert!(test.guard_seconds >= 2 * test.file_guard_seconds);
-    assert!(test.file_guard_seconds >= 3 * test.test_timeout_seconds);
+    assert_eq!(
+      (test.test_timeout_seconds, test.file_guard_seconds, test.guard_seconds),
+      (None, None, None)
+    );
   }
 
   // "is the machine's width for the one command holding it": a run holds the testbed's wide lane.
@@ -60,25 +49,6 @@ mod guards {
 
 mod asked {
   use super::*;
-
-  // "a guard is the declared one where none was given, and the number where one was"
-  #[test]
-  fn a_guard_is_the_declared_one_unless_the_caller_names_one() {
-    let test = Test::default();
-    let declared = ask_of(&SuiteWords::default(), &test);
-    let named = ask_of(
-      &SuiteWords {
-        guard: Some(30),
-        file_guard: Some(10),
-        turn_wait: Some(5),
-        ..SuiteWords::default()
-      },
-      &test,
-    );
-
-    assert_eq!((declared.whole_guard, declared.file_guard, declared.turn_wait), (240, 90, None));
-    assert_eq!((named.whole_guard, named.file_guard, named.turn_wait), (30, 10, Some(5.0)));
-  }
 
   // "a word naming a path picks the units, and the runner is handed every other word but a width"
   #[test]
@@ -194,7 +164,7 @@ mod folders {
 
     let file = words(&["tests/ts/unit/reads.test.ts"]);
     let group = file_groups(root, &bun(), &file).remove(0);
-    let command = group.language.test_command(&group.files, &[], None).unwrap();
+    let command = group.language.test_command(&group.files, &[]).unwrap();
     let passes = |at: &Path, command: &[String]| {
       Command::new(&command[0])
         .args(&command[1..])
@@ -209,7 +179,7 @@ mod folders {
 
     assert_eq!(group.dir, Path::new("tests/ts"));
     assert!(passes(&root.join(&group.dir), &command));
-    assert!(!passes(root, &group.language.test_command(&file, &[], None).unwrap()));
+    assert!(!passes(root, &group.language.test_command(&file, &[]).unwrap()));
   }
 }
 
@@ -220,16 +190,8 @@ mod sweeping {
     None
   }
 
-  fn always() -> bool {
-    true
-  }
-
   fn plan<'a, T>(width: usize, lane: &'a dyn Fn(&T) -> Option<String>) -> SweepPlan<'a, T> {
-    SweepPlan {
-      width,
-      lane,
-      may_start: &always,
-    }
+    SweepPlan { width, lane }
   }
 
   // Counts what runs at once, by kind.
@@ -270,8 +232,7 @@ mod sweeping {
       *wait
     });
 
-    assert_eq!(done.results, waits.iter().map(|wait| Some(*wait)).collect::<Vec<_>>());
-    assert!(done.unstarted.is_empty());
+    assert_eq!(done, waits);
   }
 
   // "never has more than the sweep's width running at once"
@@ -295,15 +256,12 @@ mod sweeping {
   // "runs everything even where the sweep is wider than the work, and nothing where there is none"
   #[test]
   fn runs_everything_where_the_sweep_is_wider_and_nothing_where_there_is_none() {
-    assert_eq!(
-      sweep(&[1, 2], &plan(8, &no_lane), &|item: &i32| item * 2).results,
-      vec![Some(2), Some(4)]
-    );
+    assert_eq!(sweep(&[1, 2], &plan(8, &no_lane), &|item: &i32| item * 2), vec![2, 4]);
 
     let none: [i32; 0] = [];
     let done = sweep(&none, &plan(8, &no_lane), &|_: &i32| 1);
 
-    assert!(done.results.is_empty() && done.unstarted.is_empty());
+    assert!(done.is_empty());
   }
 
   // "runs the items that must run alone one at a time, from the start, within the width": each browser file
@@ -332,7 +290,7 @@ mod sweeping {
   }
 
   // "runs each lane from the start beside the others, one at a time within it": the crates and projects
-  // take a whole run's guard between them, and the browser files queued behind them never started.
+  // never hold the browser files queued behind them back from starting.
   #[test]
   fn runs_each_lane_from_the_start_beside_the_others() {
     let items = ["h1", "h2", "h3", "b1", "b2", "a1", "a2", "a3"];
@@ -390,33 +348,22 @@ mod sweeping {
       *item
     });
 
-    assert_eq!(done.results, vec![Some("b"), Some("a")]);
+    assert_eq!(done, vec!["b", "a"]);
     assert_eq!(most.load(Ordering::SeqCst), 2);
   }
 
-  // "starts nothing once it may not, and hands back what never started": past the whole-run guard nothing
-  // new starts, what is running finishes, and what was left is named.
+  // "every unit is started and run to its end": however long the units take, none is left unstarted.
   #[test]
-  fn starts_nothing_once_it_may_not_and_hands_back_what_never_started() {
+  fn every_item_is_started_and_run_to_its_end() {
     let starts = AtomicUsize::new(0);
-    let may_start = || starts.load(Ordering::SeqCst) < 3;
-    let done = sweep(
-      &[1, 2, 3, 4, 5, 6],
-      &SweepPlan {
-        width: 2,
-        lane: &no_lane,
-        may_start: &may_start,
-      },
-      &|item: &i32| {
-        starts.fetch_add(1, Ordering::SeqCst);
-        std::thread::sleep(Duration::from_millis(2));
-        *item
-      },
-    );
+    let done = sweep(&[1, 2, 3, 4, 5, 6], &plan(2, &no_lane), &|item: &i32| {
+      starts.fetch_add(1, Ordering::SeqCst);
+      std::thread::sleep(Duration::from_millis(20));
+      *item
+    });
 
-    assert_eq!(done.results[..3], [Some(1), Some(2), Some(3)]);
-    assert_eq!(done.results[3..], [None, None, None]);
-    assert_eq!(done.unstarted, vec![3, 4, 5]);
+    assert_eq!(done, [1, 2, 3, 4, 5, 6]);
+    assert_eq!(starts.load(Ordering::SeqCst), 6);
   }
 
   // "starts the largest first, since a large file is a long run"
@@ -449,17 +396,7 @@ mod lines {
   // "open with the mark, so a caller holding only the log can find them"
   #[test]
   fn open_with_the_mark() {
-    assert!(guards_line(240, 90).starts_with(&SUITE.lines.mark));
     assert!(verdict_line(true, 66.0, "495 of 495 files passed").starts_with(&SUITE.lines.mark));
-  }
-
-  // "say at the head what the run is holding itself to"
-  #[test]
-  fn say_at_the_head_what_the_run_is_holding_itself_to() {
-    assert_eq!(
-      guards_line(240, 90),
-      fill_marks(&SUITE.lines.guards, &[("mark", &SUITE.lines.mark), ("whole", "240"), ("file", "90")])
-    );
   }
 
   // "say at the close how it came out and how long it took"
@@ -481,56 +418,36 @@ mod lines {
 mod endings {
   use super::*;
 
-  // Ten files, as many of them passed, failed, cut and never started as given.
-  fn counted(passed: usize, failed: usize, cut: usize, unstarted: usize) -> SweepCount {
+  // Ten files, as many of them passed and failed as given.
+  fn counted(passed: usize, failed: usize) -> SweepCount {
     SweepCount {
       files: 10,
       passed,
       failed,
-      cut,
-      unstarted,
     }
   }
 
   // "passes only where every file passed"
   #[test]
   fn passes_only_where_every_file_passed() {
-    let (ok, note, code) = sweep_ending(counted(10, 0, 0, 0), 240, 90);
+    let (ok, note, code) = sweep_ending(counted(10, 0));
 
     assert!(ok);
     assert_eq!(note, fill_marks(&SUITE.ending.all_passed, &[("files", "10")]));
     assert_eq!(code, 0);
   }
 
-  // "ends files that never started, and nothing else, as a run to make again"
+  // "is a failure wherever a file failed"
   #[test]
-  fn ends_files_that_never_started_as_a_run_to_make_again() {
+  fn is_a_failure_wherever_a_file_failed() {
     let said = &SUITE.ending;
     let note = [
-      fill_marks(&said.passed, &[("passed", "7"), ("files", "10")]),
-      fill_marks(&said.unstarted_count, &[("count", "3"), ("guard", "240")]),
-    ]
-    .join(&said.joiner);
-
-    assert_eq!(
-      sweep_ending(counted(7, 0, 0, 3), 240, 90),
-      (false, fill_marks(&said.only_unstarted, &[("note", &note)]), NOT_RUN_EXIT_CODE)
-    );
-  }
-
-  // "is a failure wherever a file failed or was cut, the unstarted still counted apart"
-  #[test]
-  fn is_a_failure_wherever_a_file_failed_or_was_cut() {
-    let said = &SUITE.ending;
-    let note = [
-      fill_marks(&said.passed, &[("passed", "7"), ("files", "10")]),
+      fill_marks(&said.passed, &[("passed", "9"), ("files", "10")]),
       fill_marks(&said.failed_count, &[("count", "1")]),
-      fill_marks(&said.cut_count, &[("count", "1"), ("guard", "90")]),
-      fill_marks(&said.unstarted_count, &[("count", "1"), ("guard", "240")]),
     ]
     .join(&said.joiner);
 
-    assert_eq!(sweep_ending(counted(7, 1, 1, 1), 240, 90), (false, note, 1));
+    assert_eq!(sweep_ending(counted(9, 1)), (false, note, 1));
   }
 }
 

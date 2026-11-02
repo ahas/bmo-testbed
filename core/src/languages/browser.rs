@@ -77,12 +77,7 @@ impl Language for Browser {
     Bun.configuration_file()
   }
 
-  fn test_command(
-    &self,
-    files: &[String],
-    words: &[String],
-    timeout_seconds: Option<u64>,
-  ) -> Option<Vec<String>> {
-    Bun.test_command(files, words, timeout_seconds)
+  fn test_command(&self, files: &[String], words: &[String]) -> Option<Vec<String>> {
+    Bun.test_command(files, words)
   }
 }

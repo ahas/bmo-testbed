@@ -6,7 +6,6 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 
 use bmo_testbed_core::policy::fill_marks;
-use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::policy::prune::PRUNE;
 use bmo_testbed_core::policy::service::SERVICE;
 use bmo_testbed_core::policy::suite::SUITE;
@@ -131,20 +130,17 @@ pub struct BackupPruneArgs {
   pub dry_run: bool,
 }
 
-// A positive whole number of seconds.
-fn seconds() -> clap::builder::RangedU64ValueParser<u64> {
-  clap::value_parser!(u64).range(1..)
-}
-
 #[derive(Debug, Args)]
 pub struct RunArgs {
   #[arg(long)]
   pub narrow: bool,
   #[arg(long)]
   pub adapter: Option<String>,
-  #[arg(long, value_parser = seconds())]
+  /// Read and given no effect: a run waits for its turn and runs until it ends.
+  #[arg(long, hide = true, value_name = "SECONDS")]
   pub guard: Option<u64>,
-  #[arg(long, value_parser = seconds())]
+  /// Read and given no effect.
+  #[arg(long, hide = true, value_name = "SECONDS")]
   pub wait: Option<u64>,
   #[arg(long)]
   pub json: bool,
@@ -177,11 +173,14 @@ pub struct SuiteArgs {
   pub since: Option<String>,
   #[arg(long)]
   pub again: bool,
-  #[arg(long, value_parser = seconds())]
+  /// Read and given no effect: every unit is started and runs until it ends, after the turn has come.
+  #[arg(long, hide = true, value_name = "SECONDS")]
   pub guard: Option<u64>,
-  #[arg(long, value_parser = seconds())]
+  /// Read and given no effect.
+  #[arg(long, hide = true, value_name = "SECONDS")]
   pub file_guard: Option<u64>,
-  #[arg(long, value_parser = seconds())]
+  /// Read and given no effect.
+  #[arg(long, hide = true, value_name = "SECONDS")]
   pub turn_wait: Option<u64>,
   #[arg(long)]
   pub json: bool,
@@ -342,16 +341,10 @@ pub struct McpArgs {
 
 // A usage of the policy with the binary's name and numbers filled in.
 fn usage(text: &str) -> String {
-  let numbers = &LANES.numbers;
-
   fill_marks(
     text.trim_start_matches('\n'),
     &[
       ("verb", BINARY),
-      ("guard", &numbers.guard_seconds.to_string()),
-      ("harness_wait", &numbers.harness_wait_seconds.to_string()),
-      ("unit_wait", &numbers.unit_wait_seconds.to_string()),
-      ("kept", &numbers.kept_place_seconds.to_string()),
       ("days", &PRUNE.older_than_days.to_string()),
       ("hours", &PRUNE.incremental_hours.to_string()),
       ("listen", &SERVICE.listen),

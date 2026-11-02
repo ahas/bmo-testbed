@@ -2,7 +2,7 @@
 //! file」). The units that must run alone go down a lane of one per kind, each taking one place of the width
 //! and starting with the sweep, so they neither wait for the rest nor stand beside one another; once a lane
 //! is empty it takes from the rest like any other place. The rest always get at least one place of their
-//! own. Nothing is started once the plan says no, and whatever was left is handed back as never started.
+//! own. Every unit is started and run to its end.
 
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::Mutex;
@@ -13,14 +13,6 @@ pub struct SweepPlan<'a, Item> {
   pub width: usize,
   /// The lane of one an item runs in, never beside another item of that lane; none for the rest.
   pub lane: &'a dyn Fn(&Item) -> Option<String>,
-  /// Whether another item may still be started; once it says no, none is.
-  pub may_start: &'a (dyn Fn() -> bool + Sync),
-}
-
-/// What a sweep came to: each item's result in the items' own order, and the items that never started.
-pub struct SweepOutcome<Result> {
-  pub results: Vec<Option<Result>>,
-  pub unstarted: Vec<usize>,
 }
 
 /// The order a sweep starts files in: the largest first, files of the same size in the order they came.
@@ -31,12 +23,12 @@ pub fn largest_first(files: Vec<String>, size_of: impl Fn(&str) -> u64) -> Vec<S
   sized.into_iter().map(|(_, file)| file).collect()
 }
 
-/// Runs the work over the items and gives the results back in the items' own order.
+/// Runs the work over every item, each to its end, and gives the results back in the items' own order.
 pub fn sweep<Item: Sync, Result: Send>(
   items: &[Item],
   plan: &SweepPlan<'_, Item>,
   run: &(dyn Fn(&Item) -> Result + Sync),
-) -> SweepOutcome<Result> {
+) -> Vec<Result> {
   let mut lanes: BTreeMap<String, VecDeque<usize>> = BTreeMap::new();
   let mut shared: VecDeque<usize> = VecDeque::new();
 
@@ -50,17 +42,10 @@ pub fn sweep<Item: Sync, Result: Send>(
   let shared_width = shared.len().min(plan.width.saturating_sub(lanes.len()).max(1));
   let shared = Mutex::new(shared);
   let results: Mutex<Vec<Option<Result>>> = Mutex::new((0..items.len()).map(|_| None).collect());
-  let started: Mutex<Vec<bool>> = Mutex::new(vec![false; items.len()]);
   let take = |queue: &Mutex<VecDeque<usize>>| loop {
-    if !(plan.may_start)() {
-      return;
-    }
-
     let Some(at) = queue.lock().expect("the queue is held only to take from it").pop_front() else {
       return;
     };
-
-    started.lock().expect("the marks are held only to set one")[at] = true;
 
     let result = run(&items[at]);
 
@@ -81,10 +66,5 @@ pub fn sweep<Item: Sync, Result: Send>(
     }
   });
 
-  let started = started.into_inner().unwrap_or_default();
-
-  SweepOutcome {
-    results: results.into_inner().unwrap_or_default(),
-    unstarted: (0..items.len()).filter(|at| !started[*at]).collect(),
-  }
+  results.into_inner().unwrap_or_default().into_iter().flatten().collect()
 }

@@ -4,7 +4,7 @@
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use bmo_testbed_core::answer::{Cut, cap_items};
 use bmo_testbed_core::policy::deploy_tool::DEPLOY_TOOL;
@@ -88,7 +88,6 @@ pub struct Ground {
   pub env: Env,
   pub testbed: PathBuf,
   pub poll: Duration,
-  pub wait: Duration,
 }
 
 impl Ground {
@@ -101,7 +100,6 @@ impl Ground {
       env: process_env(),
       testbed: release.unwrap_or_else(|| PathBuf::from(TESTBED)),
       poll: Duration::from_secs(DEPLOY_TOOL.numbers.poll_seconds),
-      wait: Duration::from_secs(DEPLOY_TOOL.numbers.wait_seconds),
     }
   }
 
@@ -315,17 +313,10 @@ pub fn deploy(arguments: &Arguments, ground: &Ground) -> Answer {
   let Some(unit) = unit_of(&out) else {
     return Answer::error(fill_marks(&said.no_unit, &[("said", &what_it_said(&out, &err))]));
   };
-  let started = Instant::now();
-
+  // The deployment is waited for until its unit ends, however long that takes.
   loop {
     match still_active(ground, &unit) {
       Ok(false) => break,
-      Ok(true) if started.elapsed() >= ground.wait => {
-        return Answer::error(fill_marks(
-          &said.still_running,
-          &[("unit", &unit), ("seconds", &started.elapsed().as_secs().to_string())],
-        ));
-      }
       Ok(true) => std::thread::sleep(ground.poll),
       Err(why) => return Answer::error(fill_marks(&said.unasked, &[("unit", &unit), ("why", &why)])),
     }

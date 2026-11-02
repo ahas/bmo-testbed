@@ -1,6 +1,6 @@
 //! The service coming up after a restart (docs/deploy.md, 「What the deploy run does, in order」, step 10):
-//! the wait for the declared health, systemd's account of the unit, the watch of it staying up, and the
-//! lines the deploy output keeps where it did not.
+//! the wait for the declared health until it answers or the unit gives up starting, systemd's account of the
+//! unit, the reading of it running, and the lines the deploy output keeps where it did not come up.
 
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -9,17 +9,16 @@ use std::path::Path;
 use bmo_testbed_core::policy::deploy::DEPLOY;
 use bmo_testbed_core::policy::fill_shown;
 use bmo_testbed_deploy::boot::{
-  BootScene, HealthWait, HealthWatch, StayUp, UnitStatus, boot_report, boot_scene, stay_report, stays_up,
+  BootScene, HealthWait, HealthWatch, StayUp, UnitStatus, boot_report, boot_scene, stands_up, stay_report,
   unit_gave_up, unit_status, wait_for_health,
 };
 use bmo_testbed_deploy::run::Ran;
 
-fn watch(command: &str, cwd: &Path, limit_ms: u64) -> HealthWatch<'static> {
+fn watch(command: &str, cwd: &Path) -> HealthWatch<'static> {
   HealthWatch {
-    ask_limit_ms: 2_000,
     poll_ms: 20,
     check_every_ms: 0,
-    ..HealthWatch::new(command, cwd, limit_ms)
+    ..HealthWatch::new(command, cwd)
   }
 }
 
@@ -55,7 +54,7 @@ fn readings(list: Vec<Option<UnitStatus>>) -> impl Fn() -> Option<UnitStatus> {
 #[tokio::test]
 async fn the_wait_ends_at_the_first_answer_of_zero() {
   let dir = tempfile::tempdir().unwrap();
-  let waited = wait_for_health(&watch("echo healthy", dir.path(), 5_000)).await;
+  let waited = wait_for_health(&watch("echo healthy", dir.path())).await;
 
   assert!(waited.answered && !waited.gave_up);
   assert_eq!(waited.asks, 1);
@@ -67,35 +66,22 @@ async fn the_health_is_asked_again_until_it_answers() {
   let dir = tempfile::tempdir().unwrap();
   // Fails twice, then answers: each ask leaves a mark, and the third finds two.
   let line = "echo x >> asks; test $(wc -l < asks) -ge 3";
-  let waited = wait_for_health(&watch(line, dir.path(), 5_000)).await;
+  let waited = wait_for_health(&watch(line, dir.path())).await;
 
   assert!(waited.answered);
   assert_eq!(waited.asks, 3);
 }
 
 #[tokio::test]
-async fn a_wait_that_runs_out_keeps_what_the_last_ask_heard() {
+async fn an_ask_that_takes_its_time_is_waited_for_until_it_ends() {
   let dir = tempfile::tempdir().unwrap();
-  let waited = wait_for_health(&watch("echo 'not yet'; echo more; exit 3", dir.path(), 150)).await;
+  let started = std::time::Instant::now();
+  let waited = wait_for_health(&watch("sleep 1; echo late", dir.path())).await;
 
-  assert!(!waited.answered && !waited.gave_up);
-  assert!(waited.asks > 1, "{waited:?}");
-  assert!(waited.waited_ms >= 150);
-  assert_eq!(waited.last, "exit 3: not yet");
-}
-
-#[tokio::test]
-async fn an_ask_that_does_not_answer_in_time_counts_as_no_answer() {
-  let dir = tempfile::tempdir().unwrap();
-  let waited = wait_for_health(&HealthWatch {
-    ask_limit_ms: 1_000,
-    ..watch("sleep 30", dir.path(), 10)
-  })
-  .await;
-
-  assert!(!waited.answered);
+  assert!(waited.answered);
   assert_eq!(waited.asks, 1);
-  assert_eq!(waited.last, fill_shown(&DEPLOY.boot.no_answer, &[("seconds", &1)]));
+  assert_eq!(waited.last, "exit 0: late");
+  assert!(started.elapsed() >= std::time::Duration::from_secs(1));
 }
 
 #[tokio::test]
@@ -103,13 +89,13 @@ async fn the_wait_ends_where_the_unit_gave_up_starting() {
   let dir = tempfile::tempdir().unwrap();
   let waited = wait_for_health(&HealthWatch {
     gave_up: Some(Box::new(|| true)),
-    ..watch("exit 1", dir.path(), 60_000)
+    ..watch("echo 'not yet'; echo more; exit 1", dir.path())
   })
   .await;
 
   assert!(!waited.answered && waited.gave_up);
   assert_eq!(waited.asks, 1);
-  assert_eq!(waited.last, "exit 1");
+  assert_eq!(waited.last, "exit 1: not yet");
 }
 
 #[test]
@@ -131,7 +117,7 @@ fn systemd_is_read_one_property_to_a_line() {
       exit_status: "1".to_owned(),
     }
   );
-  assert!(!unit_gave_up(Some(&read)));
+  assert!(!unit_gave_up(Some(&read), Some(&read)));
 
   let refused = |_: &[String]| Ran {
     ok: false,
@@ -147,67 +133,32 @@ fn systemd_is_read_one_property_to_a_line() {
   let read = unit_status(&partial, "app.service").unwrap();
 
   assert_eq!(read.pid, "?");
-  assert!(unit_gave_up(Some(&read)));
-  assert!(unit_gave_up(Some(&status("inactive", "dead", "0", "0"))));
-  assert!(!unit_gave_up(None));
+  assert!(unit_gave_up(None, Some(&read)));
+  assert!(unit_gave_up(None, Some(&status("inactive", "dead", "0", "0"))));
+  assert!(!unit_gave_up(None, None));
 }
 
-#[tokio::test(start_paused = true)]
-async fn a_service_running_throughout_on_one_process_stayed_up() {
-  let read = readings(vec![running("41", "2"), running("41", "2"), None, running("41", "2")]);
+#[test]
+fn a_unit_systemd_restarted_since_the_wait_began_gave_up_starting() {
+  let first = status("activating", "start", "41", "0");
 
-  assert_eq!(stays_up(3_000, 1_000, &read).await, StayUp::Stayed);
+  assert!(!unit_gave_up(Some(&first), Some(&status("active", "running", "41", "0"))));
+  assert!(unit_gave_up(Some(&first), Some(&status("activating", "auto-restart", "0", "1"))));
+  assert!(!unit_gave_up(None, Some(&status("activating", "auto-restart", "0", "1"))));
 }
 
-#[tokio::test(start_paused = true)]
-async fn a_service_that_stops_changes_process_or_restarts_fell() {
-  let went = readings(vec![running("41", "0"), Some(status("activating", "auto-restart", "0", "1"))]);
-
+#[test]
+fn a_service_read_running_is_up_and_one_not_running_or_unread_is_not() {
   let words = &DEPLOY.boot;
 
+  assert_eq!(stands_up(&readings(vec![running("41", "2")])), StayUp::Stayed);
   assert!(matches!(
-    stays_up(3_000, 1_000, &went).await,
-    StayUp::Fell { why, .. }
-      if why == fill_shown(&words.unit_went, &[("active", &"activating"), ("sub", &"auto-restart")])
-  ));
-
-  let changed = readings(vec![running("41", "0"), running("42", "0")]);
-
-  assert!(matches!(
-    stays_up(3_000, 1_000, &changed).await,
-    StayUp::Fell { why, .. } if why == fill_shown(&words.pid_changed, &[("from", &41), ("to", &42)])
-  ));
-
-  let restarted = readings(vec![running("41", "1"), running("41", "3")]);
-
-  assert!(matches!(
-    stays_up(3_000, 1_000, &restarted).await,
-    StayUp::Fell { why, .. } if why == fill_shown(&words.restarted, &[("count", &2)])
-  ));
-}
-
-#[tokio::test(start_paused = true)]
-async fn a_hold_with_no_reading_is_no_stay() {
-  let words = &DEPLOY.boot;
-  let not_running = readings(vec![Some(status("failed", "failed", "0", "0"))]);
-
-  assert!(matches!(
-    stays_up(3_000, 1_000, &not_running).await,
+    stands_up(&readings(vec![Some(status("failed", "failed", "0", "0"))])),
     StayUp::Fell { why, .. } if why == fill_shown(&words.unit_is, &[("active", &"failed"), ("sub", &"failed")])
   ));
-
-  let silent = readings(vec![None]);
-
   assert!(matches!(
-    stays_up(3_000, 1_000, &silent).await,
+    stands_up(&readings(vec![None])),
     StayUp::Fell { why, status: None } if why == words.unasked
-  ));
-
-  let quiet_after = readings(vec![running("41", "0"), None]);
-
-  assert!(matches!(
-    stays_up(3_000, 1_000, &quiet_after).await,
-    StayUp::Fell { why, .. } if why == words.unasked_hold
   ));
 }
 
@@ -229,7 +180,6 @@ fn machine(words: &[String]) -> Ran {
 fn a_health_that_did_not_answer_is_told_with_the_unit_and_its_journal() {
   let wait = HealthWait {
     command: "curl -fs localhost:8080/health".to_owned(),
-    limit_ms: 300_000,
     answered: false,
     waited_ms: 12_400,
     asks: 7,
@@ -246,7 +196,6 @@ fn a_health_that_did_not_answer_is_told_with_the_unit_and_its_journal() {
       &words.waited,
       &[
         ("waited", &12),
-        ("limit", &300),
         ("command", &"curl -fs localhost:8080/health"),
         ("asks", &7),
         ("last", &"exit 7"),
@@ -281,14 +230,11 @@ fn failed_unit_line() -> String {
 }
 
 #[test]
-fn a_service_that_did_not_stay_up_is_told_with_why() {
-  let why = fill_shown(&DEPLOY.boot.restarted, &[("count", &1)]);
-  let lines = stay_report(&machine, "app.service", 0, 30_000, &why, None);
+fn a_service_not_read_running_is_told_with_why() {
+  let why = fill_shown(&DEPLOY.boot.unit_is, &[("active", &"failed"), ("sub", &"failed")]);
+  let lines = stay_report(&machine, "app.service", 0, &why, None);
 
-  assert_eq!(
-    lines[0],
-    fill_shown(&DEPLOY.boot.fell, &[("unit", &"app.service"), ("seconds", &30), ("why", &why)])
-  );
+  assert_eq!(lines[0], fill_shown(&DEPLOY.boot.fell, &[("unit", &"app.service"), ("why", &why)]));
   assert_eq!(lines[1], failed_unit_line());
   assert_eq!(lines.len(), 4);
 }

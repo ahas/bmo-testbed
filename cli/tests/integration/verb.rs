@@ -60,7 +60,7 @@ fn the_command_after_the_dashes_runs_and_ends_on_its_result_line_with_its_own_co
   );
 }
 
-// "says who holds the turn, and runs nothing where the turn does not come"
+// "says who holds the turn, and runs nothing where its harness goes away before the turn comes"
 #[test]
 fn the_status_says_who_holds_the_turn_and_nothing_runs_where_the_turn_does_not_come() {
   let dir = tempfile::tempdir().unwrap();
@@ -77,7 +77,14 @@ fn the_status_says_who_holds_the_turn_and_nothing_runs_where_the_turn_does_not_c
     },
   )
   .expect("a free lock is had");
-  let queued = run_in(dir.path(), &["run", "--wait", "1", "--", "sh", "-c", "exit 0"]);
+  // The run waits for its turn until the harness it runs for has gone, reaped as it ends so it is gone.
+  let mut harness = std::process::Command::new("sleep").arg("1").spawn().unwrap();
+  let pid = harness.id().to_string();
+  let reaped = std::thread::spawn(move || harness.wait().unwrap());
+  let queued =
+    ran(testbed(dir.path(), dir.path(), &["run", "--", "sh", "-c", "exit 0"]).env("CLAUDE_PID", pid));
+
+  reaped.join().unwrap();
   let not_run = fill_marks(&LANES.run.not_run, &[("turn", &LANES.settled.queued)]);
 
   assert_eq!(queued.code, i32::from(NOT_RUN_EXIT_CODE));
@@ -123,7 +130,6 @@ fn words_that_do_not_read_are_refused_and_the_usage_is_printed_on_asking() {
     &["run"][..],
     &["run", "sh", "-c", "true"],
     &["run", "--fast", "--", "true"],
-    &["run", "--wait", "0", "--", "true"],
     &["run", "--guard"],
     &["walk"],
     &[],

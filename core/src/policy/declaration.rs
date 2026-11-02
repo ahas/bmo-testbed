@@ -7,9 +7,6 @@ use serde::Deserialize;
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TestDefaults {
-  pub guard_seconds: u64,
-  pub file_guard_seconds: u64,
-  pub test_timeout_seconds: u64,
   pub memory_gb: u64,
 }
 
@@ -48,22 +45,12 @@ pub struct BuildDefaults {
 #[serde(deny_unknown_fields)]
 pub struct DeployDefaults {
   pub link: String,
-  pub health_wait_seconds: u64,
-  pub stay_up_seconds: u64,
-  pub quiet_wait_seconds: u64,
-  pub step_timeout_seconds: u64,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct BackupDefaults {
   pub keep: u64,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct EventsDefaults {
-  pub timeout_seconds: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -77,7 +64,6 @@ pub struct Defaults {
   pub build: BuildDefaults,
   pub deploy: DeployDefaults,
   pub backup: BackupDefaults,
-  pub events: EventsDefaults,
 }
 
 #[derive(Debug, Deserialize)]

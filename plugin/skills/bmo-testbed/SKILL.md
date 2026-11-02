@@ -42,9 +42,9 @@ wherever the binary does.
 
 ## Exit code 75
 
-A command whose turn did not come within its wait ends with exit code 75 and runs nothing. Its place in
-the line is kept for a few minutes: call the same tool with the same arguments again at once, and it waits
-on from where it stood.
+A command waits for its turn however long the line takes, and runs until it ends. One ends with exit code
+75 and runs nothing only where the harness it runs for went away before its turn came; call the same tool
+with the same arguments again.
 
 ## A checkout's checks
 

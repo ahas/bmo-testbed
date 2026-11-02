@@ -6,9 +6,8 @@
 use std::path::{Path, PathBuf};
 
 use bmo_testbed_core::declaration::Repository;
-use bmo_testbed_core::policy::fill_shown;
 use bmo_testbed_core::policy::suite::SUITE;
-use bmo_testbed_core::queue::{LockWait, take_lock};
+use bmo_testbed_core::queue::{LockWait, now_ms, take_lock};
 
 use crate::files::checkout_files;
 use crate::selection::glob_matches;
@@ -104,6 +103,19 @@ fn program(bin: &Path, name: &str) -> String {
   bin.join(name).to_string_lossy().into_owned()
 }
 
+// Whether the server's unit still stands active or on its way there.
+fn coming_up() -> bool {
+  Command::new("systemctl")
+    .args(["--user", "is-active", OWN_UNIT])
+    .envs(crate::fence::user_bus())
+    .stdin(Stdio::null())
+    .stderr(Stdio::null())
+    .output()
+    .is_ok_and(|done| {
+      matches!(String::from_utf8_lossy(&done.stdout).trim(), "active" | "activating" | "reloading")
+    })
+}
+
 fn answers(bin: &Path, socket: &Path) -> bool {
   Command::new(program(bin, "pg_isready"))
     .args(["-q", "-t", "1", "-h"])
@@ -150,10 +162,14 @@ pub fn test_server_up() -> Result<(), String> {
 
   std::fs::create_dir_all(&dir).map_err(|why| why.to_string())?;
 
-  let wait = SUITE.numbers.server_stand_lock_seconds;
-  let lock = take_lock(&dir.join("stand.lock"), wait as f64, LockWait::default()).ok_or_else(|| {
-    fill_shown(&SUITE.cargo.stood_up_elsewhere, &[("dir", &dir.display()), ("seconds", &wait)])
-  })?;
+  // Another run standing the server up is waited out, however long it takes.
+  let mut wait_on = |_: Option<&str>| -> Option<i64> { Some(now_ms() + 1000) };
+  let wait = LockWait {
+    wait_on: Some(&mut wait_on),
+    ..LockWait::default()
+  };
+  let lock = take_lock(&dir.join("stand.lock"), 1.0, wait)
+    .ok_or_else(|| format!("{}: its stand lock could not be taken", dir.display()))?;
 
   if answers(&bin, &socket) {
     drop(lock);
@@ -197,11 +213,8 @@ pub fn test_server_up() -> Result<(), String> {
   // A unit that already stands is one still coming up, which the wait below waits for as well.
   let started = start.stdin(Stdio::null()).output();
 
-  for _ in 0..SUITE.numbers.server_start_tries {
-    if answers(&bin, &socket) {
-      break;
-    }
-
+  // Asked until it answers, however long it takes, or until its unit is no longer coming up.
+  while !answers(&bin, &socket) && coming_up() {
     std::thread::sleep(Duration::from_millis(SUITE.numbers.server_start_poll_ms));
   }
 

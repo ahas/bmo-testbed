@@ -158,15 +158,14 @@ fn a_run_of_the_suite_waits_for_the_turn_another_run_holds() {
   // A run where no service manager can be reached says it stands where it was started.
   assert!(lines[1].starts_with(&opening(&SUITE.lines.fence_none, &[("why", "")])), "{}", done.err);
   assert!(lines[2].starts_with(&opening(&SUITE.lines.cargo_jobs, &[])), "{}", done.err);
-  assert!(lines[3].starts_with(&opening(&SUITE.lines.guards, &[])), "{}", done.err);
   assert_eq!(
     verdict_of(&done.err),
     Some(verdict(&SUITE.ending.ok, &fill_marks(&SUITE.ending.all_passed, &[("files", "0")])).as_str())
   );
 }
 
-// "a run whose turn does not come within its wait runs nothing and says it was not run": one command holds
-// the machine, and no place stands beside it.
+// "a run whose harness goes away before its turn comes runs nothing and says it was not run": one command
+// holds the machine, and the run waits behind it until its harness is gone.
 #[test]
 fn a_run_whose_turn_does_not_come_runs_nothing() {
   let dir = tempfile::tempdir().unwrap();
@@ -175,7 +174,6 @@ fn a_run_whose_turn_does_not_come_runs_nothing() {
   let holder = take_turn(&TurnAsk {
     command: "the close".to_owned(),
     lane: Lane::Wide,
-    wait_seconds: Some(5.0),
     say: &|_| {},
     path: Some(lock.clone()),
     env: Env::from([("BMO_TESTBED_SCOPE".to_owned(), "place-3".to_owned())]),
@@ -183,7 +181,19 @@ fn a_run_whose_turn_does_not_come_runs_nothing() {
     poll: None,
     notice_seconds: None,
   });
-  let done = ended(suite_run(&repo, dir.path(), &["--turn-wait", "1", "no-such-test-file-791.ts"], None));
+  let mut harness = std::process::Command::new("sleep").arg("300").spawn().unwrap();
+  let mut command = testbed(&repo, dir.path(), &["suite", "no-such-test-file-791.ts"]);
+
+  command.env("CLAUDE_PID", harness.id().to_string());
+  std::os::unix::process::CommandExt::process_group(&mut command, 0);
+
+  let run = command.spawn().unwrap();
+
+  until("the run's ticket", || queued(&lock, run.id()), Duration::from_secs(20));
+  harness.kill().unwrap();
+  harness.wait().unwrap();
+
+  let done = ended(run);
 
   drop(holder);
 

@@ -225,8 +225,7 @@ fn a_repository_that_deploys_nothing_is_refused() {
   assert!(logged(dir.path(), "words").is_empty());
 }
 
-// "the unit is asked again while it is active, and a unit active past the wait is answered as still
-// running"
+// "the unit is asked again while it is active, however long it stays so"
 #[test]
 fn the_unit_is_waited_on_while_it_is_active() {
   let dir = tempfile::tempdir().unwrap();
@@ -262,23 +261,9 @@ fn the_unit_is_waited_on_while_it_is_active() {
     env: env(dir.path(), &bin, &at),
     testbed: bin.join("bmo-testbed"),
     poll: Duration::from_millis(10),
-    wait: Duration::from_secs(60),
   };
   let answer = deploy(&asked, &ground);
 
   assert!(!answer.is_error, "{}", answer.plain());
   assert_eq!(std::fs::read_to_string(&count).unwrap().lines().count(), 3);
-
-  script(&bin, "systemctl", "echo active");
-
-  let still = deploy(
-    &asked,
-    &Ground {
-      wait: Duration::ZERO,
-      ..ground
-    },
-  );
-
-  assert!(still.is_error);
-  assert!(still.plain().contains("bmo-deploy-1793328193818 is still running"), "{}", still.plain());
 }

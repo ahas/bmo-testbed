@@ -4,8 +4,7 @@
 
 use std::path::PathBuf;
 
-use crate::policy::lanes::LANES;
-use crate::turn::{Env, HELD_VARIABLE, Lane, harness_pid};
+use crate::turn::{Env, HELD_VARIABLE, Lane};
 
 /// The variable a deployment's or a whole run's unit is named by inside it.
 pub const DEPLOY_UNIT_VARIABLE: &str = "BMO_DEPLOY_UNIT";
@@ -14,33 +13,9 @@ pub const DEPLOY_UNIT_VARIABLE: &str = "BMO_DEPLOY_UNIT";
 pub struct PlaceAsk<'a> {
   pub command: &'a [String],
   pub lane: Lane,
-  /// The caller's wait for the turn and its guard, in seconds.
-  pub wait_seconds: u64,
-  pub guard_seconds: u64,
   /// The directory the run was started in.
   pub cwd: PathBuf,
   pub env: &'a Env,
-}
-
-impl PlaceAsk<'_> {
-  /// The caller's wait: the one it gave, or a harness's call's or a unit's.
-  pub fn wait_of(given: Option<f64>, env: &Env) -> u64 {
-    let numbers = &LANES.numbers;
-
-    given.map_or(
-      if harness_pid(env).is_some() {
-        numbers.harness_wait_seconds
-      } else {
-        numbers.unit_wait_seconds
-      },
-      |seconds| seconds as u64,
-    )
-  }
-
-  /// The caller's guard: the one it gave, or the run's own.
-  pub fn guard_of(given: Option<f64>) -> u64 {
-    given.map_or(LANES.numbers.guard_seconds, |seconds| seconds as u64)
-  }
 }
 
 /// Where a run goes.

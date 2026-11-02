@@ -3,30 +3,29 @@
 ## What it is
 
 - **The `suite` verb runs every test unit of a repository,** or the ones a change reaches
-  (`docs/checks.md`, 「Which tests a change runs」), and always ends inside the one call that started
-  it: passing, failing, or naming the units that would not end or never started.
+  (`docs/checks.md`, 「Which tests a change runs」), each to its end, and ends on a verdict: passing or
+  failing, naming the units that failed.
 - **What a unit is:** a test file of the repository's declared runner, a crate of its Cargo
   workspace, a project of its own, or a declared package check (`docs/declaration.md`). Each runs in a
   process of its own.
-- **Why a process per file:** a per-test timeout cuts only a test that yields to the timer. A test
-  stuck in a synchronous loop, a native call or an import holds its whole process; inside one shared
-  process it would hold every file after it. A file in a process of its own is cut by its file guard
-  whatever holds it.
+- **Why a process per file:** a test stuck in a synchronous loop, a native call or an import holds its
+  whole process; inside one shared process it would hold every file after it. A file in a process of its
+  own holds only itself, and the files beside it run on and write their results.
 - **Every caller runs the same verb:** a person, a close, a deployment's check and the daily whole
   run. A run placed on another machine runs the same verb there (`docs/testbed.md`, 「A run on another
   machine」).
 
 ## One sweep, a process per file
 
-- **Every test file runs in its own runner process,** inside its own file guard, as many at once as
-  the sweep is wide.
+- **Every test file runs in its own runner process,** until it ends, as many at once as the sweep is
+  wide.
 - **Width:** the testbed's wide lane, the machine's thread count (`docs/testbed.md`, 「The width」). A
   run holds the wide lane's turn, so no other suite or build shares the machine with it, only the
   narrow lane's one command of a few threads.
 - **The largest files start first.** A file's size says roughly how many tests it holds, so the long
   runs start while the rest can still fill the places around them.
 - **A file's process takes its descendants with it.** Each file runs as the head of a process group of
-  its own, and when the file ends or its guard fires the whole group is taken down.
+  its own, and when the file ends the whole group is taken down.
 - **Streaming:** each file's result is written out whole as that file ends, its verdict ahead of it,
   so what the run found is already in the redirected file even if the run is killed from outside.
   Output is held per file because files running beside one another would otherwise interleave.
@@ -46,14 +45,14 @@
 ## Heavy units run in a lane of one
 
 - **A crate's tests, a project's check and a declared package check** each run as one entry of the
-  sweep, as the head of a process group of its own inside a file guard, in a second lane of one
+  sweep, as the head of a process group of its own, in a second lane of one
   beside the browser lane. Each spends the machine's threads on its own, so two never run side by
   side; the projects go down the lane first, then the crates.
 - **Their verdicts stand in the log as a file's do,** and the totals count Cargo's result lines with
   the runner's, ignored tests as skipped.
-- **Crates are built once, before the guards start.** Every crate to be tested is built once the run
+- **Crates are built once, before the units start.** Every crate to be tested is built once the run
   has its turn and before its seconds are counted, by one Cargo command per crate with the words its
-  run will use, so the run compiles nothing inside a guard. A crate with a library builds its
+  run will use, so no unit compiles inside the sweep. A crate with a library builds its
   library's own tests first, alone, then the whole crate, so the two heaviest compiles never run side
   by side. A build that fails fails each unit again, by name.
 - **Cargo is handed as many jobs as the fence's memory holds** at a gigabyte and a half each, never
@@ -67,15 +66,12 @@
 
 ## One run at a time on a machine
 
-- **A run takes the testbed's wide lane before it starts,** with the testbed's waits
-  (`docs/testbed.md`, 「Waiting never fails a command」); `--turn-wait` sets another. A caller no harness's
-  call bounds passes twenty-five minutes.
+- **A run takes the testbed's wide lane before it starts,** waiting for it however long the line takes
+  (`docs/testbed.md`, 「Waiting never fails a command」).
 - **Inside a turn its caller holds, a run starts at once.**
-- **Where the turn has not come, the run does not start.** It writes its turn line, naming its place
-  and the holder, and a verdict saying it was not run, and ends with exit code 75. Its place is kept,
-  so the caller runs it again at once and waits on from where it stood.
-- **The wait is not the run's own time.** The guards and the verdict's seconds start once the turn has
-  come.
+- **Where the harness it runs for goes away while it waits, the run does not start.** It writes its turn
+  line, naming its place and the holder, and a verdict saying it was not run, and ends with exit code 75.
+- **The wait is not the run's own time.** The verdict's seconds start once the turn has come.
 
 ## A fence of its own
 
@@ -97,25 +93,20 @@
   scope kills every other process still in it and names them on one line. A run standing where its
   caller stands kills nothing.
 
-## The guards
+## Every unit runs to its end
 
-- **Thirty seconds per test** that names no limit of its own, handed to the runner; a caller that
-  names one keeps its own.
-- **Ninety seconds per file.** A file that has not ended by then is cut: its process group is killed,
-  its result line reads `CUT` with the seconds it ran, and what it wrote before the cut follows.
-- **Four minutes for the whole run.** Once they have passed, no further file is started; the files
-  already running go on under their own guards. The run then names the files it never started.
-- **A cut file fails the run,** and the verdict names it as one that would not end.
-- **A file that never started is not a failure.** Nothing of it was tested, so it is counted apart:
-  - where nothing failed and nothing was cut, the run ends with a failed verdict saying how many never
-    started and that none failed, and with exit code 75, the code of a run to make again;
-  - where something also failed, it ends with exit code 1, the files that never started still named
-    apart.
-- **Why so far above the work:** the machine a run stands on carries other work as well, and a guard
-  set close to the measured time turns a loaded run into a cut one, whose only answer is to run the
-  same tests again.
-- **Changing them:** `--guard` sets the whole-run guard and `--file-guard` the per-file one, in
-  seconds.
+- **Nothing of the suite's cuts a unit or a test.** A file, a crate's tests, a project's check and a
+  declared package check each run until they end, however long that takes, and every unit is started.
+- **A runner's own per-test limit is lifted** where the runner keeps one by default: `bun test` is handed
+  `--timeout 0`. A caller that names a limit in its words keeps its own, and a limit a test sets for itself
+  is the test's.
+- **A unit that does not end holds the run open** until someone stops it; the run says nothing of its own
+  about it, and the unit's process group is the one to stop.
+- **A unit's output closes once it has ended:** whatever it left standing in its process group is killed
+  at once, and so is any process outside the group still holding its output, so the run reads the output
+  whole and goes on.
+- **Keys read and given no effect:** `--guard`, `--file-guard` and `--turn-wait`, and a declaration's
+  `guard_seconds`, `file_guard_seconds` and `test_timeout_seconds`.
 
 ## Which files run
 
@@ -125,7 +116,7 @@
   suite.
 - **The declared languages run them** (`docs/testbed.md`, 「Languages」): each file by the first
   declared language whose naming it carries, or else the first that runs test files, handed the
-  caller's words and the declared per-test timeout. A repository declaring no language that runs
+  caller's words, with no per-test limit of the runner's own standing. A repository declaring no language that runs
   test files has none; a project's check script is run by the first declared language that runs
   package scripts.
 - **Each file runs from the folder of its runner's configuration:** the nearest folder at or above
@@ -238,14 +229,14 @@
 
 - **A test failing only now and then lets a change through once the next run passes,** and is mended
   rather than forgotten. A close and a deployment never stall on one.
-- **With `--again`,** where the first run failed or left files unstarted, the files and units that
-  failed or never started run once more, alone and by name, in the same tree. The run says so first,
+- **With `--again`,** where the first run failed, the files and units that failed run once more, alone
+  and by name, in the same tree. The run says so first,
   naming them.
   - It runs once more at most, and judges on that second run: where it passed, the run passes; where
     it did not, it fails as the second run ended, with what failed in either run named.
-  - A run whose turn never came and left nothing unstarted has nothing to run once more.
+  - A run whose turn never came has nothing to run once more.
 - **What passed the second time is flaky:** each test the first run named as failing, with the file or
-  unit it stands in, and each file or unit that failed. One that only never started is not flaky.
+  unit it stands in, and each file or unit that failed.
 - **The flaky record:** one line in `suite-flaky.jsonl` under the data root's `testbed/` for each run
   that found any, with the time, the commit, the tests by name with their files, the files and the
   log, and a `suite-flaky` event goes to the hook (`docs/boundary.md`, 「Events」).
@@ -271,9 +262,6 @@
   in its repository's folder before anything else, and `full --due <HH:MM>` starts one only where none
   started since the latest such time of day, local time, so a scheduler that asks every minute runs it
   once.
-- **Files that never started run again.** Where a pass leaves files unstarted, it runs again over those
-  files alone, and again while each round starts more of them than the one before. The pass stands on
-  what every round came to.
 - **What it tells:** a run that fails sends a `full-suite-failed` event naming the failing files, the
   unit each stands in, the head it ran at and the log; a tree that could not be set up, or a static
   check that failed, is told the same way with what failed. A run that passes says nothing beyond its
@@ -294,10 +282,10 @@
   repository in `upstreams`, each by its declared name and root. It answers the direct consumers only; it
   does not follow a consumer's own consumers.
 - **With `--run`** it then runs each consumer's suite through the suite runner above, from that consumer's
-  root, one repository at a time in the wide lane, each with the consumer's own declaration, log, test run and
-  guards. A consumer whose suite fails does not stop the ones after it.
-- **Exit codes:** 0 where every consumer passed, or there is none; 1 where any consumer's suite failed or was
-  cut; 75 where none failed but a consumer's suite did not run; 2 where the registry or a consumer's
+  root, one repository at a time in the wide lane, each with the consumer's own declaration, log and test run.
+  A consumer whose suite fails does not stop the ones after it.
+- **Exit codes:** 0 where every consumer passed, or there is none; 1 where any consumer's suite failed; 75
+  where none failed but a consumer's suite did not run; 2 where the registry or a consumer's
   declaration does not read. The consumers are refused before any suite starts.
 - **How a change is known to be major:** a caller names it by running `dependents --run`. A deployment
   decides for itself: it compares the major of the commit's `VERSION` with the version in the deployment
@@ -309,8 +297,6 @@
 ## The lines the run writes about itself
 
 - **Both open with `suite:`,** so a caller holding a log full of the runners' own output can find them.
-- **The first line says what the run holds itself to,** the two guards, so a log cut off still says
-  at its head what the run was allowing.
 - **The last line is always the verdict:** whether it passed, how long it took, and what happened. Its
   presence is the answer to whether the run has ended.
 - **Every line goes to the run's own log as well,** under the data root's `testbed/`, which its test

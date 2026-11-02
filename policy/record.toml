@@ -10,7 +10,6 @@ file = "record.sqlite"
 keep_days = 30
 # Events older than this many days go; a resume from before them is answered gone.
 event_window_days = 7
-busy_milliseconds = 5000
 # A page's items where the query names no limit, and the most it ever answers.
 default_limit = 50
 limit_ceiling = 500

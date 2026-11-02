@@ -12,7 +12,6 @@ pub struct Prune {
   pub own_grace_hours: i64,
   pub shared_ceiling_bytes: u64,
   pub checkout_ceiling_bytes: u64,
-  pub lock_wait_seconds: u64,
 }
 
 super::part!(pub PRUNE: Prune = "prune.toml");

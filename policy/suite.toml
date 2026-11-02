@@ -1,9 +1,9 @@
 # What a run of the suite says (docs/suite.md): the selection it opens with (docs/checks.md, 「Which
 # tests a change runs」), the lines it writes about itself, each unit's result and the verdict it ends on.
 # A harness and the readers of a suite's log read them, so they are English, and the lines a reader parses —
-# each unit's mark, the summary of what failed, would not end or never started, and the verdict — keep
-# their shape. Each `{name}` is filled in with what it names. Its numbers, the fence's, each unit's, the
-# test server's, the superseded removal's and the change check's, stand under `[numbers]`.
+# each unit's mark, the summary of what failed, and the verdict — keep their shape. Each `{name}` is filled
+# in with what it names. Its numbers, the fence's, the test server's, the superseded removal's and the change
+# check's, stand under `[numbers]`.
 
 # The numbers a run and the change check hold to. Each key names its unit.
 [numbers]
@@ -19,22 +19,9 @@ fence_tasks = 8192
 # runs where it is.
 fence_move_poll_ms = 50
 fence_move_tries = 40
-# One unit (docs/suite.md, 「One sweep, a process per file」): how often a running unit is looked at; how
-# long a cut unit's processes are given to go once asked, before they are killed; and how long its output
-# is still read after they were taken down, since a process that left the group can still hold it open.
-unit_poll_ms = 50
-unit_kill_after_seconds = 5
-unit_output_grace_seconds = 2
-# The suite's own test server once started: how many times, and how far apart, it is asked whether it
-# answers before it is taken for one that did not come up.
-server_start_tries = 60
+# The suite's own test server once started: how far apart it is asked whether it answers, until it does or
+# its unit is no longer coming up.
 server_start_poll_ms = 500
-# How long a run waits for another run standing the test server up before it gives up on it.
-server_stand_lock_seconds = 120
-# The removal of what a build superseded: how long it waits on Cargo's build lock before it leaves what it
-# found to the next one, and how far apart it tries.
-superseded_lock_wait_seconds = 5
-superseded_lock_poll_ms = 200
 # How many lines of a failing static step's output the change check prints; the rest is in its log.
 check_shown_lines = 40
 
@@ -113,7 +100,6 @@ unrecorded = "{mark} the flaky tests could not be written down: {why}"
 [lines]
 mark = "suite:"
 turn = "{mark} turn: {words}"
-guards = "{mark} guards: {whole}s to start files, {file}s per file"
 cargo_jobs = "{mark} cargo: {jobs} jobs, what the fence holds"
 fence_none = "{mark} fence: none, running where it stands: {why}"
 fence_held = "{mark} fence: {unit}, memory {memory} GB, swap {swap} GB, {tasks} tasks"
@@ -142,7 +128,6 @@ no_browser = "none declared"
 
 # One unit's result, written whole as it ends: its mark, its seconds and its name, then what it printed.
 [file]
-cut = "CUT "
 ok = "ok  "
 failed = "fail"
 heading = "{mark} {seconds}s  {file}"
@@ -154,25 +139,19 @@ no_runner = "no declared language runs its {script} script, so nothing of it cou
 tests_step = "{language} test"
 no_tool_check = "its {manifest} names no {key} command, so nothing of it could be checked"
 unread_manifest = "its {manifest} does not read, so nothing of it could be checked: {why}"
-held = "(a process this file started outside its own group still held its output; the rest was not read)"
 
 # What the sweep came to, and the verdict the run ends on.
 [ending]
-summary = "{files} files: {passed} ok, {failed} failed, {cut} cut, {unstarted} never started"
-cut_files = "did not end within {guard}s: {files}"
+summary = "{files} files: {passed} ok, {failed} failed"
 failed_files = "failed: {files}"
-unstarted_files = "never started within {guard}s: {files}"
 verdict = "{mark} {outcome} in {seconds}s: {note}"
 ok = "ok"
 failed = "FAILED"
-not_run = "not run: the machine's turn for heavy commands did not come, so nothing was tested; run it again at once to wait on from its place"
+not_run = "not run: the harness it waited for went away before the machine's turn for heavy commands came, so nothing was tested"
 all_passed = "{files} of {files} files passed"
 passed = "{passed} of {files} files passed"
 failed_count = "{count} failed"
-cut_count = "{count} did not end within {guard}s"
-unstarted_count = "{count} never started within {guard}s"
 joiner = ", "
-only_unstarted = "{note}; none failed, so run it again for the ones that never started"
 # A checkout of the testbed whose own binary did not build, by the {code} its build ended with
 # (docs/boundary.md, 「The binary」).
 unbuilt = "this checkout's bmo-testbed did not build (exit {code}), so nothing was tested"
@@ -209,4 +188,3 @@ locked = "cargo: another build holds the build lock; {count} superseded units of
 removed = "cargo: removed {count} superseded units of {target}, {megabytes} MB"
 unstarted = "cargo: {command} could not be started: {why}"
 # The test server's stand lock not had: {dir} the server's folder, {seconds} how long it was waited for.
-stood_up_elsewhere = "{dir} was being stood up by another run for {seconds}s"

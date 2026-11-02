@@ -91,7 +91,6 @@ fn hand(setting: &Value) -> Value {
     let held = take_turn(&TurnAsk {
       command: format!("{} by hand", setting["name"].as_str().unwrap()),
       lane: Lane::Wide,
-      wait_seconds: Some(60.0),
       say: &quiet,
       path: None,
       env: env.clone(),
@@ -269,7 +268,6 @@ fn holds_the_wide_lane_and_lets_a_deployment_at_the_front_in_before_the_next() {
       let turn = take_turn(&TurnAsk {
         command: "the deployment's check".to_owned(),
         lane: Lane::Wide,
-        wait_seconds: Some(10.0),
         say: &quiet,
         path: Some(lock.clone()),
         env: front.clone(),

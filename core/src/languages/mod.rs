@@ -59,14 +59,8 @@ pub trait Language: Sync {
     None
   }
   /// The command that runs these test files, each a path from the folder it runs in, handed the caller's
-  /// words and, where one is given, the per-test limit in seconds its own way unless the words name one;
-  /// none for a language that runs no test files.
-  fn test_command(
-    &self,
-    _files: &[String],
-    _words: &[String],
-    _timeout_seconds: Option<u64>,
-  ) -> Option<Vec<String>> {
+  /// words, with no per-test limit of the runner's own standing; none for a language that runs no test files.
+  fn test_command(&self, _files: &[String], _words: &[String]) -> Option<Vec<String>> {
     None
   }
   /// The command that runs a project's package script; none for a language that runs no scripts.

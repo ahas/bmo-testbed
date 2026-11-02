@@ -519,7 +519,7 @@
             ]
           },
           "kept": {
-            "description": "A place kept for a run that ended not run.",
+            "description": "Always false: a waiter waits its turn out, and no place is kept for one that left.",
             "type": "boolean"
           },
           "next": {

@@ -12,14 +12,7 @@ pub struct Numbers {
   pub fence_tasks: u64,
   pub fence_move_poll_ms: u64,
   pub fence_move_tries: u32,
-  pub unit_poll_ms: u64,
-  pub unit_kill_after_seconds: u64,
-  pub unit_output_grace_seconds: u64,
-  pub server_start_tries: u32,
   pub server_start_poll_ms: u64,
-  pub server_stand_lock_seconds: u64,
-  pub superseded_lock_wait_seconds: u64,
-  pub superseded_lock_poll_ms: u64,
   pub check_shown_lines: usize,
 }
 
@@ -87,7 +80,6 @@ pub struct AgainWords {
 pub struct LineWords {
   pub mark: String,
   pub turn: String,
-  pub guards: String,
   pub cargo_jobs: String,
   pub fence_none: String,
   pub fence_held: String,
@@ -114,7 +106,6 @@ pub struct LineWords {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FileWords {
-  pub cut: String,
   pub ok: String,
   pub failed: String,
   pub heading: String,
@@ -123,16 +114,13 @@ pub struct FileWords {
   pub tests_step: String,
   pub no_tool_check: String,
   pub unread_manifest: String,
-  pub held: String,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct EndingWords {
   pub summary: String,
-  pub cut_files: String,
   pub failed_files: String,
-  pub unstarted_files: String,
   pub verdict: String,
   pub ok: String,
   pub failed: String,
@@ -140,10 +128,7 @@ pub struct EndingWords {
   pub all_passed: String,
   pub passed: String,
   pub failed_count: String,
-  pub cut_count: String,
-  pub unstarted_count: String,
   pub joiner: String,
-  pub only_unstarted: String,
   pub unbuilt: String,
 }
 
@@ -172,7 +157,6 @@ pub struct CargoWords {
   pub locked: String,
   pub removed: String,
   pub unstarted: String,
-  pub stood_up_elsewhere: String,
 }
 
 /// What no test unit inherits: the deployment's own variables, which name the live data rather than the

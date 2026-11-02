@@ -13,18 +13,11 @@ pub struct LaneWords {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Numbers {
-  pub harness_wait_seconds: u64,
-  pub unit_wait_seconds: u64,
-  pub front_allowance_seconds: u64,
-  pub kept_place_seconds: u64,
   pub notice_seconds: u64,
   pub poll_milliseconds: u64,
   pub watch_seconds: u64,
-  pub stop_grace_seconds: u64,
-  pub guard_seconds: u64,
   pub failure_lines: usize,
   pub log_keep_days: u64,
-  pub placement_answer_seconds: u64,
   pub narrow_divisor: usize,
 }
 
@@ -34,7 +27,7 @@ pub struct MemoryLimitNumbers {
   pub settle_seconds: u64,
   pub needed_gigabytes: u64,
   pub poll_seconds: u64,
-  pub wait_seconds: u64,
+  pub notice_seconds: u64,
   pub runs: u32,
 }
 
@@ -60,7 +53,6 @@ pub struct SettledWords {
   pub own: String,
   pub queued: String,
   pub nobody: String,
-  pub kept: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -91,7 +83,6 @@ pub struct RunWords {
   pub counts: String,
   pub exit: String,
   pub by_signal: String,
-  pub cut: String,
   pub failures: String,
   pub failures_first: String,
   pub failure: String,
@@ -110,7 +101,6 @@ pub struct StatusWords {
   pub age: String,
   pub front: String,
   pub next: String,
-  pub kept: String,
   pub close_line: String,
 }
 

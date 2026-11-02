@@ -36,13 +36,9 @@ pub struct Numbers {
   pub quoted_chars: usize,
   pub command_chars: usize,
   pub releases_told_above: usize,
-  pub health_ask_ms: u64,
   pub health_poll_ms: u64,
   pub unit_check_ms: u64,
-  pub stay_poll_ms: u64,
   pub journal_lines: usize,
-  pub step_poll_ms: u64,
-  pub step_stop_grace_seconds: u64,
   pub quiet_poll_ms: u64,
 }
 
@@ -108,7 +104,6 @@ pub struct RunWords {
   pub before_start_failed: String,
   pub quiet_asking: String,
   pub quiet_live: String,
-  pub quiet_refused: String,
   pub quiet_forced: String,
   pub waiting: String,
   pub watching: String,
@@ -117,7 +112,6 @@ pub struct RunWords {
   pub retired_plain: String,
   pub unretired: String,
   pub after_failed: String,
-  pub after_overran: String,
   pub pruned: String,
   pub kept_pinned: String,
   pub pinned_summary: String,
@@ -152,17 +146,12 @@ pub struct AdoptWords {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct BootWords {
-  pub no_answer: String,
   pub not_run: String,
   pub exit: String,
   pub exit_said: String,
   pub a_signal: String,
   pub unasked: String,
   pub unit_is: String,
-  pub unit_went: String,
-  pub pid_changed: String,
-  pub restarted: String,
-  pub unasked_hold: String,
   pub strain: String,
   pub unknown: String,
   pub waited: String,

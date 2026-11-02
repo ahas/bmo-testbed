@@ -5,7 +5,6 @@
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
-use std::time::Duration;
 
 use bmo_testbed_core::declaration::Repository;
 use bmo_testbed_core::placement::{PlaceAsk, Placement};
@@ -54,8 +53,6 @@ struct Asked<'a> {
   lane: Lane,
   front: bool,
   next: bool,
-  wait_seconds: u64,
-  guard_seconds: u64,
 }
 
 /// Where the caller's copy of its checkout stands on the placed machine.
@@ -192,11 +189,9 @@ fn dropped(machine: &str, said: &str) -> u8 {
 impl HttpPlacement {
   // The endpoint's answer to the run, or why there is none that reads.
   async fn asked(&self, client: &reqwest::Client, asked: &Asked<'_>) -> Result<Answer, String> {
-    let wait = Duration::from_secs(LANES.numbers.placement_answer_seconds);
     let answered = client
       .post(&self.endpoint)
       .json(asked)
-      .timeout(wait)
       .send()
       .await
       .and_then(reqwest::Response::error_for_status)
@@ -247,8 +242,6 @@ impl HttpPlacement {
       lane: ask.lane,
       front: stands_at_front(ask.env),
       next: stands_next(ask.env),
-      wait_seconds: ask.wait_seconds,
-      guard_seconds: ask.guard_seconds,
     };
     let client = reqwest::Client::new();
     let local = |why: &str| {

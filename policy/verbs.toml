@@ -1,7 +1,6 @@
 # The binary's own words (docs/boundary.md, 「The binary」 and 「The verbs」): the usage `--help` prints,
 # for the binary and for each verb, and what each verb says of itself. A harness reads the words, so they are
-# English. {verb} is the binary's name, and {guard}, {harness_wait}, {unit_wait} and {kept} are the `lanes`
-# numbers they stand for.
+# English. {verb} is the binary's name.
 
 [usage]
 binary = """
@@ -35,25 +34,22 @@ test      the platform's names for the suite verbs: test suite, test count, test
 
 {verb} <verb> --help prints that verb's own usage (docs/boundary.md)."""
 run = """
-usage: {verb} run [--narrow] [--adapter <name>] [--guard <seconds>] [--wait <seconds>] [--json] -- <command…>
+usage: {verb} run [--narrow] [--adapter <name>] [--json] -- <command…>
 
 Runs a heavy test or build command in the machine's turn: it waits behind every other such
-command of its lane on this machine, then runs alone there, handed the lane's width, and ends on
-one line: passed or not, how many tests passed, failed and were skipped, how long it ran and
+command of its lane on this machine, however long that takes, then runs alone there until it ends,
+handed the lane's width, and ends on one line: passed or not, how many tests passed, failed and were skipped, how long it ran and
 waited, and the log holding its whole output, with what failed under it.
 
 --narrow   the narrow lane, beside the wide lane's holder on a quarter of the machine, for a
            command that needs only a few threads: one file run again and again, a script of its
            own over one test
 --adapter  the language that runs it, instead of the one that claims the command
---guard    seconds the command may hold the machine before it is cut (default {guard})
---wait     seconds to wait for the turn (default {harness_wait} in a harness's call, {unit_wait}
-           elsewhere)
 --json     the lines on standard error, and on standard output one command run once it has ended
            (docs/boundary.md)
 
-Where the turn does not come within the wait, nothing runs, it ends with exit code 75, and a
-harness's place in the line is kept for {kept} seconds: run the same command again at once."""
+Where the harness it runs for goes away before the turn comes, nothing runs and it ends with exit
+code 75."""
 status = """
 usage: {verb} status [--json]
 
@@ -71,17 +67,15 @@ light line and 1 for a heavy one.
 --takes-turn  a command that takes the turn itself, its program and the words it opens with
 --json        the answer as one JSON object (docs/boundary.md)"""
 suite = """
-usage: {verb} suite [--since <commit>] [--again] [--guard <seconds>] [--file-guard <seconds>] [--turn-wait <seconds>] [--json] [<word>…]
+usage: {verb} suite [--since <commit>] [--again] [--json] [<word>…]
 
 Runs the repository's units in the machine's turn (docs/suite.md): every one, or those the change
 since a commit reaches. A word naming a path narrows the files, a word naming a unit exactly picks
-it, and every other word goes to each file's runner. The verb's own flags come before its words.
+it, and every other word goes to each file's runner. Every unit runs until it ends. The verb's own
+flags come before its words.
 
 --since       the commit the change is read from
---again       what failed or never started, run once more by name and judged on that run
---guard       seconds the whole run may take (default the declaration's)
---file-guard  seconds one unit may take (default the declaration's)
---turn-wait   seconds to wait for the turn
+--again       what failed, run once more by name and judged on that run
 --json        one command run on standard output once the run has ended, its log the run's own"""
 dependents = """
 usage: {verb} dependents [--run]
@@ -171,8 +165,7 @@ full = """
 usage: {verb} full [--due <HH:MM>]
 
 Starts the daily whole run of the repository in a unit of its own and ends (docs/suite.md): the main
-branch's head in a tree of its own, set up, the static check, then every unit, what never started run
-again by name. A run that fails sends a full-suite-failed event. Inside its unit it runs to its end
+branch's head in a tree of its own, set up, the static check, then every unit. A run that fails sends a full-suite-failed event. Inside its unit it runs to its end
 and exits 1 where it failed; a second run meeting one at work is refused with 2.
 
 --due  start only where no run started since that time of day, local time"""
@@ -181,7 +174,7 @@ usage: {verb} deploy [--commit <sha>] [--message <why>] [--dry-run] [--no-check]
 
 Puts a commit of the repository live (docs/deploy.md): the checkout's HEAD, or the commit named,
 gated by the static check and the suite, backed up, built into a release of its own, flipped onto,
-its services restarted and watched, and rolled back where they do not stay up. Outside a
+its services restarted and watched, and rolled back where they do not come up. Outside a
 deployment's unit it starts one, prints its name and how to read its journal, and exits 0.
 
 --commit        the commit to put live, which the remote must hold
@@ -190,7 +183,7 @@ deployment's unit it starts one, prints its name and how to read its journal, an
 --dry-run       say what would be done, here, and change nothing
 --no-check      leave the gate out, where the caller already ran it
 --before-start  a command run between the bot service's stop and its start
---force-live    go on past the declared quiet command where work still stands under way after its wait"""
+--force-live    go on at once past the declared quiet command where work stands under way, cutting it"""
 backups = """
 usage: {verb} backups
 
@@ -311,13 +304,12 @@ how = "ask again over fewer files."
 not_named = "it names nothing: give a value that is neither empty nor a flag"
 not_a_time = "it is no time of day: give it as HH:MM"
 
-# What `backups` says: {dir} the backup directory, {seconds} how long it waits for another run.
+# What `backups` says: {dir} the backup directory.
 [backups]
 none_declared = "the declaration names no [deploy.backup], so there are no backups to send"
 local_only = "the declaration names no remote, so the backups in {dir} stay on this machine"
 holder = "backups"
-wait_seconds = 10800
-locked = "backups: another run held the upload for {seconds}s, so nothing was sent; run it again"
+locked = "backups: waiting for another run's upload to end"
 
 # What `prune` says (docs/deploy.md, 「The Cargo build directory」): {root} the build directory, {what}
 # what it takes, {verb} whether it was removed, the counts of what it took, {checkouts} the checkouts'
@@ -327,7 +319,7 @@ gone = "prune: {root} does not exist, so there is nothing to remove"
 noatime = "prune: the disk {root} stands on keeps no access times (noatime), so what no build read cannot be told"
 too_short = "prune: --older-than takes a number of days above {days}, since the disk moves a read's time only once it is a day old"
 no_hours = "prune: --incremental-older-than takes a number of hours above 0"
-locked = "prune: nothing removed: Cargo's build lock in {profile} did not come within {seconds} seconds"
+locked = "prune: waiting for Cargo's build lock in {profile}, which a build holds"
 everything = "everything but its lock files"
 spans = "own units no live checkout's record names, other units unread for {days} days, incremental state unchanged for {hours} hours"
 heading = "prune: {root}, {what} {verb}"

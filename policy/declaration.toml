@@ -7,9 +7,6 @@ file = "testbed.toml"
 
 # The defaults, one for each key whose default is a number or a word, under the table that key stands in.
 [defaults.test]
-guard_seconds = 240
-file_guard_seconds = 90
-test_timeout_seconds = 30
 memory_gb = 12
 
 [defaults.database]
@@ -30,16 +27,9 @@ cargo_profile = "release"
 
 [defaults.deploy]
 link = "deploy"
-health_wait_seconds = 300
-stay_up_seconds = 30
-quiet_wait_seconds = 300
-step_timeout_seconds = 1200
 
 [defaults.backup]
 keep = 5
-
-[defaults.events]
-timeout_seconds = 30
 
 # What a declaration that does not read is refused with. {file} is the declaration's path.
 [refusal]

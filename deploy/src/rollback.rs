@@ -13,8 +13,8 @@ use serde_json::{Value, json};
 use crate::release::{GitRun, flip, release_dir, stands_built};
 use crate::tree::{DeployRecord, relink_units, short, unit_link_plan, unit_links, write_deploy_record};
 
-/// Why the deployment failed: a unit refused its restart, the health did not answer, or the service
-/// answered and then did not stay up.
+/// Why the deployment failed: a unit refused its restart, the unit gave up starting before the health
+/// answered, or the service answered and was not read running.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BootFailure {
   RestartRefused,
@@ -36,10 +36,6 @@ pub struct FailedDeploy {
   pub before_start: bool,
   /// The unit that did not come up, whose journal holds the cause.
   pub unit: String,
-  /// How long the deployment waits for the health, in seconds.
-  pub health_wait_seconds: u64,
-  /// How long a service that answered must stay up, in seconds.
-  pub stay_up_seconds: u64,
 }
 
 /// The deploy tree put back on a commit's release, as the deployment itself would have flipped it.
@@ -59,7 +55,7 @@ pub trait ServiceHands {
   /// Reloads the units and restarts the service with the `binary` units whose binaries differ; false
   /// where systemctl would not.
   fn restart(&self) -> bool;
-  /// Whether the health answers within the deployment's wait, and the service stays up.
+  /// Whether the health answers before the unit gives up starting, and the service is read running.
   fn answers(&self) -> impl Future<Output = bool>;
   fn say(&self, line: &str);
   /// The moment now, in ISO.
@@ -178,14 +174,8 @@ pub fn failure_line(failed: &FailedDeploy) -> String {
 
   match failed.failure {
     BootFailure::RestartRefused => fill_marks(&words.restart_refused, &[("commit", &commit)]),
-    BootFailure::NotAnswering => fill_marks(
-      &words.not_answering,
-      &[("commit", &commit), ("seconds", &failed.health_wait_seconds.to_string())],
-    ),
-    BootFailure::DiedAfterStart => fill_marks(
-      &words.died_after_start,
-      &[("commit", &commit), ("seconds", &failed.stay_up_seconds.to_string())],
-    ),
+    BootFailure::NotAnswering => fill_marks(&words.not_answering, &[("commit", &commit)]),
+    BootFailure::DiedAfterStart => fill_marks(&words.died_after_start, &[("commit", &commit)]),
   }
 }
 

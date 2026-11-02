@@ -2,7 +2,6 @@
 //! taking none, and a span too short to tell refused before anything is read.
 
 use std::ffi::OsString;
-use std::time::Duration;
 
 use bmo_testbed_cli::cargo::prune_in;
 use bmo_testbed_cli::words::{PruneArgs, Verb, read};
@@ -20,7 +19,6 @@ fn prune_words(given: &[&str]) -> Result<PruneArgs, clap::Error> {
 fn no_hook() -> Hook {
   Hook {
     command: None,
-    timeout: Duration::from_secs(1),
     repository: None,
     root: None,
   }

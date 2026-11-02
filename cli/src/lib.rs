@@ -59,8 +59,6 @@ fn run(args: RunArgs) -> u8 {
       command: args.command,
       narrow: args.narrow,
       adapter: args.adapter,
-      guard_seconds: args.guard.map(|seconds| seconds as f64),
-      wait_seconds: args.wait.map(|seconds| seconds as f64),
       json: args.json,
     },
     &VerbGround {

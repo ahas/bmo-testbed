@@ -10,9 +10,6 @@ protocol = 1
 [numbers]
 # How often the deployment's unit is asked whether it is still active, in seconds.
 poll_seconds = 5
-# How long the unit is waited for, in seconds: under the manifest's hour, so the call answers before the
-# host ends it.
-wait_seconds = 3480
 # How many of the unit's journal lines a deployment that did not go live is answered with.
 journal_lines = 30
 # The fewest and the most hexadecimal digits a commit's name is taken with.
@@ -30,7 +27,6 @@ unit = "unit: {unit}"
 not_live = "not live: {unit} ended and the deployment record names {recorded}, not {commit}. The last lines of its journal:"
 not_written = "not live: {unit} ended and the deployment record is still the one from before this call. The last lines of its journal:"
 nothing_recorded = "nothing"
-still_running = "{unit} is still running after {seconds}s; read it with: journalctl --user -u {unit} --no-pager"
 unasked = "{unit} could not be asked whether it is still active: {why}"
 journal_unread = "its journal could not be read: {why}"
 # What the verb itself came to, {said} what it wrote.

@@ -15,7 +15,6 @@ use bmo_testbed_core::declaration::Repository;
 use bmo_testbed_core::events::{Event, Hook};
 use bmo_testbed_core::policy::daily::DAILY;
 use bmo_testbed_core::policy::fill_marks;
-use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::queue::{LockWait, now_ms, take_lock};
 use bmo_testbed_core::turn::{NOT_RUN_EXIT_CODE, process_env};
 use bmo_testbed_core::verb::{REFUSED_EXIT_CODE, data_root};
@@ -367,12 +366,7 @@ impl FullHands for Machine {
   }
 
   fn suite(&self, only: &[String]) -> Round {
-    let mut line = vec![
-      this_again()[0].clone(),
-      "suite".to_owned(),
-      "--turn-wait".to_owned(),
-      LANES.numbers.unit_wait_seconds.to_string(),
-    ];
+    let mut line = vec![this_again()[0].clone(), "suite".to_owned()];
 
     line.extend(only.iter().cloned());
 

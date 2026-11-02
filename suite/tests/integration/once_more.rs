@@ -132,11 +132,8 @@ fn a_run_that_passed_or_started_nothing_runs_nothing_once_more() {
 // "what never started runs once more beside what failed, and only what failed is flaky"
 #[test]
 fn what_never_started_runs_once_more_beside_what_failed_and_only_what_failed_is_flaky() {
-  let first = format!(
-    "{}\n{}",
-    one_failed(),
-    fill_marks(&SUITE.ending.unstarted_files, &[("guard", "240"), ("files", STEADY)])
-  );
+  // A log a run with a whole-run guard wrote, naming a unit it never started.
+  let first = format!("{}\nnever started within 240s: {STEADY}", one_failed());
   let asked = RefCell::new(Vec::new());
   let runs = run_once_more(SuiteRun::of_log(1, &first), |named: &[String]| {
     asked.borrow_mut().push(named.to_vec());

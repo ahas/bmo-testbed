@@ -21,7 +21,7 @@ fn entry(entry: &TurnEntry) -> QueueEntry {
     pid: entry.pid,
     asked_at: entry.asked,
     held_at: entry.since,
-    kept: entry.kept,
+    kept: false,
     front: entry.front,
     next: entry.next,
   }

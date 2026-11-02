@@ -110,15 +110,11 @@ impl Language for Bun {
     Some("bunfig.toml")
   }
 
-  // Several files run side by side in bun's own pool; the per-test limit is bun's `--timeout`, in milliseconds.
+  // Several files run side by side in bun's own pool. Bun ends a test at a limit of its own unless told
+  // otherwise, so it is handed `--timeout 0`, which lifts that limit, unless the words name a limit themselves.
   // bun reads a word as a file only where it is written as a path, and any other word as a filter it matches
   // within every test file's path, so a file handed by a bare name would run every file whose path holds it.
-  fn test_command(
-    &self,
-    files: &[String],
-    words: &[String],
-    timeout_seconds: Option<u64>,
-  ) -> Option<Vec<String>> {
+  fn test_command(&self, files: &[String], words: &[String]) -> Option<Vec<String>> {
     let mut command = vec!["bun".to_owned(), "test".to_owned()];
 
     if files.len() > 1 {
@@ -127,10 +123,8 @@ impl Language for Bun {
 
     command.extend(words.iter().cloned());
 
-    if let Some(seconds) = timeout_seconds
-      && !names_flag(words, "--timeout")
-    {
-      command.extend(["--timeout".to_owned(), (seconds * 1000).to_string()]);
+    if !names_flag(words, "--timeout") {
+      command.extend(["--timeout".to_owned(), "0".to_owned()]);
     }
 
     command.extend(files.iter().map(|file| {

@@ -113,8 +113,6 @@ pub fn ended(repo: &Repository, run_suites: bool) -> DependentsEnded {
     );
 
     let ask = SuiteAsk {
-      whole_guard: consumer.declaration.test.guard_seconds,
-      file_guard: consumer.declaration.test.file_guard_seconds,
       record: Some(suite_record(&root, consumer, format!("{BINARY} dependents --run"))),
       ..SuiteAsk::default()
     };

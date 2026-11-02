@@ -213,7 +213,6 @@ async fn the_lanes_answer_as_they_stand_and_a_change_is_an_event() {
   let turn = take_turn(&TurnAsk {
     command: "a check".to_owned(),
     lane: Lane::Wide,
-    wait_seconds: Some(1.0),
     say: &|_| {},
     path: Some(lock),
     env,

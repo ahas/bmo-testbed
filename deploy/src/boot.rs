@@ -1,8 +1,8 @@
 //! Watching the `bot` service come up after a restart, and saying what came of it where it did not
-//! (docs/deploy.md, 「What the deploy run does, in order」, step 10, and 「Rollback」). A wait that runs out is
-//! the one moment the failing service can still be looked at — the rollback stops it next — so what was
-//! waited for, what systemd and the kernel hold of it and the tail of its journal are read here, into lines
-//! the deploy output keeps.
+//! (docs/deploy.md, 「What the deploy run does, in order」, step 10, and 「Rollback」). A unit that gave up
+//! starting is the one moment the failing service can still be looked at — the rollback stops it next — so
+//! what was waited for, what systemd and the kernel hold of it and the tail of its journal are read here, into
+//! lines the deploy output keeps.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -19,13 +19,12 @@ use crate::unit::first_chars;
 pub struct HealthWait {
   /// The health command, as the declaration writes it.
   pub command: String,
-  pub limit_ms: u64,
   pub answered: bool,
   pub waited_ms: u64,
   pub asks: u32,
   /// What the last ask heard: its exit and the start of what it printed, or why nothing came.
   pub last: String,
-  /// The unit gave up starting before the limit, which ended the wait at once.
+  /// The unit gave up starting before the health answered, which ended the wait at once.
   pub gave_up: bool,
 }
 
@@ -37,9 +36,6 @@ pub struct HealthWatch<'a> {
   /// The declared health command, run by the shell in `cwd`; it answers 0 once the service is healthy.
   pub command: String,
   pub cwd: PathBuf,
-  pub limit_ms: u64,
-  /// The longest one ask may take before it counts as no answer.
-  pub ask_limit_ms: u64,
   /// Whether the unit has given up starting; asked between asks, at most every `check_every_ms`.
   pub gave_up: Option<GaveUp<'a>>,
   pub poll_ms: u64,
@@ -47,15 +43,14 @@ pub struct HealthWatch<'a> {
 }
 
 impl<'a> HealthWatch<'a> {
-  /// A wait of `limit_ms` for a health command, asking and checking the unit as the policy says.
-  pub fn new(command: &str, cwd: &Path, limit_ms: u64) -> Self {
+  /// A wait for a health command, asking and checking the unit as the policy says, until it answers or the
+  /// unit gives up starting.
+  pub fn new(command: &str, cwd: &Path) -> Self {
     let numbers = &DEPLOY.numbers;
 
     Self {
       command: command.to_owned(),
       cwd: cwd.to_path_buf(),
-      limit_ms,
-      ask_limit_ms: numbers.health_ask_ms,
       gave_up: None,
       poll_ms: numbers.health_poll_ms,
       check_every_ms: numbers.unit_check_ms,
@@ -69,10 +64,10 @@ async fn ask_health(watch: &HealthWatch<'_>) -> (bool, String) {
 
   ask.kill_on_drop(true);
 
-  match tokio::time::timeout(Duration::from_millis(watch.ask_limit_ms), ask.output()).await {
-    Err(_) => (false, fill_shown(&DEPLOY.boot.no_answer, &[("seconds", &seconds(watch.ask_limit_ms))])),
-    Ok(Err(why)) => (false, fill_shown(&DEPLOY.boot.not_run, &[("why", &why)])),
-    Ok(Ok(done)) => {
+  // One ask is waited for until the command ends.
+  match ask.output().await {
+    Err(why) => (false, fill_shown(&DEPLOY.boot.not_run, &[("why", &why)])),
+    Ok(done) => {
       let code = done.status.code().map_or_else(|| DEPLOY.boot.a_signal.clone(), |code| code.to_string());
       let said =
         format!("{}{}", String::from_utf8_lossy(&done.stdout), String::from_utf8_lossy(&done.stderr));
@@ -91,15 +86,13 @@ async fn ask_health(watch: &HealthWatch<'_>) -> (bool, String) {
   }
 }
 
-/// The health asked until it answers 0, the limit runs out, or the unit gives up starting.
+/// The health asked until it answers 0 or the unit gives up starting, however long that takes.
 pub async fn wait_for_health(watch: &HealthWatch<'_>) -> HealthWait {
   let started = Instant::now();
-  let until = started + Duration::from_millis(watch.limit_ms);
   let mut checked = started;
   let mut asks = 0;
   let ended = |answered: bool, gave_up: bool, asks: u32, last: String| HealthWait {
     command: watch.command.clone(),
-    limit_ms: watch.limit_ms,
     answered,
     waited_ms: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
     asks,
@@ -114,10 +107,6 @@ pub async fn wait_for_health(watch: &HealthWatch<'_>) -> HealthWait {
 
     if answered {
       return ended(true, false, asks, last);
-    }
-
-    if Instant::now() >= until {
-      return ended(false, false, asks, last);
     }
 
     if let Some(gave_up) = &watch.gave_up
@@ -178,12 +167,22 @@ pub fn unit_status(run: &dyn Fn(&[String]) -> Ran, unit: &str) -> Option<UnitSta
   })
 }
 
-/// A unit that has stopped trying: one that restarts itself is still on its way.
-pub fn unit_gave_up(status: Option<&UnitStatus>) -> bool {
-  status.is_some_and(|status| status.active == "failed" || status.active == "inactive")
+fn number(text: &str) -> i64 {
+  text.trim().parse().unwrap_or(0)
 }
 
-/// What one watch of the service staying up came to.
+/// A unit that has given up starting, `now` against the reading `first` taken as the wait began: one that
+/// has stopped trying, or one whose process ended and that systemd restarted since, which says the process
+/// the deployment started is gone. A reading systemd would not give says nothing.
+pub fn unit_gave_up(first: Option<&UnitStatus>, now: Option<&UnitStatus>) -> bool {
+  now.is_some_and(|now| {
+    now.active == "failed"
+      || now.active == "inactive"
+      || first.is_some_and(|first| number(&now.restarts) > number(&first.restarts))
+  })
+}
+
+/// What one reading of the service, once it came up, came to.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StayUp {
   Stayed,
@@ -197,73 +196,20 @@ fn is_running(status: &UnitStatus) -> bool {
   status.active == "active" && status.sub == "running" && status.pid != "0"
 }
 
-fn number(text: &str) -> i64 {
-  text.trim().parse().unwrap_or(0)
-}
-
-/// Watches the unit for the hold: running throughout, the same main process, and no automatic restart
-/// counted past the first reading. A health that answered says only that the service came up, and a start
-/// that throws a moment later has already answered once; a unit restarting itself every few seconds is
-/// still a dead service. A reading systemd would not give is passed over, so a busy bus does not fail a
-/// service that runs, but a hold with no reading at all is not one the service was seen to stay up for.
-pub async fn stays_up(hold_ms: u64, poll_ms: u64, status: &dyn Fn() -> Option<UnitStatus>) -> StayUp {
-  let Some(first) = status() else {
+/// The unit read once it came up: running is up. A health that answered says the service came up; where
+/// none is declared, this reading is what says it.
+pub fn stands_up(status: &dyn Fn() -> Option<UnitStatus>) -> StayUp {
+  let Some(now) = status() else {
     return StayUp::Fell {
       why: DEPLOY.boot.unasked.clone(),
       status: None,
     };
   };
 
-  if !is_running(&first) {
+  if !is_running(&now) {
     return StayUp::Fell {
-      why: fill_shown(&DEPLOY.boot.unit_is, &[("active", &first.active), ("sub", &first.sub)]),
-      status: Some(first),
-    };
-  }
-
-  let until = Instant::now() + Duration::from_millis(hold_ms);
-  let mut read = false;
-
-  while Instant::now() < until {
-    let left = until.saturating_duration_since(Instant::now());
-
-    tokio::time::sleep(Duration::from_millis(poll_ms).min(left)).await;
-
-    let Some(now) = status() else {
-      continue;
-    };
-
-    read = true;
-
-    if !is_running(&now) {
-      return StayUp::Fell {
-        why: fill_shown(&DEPLOY.boot.unit_went, &[("active", &now.active), ("sub", &now.sub)]),
-        status: Some(now),
-      };
-    }
-
-    if now.pid != first.pid {
-      return StayUp::Fell {
-        why: fill_shown(&DEPLOY.boot.pid_changed, &[("from", &first.pid), ("to", &now.pid)]),
-        status: Some(now),
-      };
-    }
-
-    if number(&now.restarts) > number(&first.restarts) {
-      return StayUp::Fell {
-        why: fill_shown(
-          &DEPLOY.boot.restarted,
-          &[("count", &(number(&now.restarts) - number(&first.restarts)))],
-        ),
-        status: Some(now),
-      };
-    }
-  }
-
-  if !read && hold_ms > 0 {
-    return StayUp::Fell {
-      why: DEPLOY.boot.unasked_hold.clone(),
-      status: None,
+      why: fill_shown(&DEPLOY.boot.unit_is, &[("active", &now.active), ("sub", &now.sub)]),
+      status: Some(now),
     };
   }
 
@@ -409,7 +355,6 @@ pub fn boot_report(scene: &BootScene) -> Vec<String> {
       &DEPLOY.boot.waited,
       &[
         ("waited", &seconds(wait.waited_ms)),
-        ("limit", &seconds(wait.limit_ms)),
         ("command", &wait.command),
         ("asks", &wait.asks),
         ("last", &wait.last),
@@ -437,14 +382,13 @@ pub fn stay_report(
   run: &dyn Fn(&[String]) -> Ran,
   unit: &str,
   restarted_at_ms: i64,
-  hold_ms: u64,
   why: &str,
   fell: Option<UnitStatus>,
 ) -> Vec<String> {
   let status = unit_status(run, unit).or(fell);
   let process = status.as_ref().and_then(|status| process_state(&status.pid));
   let mut lines = vec![
-    fill_shown(&DEPLOY.boot.fell, &[("unit", &unit), ("seconds", &seconds(hold_ms)), ("why", &why)]),
+    fill_shown(&DEPLOY.boot.fell, &[("unit", &unit), ("why", &why)]),
     unit_line(unit, status.as_ref(), process.as_deref()),
   ];
 

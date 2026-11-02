@@ -12,16 +12,16 @@ use crate::turn::{
   Env, Lane, NOT_RUN_EXIT_CODE, TestbedTurn, TurnAsk, record_turn_times, take_turn, times_words,
 };
 
-/// How long each part of the wait runs, and how many runs a command is given.
+/// How the wait for memory is paced, and how many runs a command is given.
 #[derive(Clone, Copy, Debug)]
 pub struct MemoryLimits {
   /// How long a killed command waits before it looks at the memory at all.
   pub settle: Duration,
   /// How much memory has to be available before a killed command runs again.
   pub needed_bytes: u64,
-  /// How often, and for how long, it looks.
+  /// How often it looks, and how often it says it is still waiting.
   pub poll: Duration,
-  pub wait: Duration,
+  pub notice: Duration,
   /// Runs in all, the first included.
   pub runs: u32,
 }
@@ -35,7 +35,7 @@ impl Default for MemoryLimits {
       settle: Duration::from_secs(limits.settle_seconds),
       needed_bytes: limits.needed_gigabytes << 30,
       poll: Duration::from_secs(limits.poll_seconds),
-      wait: Duration::from_secs(limits.wait_seconds),
+      notice: Duration::from_secs(limits.notice_seconds),
       runs: limits.runs,
     }
   }
@@ -193,14 +193,16 @@ fn say(hands: &mut dyn HeavyHands, line: &str) {
   hands.say(&format!("{} {line}", LANES.memory.mark));
 }
 
-// After a kill: a settling pause, then a bounded wait until enough memory is available.
+// After a kill: a settling pause, then a wait until enough memory is available, however long that takes, said
+// now and again while it goes on.
 fn wait_for_memory(hands: &mut dyn HeavyHands, limits: &MemoryLimits) {
   let said = &LANES.memory;
   let what = hands.what();
 
   hands.sleep(limits.settle);
 
-  let until = hands.now() + limits.wait.as_secs_f64();
+  let started = hands.now();
+  let mut next_notice = started + limits.notice.as_secs_f64();
 
   loop {
     let Some(available) = hands.available_bytes() else {
@@ -218,8 +220,8 @@ fn wait_for_memory(hands: &mut dyn HeavyHands, limits: &MemoryLimits) {
       return;
     }
 
-    if hands.now() >= until {
-      let minutes = (limits.wait.as_secs_f64() / 60.0).round().to_string();
+    if hands.now() >= next_notice {
+      let minutes = ((hands.now() - started) / 60.0).round().to_string();
 
       say(
         hands,
@@ -228,8 +230,7 @@ fn wait_for_memory(hands: &mut dyn HeavyHands, limits: &MemoryLimits) {
           &[("what", &what), ("available", &gigabytes(available)), ("minutes", &minutes)],
         ),
       );
-
-      return;
+      next_notice += limits.notice.as_secs_f64();
     }
 
     hands.sleep(limits.poll);
@@ -377,7 +378,6 @@ impl HeavyHands for MachineHands<'_> {
     take_turn(&TurnAsk {
       command: self.what.clone(),
       lane: self.lane,
-      wait_seconds: None,
       say: &say,
       path: None,
       env: self.env.clone(),

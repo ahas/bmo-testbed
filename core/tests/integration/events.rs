@@ -2,7 +2,7 @@
 //! handed the event's name and its payload, and nothing a failing hook does reaching the verb.
 
 use std::path::PathBuf;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use bmo_testbed_core::declaration::Repository;
 use bmo_testbed_core::events::{EVENT_HOOK_VARIABLE, Event, Hook};
@@ -21,7 +21,6 @@ fn event() -> Event<'static> {
 fn hook(command: &str) -> Hook {
   Hook {
     command: Some(command.to_owned()),
-    timeout: Duration::from_secs(30),
     repository: Some("sample".to_owned()),
     root: Some(PathBuf::from("/checkout")),
   }
@@ -56,6 +55,19 @@ fn a_hook_that_fails_changes_nothing() {
   hook("/no/such/hook-program").send(&event());
 }
 
+// "the hook is waited for until it ends": one that takes its time is never stopped
+#[test]
+fn a_hook_that_takes_its_time_is_waited_for_until_it_ends() {
+  let dir = tempfile::tempdir().unwrap();
+  let ended = dir.path().join("ended");
+  let started = Instant::now();
+
+  hook(&format!("sleep 1; touch {}", ended.display())).send(&event());
+
+  assert!(ended.exists());
+  assert!(started.elapsed() >= Duration::from_secs(1));
+}
+
 // "the environment's hook stands over the declaration's, and a verb outside a repository has it alone"
 #[test]
 fn the_environments_hook_stands_over_the_declarations() {
@@ -71,7 +83,6 @@ fn the_environments_hook_stands_over_the_declarations() {
   let named = Env::from([(EVENT_HOOK_VARIABLE.to_owned(), "named".to_owned())]);
 
   assert_eq!(Hook::of(Some(&repo), &Env::new()).command.as_deref(), Some("declared"));
-  assert_eq!(Hook::of(Some(&repo), &Env::new()).timeout, Duration::from_secs(7));
   assert_eq!(Hook::of(Some(&repo), &named).command.as_deref(), Some("named"));
   assert_eq!(Hook::of(None, &named).command.as_deref(), Some("named"));
   assert_eq!(Hook::of(None, &Env::new()).command, None);

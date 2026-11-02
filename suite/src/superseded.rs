@@ -11,7 +11,6 @@ use std::fs::File;
 use std::os::unix::fs::MetadataExt as _;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
-use std::time::{Duration, Instant};
 
 use bmo_testbed_core::policy::fill_shown;
 use bmo_testbed_core::policy::prune::PRUNE;
@@ -525,10 +524,9 @@ fn try_flock(path: &Path) -> Option<HeldBuildLock> {
 }
 
 // Cargo's build lock of every profile directory the units stand in, and of the host's profile directory a
-// cross build's stands beside, taken in one order; none where one is not had in time, the removal then leaving
+// cross build's stands beside, taken in one order; none where a build holds one now, the removal then leaving
 // what it found to the next one.
 fn take_build_locks(build_root: &Path, units: &[String]) -> Option<Vec<HeldBuildLock>> {
-  let numbers = &SUITE.numbers;
   let profiles: BTreeSet<&str> = units
     .iter()
     .flat_map(|unit| {
@@ -541,20 +539,8 @@ fn take_build_locks(build_root: &Path, units: &[String]) -> Option<Vec<HeldBuild
 
   for profile in profiles {
     let path = build_root.join(profile).join(CARGO_BUILD_LOCK_NAME);
-    let until = Instant::now() + Duration::from_secs(numbers.superseded_lock_wait_seconds);
 
-    loop {
-      if let Some(lock) = try_flock(&path) {
-        held.push(lock);
-        break;
-      }
-
-      if Instant::now() >= until {
-        return None;
-      }
-
-      std::thread::sleep(Duration::from_millis(numbers.superseded_lock_poll_ms));
-    }
+    held.push(try_flock(&path)?);
   }
 
   Some(held)

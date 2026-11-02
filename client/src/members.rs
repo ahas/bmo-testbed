@@ -115,7 +115,7 @@ pub struct QueueEntry {
   pub asked_at: i64,
   /// When the turn came; null while it waits.
   pub held_at: Option<i64>,
-  /// A place kept for a run that ended not run.
+  /// Always false: a waiter waits its turn out, and no place is kept for one that left.
   pub kept: bool,
   /// Standing at the front.
   pub front: bool,

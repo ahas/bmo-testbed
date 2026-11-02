@@ -32,6 +32,8 @@ struct Hands {
   said: RefCell<Vec<String>>,
   /// Whether a restart of the `bot` service is refused.
   refuse_restart: bool,
+  /// Whether systemd holds the `bot` service as one that gave up starting.
+  gives_up: bool,
 }
 
 impl DeployHands for Hands {
@@ -45,7 +47,9 @@ impl DeployHands for Hands {
 
         Ran {
           ok: !refused,
-          out: if asked.starts_with("show ") {
+          out: if asked.starts_with("show ") && self.gives_up {
+            "ActiveState=failed\nSubState=failed\nMainPID=0\nNRestarts=0\nExecMainStatus=1".to_owned()
+          } else if asked.starts_with("show ") {
             "ActiveState=active\nSubState=running\nMainPID=42\nNRestarts=0\nExecMainStatus=0".to_owned()
           } else {
             String::new()
@@ -178,8 +182,6 @@ command = "mkdir -p target/release && printf 'echo {version}\n' > target/release
 root = "{live}"
 data_root = "{data}"
 health = "{health}"
-health_wait_seconds = 0
-stay_up_seconds = 0
 
 [[deploy.step]]
 id = "before"
@@ -228,8 +230,6 @@ name = "sample"
 root = "{live}"
 data_root = "{data}"
 health = "true"
-health_wait_seconds = 0
-stay_up_seconds = 0
 
 [deploy.backup]
 "#,
@@ -281,7 +281,6 @@ stay_up_seconds = 0
 
     Hook {
       command: Some(format!("f() {{ cat >> {0}; echo >> {0}; }}; f", events.display())),
-      timeout: Duration::from_secs(30),
       repository: Some("sample".to_owned()),
       root: Some(self.source.clone()),
     }
@@ -613,7 +612,11 @@ fn a_service_that_does_not_come_up_is_rolled_back() {
   scene.declare("v2", "false");
   scene.push("second");
 
-  let hands = Hands::default();
+  // Its health never answers, and systemd holds the service as one that gave up starting.
+  let hands = Hands {
+    gives_up: true,
+    ..Hands::default()
+  };
 
   assert_eq!(scene.run(&hands), 1, "{}", said(&hands));
   assert_eq!(
@@ -702,10 +705,10 @@ fn a_first_deployment_whose_service_will_not_restart_fails_unrolled() {
   assert_eq!(scene.events()[0]["detail"]["rolled_back"], false);
 }
 
-// "the deployment waits for quiet just before the record: work still under way stops it with nothing flipped,
-// unless it was asked to go on past it"
+// "the deployment waits for quiet just before the record, however long the work takes, unless it was asked to go
+// on past it at once"
 #[test]
-fn work_under_way_stops_the_deployment_before_the_flip_unless_asked_to_go_on() {
+fn work_under_way_is_waited_out_before_the_flip_unless_asked_to_go_on_at_once() {
   let scene = Scene::new();
   let busy = scene.at("busy");
   let declared = std::fs::read_to_string(scene.source.join("testbed.toml")).unwrap();
@@ -713,27 +716,15 @@ fn work_under_way_stops_the_deployment_before_the_flip_unless_asked_to_go_on() {
   scene.write(
     "testbed.toml",
     &declared.replace(
-      "stay_up_seconds = 0\n",
+      "\n[[deploy.step]]\nid = \"before\"",
       &format!(
-        "stay_up_seconds = 0\nquiet = \"sh -c 'if test -f {0}; then echo a turn under way; exit 1; fi'\"\nquiet_wait_seconds = 0\n",
+        "quiet = \"sh -c 'if test -f {0}; then echo a turn under way; exit 1; fi'\"\n\n[[deploy.step]]\nid = \"before\"",
         busy.display()
       ),
     ),
   );
   scene.push("a quiet check");
   std::fs::write(&busy, "").unwrap();
-
-  let hands = Hands::default();
-
-  assert_eq!(scene.run(&hands), 1, "{}", said(&hands));
-  assert!(!scene.deploy_dir().exists(), "nothing was flipped");
-  assert!(
-    !hands.systemctl.borrow().iter().any(|asked| asked.starts_with("restart ")),
-    "no service was touched"
-  );
-  assert!(read_deploy_record(&scene.at("live/deployed.json")).is_none(), "nothing was recorded");
-  assert!(said(&hands).contains("a turn under way"), "the line names the work: {}", said(&hands));
-  assert_eq!(scene.events().last().unwrap()["detail"]["stage"], "before");
 
   let forced = Hands::default();
   let asked = DeployAsk {
@@ -745,9 +736,27 @@ fn work_under_way_stops_the_deployment_before_the_flip_unless_asked_to_go_on() {
   assert!(said(&forced).contains("--force-live goes on"), "{}", said(&forced));
   assert!(scene.deploy_dir().exists(), "it went live past the work");
 
-  std::fs::remove_file(&busy).unwrap();
+  scene.write("note", "second");
+  scene.push("a second quiet check");
+
+  let ends = {
+    let busy = busy.clone();
+
+    std::thread::spawn(move || {
+      std::thread::sleep(Duration::from_millis(500));
+      std::fs::remove_file(&busy).unwrap();
+    })
+  };
+  let waited = Hands::default();
+
+  assert_eq!(scene.run(&waited), 0, "{}", said(&waited));
+  assert!(said(&waited).contains("a turn under way"), "the line names the work: {}", said(&waited));
+  ends.join().unwrap();
 
   let quiet = Hands::default();
+
+  scene.write("note", "third");
+  scene.push("a third quiet check");
 
   assert_eq!(scene.run(&quiet), 0, "{}", said(&quiet));
   assert!(!said(&quiet).contains("waiting:"), "a quiet answer waits for nothing: {}", said(&quiet));

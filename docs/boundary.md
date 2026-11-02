@@ -45,7 +45,7 @@ release. The version rules at the end are over this document.
 | 0 | Done, or passed |
 | 1 | Ran and failed: a test, a check, a step, a deployment |
 | 2 | Refused: words that do not read, a declaration that does not read or names another major, a change that cannot be read, a refusal a verb names |
-| 75 | Not run: the turn did not come, a lock did not come, a placed machine dropped the run, or a suite left units unstarted and failed nothing. Run the same command again |
+| 75 | Not run: the harness it waited for went away before the turn came, or a placed machine dropped the run. Run the same command again |
 | any other | `run` only: the command's own exit code, passed through |
 
 ## The verbs
@@ -53,13 +53,13 @@ release. The version rules at the end are over this document.
 ### `run`
 
 ```
-bmo-testbed run [--narrow] [--adapter <name>] [--guard <seconds>] [--wait <seconds>] [--json] -- <command…>
+bmo-testbed run [--narrow] [--adapter <name>] [--json] -- <command…>
 ```
 
 - Runs the command in the wide lane's turn, or the narrow lane's with `--narrow`, read by the language
-  that claims it or the one `--adapter` names (`bun`, `cargo`, `node`, `browser`, `plain`). `--guard`
-  replaces the thirty-minute run guard, `--wait` the wait for the turn; both take positive whole
-  seconds.
+  that claims it or the one `--adapter` names (`bun`, `cargo`, `node`, `browser`, `plain`), waiting for
+  the turn however long the line takes and running the command until it ends. `--guard <seconds>` and
+  `--wait <seconds>` are read and given no effect.
 - Placed first where the placement endpoint answers so (「Placement」), unless inside a held turn.
 - Every run that is not placed elsewhere is a test run of kind `command` in the record (「The
   record」), written as its turn comes and ended with its counts.
@@ -77,7 +77,7 @@ bmo-testbed status [--json]
 ```
 
 - Prints each lane, its width, its holder or nobody, and its waiters in order with their age and their
-  front, next and kept marks; then the close line of the repository it is run in. Exits 0.
+  front and next marks; then the close line of the repository it is run in. Exits 0.
 - **`--json`** prints one object:
   - `queues`: the page of both lanes exactly as `GET /queues` answers it (「Members」);
   - `closeLine`: the repository's close line, with `holder` (a close entry or null) and `waiting` (a
@@ -105,24 +105,25 @@ bmo-testbed classify [--json] [--takes-turn <command>]… <shell line>
 ### `suite`
 
 ```
-bmo-testbed suite [--since <commit>] [--again] [--guard <seconds>] [--file-guard <seconds>] [--turn-wait <seconds>] [--json] [<word>…]
+bmo-testbed suite [--since <commit>] [--again] [--json] [<word>…]
 ```
 
 - Runs the repository's units (`docs/suite.md`): all of them, or those the change since `--since`
   reaches. A word naming a path narrows the files; a word that is a unit's name exactly picks that
-  unit; every other word goes to each file's runner. `--again` runs what failed or never started once
-  more.
+  unit; every other word goes to each file's runner. `--again` runs what failed once more. Every unit
+  runs until it ends; `--guard`, `--file-guard` and `--turn-wait`, each with seconds, are read and given
+  no effect.
 - Writes its `suite:` lines and each unit's output to standard error, to be redirected to a file, and
   the same to a log of its own under the data root's `testbed/`.
 - Every run is a test run of kind `suite` in the record (「The record」), its log the run's own.
 - **`--json`** prints one command run (「Members」) on standard output once the run has ended, its log
   the run's own; the exit code is the same.
-- **With `--again`,** a first run that failed or left units unstarted says `suite: once more`, naming
+- **With `--again`,** a first run that failed says `suite: once more`, naming
   them, runs them once more by name and ends as that second run ends; the tests that passed only the
   second time are written down and sent as a `suite-flaky` event (`docs/suite.md`, 「What failed runs
   once more」). The suite's own flags come before its words.
-- Exits 0 where it passed, 1 where anything failed or was cut, 75 where it was not run or left units
-  unstarted and failed nothing, 2 where its words or the declaration do not read.
+- Exits 0 where it passed, 1 where anything failed, 75 where it was not run, 2 where its words or the
+  declaration do not read.
 
 ### `dependents`
 
@@ -134,7 +135,7 @@ bmo-testbed dependents [--run]
   (`docs/suite.md`, 「The dependents of a major change」), each by its declared name and root.
 - **`--run`** runs each consumer's suite in turn through the suite runner, one repository at a time in
   the wide lane, with that consumer's own declaration, log and test run.
-- Exits 0 where every consumer passed or there is none, 1 where any consumer's suite failed or was cut,
+- Exits 0 where every consumer passed or there is none, 1 where any consumer's suite failed,
   75 where none failed but a consumer's suite did not run, and 2 where the registry or a consumer's
   declaration does not read.
 
@@ -206,7 +207,8 @@ bmo-testbed cargo <cargo arguments…>
 
 - Runs Cargo through the shared build directory with the checkout's own crates apart in it, in the wide
   lane where the command compiles, run again where the kernel killed it for want of memory, then
-  removes what the build superseded. Exits with Cargo's own code, 75 where the turn did not come.
+  removes what the build superseded. Exits with Cargo's own code, 75 where its harness went away
+  before the turn came.
 
 ### `prune`
 
@@ -215,8 +217,9 @@ bmo-testbed prune [--dry-run] [--older-than <days>] [--incremental-older-than <h
 bmo-testbed prune --all
 ```
 
-- Prunes the shared Cargo build directory (`docs/deploy.md`, 「The Cargo build directory」). Exits 75
-  where a lock did not come, 2 for a unit span of a day or less or a disk that keeps no access times.
+- Prunes the shared Cargo build directory (`docs/deploy.md`, 「The Cargo build directory」), waiting for
+  each of Cargo's build locks until the build holding it lets go. Exits 2 for a unit span of a day or less
+  or a disk that keeps no access times.
 
 ### `full`
 
@@ -240,8 +243,9 @@ bmo-testbed deploy [--commit <sha>] [--message <why>] [--dry-run] [--no-check] [
   and the command that reads its journal, and exits 0; inside it, it runs and exits 0 where the commit
   went live, 1 where it failed or was rolled back. Its refusals exit 2 in the caller's own process.
   `--dry-run` says in the caller's own process what it would do, changes nothing and starts no unit.
-  `--force-live` goes on past a declared `quiet` command that still names work under way once its wait is
-  over (`docs/deploy.md`, 「What the deploy run does, in order」), saying the work it cuts.
+  `--force-live` goes on at once past a declared `quiet` command that names work under way, instead of
+  waiting for it to answer 0 (`docs/deploy.md`, 「What the deploy run does, in order」), saying the work it
+  cuts.
 
 ### `backups`
 
@@ -360,7 +364,7 @@ verb's own name, and each noun takes what that verb takes.
 
 - `testbed`: the major targeted;
 - `upstreams`: the repositories this one builds on, by their declared names;
-- `[test]` with `[test.database]`: the languages, files, guards, fence and setup of the suite;
+- `[test]` with `[test.database]`: the languages, files, fence and setup of the suite;
 - `[projects]` and `[tools]`: units found by their own files;
 - `[check]` with `[[check.step]]`: the quick checks enabled and their inputs, and the static steps;
 - `[build]` with `[[build.step]]`: the release build;
@@ -382,8 +386,8 @@ keep (`docs/deploy.md`, 「The unit links」).
   through `sh -c` with the event's name as its first argument and the payload as one JSON object on
   standard input. With no hook, the event is written on the verb's standard error as one line, its
   name and its payload, and nothing more.
-- **The hook never changes a verb's outcome.** One that fails or overruns its time, thirty seconds
-  unless declared, is said on a line and the verb goes on.
+- **The hook never changes a verb's outcome.** It is waited for until it ends; one that fails is said on
+  a line and the verb goes on.
 - **The payload:**
 
   | Field | Type | Meaning |
@@ -419,8 +423,7 @@ keep (`docs/deploy.md`, 「The unit links」).
   deployments with their steps and log lines, the restarts, and the events of each.
 - **A test run** is written by every `run` that is not placed elsewhere, kind `command`, and by every
   `suite`, kind `suite`, a deployment's gate and the daily whole run among them. It is written once
-  its turn has come and ended with its counts; a run ending not run from there on, a suite leaving
-  units unstarted and failing nothing, ends `not-run`. A run placed elsewhere is written by the
+  its turn has come and ended with its counts; a run ending not run from there on ends `not-run`. A run placed elsewhere is written by the
   machine it runs on.
 - **A deployment** is written as the deploy run begins its progress record and changed with it
   (`docs/deploy.md`, 「What a deployment says of itself as it runs」), and every line the deploy run
@@ -470,7 +473,7 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   `waiting` (a list of queue entries, in the order they will be served).
 - **Queue entry:** `scope` (string or null, the caller's opaque scope from `BMO_TESTBED_SCOPE`),
   `checkout`, `command` (one line), `pid`, `askedAt`, `heldAt` (null while waiting), and the booleans
-  `kept`, `front` and `next`.
+  `front` and `next`, and `kept`, always false, since no place is kept for a waiter that left.
 - **Test run:** `id`, `kind` (`suite` or `command`), `checkout`, `repositoryName` (string or null),
   `commit` (string or null), `command` (the words run, as one line), `scope` (string or null),
   `unitName` (the unit it runs in, from `BMO_DEPLOY_UNIT`, or null), `pid`, `state`, `passedCount`,
@@ -572,7 +575,6 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   | `command` | list of strings | The command's words |
   | `lane` | string | `wide` or `narrow` |
   | `front`, `next` | booleans | Where the caller stands |
-  | `wait_seconds`, `guard_seconds` | integers | The caller's wait and guard |
 
 - **The answer** is one JSON object. Its `place` is `local`, and the command runs here; or `remote`,
   with `machine`, the placed machine's label, `bench`, where the caller's copy of its checkout stands
@@ -594,8 +596,8 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   the run's output, which the caller writes to its standard error; one `result` event's data is one
   JSON object with `line`, the testbed's result line, which the caller writes to its standard output,
   and `code`, the exit code it ends with.
-- **Anything else is local:** no endpoint, one that does not answer within five seconds, an error, or an
-  answer that does not read. The caller says so on a line and runs here.
+- **Anything else is local:** no endpoint, one whose connection is refused or breaks, an error, or an
+  answer that does not read. The caller waits for the endpoint's answer however long it takes. The caller says so on a line and runs here.
 - **A stream that ends with no `result`** ends the run as not run, exit code 75.
 - **A run started on a placed machine is never placed again:** the remote side runs it inside a held
   turn of its own.

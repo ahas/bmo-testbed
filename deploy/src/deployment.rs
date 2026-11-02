@@ -19,7 +19,7 @@ use bmo_testbed_core::policy::deploy::DEPLOY;
 use bmo_testbed_core::policy::deploy_steps::DeployStep as OwnStep;
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::turn::{
-  Env, FRONT_VARIABLE, Lane, NOT_RUN_EXIT_CODE, TurnAsk, harness_pid, process_env, stop_tree, take_turn,
+  Env, FRONT_VARIABLE, Lane, NOT_RUN_EXIT_CODE, TurnAsk, harness_pid, process_env, take_turn,
 };
 use bmo_testbed_core::verb::REFUSED_EXIT_CODE;
 use serde_json::{Value, json};
@@ -27,7 +27,7 @@ use serde_json::{Value, json};
 use crate::adopt::{Adopting, adopt, prune_retired};
 use crate::backup::{BackupPlan, BackupTaken, take_backup};
 use crate::boot::{
-  HealthWatch, StayUp, boot_report, boot_scene, stay_report, stays_up, unit_gave_up, unit_status,
+  HealthWatch, StayUp, boot_report, boot_scene, stands_up, stay_report, unit_gave_up, unit_status,
   wait_for_health,
 };
 use crate::expansion::{BuildTree, bring_submodules, expansion_tree, lay_outside_trees, put_build_tree};
@@ -190,26 +190,24 @@ impl Gate for Passed {
   }
 }
 
-/// A step of the run's own or a declared one: its id, its words, where it runs, the lane whose turn it takes
-/// and the time it is given.
+/// A step of the run's own or a declared one: its id, its words, where it runs, and the lane whose turn it
+/// takes. It runs until it ends.
 #[derive(Debug, Clone)]
 pub struct StepAsk {
   pub id: String,
   pub command: Vec<String>,
   pub cwd: PathBuf,
   pub lane: Option<Lane>,
-  pub timeout: Option<Duration>,
 }
 
-/// What a step came to: its code, 75 where its turn did not come; how long it waited and ran; the start of
-/// what it said; and whether it was stopped past its time.
+/// What a step came to: its code, 75 where its turn did not come; how long it waited and ran; and the start of
+/// what it said.
 #[derive(Debug, Clone, PartialEq)]
 pub struct StepRan {
   pub code: i64,
   pub waited_seconds: f64,
   pub ran_seconds: f64,
   pub said: String,
-  pub overran: bool,
 }
 
 /// What the run does outside its own trees: commands run to their end, the service manager's among them;
@@ -263,7 +261,6 @@ impl DeployHands for Machine {
       take_turn(&TurnAsk {
         command: ask.id.clone(),
         lane,
-        wait_seconds: None,
         say: &say,
         path: None,
         env: env.clone(),
@@ -280,7 +277,6 @@ impl DeployHands for Machine {
         waited_seconds,
         ran_seconds: 0.0,
         said: turn.words(),
-        overran: false,
       };
     }
 
@@ -301,25 +297,13 @@ impl DeployHands for Machine {
           waited_seconds,
           ran_seconds: 0.0,
           said: why.to_string(),
-          overran: false,
         };
       }
     };
     let out = gathered(child.stdout.take().expect("the output is piped"));
     let err = gathered(child.stderr.take().expect("the errors are piped"));
-    let mut overran = false;
-    let status = loop {
-      match child.try_wait() {
-        Ok(Some(status)) => break Some(status),
-        Ok(None) if ask.timeout.is_some_and(|limit| started.elapsed() >= limit) => {
-          overran = true;
-          stop_tree(i64::from(child.id()), Duration::from_secs(DEPLOY.numbers.step_stop_grace_seconds));
-          break child.wait().ok();
-        }
-        Ok(None) => std::thread::sleep(Duration::from_millis(DEPLOY.numbers.step_poll_ms)),
-        Err(_) => break None,
-      }
-    };
+    // The step is waited for until it ends, however long that takes.
+    let status = child.wait().ok();
     let said = format!(
       "{}{}",
       String::from_utf8_lossy(&out.join().unwrap_or_default()),
@@ -331,7 +315,6 @@ impl DeployHands for Machine {
       waited_seconds,
       ran_seconds: started.elapsed().as_secs_f64(),
       said: first_chars(said.trim(), DEPLOY.numbers.quoted_chars),
-      overran,
     }
   }
 
@@ -705,7 +688,6 @@ impl<'a> Laying<'a> {
         command: release_build(profile, &target),
         cwd: tree.clone(),
         lane: Some(Lane::Wide),
-        timeout: None,
       };
       let ran = self.step(&ask);
 
@@ -720,7 +702,6 @@ impl<'a> Laying<'a> {
         command: shell_words(&one.command),
         cwd: one.dir.as_ref().map_or_else(|| tree.clone(), |dir| tree.join(dir)),
         lane: one.lane,
-        timeout: None,
       };
       let ran = self.step(&ask);
 
@@ -774,12 +755,11 @@ impl<'a> Laying<'a> {
       command: shell_words(&step.command),
       cwd: release.to_path_buf(),
       lane: None,
-      timeout: Some(Duration::from_secs(step.timeout_seconds)),
     })
   }
 
-  // Whether the `bot` service came up: the declared health answered within its wait, where one is declared,
-  // and the service stayed up; why not where it did not, said with what was read of it.
+  // Whether the `bot` service came up: the declared health answered before the unit gave up starting, where
+  // one is declared, and the unit is read running; why not where it did not, said with what was read of it.
   async fn came_up(&self, bot: &str) -> Option<BootFailure> {
     let said = &DEPLOY.run;
     let deploy = &self.repo.declaration.deploy;
@@ -787,11 +767,11 @@ impl<'a> Laying<'a> {
     let status = || unit_status(&run, bot);
 
     if let Some(health) = &deploy.health {
-      let seconds = deploy.health_wait_seconds;
-      let mut watch = HealthWatch::new(health, &self.places.deploy_dir, seconds * 1000);
+      let mut watch = HealthWatch::new(health, &self.places.deploy_dir);
+      let first = status();
 
-      self.say(&fill_marks(&said.waiting, &[("seconds", &seconds.to_string()), ("health", health)]));
-      watch.gave_up = Some(Box::new(|| unit_gave_up(status().as_ref())));
+      self.say(&fill_marks(&said.waiting, &[("health", health)]));
+      watch.gave_up = Some(Box::new(move || unit_gave_up(first.as_ref(), status().as_ref())));
 
       let wait = wait_for_health(&watch).await;
 
@@ -804,19 +784,14 @@ impl<'a> Laying<'a> {
       }
     }
 
-    let hold = deploy.stay_up_seconds * 1000;
-
-    self.say(&fill_marks(
-      &said.watching,
-      &[("unit", bot), ("seconds", &deploy.stay_up_seconds.to_string())],
-    ));
+    self.say(&fill_marks(&said.watching, &[("unit", bot)]));
 
     if !self.rolling_back.get() {
       self.stage(Stage::StayUp);
     }
 
-    if let StayUp::Fell { why, status } = stays_up(hold, DEPLOY.numbers.stay_poll_ms, &status).await {
-      for line in stay_report(&run, bot, self.restarted_at.get(), hold, &why, status) {
+    if let StayUp::Fell { why, status } = stands_up(&status) {
+      for line in stay_report(&run, bot, self.restarted_at.get(), &why, status) {
         self.say(&line);
       }
 
@@ -837,7 +812,6 @@ impl<'a> Laying<'a> {
     bound: &[(String, String)],
   ) -> u8 {
     let places = self.places;
-    let deploy = &self.repo.declaration.deploy;
     let failed = FailedDeploy {
       commit: self.commit.clone(),
       failure,
@@ -845,8 +819,6 @@ impl<'a> Laying<'a> {
       written: written.clone(),
       before_start: self.ask.before_start.is_some(),
       unit: bot.to_owned(),
-      health_wait_seconds: deploy.health_wait_seconds,
-      stay_up_seconds: deploy.stay_up_seconds,
     };
     let said = |line: &str| self.say(line);
     let git = |args: &[&str], cwd: &Path| self.git(args, cwd);
@@ -1377,13 +1349,12 @@ pub async fn deploy(
     }
   }
 
-  // 8. The wait for quiet, the last step before the record, so its answer stands seconds before the stop.
+  // 8. The wait for quiet, the last step before the record, so its answer stands seconds before the stop. It
+  // waits until no work stands under way, however long that takes; `--force-live` goes on at once.
   if let Some(quiet) = &repo.declaration.deploy.quiet {
-    let seconds = repo.declaration.deploy.quiet_wait_seconds;
     let line = shell_words(quiet);
-    let until = hands.now_ms() + i64::try_from(seconds * 1000).unwrap_or(i64::MAX);
 
-    run.say(&fill_marks(&said.quiet_asking, &[("quiet", quiet), ("seconds", &seconds.to_string())]));
+    run.say(&fill_marks(&said.quiet_asking, &[("quiet", quiet)]));
 
     loop {
       let asked = hands.run(&line, &release);
@@ -1394,16 +1365,9 @@ pub async fn deploy(
 
       let named = first_chars(asked.out.trim(), DEPLOY.numbers.quoted_chars);
 
-      if hands.now_ms() >= until {
-        let marks = [("seconds", seconds.to_string()), ("said", named)];
-        let marks: Vec<(&str, &str)> = marks.iter().map(|(key, value)| (*key, value.as_str())).collect();
-
-        if run.ask.force_live {
-          run.warn(fill_marks(&said.quiet_forced, &marks));
-          break;
-        }
-
-        return run.failed(Stage::Before, fill_marks(&said.quiet_refused, &marks), Outcome::Failed);
+      if run.ask.force_live {
+        run.warn(fill_marks(&said.quiet_forced, &[("said", &named)]));
+        break;
       }
 
       run.say(&fill_marks(&said.quiet_live, &[("said", &named)]));
@@ -1618,7 +1582,6 @@ pub async fn deploy(
           command: shell_words(command),
           cwd: deploy_dir.clone(),
           lane: None,
-          timeout: None,
         });
 
         if ran.code != 0 {
@@ -1675,12 +1638,7 @@ pub async fn deploy(
   for step in repo.declaration.deploy.steps.iter().filter(|step| step.phase == Phase::AfterHealth) {
     let ran = run.declared_step(step, &release);
 
-    if ran.overran {
-      run.warn(fill_marks(
-        &said.after_overran,
-        &[("step", &step.id), ("seconds", &step.timeout_seconds.to_string())],
-      ));
-    } else if ran.code != 0 {
+    if ran.code != 0 {
       run.warn(fill_marks(
         &said.after_failed,
         &[("step", &step.id), ("code", &ran.code.to_string()), ("said", &ran.said)],

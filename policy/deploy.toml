@@ -6,8 +6,8 @@
 # then where to read the cause (docs/deploy.md, 「Rollback」). {commit} and {to} are short commits.
 [rollback]
 restart_refused = "deployment failed: the service could not be restarted on {commit}."
-not_answering = "deployment failed: the service on {commit} did not answer within {seconds}s of its restart."
-died_after_start = "deployment failed: the service on {commit} answered and then did not stay up {seconds}s."
+not_answering = "deployment failed: the service on {commit} gave up starting before its health answered."
+died_after_start = "deployment failed: the service on {commit} answered and was not running when it was read."
 answers = "Rolled back to the earlier release {to}, and the service answers again."
 silent = "Rolled back to the earlier release {to}, but the service still does not answer; it is down."
 # Why nothing was rolled back, followed by the line after them.
@@ -40,20 +40,12 @@ quoted_chars = 300
 command_chars = 200
 # How many releases may stand before a prune sends `releases-pinned`.
 releases_told_above = 12
-# The longest one ask of the declared health may take before it counts as no answer, in milliseconds.
-health_ask_ms = 5000
 # How long a wait for the health rests between asks, in milliseconds.
 health_poll_ms = 500
 # How often a wait for the health asks systemd whether the unit gave up starting, in milliseconds.
 unit_check_ms = 5000
-# How often the watch of the service staying up reads the unit, in milliseconds.
-stay_poll_ms = 1000
 # How many lines of a failing service's journal the deploy output keeps.
 journal_lines = 40
-# How often a step under way is looked at for its end and its time, in milliseconds.
-step_poll_ms = 100
-# How long a step that overran its time, and what it started, are given to go once asked, in seconds.
-step_stop_grace_seconds = 1
 # How long the wait for quiet rests between asks of the declared `quiet` command, in milliseconds.
 quiet_poll_ms = 15000
 
@@ -121,18 +113,16 @@ before_start = "running before the start: {command}"
 # The id the command run before the start is written under in the progress record.
 before_start_step = "before-start"
 before_start_failed = "the command run before the start failed: {said}; {unit} is stopped, and a deployment with --before-start is not rolled back by itself"
-quiet_asking = "asking `{quiet}` whether work stands under way that the restart would cut, for up to {seconds}s"
+quiet_asking = "asking `{quiet}` whether work stands under way that the restart would cut, until none does"
 quiet_live = "work stands under way, waiting: {said}"
-quiet_refused = "work still stands under way after {seconds}s, so nothing was flipped: {said}; --force-live goes on past it"
-quiet_forced = "work still stands under way after {seconds}s, and --force-live goes on, cutting it: {said}"
-waiting = "waiting up to {seconds}s for `{health}` to answer"
-watching = "watching {unit} stay up for {seconds}s"
-stayed = "{unit} came up and stayed up"
+quiet_forced = "work stands under way, and --force-live goes on at once, cutting it: {said}"
+waiting = "waiting for `{health}` to answer, or for the unit to give up starting"
+watching = "reading whether {unit} is running"
+stayed = "{unit} came up"
 retired = "{unit} retired: stopped, disabled and unlinked"
 retired_plain = "{unit} retired: stopped and disabled; it stands as a plain file, so it was left in place"
 unretired = "{unit} was stopped and disabled, and its link could not be taken out: {why}"
 after_failed = "the step {step} after the health failed (exit {code}): {said}; the next deployment runs it again"
-after_overran = "the step {step} after the health ran past its {seconds}s and was stopped; the next deployment runs it again"
 pruned = "pruned the releases {names}"
 kept_pinned = "kept the release {release}, which the processes {pids} stand in"
 pinned_summary = "{count} releases stand after the prune, the ones past the policy's kept by processes standing in them"
@@ -163,29 +153,24 @@ not_repaired = "the retired tree {dir} could not be repaired: {said}"
 submodule_not_pointed = "the retired tree's submodule {path} could not be pointed at {dir}: {said}"
 not_removed = "the retired tree {dir} could not be removed: {why}"
 
-# What the watch of the `bot` service coming up and staying up says (docs/deploy.md, 「Rollback」):
+# What the watch of the `bot` service coming up says (docs/deploy.md, 「Rollback」):
 # {seconds} a time, {code} an exit, {said} and {why} what came of it, {active} and {sub} the unit's states,
 # {unit} the unit.
 [boot]
 # What one ask of the health heard.
-no_answer = "no answer within {seconds}s"
 not_run = "could not be run: {why}"
 exit = "exit {code}"
 exit_said = "exit {code}: {said}"
 # The code of an ask ended by a signal.
 a_signal = "a signal"
-# Why the service did not stay up.
+# Why the service was not read running once it came up.
 unasked = "systemd could not be asked for the unit"
 unit_is = "the unit is {active}/{sub}"
-unit_went = "the unit went {active}/{sub}"
-pid_changed = "its main process changed from {from} to {to}"
-restarted = "systemd restarted it {count} time(s)"
-unasked_hold = "systemd could not be asked for the unit during the hold"
 # The machine's strain: {load} its load, {io} and {memory} the share of the last minute stalled on each.
 strain = "load {load}, stalled on I/O {io} and on memory {memory} of the last minute"
 unknown = "unknown"
 # The lines the deploy output keeps of a service that did not come up or stay up.
-waited = "waited {waited}s of {limit}s for the health `{command}`: {asks} asks, the last heard {last}{gave_up}"
+waited = "waited {waited}s for the health `{command}`: {asks} asks, the last heard {last}{gave_up}"
 gave_up = "; {unit} gave up starting"
 unit_unasked = "{unit}: systemd could not be asked"
 unit = "{unit}: {active}/{sub}, main process {pid}{process}, {restarts} automatic restarts, last exit status {status}"
@@ -193,7 +178,7 @@ process = " ({process})"
 machine = "machine: {strain}"
 journal = "{unit}'s journal since the restart, its last {lines} lines at most:"
 journal_unread = "journalctl could not be read: {said}"
-fell = "{unit} answered and did not stay up for {seconds}s: {why}"
+fell = "{unit} answered and was not running: {why}"
 
 # What making a fresh build tree and bringing its submodules says: {tree} and {at} places, {commit} a
 # short commit, {what} the step, {said} and {why} what a command or a call came to.

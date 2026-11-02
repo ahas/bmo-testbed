@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::policy::fill_marks;
 use crate::policy::lanes::LANES;
-use crate::queue::{HeldLock, LockKeep, LockWait, Rank, now_ms, process_alive, queue_tickets, take_lock};
+use crate::queue::{HeldLock, LockWait, Rank, now_ms, process_alive, queue_tickets, take_lock};
 
 /// The exit code of a command that did not run because its turn did not come.
 pub const NOT_RUN_EXIT_CODE: u8 = 75;
@@ -136,8 +136,6 @@ pub struct TurnEntry {
   pub since: Option<i64>,
   pub pid: i64,
   #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-  pub kept: bool,
-  #[serde(default, skip_serializing_if = "std::ops::Not::not")]
   pub front: bool,
   #[serde(default, skip_serializing_if = "std::ops::Not::not")]
   pub next: bool,
@@ -193,7 +191,6 @@ pub fn read_queue(path: &Path) -> TestbedQueue {
       });
 
       entry.pid = ticket.pid;
-      entry.kept = ticket.kept;
       entry.front = ticket.front;
       entry.next = ticket.next;
       entry
@@ -234,23 +231,11 @@ pub fn stands_next(env: &Env) -> bool {
   env.get(NEXT_VARIABLE).is_some_and(|value| value == "1") && !stands_at_front(env)
 }
 
-/// Whether a caller at the front holds the lane or stands ahead of a waiter in it — a kept place of one
-/// passed over — which is the time a waiter's wait does not count, up to its allowance.
-pub fn front_ahead(queue: &TestbedQueue, pid: i64) -> bool {
-  let mine = queue.waiting.iter().position(|entry| entry.pid == pid);
-  let ahead = &queue.waiting[..mine.unwrap_or(queue.waiting.len())];
-
-  queue.holder.as_ref().is_some_and(|holder| holder.front)
-    || ahead.iter().any(|entry| entry.front && !entry.kept)
-}
-
 /// A turn asked for.
 pub struct TurnAsk<'a> {
   /// The command, as the line names it.
   pub command: String,
   pub lane: Lane,
-  /// How long to wait; the caller's own default where none is given.
-  pub wait_seconds: Option<f64>,
   pub say: &'a dyn Fn(&str),
   /// The lock, for a test; the lane's own otherwise.
   pub path: Option<PathBuf>,
@@ -273,7 +258,6 @@ pub enum TestbedTurn {
     waited_seconds: f64,
     ahead: usize,
     holder: Option<TurnEntry>,
-    kept_seconds: Option<u64>,
   },
 }
 
@@ -323,27 +307,15 @@ impl TestbedTurn {
     match self {
       Self::Inside => said.inside.clone(),
       Self::Own { .. } => fill_marks(&said.own, &[("seconds", &waited)]),
-      Self::Queued {
-        ahead,
-        holder,
-        kept_seconds,
-        ..
-      } => {
+      Self::Queued { ahead, holder, .. } => {
         let holder = holder.as_ref().map_or_else(
           || said.nobody.clone(),
           |holder| fill_marks(&LANES.waiting.held_by, &[("who", &holder.words())]),
         );
-        let kept = kept_seconds
-          .map_or_else(String::new, |seconds| fill_marks(&said.kept, &[("seconds", &seconds.to_string())]));
 
         fill_marks(
           &said.queued,
-          &[
-            ("seconds", &waited),
-            ("ahead", &ahead.to_string()),
-            ("holder", &holder),
-            ("kept", &kept),
-          ],
+          &[("seconds", &waited), ("ahead", &ahead.to_string()), ("holder", &holder)],
         )
       }
     }
@@ -382,18 +354,9 @@ fn signal(pids: &[i64], signal: i32) {
   }
 }
 
-/// A process and everything under it stopped: asked first, killed once the grace is out.
-pub fn stop_tree(pid: i64, grace: Duration) {
-  let all: Vec<i64> = std::iter::once(pid).chain(descendants_of(pid)).collect();
-
-  signal(&all, libc::SIGTERM);
-  std::thread::sleep(grace);
-  signal(&all.into_iter().filter(|pid| process_alive(*pid)).collect::<Vec<_>>(), libc::SIGKILL);
-}
-
 /// The watch on a harness holding a turn or a line: once the harness's process is gone, this process and
-/// everything under it are stopped, and what it held goes with them. Answers the switch that stops the
-/// watch.
+/// everything under it are killed at once, since nobody is left to read what they would answer, and what it
+/// held goes with them. Answers the switch that stops the watch.
 pub fn watch_harness(job: i64) -> Arc<AtomicBool> {
   let watching = Arc::new(AtomicBool::new(true));
   let still = Arc::clone(&watching);
@@ -402,11 +365,7 @@ pub fn watch_harness(job: i64) -> Arc<AtomicBool> {
     while still.load(Ordering::Relaxed) {
       if !process_alive(job) {
         let me = i64::from(std::process::id());
-        let under = descendants_of(me);
-
-        signal(&under, libc::SIGTERM);
-        std::thread::sleep(Duration::from_secs(LANES.numbers.stop_grace_seconds));
-        signal(&under.into_iter().filter(|pid| process_alive(*pid)).collect::<Vec<_>>(), libc::SIGKILL);
+        signal(&descendants_of(me), libc::SIGKILL);
         std::process::exit(i32::from(NOT_RUN_EXIT_CODE));
       }
 
@@ -437,7 +396,8 @@ fn waiting_line(ask: &TurnAsk<'_>, queue: &TestbedQueue, waited: f64) -> String 
   )
 }
 
-/// A lane's turn: at once inside a caller's, in line otherwise, and not had once the wait runs out.
+/// A lane's turn: at once inside a caller's, in line otherwise for as long as the line takes, and not had only
+/// where the harness the caller runs for is gone while it waits.
 pub fn take_turn(ask: &TurnAsk<'_>) -> TestbedTurn {
   let env = &ask.env;
   let path = ask.path.clone().unwrap_or_else(|| lock_path(env, ask.lane));
@@ -449,20 +409,8 @@ pub fn take_turn(ask: &TurnAsk<'_>) -> TestbedTurn {
   let job = harness_pid(env);
   let front = stands_at_front(env);
   let next = stands_next(env);
-  // A caller standing next waits its turn out; the harness it runs for ends its wait by ending.
-  let numbers = &LANES.numbers;
-  let wait_seconds = ask.wait_seconds.unwrap_or(if next {
-    f64::INFINITY
-  } else if job.is_none() {
-    numbers.unit_wait_seconds as f64
-  } else {
-    numbers.harness_wait_seconds as f64
-  });
-  let notice = ask.notice_seconds.unwrap_or(numbers.notice_seconds as f64);
+  let notice = ask.notice_seconds.unwrap_or(LANES.numbers.notice_seconds as f64);
   let asked = now_ms();
-  let mut until = if wait_seconds.is_finite() { asked + (wait_seconds * 1000.0) as i64 } else { i64::MAX };
-  let mut allowance = (numbers.front_allowance_seconds * 1000) as i64;
-  let mut looked = asked;
   let me = i64::from(std::process::id());
   let entry = TurnEntry {
     scope: scope_of(env),
@@ -471,50 +419,28 @@ pub fn take_turn(ask: &TurnAsk<'_>) -> TestbedTurn {
     asked,
     since: None,
     pid: me,
-    kept: false,
     front,
     next,
   };
-  // A place is kept for a harness that may come back, which a caller standing next never leaves to do.
-  let keeps = job.is_some() && !next;
+  // The wait goes on until the turn comes; only a gone harness ends it, since nobody is left to run what it
+  // waits for. The notice says where the waiter stands now and again.
   let mut wait_on = |_: Option<&str>| -> Option<i64> {
     let now = now_ms();
 
-    // Nobody is left to run what a gone job waits for.
     if job.is_some_and(|job| !process_alive(job)) {
       return None;
     }
 
-    let queue = read_queue(&path);
+    (ask.say)(&waiting_line(ask, &read_queue(&path), (now - asked) as f64 / 1000.0));
 
-    // The time spent behind a caller at the front is not the wait's own, up to the allowance.
-    if front_ahead(&queue, me) {
-      let behind = allowance.min(now - looked);
-
-      until = until.saturating_add(behind);
-      allowance -= behind;
-    }
-
-    looked = now;
-
-    if now >= until {
-      return None;
-    }
-
-    (ask.say)(&waiting_line(ask, &queue, (now - asked) as f64 / 1000.0));
-
-    Some(until.min(now + (notice * 1000.0) as i64))
+    Some(now + (notice * 1000.0) as i64)
   };
   let held = take_lock(
     &path,
-    notice.min(wait_seconds),
+    notice,
     LockWait {
       holder: serde_json::to_string(&entry).unwrap_or_default(),
       wait_on: Some(&mut wait_on),
-      keep: keeps.then(|| LockKeep {
-        key: format!("job {}", job.unwrap_or_default()),
-        seconds: numbers.kept_place_seconds,
-      }),
       rank: if front {
         Rank::Front
       } else if next {
@@ -529,13 +455,11 @@ pub fn take_turn(ask: &TurnAsk<'_>) -> TestbedTurn {
 
   let Some(lock) = held else {
     let queue = read_queue(&path);
-    let ahead = queue.waiting.iter().position(|one| one.kept && one.asked == entry.asked);
 
     return TestbedTurn::Queued {
       waited_seconds,
-      ahead: ahead.unwrap_or(queue.waiting.len()),
+      ahead: queue.waiting.len(),
       holder: queue.holder,
-      kept_seconds: keeps.then_some(numbers.kept_place_seconds),
     };
   };
 
@@ -626,7 +550,6 @@ pub fn take_turns(lanes: &[Lane], ask: &TurnAsk<'_>) -> TestbedTurns {
     let turn = take_turn(&TurnAsk {
       command: ask.command.clone(),
       lane: *lane,
-      wait_seconds: ask.wait_seconds,
       say: ask.say,
       path: None,
       env: ask.env.clone(),
@@ -635,20 +558,13 @@ pub fn take_turns(lanes: &[Lane], ask: &TurnAsk<'_>) -> TestbedTurns {
       notice_seconds: ask.notice_seconds,
     });
 
-    if let TestbedTurn::Queued {
-      ahead,
-      holder,
-      kept_seconds,
-      ..
-    } = turn
-    {
+    if let TestbedTurn::Queued { ahead, holder, .. } = turn {
       taken.release();
 
       return TestbedTurns::Queued(TestbedTurn::Queued {
         waited_seconds: asked.elapsed().as_secs_f64(),
         ahead,
         holder,
-        kept_seconds,
       });
     }
 

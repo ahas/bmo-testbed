@@ -7,7 +7,6 @@ use serde::Deserialize;
 #[serde(deny_unknown_fields)]
 pub struct Numbers {
   pub poll_seconds: u64,
-  pub wait_seconds: u64,
   pub journal_lines: usize,
   pub commit_shortest: usize,
   pub commit_longest: usize,
@@ -24,7 +23,6 @@ pub struct Lines {
   pub not_live: String,
   pub not_written: String,
   pub nothing_recorded: String,
-  pub still_running: String,
   pub unasked: String,
   pub journal_unread: String,
   pub refused: String,

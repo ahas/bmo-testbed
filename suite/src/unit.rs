@@ -1,22 +1,16 @@
-//! One unit of a run in a process of its own, heading a process group of its own, under the file guard
+//! One unit of a run in a process of its own, heading a process group of its own, run until it ends
 //! (docs/suite.md, 「One sweep, a process per file」). Its output is held until it ends, since the
 //! units beside it would otherwise interleave with it, and is then written out whole with the verdict on
-//! the unit ahead of it. Whatever the unit started and left behind goes with the group once it ends.
+//! the unit ahead of it. Whatever the unit started and left behind goes once it ends: its group, and any
+//! process outside the group still holding its output.
 
 use std::io::Read;
+use std::os::fd::AsRawFd;
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
-use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
-use std::time::{Duration, Instant};
-
-use bmo_testbed_core::policy::suite::SUITE;
-
-// How often a running unit is looked at.
-fn look_every() -> Duration {
-  Duration::from_millis(SUITE.numbers.unit_poll_ms)
-}
+use std::time::Instant;
 
 /// How a unit is started.
 pub struct UnitCommand {
@@ -49,50 +43,59 @@ impl UnitCommand {
 pub struct UnitRun {
   pub code: i32,
   pub seconds: f64,
-  pub cut: bool,
   pub output: String,
-  /// Whether a process the unit started outside its own group still held its output past the grace.
-  pub held: bool,
 }
 
+// A stream read to its end beside the unit, and the pipe it is read from, as the kernel names it.
 struct Gathered {
-  bytes: Arc<Mutex<Vec<u8>>>,
-  reader: JoinHandle<()>,
+  pipe: Option<PathBuf>,
+  reader: JoinHandle<Vec<u8>>,
 }
 
-fn gather(mut stream: impl Read + Send + 'static) -> Gathered {
-  let bytes = Arc::new(Mutex::new(Vec::new()));
-  let into = Arc::clone(&bytes);
+fn gather(mut stream: impl Read + AsRawFd + Send + 'static) -> Gathered {
+  let pipe = std::fs::read_link(format!("/proc/self/fd/{}", stream.as_raw_fd())).ok();
   let reader = std::thread::spawn(move || {
-    let mut chunk = [0u8; 64 * 1024];
+    let mut bytes = Vec::new();
+    let _ = stream.read_to_end(&mut bytes);
 
-    while let Ok(read) = stream.read(&mut chunk) {
-      if read == 0 {
-        break;
-      }
-
-      into
-        .lock()
-        .expect("the output is held only to add to it")
-        .extend_from_slice(&chunk[..read]);
-    }
+    bytes
   });
 
-  Gathered { bytes, reader }
+  Gathered { pipe, reader }
 }
 
-// Everything a stream said, once it ended or once the grace after the unit's end is spent; and whether it
-// ended.
-fn gathered(stream: Gathered, until: Instant) -> (String, bool) {
-  while !stream.reader.is_finished() && Instant::now() < until {
-    std::thread::sleep(look_every());
+// Every process but this one holding the pipe open: what the unit started and left outside its group.
+fn holders_of(pipe: &PathBuf) -> Vec<i32> {
+  let me = std::process::id().to_string();
+  let Ok(processes) = std::fs::read_dir("/proc") else { return Vec::new() };
+
+  processes
+    .flatten()
+    .filter_map(|process| {
+      let pid = process.file_name().to_string_lossy().into_owned();
+
+      if pid == me || !pid.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+      }
+
+      let fds = std::fs::read_dir(process.path().join("fd")).ok()?;
+      let holds = fds.flatten().any(|fd| std::fs::read_link(fd.path()).is_ok_and(|link| link == *pipe));
+
+      holds.then(|| pid.parse().ok()).flatten()
+    })
+    .collect()
+}
+
+// Everything a stream said, read to its end once whatever still held it open has been ended.
+fn gathered(stream: Gathered) -> String {
+  if let Some(pipe) = &stream.pipe {
+    for pid in holders_of(pipe) {
+      // SAFETY: a signal to a process holding this unit's own output pipe, which the unit started.
+      unsafe { libc::kill(pid, libc::SIGKILL) };
+    }
   }
 
-  let ended = stream.reader.is_finished();
-  let text =
-    String::from_utf8_lossy(&stream.bytes.lock().expect("the output is held only to read it")).into_owned();
-
-  (text, ended)
+  String::from_utf8_lossy(&stream.reader.join().unwrap_or_default()).into_owned()
 }
 
 fn signal_group(leader: u32, signal: i32) {
@@ -100,20 +103,18 @@ fn signal_group(leader: u32, signal: i32) {
   unsafe { libc::kill(-(leader as i32), signal) };
 }
 
-fn ended(child: &mut Child) -> Option<i32> {
-  match child.try_wait() {
-    Ok(Some(status)) => Some(
-      status
-        .code()
-        .unwrap_or_else(|| 128 + std::os::unix::process::ExitStatusExt::signal(&status).unwrap_or(0)),
-    ),
-    Ok(None) => None,
-    Err(_) => Some(1),
+// The code the unit ended with, a signal that ended it read as the shell reads it.
+fn ended(child: &mut Child) -> i32 {
+  match child.wait() {
+    Ok(status) => status
+      .code()
+      .unwrap_or_else(|| 128 + std::os::unix::process::ExitStatusExt::signal(&status).unwrap_or(0)),
+    Err(_) => 1,
   }
 }
 
-/// Runs one unit to its end, cut where it outlasts the guard.
-pub fn run_unit(unit: &UnitCommand, guard: Duration) -> UnitRun {
+/// Runs one unit to its end, however long that takes.
+pub fn run_unit(unit: &UnitCommand) -> UnitRun {
   let started = Instant::now();
   let spawned = Command::new(&unit.program)
     .args(&unit.args)
@@ -131,43 +132,21 @@ pub fn run_unit(unit: &UnitCommand, guard: Duration) -> UnitRun {
       return UnitRun {
         code: 127,
         seconds: 0.0,
-        cut: false,
         output: why.to_string(),
-        held: false,
       };
     }
   };
   let leader = child.id();
   let out = gather(child.stdout.take().expect("the output is piped"));
   let err = gather(child.stderr.take().expect("the errors are piped"));
-  let mut cut = false;
-  let mut asked_at: Option<Instant> = None;
-  let code = loop {
-    if let Some(code) = ended(&mut child) {
-      break code;
-    }
+  let code = ended(&mut child);
 
-    if !cut && started.elapsed() >= guard {
-      cut = true;
-      asked_at = Some(Instant::now());
-      signal_group(leader, libc::SIGTERM);
-    }
-
-    if asked_at
-      .is_some_and(|asked| asked.elapsed() >= Duration::from_secs(SUITE.numbers.unit_kill_after_seconds))
-    {
-      signal_group(leader, libc::SIGKILL);
-    }
-
-    std::thread::sleep(look_every());
-  };
-
+  // What the unit left standing in its group goes at once, and so does anything outside it still holding the
+  // output, so the output closes.
   signal_group(leader, libc::SIGKILL);
 
-  // A process that left the group on its own can still hold the output open, and the run does not wait on it.
-  let until = Instant::now() + Duration::from_secs(SUITE.numbers.unit_output_grace_seconds);
-  let (said, said_whole) = gathered(out, until);
-  let (warned, warned_whole) = gathered(err, until);
+  let said = gathered(out);
+  let warned = gathered(err);
 
   if let Some(home) = &unit.home {
     let _ = std::fs::remove_dir_all(home);
@@ -176,8 +155,6 @@ pub fn run_unit(unit: &UnitCommand, guard: Duration) -> UnitRun {
   UnitRun {
     code,
     seconds: started.elapsed().as_secs_f64(),
-    cut,
     output: format!("{said}{warned}"),
-    held: !(said_whole && warned_whole),
   }
 }

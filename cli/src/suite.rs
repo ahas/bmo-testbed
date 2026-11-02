@@ -52,9 +52,6 @@ pub fn suite(args: SuiteArgs) -> u8 {
   };
   let given = SuiteWords {
     since: args.since.clone(),
-    guard: args.guard,
-    file_guard: args.file_guard,
-    turn_wait: args.turn_wait,
     words: args.words.clone(),
   };
   let command: Vec<String> = std::iter::once(BINARY.to_owned()).chain(std::env::args().skip(1)).collect();
@@ -69,8 +66,6 @@ pub fn suite(args: SuiteArgs) -> u8 {
     let placed = placement_of(&env, &repo.root).place(&PlaceAsk {
       command: &command,
       lane: Lane::Wide,
-      wait_seconds: PlaceAsk::wait_of(ask.turn_wait, &env),
-      guard_seconds: ask.whole_guard,
       cwd: std::env::current_dir().unwrap_or_default(),
       env: &env,
     });

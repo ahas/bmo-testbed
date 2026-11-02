@@ -26,5 +26,3 @@ shared_ceiling_bytes = 120_000_000_000
 # generation, its builds, tests and lints.
 checkout_ceiling_bytes = 8_000_000_000
 
-# How long the prune waits for each of Cargo's build locks, standing at the front of its line, in seconds.
-lock_wait_seconds = 600

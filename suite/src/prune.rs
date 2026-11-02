@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use bmo_testbed_core::policy::prune::PRUNE;
-use bmo_testbed_core::queue::{HeldLock, LockWait, Rank, take_lock};
+use bmo_testbed_core::queue::{HeldLock, LockWait, Rank, now_ms, take_lock};
 use serde_json::Value;
 
 use crate::crates::{CHECKOUT_RECORD_NAME, checkout_target_name, resolved};
@@ -650,25 +650,31 @@ pub fn directory_bytes(root: &Path) -> u64 {
 }
 
 /// Cargo's build lock in each profile directory of the build directory at `root`, each taken at the front of
-/// its line and waited on for `wait_seconds`; the profile directory whose lock did not come where one did not.
-pub fn take_prune_locks(root: &Path, wait_seconds: f64) -> Result<Vec<HeldLock>, PathBuf> {
-  let paths = profile_dirs(root).into_iter().map(|profile| profile.join(CARGO_BUILD_LOCK_NAME));
+/// its line and waited for until the build holding it lets go, however long that takes. While a lock is
+/// held, `waiting` is told the profile directory once every `notice_seconds`.
+pub fn take_prune_locks(root: &Path, notice_seconds: f64, waiting: &dyn Fn(&Path)) -> Vec<HeldLock> {
   let mut held = Vec::new();
 
-  for path in paths {
+  for profile in profile_dirs(root) {
+    let path = profile.join(CARGO_BUILD_LOCK_NAME);
+    let mut wait_on = |_: Option<&str>| -> Option<i64> {
+      waiting(&profile);
+
+      Some(now_ms() + (notice_seconds * 1000.0) as i64)
+    };
     let wait = LockWait {
       holder: "cargo prune".to_owned(),
       rank: Rank::Front,
+      wait_on: Some(&mut wait_on),
       ..LockWait::default()
     };
 
-    match take_lock(&path, wait_seconds, wait) {
-      Some(lock) => held.push(lock),
-      None => return Err(path.parent().map(Path::to_path_buf).unwrap_or(path)),
+    if let Some(lock) = take_lock(&path, notice_seconds, wait) {
+      held.push(lock);
     }
   }
 
-  Ok(held)
+  held
 }
 
 /// What the disk a path stands on has free for this account, in bytes; nought where it cannot be read.

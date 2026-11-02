@@ -32,14 +32,14 @@ flowchart TD
   F -- no --> N{a close holding its line?}
   N -- yes --> NT[ticket next after the front]
   N -- no --> OT[ticket at the back]
-  FT --> W{turn within the wait?}
+  FT --> W{turn come?}
   NT --> W
   OT --> W
   W -- yes --> H[holds the lane]
   H --> R
-  W -- no --> K[ends: not run, place kept]
-  K --> A
-  R --> V[one result line, log kept]
+  W -- harness gone --> K[ends: not run]
+  W -- not yet --> W
+  R --> V[runs to its end: one result line, log kept]
 ```
 
 ## What goes through it
@@ -152,42 +152,31 @@ flowchart TD
 
 ## Waiting never fails a command
 
-- **A caller inside a harness's call waits three minutes,** so the wait, the run and anything after it fit
-  in the one call the harness gives it. A caller is inside a harness's call where `CLAUDE_PID` names the harness's
-  process. A caller no harness's call bounds, a deployment, the daily whole run, a person's shell,
-  waits up to twenty-five minutes. `--wait` sets another.
-- **A caller standing next waits with no limit while its harness lives.**
-- **A waiter whose harness is gone leaves the line,** whatever its wait.
-- **The time spent behind a deployment does not count against a harness's wait,** up to six minutes more:
-  while a deployment holds the lane or stands ahead of the harness's ticket, the harness's three minutes stand
-  still.
+- **Every caller waits for its turn however long the line takes:** a caller inside a harness's call, a
+  deployment, the daily whole run and a person's shell alike. A caller is inside a harness's call where
+  `CLAUDE_PID` names the harness's process.
+- **A waiter whose harness is gone leaves the line,** since nobody is left to run what it waits for. Its
+  command does not run, and says so: a line naming its place and the holder, a verdict of not run with
+  nothing tested and nothing failed, and exit code 75. That is the one way a waiter leaves the line without
+  its turn.
 - **While it waits it says, every thirty seconds, its place in the line and who holds the turn,** so a
   reader sees it is queued and not stuck.
-- **Where the turn has not come by then, the command does not run, and says so:** a line naming its
-  place and the holder, a verdict of not run with nothing tested and nothing failed, and exit code 75.
-  The caller runs the same command again.
-- **Its place is kept for ten minutes.** The ticket passes to a stand-in process that lives that long;
-  the same harness running a heavy command again within those minutes takes the ticket back and waits on
-  from where it stood. A place nobody comes back for is dropped when the stand-in ends. A caller
-  standing next keeps none, since it never gives its wait up.
-- **A kept place holds nobody up while its harness is away.** The tickets behind it go for the lane past
-  it, so a free lane never stands idle.
-- **The wait is never the command's own time.** The guards start once the turn has come.
 
 ## A holder that dies lets go
 
 - **A holder process that dies lets the turn go with it:** the lock goes the moment the process
   holding it ends.
 - **A harness that dies holding the turn lets it go too.** The holder of a harness's turn watches the harness's
-  process named in `CLAUDE_PID`; once that process is gone the watch stops the holder and every
-  process under it, and the turn goes with them.
-- **A run that will not end is cut.** It is given thirty minutes, `--guard` sets another; past it the
-  command and everything under it are stopped and the result says it was cut.
+  process named in `CLAUDE_PID`; once that process is gone the watch kills the holder and every process
+  under it at once, since nobody is left to read what they would answer, and the turn goes with them.
+- **A run runs until it ends,** however long that takes: nothing of the testbed's cuts it. A person who
+  wants it gone stops it.
 
 ## Memory
 
 - **A command the kernel killed for want of memory runs again,** at most four runs in all: before each
-  further run the testbed waits at least thirty seconds, then until six gigabytes are free. The Cargo
+  further run the testbed waits at least thirty seconds, then until six gigabytes are free, however long
+  that takes, saying every ten minutes that it still waits. The Cargo
   verb and a declared check step that asks for it do so (`docs/declaration.md`); a plain `run` does
   not.
 
@@ -234,7 +223,7 @@ flowchart TD
 ## Seeing the queue
 
 - **The `status` verb** prints each lane: its width, who holds the turn and since when, and who waits
-  behind it in order, with kept places and the front and the next marked; then the close line of the
+  behind it in order, with the front and the next marked; then the close line of the
   repository it is run in, its holder and who waits behind it. `--json` gives the same as structure
   (`docs/boundary.md`).
 
@@ -251,8 +240,8 @@ flowchart TD
   - what a run's output adds up to: how many tests passed, failed and were skipped;
   - what failed, as short lines out of the output;
   - for a language that runs test files, its own naming of a test file, and the command that runs
-    test files, handed the caller's words, the per-test timeout its own way, and each file by its
-    path from the folder the command runs in;
+    test files, handed the caller's words, with no per-test limit of its runner's own standing, and each
+    file by its path from the folder the command runs in;
   - for a language whose runner reads a configuration file of its own from the folder it starts in,
     that file's name, which decides the folder its test files run from (`docs/suite.md`, 「Which
     files run」);
@@ -264,7 +253,8 @@ flowchart TD
 - **The ones there are:**
   - `bun`: `bun test` over anything but one test file; its test files are named `*.test.ts`, run by
     `bun test` handed each file as a path from where it runs (a word that is not written as a path
-    is a filter bun matches within every test file's path), its configuration is `bunfig.toml`, and
+    is a filter bun matches within every test file's path) and `--timeout 0`, which lifts bun's own
+    per-test limit unless the words name one, its configuration is `bunfig.toml`, and
     it runs a project's script with `bun run`. Its root configuration is `package.json`, `bun.lock`,
     `bunfig.toml` and `tsconfig.json`, and its lockfile `bun.lock`;
   - `cargo`: build, check, clippy, test, bench, doc and nextest;

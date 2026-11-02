@@ -9,7 +9,7 @@ use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use bmo_testbed_core::declaration::{Repository, Test};
 use bmo_testbed_core::languages::{Language, run_folder};
@@ -44,9 +44,6 @@ fn stderr(line: &str) {
 /// What the caller asked of the run.
 #[derive(Clone, Debug, Default)]
 pub struct SuiteAsk {
-  pub whole_guard: u64,
-  pub file_guard: u64,
-  pub turn_wait: Option<f64>,
   pub since: Option<String>,
   /// Words naming paths, which pick the units.
   pub picked: Vec<String>,
@@ -85,14 +82,10 @@ pub struct SuiteEnded {
   pub test_run: Option<i64>,
 }
 
-/// The run's words as the binary read them: its own flags, each a positive number of seconds where it is
-/// one, and every other word as given.
+/// The run's words as the binary read them: its own flags, and every other word as given.
 #[derive(Clone, Debug, Default)]
 pub struct SuiteWords {
   pub since: Option<String>,
-  pub guard: Option<u64>,
-  pub file_guard: Option<u64>,
-  pub turn_wait: Option<u64>,
   pub words: Vec<String>,
 }
 
@@ -101,7 +94,7 @@ pub fn file_languages(test: &Test) -> Vec<&'static dyn Language> {
   test
     .languages()
     .into_iter()
-    .filter(|language| language.test_command(&[], &[], None).is_some())
+    .filter(|language| language.test_command(&[], &[]).is_some())
     .collect()
 }
 
@@ -172,17 +165,14 @@ fn names_path(word: &str, test: &Test) -> bool {
       || word.rsplit_once('.').is_some_and(|(_, extension)| extensions.contains(&extension)))
 }
 
-/// The run asked for, the caller's words over what the repository declares for its tests: a guard it names
-/// over the declared one, a word naming a path picking the units, and every other word for the runner.
+/// The run asked for, the caller's words over what the repository declares for its tests: a word naming a
+/// path picking the units, and every other word for the runner.
 pub fn ask_of(given: &SuiteWords, test: &Test) -> SuiteAsk {
   // A width for the runner's own pool means nothing to a run of one file, so it is not handed through.
   let for_runner: Vec<&String> =
     given.words.iter().filter(|word| !word.starts_with("--parallel")).collect();
 
   SuiteAsk {
-    whole_guard: given.guard.unwrap_or(test.guard_seconds),
-    file_guard: given.file_guard.unwrap_or(test.file_guard_seconds),
-    turn_wait: given.turn_wait.map(|seconds| seconds as f64),
     since: given.since.clone(),
     picked: for_runner
       .iter()
@@ -196,15 +186,6 @@ pub fn ask_of(given: &SuiteWords, test: &Test) -> SuiteAsk {
       .collect(),
     record: None,
   }
-}
-
-/// What the run says before it starts: how long it will let the work take, so a log cut off still says at
-/// its head what the run held itself to.
-pub fn guards_line(whole: u64, file: u64) -> String {
-  fill_marks(
-    &SUITE.lines.guards,
-    &[("mark", &SUITE.lines.mark), ("whole", &whole.to_string()), ("file", &file.to_string())],
-  )
 }
 
 /// The one line a run always ends on: how it came out, how long it took and what happened.
@@ -228,20 +209,15 @@ pub struct SweepCount {
   pub files: usize,
   pub passed: usize,
   pub failed: usize,
-  pub cut: usize,
-  pub unstarted: usize,
 }
 
-/// How a sweep ends: whether it passed, its verdict's clause and its exit code. A unit that never started
-/// failed nothing, so a run whose only shortfall is such units ends with the code of a run to make again.
-pub fn sweep_ending(count: SweepCount, whole_guard: u64, file_guard: u64) -> (bool, String, u8) {
+/// How a sweep ends: whether it passed, its verdict's clause and its exit code.
+pub fn sweep_ending(count: SweepCount) -> (bool, String, u8) {
   let said = &SUITE.ending;
   let SweepCount {
     files,
     passed,
     failed,
-    cut,
-    unstarted,
   } = count;
 
   if passed == files {
@@ -256,26 +232,8 @@ pub fn sweep_ending(count: SweepCount, whole_guard: u64, file_guard: u64) -> (bo
   if failed > 0 {
     parts.push(fill_marks(&said.failed_count, &[("count", &failed.to_string())]));
   }
-  if cut > 0 {
-    parts.push(fill_marks(
-      &said.cut_count,
-      &[("count", &cut.to_string()), ("guard", &file_guard.to_string())],
-    ));
-  }
-  if unstarted > 0 {
-    parts.push(fill_marks(
-      &said.unstarted_count,
-      &[("count", &unstarted.to_string()), ("guard", &whole_guard.to_string())],
-    ));
-  }
 
-  let note = parts.join(&said.joiner);
-
-  if failed == 0 && cut == 0 && unstarted > 0 {
-    (false, fill_marks(&said.only_unstarted, &[("note", &note)]), NOT_RUN_EXIT_CODE)
-  } else {
-    (false, note, 1)
-  }
+  (false, parts.join(&said.joiner), 1)
 }
 
 /// Every test file of this repository, the ones git has never seen included, matching the declared test
@@ -313,16 +271,10 @@ fn browser_file(test: &Test, file: &str) -> bool {
 }
 
 // A unit's mark, as the readers of the log find it.
-fn mark(code: i32, cut: bool) -> &'static str {
+fn mark(code: i32) -> &'static str {
   let said = &SUITE.file;
 
-  if cut {
-    &said.cut
-  } else if code == 0 {
-    &said.ok
-  } else {
-    &said.failed
-  }
+  if code == 0 { &said.ok } else { &said.failed }
 }
 
 // The words of a whole run, or of a run narrowed by words naming units exactly, by directory and a slash.
@@ -403,14 +355,12 @@ pub fn run_saying(repo: &Repository, ask: &SuiteAsk, heard: &(dyn Fn(&str) + Syn
     }
   };
 
-  // The machine's turn, before anything is timed: a run queued behind another is not cut for it, and a run
-  // inside its caller's turn starts at once.
+  // The machine's turn, before anything is timed: a run inside its caller's turn starts at once.
   let env = turn::process_env();
   let turn_command = if selected.is_none() { &SUITE.run.whole } else { &SUITE.run.selected };
   let turn = turn::take_turn(&TurnAsk {
     command: turn_command.clone(),
     lane: Lane::Wide,
-    wait_seconds: ask.turn_wait,
     say,
     path: None,
     env: env.clone(),
@@ -726,7 +676,6 @@ fn run_held(
     std::fs::metadata(root.join(file)).map_or(0, |held| held.len())
   }));
 
-  say(&guards_line(ask.whole_guard, ask.file_guard));
   say(&fill_marks(
     &SUITE.lines.plan,
     &[
@@ -786,7 +735,7 @@ fn run_held(
       let mut env = base;
 
       // Cargo itself, in the checkout's own build environment, with a home of its own as every test file
-      // has: the run's guard is the unit's, which a wrapper running it again would spend.
+      // has.
       env.extend(cargo_env.iter().cloned());
       env.push(("HOME".to_owned(), home.to_string_lossy().into_owned()));
 
@@ -805,8 +754,7 @@ fn run_held(
       .into_iter()
       .next()
       .and_then(|group| {
-        let line =
-          group.language.test_command(&group.files, &ask.extra, Some(test.test_timeout_seconds))?;
+        let line = group.language.test_command(&group.files, &ask.extra)?;
 
         Some((group.dir, line))
       })
@@ -814,7 +762,7 @@ fn run_held(
 
     UnitCommand::of(line, root.join(dir), base, None)
   };
-  let file_run = |file: &String| -> (i32, bool) {
+  let file_run = |file: &String| -> i32 {
     let no_check = match (project_units.get(file), tool_units.get(file)) {
       (Some(project), _) if !project.check => {
         Some(fill_marks(&SUITE.file.no_check, &[("script", &repo.declaration.projects.check_script)]))
@@ -830,29 +778,24 @@ fn run_held(
     if let Some(why) = no_check {
       say(&format!(
         "\n{}\n{why}\n",
-        fill_marks(&SUITE.file.heading, &[("mark", mark(1, false)), ("seconds", "0.0"), ("file", file)]),
+        fill_marks(&SUITE.file.heading, &[("mark", mark(1)), ("seconds", "0.0"), ("file", file)]),
       ));
 
-      return (1, false);
+      return 1;
     }
 
-    let ran = run_unit(&unit_command(file), Duration::from_secs(ask.file_guard));
-    let held = if ran.held { format!("\n{}\n", SUITE.file.held) } else { String::new() };
+    let ran = run_unit(&unit_command(file));
 
     say(&format!(
-      "\n{}\n{}{held}",
+      "\n{}\n{}",
       fill_marks(
         &SUITE.file.heading,
-        &[
-          ("mark", mark(ran.code, ran.cut)),
-          ("seconds", &format!("{:.1}", ran.seconds)),
-          ("file", file)
-        ],
+        &[("mark", mark(ran.code)), ("seconds", &format!("{:.1}", ran.seconds)), ("file", file)],
       ),
       ran.output
     ));
 
-    (ran.code, ran.cut)
+    ran.code
   };
   let lane = |file: &String| -> Option<String> {
     if browser_file(test, file) || project_browser.contains(file) {
@@ -866,31 +809,14 @@ fn run_held(
       None
     }
   };
-  let whole_guard = ask.whole_guard as f64;
-  let may_start = || took() < whole_guard;
-  let outcome = sweep(
-    &files,
-    &SweepPlan {
-      width,
-      lane: &lane,
-      may_start: &may_start,
-    },
-    &file_run,
-  );
-  let ran: Vec<(&String, (i32, bool))> = files
+  let codes = sweep(&files, &SweepPlan { width, lane: &lane }, &file_run);
+  let failed: Vec<&str> = files
     .iter()
-    .zip(&outcome.results)
-    .filter_map(|(file, result)| result.map(|result| (file, result)))
-    .collect();
-  let cut_files: Vec<&str> =
-    ran.iter().filter(|(_, (_, cut))| *cut).map(|(file, _)| file.as_str()).collect();
-  let failed: Vec<&str> = ran
-    .iter()
-    .filter(|(_, (code, cut))| !*cut && *code != 0)
+    .zip(&codes)
+    .filter(|(_, code)| **code != 0)
     .map(|(file, _)| file.as_str())
     .collect();
-  let unstarted: Vec<&str> = outcome.unstarted.iter().map(|at| files[*at].as_str()).collect();
-  let passed = ran.len() - cut_files.len() - failed.len();
+  let passed = codes.len() - failed.len();
   let said = &SUITE.ending;
   let joined = |names: &[&str]| names.join(&said.joiner);
 
@@ -902,36 +828,20 @@ fn run_held(
         ("files", &files.len().to_string()),
         ("passed", &passed.to_string()),
         ("failed", &failed.len().to_string()),
-        ("cut", &cut_files.len().to_string()),
-        ("unstarted", &unstarted.len().to_string()),
       ],
     )
   ));
 
-  if !cut_files.is_empty() {
-    say(&fill_marks(
-      &said.cut_files,
-      &[("guard", &ask.file_guard.to_string()), ("files", &joined(&cut_files))],
-    ));
-  }
   if !failed.is_empty() {
     say(&fill_marks(&said.failed_files, &[("files", &joined(&failed))]));
-  }
-  if !unstarted.is_empty() {
-    say(&fill_marks(
-      &said.unstarted_files,
-      &[("guard", &ask.whole_guard.to_string()), ("files", &joined(&unstarted))],
-    ));
   }
 
   let count = SweepCount {
     files: files.len(),
     passed,
     failed: failed.len(),
-    cut: cut_files.len(),
-    unstarted: unstarted.len(),
   };
-  let (ok, note, code) = sweep_ending(count, ask.whole_guard, ask.file_guard);
+  let (ok, note, code) = sweep_ending(count);
 
   // The last thing written, always: what the run came to, on one line a caller can read on its own.
   if let Some(cleared) = clear_fence(&mut LiveClear) {

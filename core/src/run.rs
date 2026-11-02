@@ -6,18 +6,13 @@ use std::fs::File;
 use std::os::unix::process::CommandExt as _;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc;
 use std::time::{Duration, Instant, SystemTime};
 
 use crate::languages::{Language, PLAIN, Tally, failures_of_log, tally_of_log};
 use crate::policy::fill_marks;
 use crate::policy::lanes::LANES;
 use crate::queue::now_ms;
-use crate::turn::{
-  NOT_RUN_EXIT_CODE, TurnAsk, lane_width, machine_threads, record_turn_times, stop_tree, take_turn,
-};
+use crate::turn::{NOT_RUN_EXIT_CODE, TurnAsk, lane_width, machine_threads, record_turn_times, take_turn};
 use crate::witness::{RunBegun, RunEnded, RunVerdict, RunWitness};
 
 /// How one run ended.
@@ -28,7 +23,6 @@ pub struct TestbedResult {
   pub ran: bool,
   pub ok: bool,
   pub code: Option<i32>,
-  pub cut: bool,
   pub tally: Option<Tally>,
   pub seconds: f64,
   pub waited_seconds: f64,
@@ -76,7 +70,6 @@ impl TestbedResult {
         ("waited", &self.waited_seconds.round().to_string()),
         ("language", self.language),
         ("counts", &counts),
-        ("cut", if self.cut { &said.cut } else { "" }),
         ("log", &log),
       ],
     )
@@ -107,8 +100,6 @@ pub struct RunAsk<'a> {
   pub language: &'static dyn Language,
   pub languages: &'a [&'static dyn Language],
   pub log_dir: PathBuf,
-  /// Seconds it may hold the machine; the run's own guard where none is given.
-  pub guard_seconds: Option<f64>,
   pub cwd: PathBuf,
   /// The turn's own ask, its lane the one the command runs in, at that lane's width.
   pub turn: TurnAsk<'a>,
@@ -143,7 +134,7 @@ pub fn log_name(started_ms: i64, language: &str) -> String {
   format!("{at}-{language}-{}.log", std::process::id())
 }
 
-/// The command run in its turn, wide, under its guard, its output into a log of its own; or the words of
+/// The command run in its turn, wide, until it ends, its output into a log of its own; or the words of
 /// why it could not run at all.
 pub fn run_in_testbed(ask: &RunAsk<'_>) -> Result<TestbedResult, String> {
   let turn = take_turn(&ask.turn);
@@ -152,7 +143,6 @@ pub fn run_in_testbed(ask: &RunAsk<'_>) -> Result<TestbedResult, String> {
     ran: false,
     ok: false,
     code: None,
-    cut: false,
     tally: None,
     seconds: 0.0,
     waited_seconds: turn.waited_seconds(),
@@ -206,7 +196,7 @@ pub fn run_in_testbed(ask: &RunAsk<'_>) -> Result<TestbedResult, String> {
     tell_ended(RunVerdict::NotRun, None);
     return Ok(not_run());
   };
-  // A process group of its own, so the guard takes everything the command started with it.
+  // A process group of its own, so what the command started stands together under it.
   let mut child = Command::new(program)
     .args(args)
     .current_dir(&ask.cwd)
@@ -221,26 +211,10 @@ pub fn run_in_testbed(ask: &RunAsk<'_>) -> Result<TestbedResult, String> {
       tell_ended(RunVerdict::Failed, None);
       fill_marks(&said.unstarted, &[("program", program), ("why", &why.to_string())])
     })?;
-  let cut = Arc::new(AtomicBool::new(false));
-  let (ended, ending) = mpsc::channel::<()>();
-  let guard =
-    Duration::from_secs_f64(ask.guard_seconds.unwrap_or(LANES.numbers.guard_seconds as f64).max(0.0));
-  let pid = i64::from(child.id());
-  let cutting = Arc::clone(&cut);
-
-  std::thread::spawn(move || {
-    if ending.recv_timeout(guard) == Err(mpsc::RecvTimeoutError::Timeout) {
-      cutting.store(true, Ordering::Relaxed);
-      stop_tree(pid, Duration::from_secs(LANES.numbers.stop_grace_seconds));
-    }
-  });
-
   let status = child.wait().ok();
-  let _ = ended.send(());
-  let cut = cut.load(Ordering::Relaxed);
   let code = status.and_then(|status| status.code());
   let text = String::from_utf8_lossy(&std::fs::read(&log).unwrap_or_default()).into_owned();
-  let ok = code == Some(0) && !cut;
+  let ok = code == Some(0);
   let seconds = started.elapsed().as_secs_f64();
 
   record_turn_times(env, &ask.turn.command, ask.turn.lane, turn.waited_seconds(), seconds);
@@ -259,7 +233,6 @@ pub fn run_in_testbed(ask: &RunAsk<'_>) -> Result<TestbedResult, String> {
     ran: true,
     ok,
     code,
-    cut,
     tally,
     seconds,
     waited_seconds: turn.waited_seconds(),

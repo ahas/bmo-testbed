@@ -102,12 +102,15 @@ pub struct Test {
   pub files: Option<Vec<String>>,
   #[serde(default)]
   pub browser: Vec<String>,
-  #[serde(default = "Test::guard_seconds")]
-  pub guard_seconds: u64,
-  #[serde(default = "Test::file_guard_seconds")]
-  pub file_guard_seconds: u64,
-  #[serde(default = "Test::test_timeout_seconds")]
-  pub test_timeout_seconds: u64,
+  /// Read and given no effect: nothing the testbed runs has a span it must end within.
+  #[serde(default)]
+  pub guard_seconds: Option<u64>,
+  /// Read and given no effect: nothing the testbed runs has a span it must end within.
+  #[serde(default)]
+  pub file_guard_seconds: Option<u64>,
+  /// Read and given no effect: nothing the testbed runs has a span it must end within.
+  #[serde(default)]
+  pub test_timeout_seconds: Option<u64>,
   #[serde(default = "Test::memory_gb")]
   pub memory_gb: u64,
   #[serde(default)]
@@ -117,18 +120,6 @@ pub struct Test {
 }
 
 impl Test {
-  fn guard_seconds() -> u64 {
-    DECLARATION.defaults.test.guard_seconds
-  }
-
-  fn file_guard_seconds() -> u64 {
-    DECLARATION.defaults.test.file_guard_seconds
-  }
-
-  fn test_timeout_seconds() -> u64 {
-    DECLARATION.defaults.test.test_timeout_seconds
-  }
-
   fn memory_gb() -> u64 {
     DECLARATION.defaults.test.memory_gb
   }
@@ -359,14 +350,17 @@ pub struct Deploy {
   /// Where the unit files stand; none is every tracked service and timer.
   pub units: Option<Vec<String>>,
   pub health: Option<String>,
-  #[serde(default = "Deploy::health_wait_seconds")]
-  pub health_wait_seconds: u64,
-  #[serde(default = "Deploy::stay_up_seconds")]
-  pub stay_up_seconds: u64,
+  /// Read and given no effect: nothing the testbed runs has a span it must end within.
+  #[serde(default)]
+  pub health_wait_seconds: Option<u64>,
+  /// Read and given no effect: nothing the testbed runs has a span it must end within.
+  #[serde(default)]
+  pub stay_up_seconds: Option<u64>,
   /// Answers 0 where no work stands under way that a restart would cut; asked just before the record and the flip.
   pub quiet: Option<String>,
-  #[serde(default = "Deploy::quiet_wait_seconds")]
-  pub quiet_wait_seconds: u64,
+  /// Read and given no effect: nothing the testbed runs has a span it must end within.
+  #[serde(default)]
+  pub quiet_wait_seconds: Option<u64>,
   #[serde(default = "yes")]
   pub gate: bool,
   /// `[[deploy.step]]`, in order.
@@ -378,18 +372,6 @@ pub struct Deploy {
 impl Deploy {
   fn link() -> String {
     DECLARATION.defaults.deploy.link.clone()
-  }
-
-  fn health_wait_seconds() -> u64 {
-    DECLARATION.defaults.deploy.health_wait_seconds
-  }
-
-  fn stay_up_seconds() -> u64 {
-    DECLARATION.defaults.deploy.stay_up_seconds
-  }
-
-  fn quiet_wait_seconds() -> u64 {
-    DECLARATION.defaults.deploy.quiet_wait_seconds
   }
 }
 
@@ -424,14 +406,9 @@ pub struct DeployStep {
   pub id: String,
   pub command: String,
   pub phase: Phase,
-  #[serde(default = "DeployStep::timeout_seconds")]
-  pub timeout_seconds: u64,
-}
-
-impl DeployStep {
-  fn timeout_seconds() -> u64 {
-    DECLARATION.defaults.deploy.step_timeout_seconds
-  }
+  /// Read and given no effect: nothing the testbed runs has a span it must end within.
+  #[serde(default)]
+  pub timeout_seconds: Option<u64>,
 }
 
 /// `[deploy.backup]`: the backup a deployment takes.
@@ -470,14 +447,9 @@ pub struct Runner {
 #[serde(deny_unknown_fields)]
 pub struct Events {
   pub hook: Option<String>,
-  #[serde(default = "Events::timeout_seconds")]
-  pub timeout_seconds: u64,
-}
-
-impl Events {
-  fn timeout_seconds() -> u64 {
-    DECLARATION.defaults.events.timeout_seconds
-  }
+  /// Read and given no effect: nothing the testbed runs has a span it must end within.
+  #[serde(default)]
+  pub timeout_seconds: Option<u64>,
 }
 
 impl Default for Events {

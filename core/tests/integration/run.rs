@@ -20,12 +20,10 @@ fn ask<'a>(dir: &Path, command: &[&str], languages: &'a [&'static dyn Language])
     language: PLAIN,
     languages,
     log_dir: dir.join("logs"),
-    guard_seconds: None,
     cwd: dir.to_path_buf(),
     turn: TurnAsk {
       command: command.join(" "),
       lane: Lane::Wide,
-      wait_seconds: None,
       say: &quiet,
       path: Some(dir.join("testbed.lock")),
       env: Env::new(),
@@ -38,12 +36,21 @@ fn ask<'a>(dir: &Path, command: &[&str], languages: &'a [&'static dyn Language])
   }
 }
 
+// A harness's process that has ended.
+fn gone_harness() -> String {
+  let mut ended = std::process::Command::new("true").spawn().unwrap();
+  let pid = ended.id();
+
+  ended.wait().unwrap();
+  pid.to_string()
+}
+
 fn run(ask: &RunAsk<'_>) -> TestbedResult {
   run_in_testbed(ask).expect("the command runs")
 }
 
 // The result line as the policy words it, the run's own seconds and log filled in.
-fn line(result: &TestbedResult, verdict: &str, counts: &str, cut: &str) -> String {
+fn line(result: &TestbedResult, verdict: &str, counts: &str) -> String {
   let log: PathBuf = result.log.clone().unwrap_or_default();
 
   fill_marks(
@@ -54,7 +61,6 @@ fn line(result: &TestbedResult, verdict: &str, counts: &str, cut: &str) -> Strin
       ("waited", &result.waited_seconds.round().to_string()),
       ("language", result.language),
       ("counts", counts),
-      ("cut", cut),
       ("log", &log.to_string_lossy()),
     ],
   )
@@ -70,7 +76,7 @@ fn a_run_keeps_its_whole_output_in_its_log_and_ends_on_one_line_with_the_counts_
     &LANGUAGES,
   ));
 
-  assert!(result.ran && !result.ok && !result.cut);
+  assert!(result.ran && !result.ok);
   assert_eq!((result.language, result.code), (PLAIN.name(), Some(1)));
   assert_eq!(
     result.tally,
@@ -85,7 +91,7 @@ fn a_run_keeps_its_whole_output_in_its_log_and_ends_on_one_line_with_the_counts_
 
   let counts = fill_marks(&LANES.run.counts, &[("pass", "3"), ("fail", "1"), ("skip", "0")]);
 
-  assert_eq!(result.line(), line(&result, &LANES.run.failed, &counts, ""));
+  assert_eq!(result.line(), line(&result, &LANES.run.failed, &counts));
   assert_eq!(result.exit_code(), 1);
 }
 
@@ -98,28 +104,24 @@ fn a_build_says_its_exit_code_and_the_last_lines_where_nothing_named_a_failure()
 
   assert_eq!(
     passed.line(),
-    line(&passed, &LANES.run.ok, &fill_marks(&LANES.run.exit, &[("code", "0")]), "")
+    line(&passed, &LANES.run.ok, &fill_marks(&LANES.run.exit, &[("code", "0")]))
   );
   assert_eq!(passed.exit_code(), 0);
   assert_eq!(failed.failures, ["first", "broke"]);
   assert_eq!(failed.exit_code(), 3);
 }
 
-// "cuts a command at its guard, with everything it started"
+// "runs a command until it ends, however long that takes"
 #[test]
-fn a_command_is_cut_at_its_guard_with_everything_it_started() {
+fn a_command_runs_until_it_ends() {
   let dir = tempfile::tempdir().unwrap();
-  let mut asked = ask(dir.path(), &["sh", "-c", "sleep 30 & wait"], &[]);
+  let result = run(&ask(dir.path(), &["sh", "-c", "sleep 1 & wait"], &[]));
 
-  asked.guard_seconds = Some(0.2);
-
-  let result = run(&asked);
-
-  assert!(!result.ok && result.cut);
-  assert!(result.line().contains(&LANES.run.cut));
+  assert!(result.ran && result.ok);
+  assert!(result.seconds >= 1.0);
 }
 
-// "runs nothing where the turn does not come, and says so"
+// "runs nothing where the harness it waits for goes away before the turn comes, and says so"
 #[test]
 fn nothing_runs_where_the_turn_does_not_come_and_it_says_so() {
   let dir = tempfile::tempdir().unwrap();
@@ -127,7 +129,8 @@ fn nothing_runs_where_the_turn_does_not_come_and_it_says_so() {
     take_lock(&dir.path().join("testbed.lock"), 5.0, LockWait::default()).expect("a free lock is had");
   let mut asked = ask(dir.path(), &["sh", "-c", "exit 0"], &[]);
 
-  asked.turn.wait_seconds = Some(0.0);
+  asked.turn.env = Env::from([("CLAUDE_PID".to_owned(), gone_harness())]);
+  asked.turn.notice_seconds = Some(0.05);
 
   let result = run(&asked);
 

@@ -40,7 +40,6 @@ pub struct BackupsWords {
   pub none_declared: String,
   pub local_only: String,
   pub holder: String,
-  pub wait_seconds: u64,
   pub locked: String,
 }
 

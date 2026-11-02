@@ -183,6 +183,28 @@ fn the_runs_spent_on_kills_fail_saying_the_code_was_never_judged() {
 }
 
 #[test]
+fn a_killed_run_waits_for_memory_however_long_it_takes_saying_so_now_and_again() {
+  let limits = MemoryLimits {
+    notice: Duration::from_secs(10),
+    ..MemoryLimits::default()
+  };
+  let mut bench = Bench::new(&[KILLED, PASSED], &[Some(1), Some(2), Some(2), Some(2)]);
+
+  bench.available = RefCell::new(std::iter::repeat_n(Some(1 << 30), 40).collect());
+
+  assert_eq!(run_in_turn(&mut bench, &limits, &mut || ()), 0);
+  assert_eq!(bench.ran, 2);
+  assert!(
+    bench
+      .said
+      .iter()
+      .filter(|line| line.contains("waits for more before it runs again"))
+      .count()
+      > 1
+  );
+}
+
+#[test]
 fn a_turn_not_had_runs_nothing_and_ends_on_the_testbeds_code() {
   let mut bench = Bench::new(&[], &[]);
 
@@ -190,7 +212,6 @@ fn a_turn_not_had_runs_nothing_and_ends_on_the_testbeds_code() {
     waited_seconds: 180.0,
     ahead: 2,
     holder: None,
-    kept_seconds: None,
   });
 
   assert_eq!(run_in_turn(&mut bench, &MemoryLimits::default(), &mut || ()), NOT_RUN_EXIT_CODE);
