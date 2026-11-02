@@ -176,6 +176,7 @@ pub struct ExpansionWords {
   pub trees_unread: String,
   pub tree_absent: String,
   pub tree_unlinked: String,
+  pub target_in_use: String,
 }
 
 #[derive(Debug, Deserialize)]

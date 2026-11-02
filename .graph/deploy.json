@@ -8,8 +8,8 @@
       "deploy/src/upload.rs",
       "cli/src/deploy.rs",
       "docs/deploy.md",
-      "deploy/tests/integration/backup.rs",
-      "deploy/tests/integration/upload.rs"
+      "deploy/tests/backup.rs",
+      "deploy/tests/upload.rs"
     ],
     "symbols": [],
     "aliases": [
@@ -22,7 +22,7 @@
       "core/policy-loader"
     ],
     "base": "eb8cf86b4307e8dff49a65e4aaf6d2efeb9860c8",
-    "changed": 1792641383878
+    "changed": 1793602777307
   },
   {
     "id": "deploy/deploy-run",
@@ -37,11 +37,11 @@
       "deploy/src/run.rs",
       "cli/src/deploy.rs",
       "docs/deploy.md",
-      "deploy/tests/integration/deployment.rs",
-      "deploy/tests/integration/progress.rs",
-      "deploy/tests/integration/boot.rs",
-      "cli/tests/integration/deploy_verbs.rs",
-      "deploy/tests/integration/expansion.rs"
+      "deploy/tests/deployment.rs",
+      "deploy/tests/progress.rs",
+      "deploy/tests/boot.rs",
+      "cli/tests/deploy_verbs.rs",
+      "deploy/tests/expansion.rs"
     ],
     "symbols": [],
     "aliases": [],
@@ -57,7 +57,7 @@
       "record/record"
     ],
     "base": "eb8cf86b4307e8dff49a65e4aaf6d2efeb9860c8",
-    "changed": 1792641375448
+    "changed": 1793602777307
   },
   {
     "id": "deploy/releases-and-rollback",
@@ -70,10 +70,10 @@
       "deploy/src/rollback.rs",
       "deploy/src/remove.rs",
       "docs/deploy.md",
-      "deploy/tests/integration/release.rs",
-      "deploy/tests/integration/tree.rs",
-      "deploy/tests/integration/adopt.rs",
-      "deploy/tests/integration/rollback.rs"
+      "deploy/tests/release.rs",
+      "deploy/tests/tree.rs",
+      "deploy/tests/adopt.rs",
+      "deploy/tests/rollback.rs"
     ],
     "symbols": [],
     "aliases": [
@@ -84,6 +84,6 @@
       "core/policy-loader"
     ],
     "base": "eb8cf86b4307e8dff49a65e4aaf6d2efeb9860c8",
-    "changed": 1792641383889
+    "changed": 1793602777307
   }
 ]

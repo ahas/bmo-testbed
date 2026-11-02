@@ -52,11 +52,17 @@ differs = "{manifest}: [profile.{profile}] {key} is {found} where it should be {
 missing = "{manifest}: [profile.{profile}] {key} is not set where it should be {wanted}"
 not_manifest = "{manifest} does not read as a Cargo manifest: {why}"
 
-# The settings that keep every build's output small: debug information down to line numbers and kept
-# beside the objects, no incremental state, and none kept in a release.
+# The settings that keep every build's output small, as bmo-chat's docs/conventions.md, 「Rust builds」,
+# states them: debug information down to line numbers and kept beside the objects, none in a test binary,
+# no incremental state, and none kept in a release.
 [cargo_profile.wanted.dev]
 debug = "line-tables-only"
 split-debuginfo = "unpacked"
+incremental = false
+
+[cargo_profile.wanted.test]
+debug = "line-tables-only"
+strip = "debuginfo"
 incremental = false
 
 [cargo_profile.wanted.release]

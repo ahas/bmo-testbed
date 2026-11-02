@@ -210,16 +210,16 @@ fn script_reading(text: &str, tsx: bool) -> Reading {
   }
 }
 
-// A text parsed by a tree-sitter grammar; none where the parser gives up.
-fn parse(language: tree_sitter::Language, text: &str) -> Option<Tree> {
+/// A text parsed by a tree-sitter grammar; none where the parser gives up.
+pub(crate) fn parse(language: tree_sitter::Language, text: &str) -> Option<Tree> {
   let mut parser = tree_sitter::Parser::new();
 
   parser.set_language(&language).ok()?;
   parser.parse(text, None)
 }
 
-// Every node of a tree, each before the nodes inside it.
-fn every_node(tree: &Tree) -> Vec<Node<'_>> {
+/// Every node of a tree, each before the nodes inside it.
+pub(crate) fn every_node(tree: &Tree) -> Vec<Node<'_>> {
   let mut nodes = Vec::new();
   let mut left = vec![tree.root_node()];
 
@@ -234,7 +234,7 @@ fn every_node(tree: &Tree) -> Vec<Node<'_>> {
   nodes
 }
 
-fn node_text<'t>(node: Node, text: &'t str) -> &'t str {
+pub(crate) fn node_text<'t>(node: Node, text: &'t str) -> &'t str {
   text.get(node.byte_range()).unwrap_or_default()
 }
 

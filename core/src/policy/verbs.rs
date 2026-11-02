@@ -138,6 +138,10 @@ pub struct PruneWords {
   pub held: String,
   pub gigabytes: String,
   pub over: String,
+  pub build_heading: String,
+  pub build_counts: String,
+  pub build_not_removed: String,
+  pub registry_unread: String,
 }
 
 #[derive(Debug, Deserialize)]

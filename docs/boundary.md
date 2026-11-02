@@ -218,8 +218,9 @@ bmo-testbed prune --all
 ```
 
 - Prunes the shared Cargo build directory (`docs/deploy.md`, 「The Cargo build directory」), waiting for
-  each of Cargo's build locks until the build holding it lets go. Exits 2 for a unit span of a day or less
-  or a disk that keeps no access times.
+  each of Cargo's build locks until the build holding it lets go, and removes the target directory of
+  every deployment's build tree whose last deployment is three days old (`docs/deploy.md`, 「The
+  releases」). Exits 2 for a unit span of a day or less or a disk that keeps no access times.
 
 ### `full`
 
@@ -340,7 +341,7 @@ verb's own name, and each noun takes what that verb takes.
 | `BMO_TESTBED_TOKEN` | `serve`, `mcp` | The HTTP service's bearer token |
 | `BMO_TESTBED_SERVICE` | `mcp` | The HTTP service's address the reading tools call |
 | `BMO_TESTBED_PLACEMENT` | `run`, `suite` | The placement endpoint, over the declaration's |
-| `BMO_TESTBED_CHECKOUTS` | `dependents`, `deploy`, the hosted deploy tool | The machine's registry of checkouts, over the data root's `testbed/checkouts.toml` |
+| `BMO_TESTBED_CHECKOUTS` | `dependents`, `deploy`, `prune`, the hosted deploy tool | The machine's registry of checkouts, over the data root's `testbed/checkouts.toml` |
 | `BMO_TESTBED_EVENT_HOOK` | every verb that sends events | The event hook, over the declaration's, and the hook for a verb run outside a repository |
 | `BMO_SUITE_MEMORY_GB` | the suite | The fence's memory ceiling |
 | `BMO_TEST_POSTGRES` | the suite, `template`, `scratch-database` | The test database server's address; set by the suite for every process it starts |

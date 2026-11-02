@@ -1,7 +1,8 @@
 //! `cargo` and `prune` (docs/deploy.md, 「The Cargo build directory」): Cargo run over the shared build
 //! directory the way every verb of the testbed runs it, and what no build reads any more removed from that
 //! directory, holding Cargo's own build lock in every profile directory, at the front of each lock's line and
-//! never in the testbed's. The invocation, the plan, the removal and the locks are the suite crate's; this is
+//! never in the testbed's; then the target directories of the deployments' build trees that outlived their
+//! span. The invocation, the plan, the removal and the locks are the suite crate's; this is
 //! the verbs' side of them.
 
 use std::path::Path;
@@ -13,10 +14,13 @@ use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::policy::prune::PRUNE;
 use bmo_testbed_core::policy::verbs::VERBS;
 use bmo_testbed_core::queue::now_ms;
-use bmo_testbed_core::turn::process_env;
-use bmo_testbed_core::verb::REFUSED_EXIT_CODE;
+use bmo_testbed_core::turn::{Env, process_env};
+use bmo_testbed_core::verb::{REFUSED_EXIT_CODE, data_root};
+use bmo_testbed_deploy::deployment::DeployPlaces;
+use bmo_testbed_deploy::expansion::{idle_build_target, remove_build_target};
 use bmo_testbed_suite::cargo::run_cargo;
 use bmo_testbed_suite::crates::cargo_target_root;
+use bmo_testbed_suite::dependents::{read_registry, registry_path};
 use bmo_testbed_suite::prune::{
   DAY_MS, HOUR_MS, PrunePlan, ceiling, directory_bytes, disk_free_bytes, keeps_access_times, plan_clear,
   plan_prune, take_prune_locks,
@@ -125,25 +129,10 @@ fn hold_to_ceiling(root: &Path, hook: &Hook, answer: &mut Said) {
   });
 }
 
-/// `prune` over the build directory at `root`: what it says and the code it ends with.
-pub fn prune_in(args: &PruneArgs, root: &Path, hook: &Hook) -> Said {
+// The shared build directory pruned at `root`: what it says, a refusal where its disk keeps no access times.
+fn prune_shared(args: &PruneArgs, root: &Path, days: f64, hours: f64, hook: &Hook) -> Said {
   let said = &VERBS.prune;
-  let refused = |line: String| Said {
-    err: vec![line],
-    code: REFUSED_EXIT_CODE,
-    ..Said::default()
-  };
-  let days = args.older_than.unwrap_or(PRUNE.older_than_days as f64);
-  let hours = args.incremental_older_than.unwrap_or(PRUNE.incremental_hours as f64);
   let shown = root.to_string_lossy();
-
-  if !hours.is_finite() || hours <= 0.0 {
-    return refused(said.no_hours.clone());
-  }
-
-  if !days.is_finite() || days <= PRUNE.relatime_days as f64 {
-    return refused(fill_marks(&said.too_short, &[("days", &PRUNE.relatime_days.to_string())]));
-  }
 
   if !root.exists() {
     return Said {
@@ -153,7 +142,11 @@ pub fn prune_in(args: &PruneArgs, root: &Path, hook: &Hook) -> Said {
   }
 
   if !args.all && !keeps_access_times(root) {
-    return refused(fill_marks(&said.noatime, &[("root", &shown)]));
+    return Said {
+      err: vec![fill_marks(&said.noatime, &[("root", &shown)])],
+      code: REFUSED_EXIT_CODE,
+      ..Said::default()
+    };
   }
 
   let plan_now = || {
@@ -197,11 +190,135 @@ pub fn prune_in(args: &PruneArgs, root: &Path, hook: &Hook) -> Said {
   answer
 }
 
-/// `prune` over the shared build directory, its events to the hook the environment or the repository it is
-/// run in names.
+/// The deployments whose build trees the prune reads (docs/deploy.md, 「The Cargo build directory」): the
+/// places of every checkout of the machine's registry whose declaration deploys, a deploy root several
+/// checkouts name read once, and the line saying why none were read where the registry does not read.
+#[derive(Debug, Default)]
+pub struct Deployments {
+  pub places: Vec<DeployPlaces>,
+  pub unread: Option<String>,
+}
+
+impl Deployments {
+  /// The deployments the registry at `registry` names.
+  pub fn of_registry(registry: &Path, env: &Env) -> Self {
+    let checkouts = match read_registry(registry, env) {
+      Ok(checkouts) => checkouts,
+      Err(fault) => {
+        return Self {
+          places: Vec::new(),
+          unread: Some(fill_marks(&VERBS.prune.registry_unread, &[("why", &fault.to_string())])),
+        };
+      }
+    };
+    let mut places: Vec<DeployPlaces> = Vec::new();
+
+    for checkout in checkouts {
+      let Some(found) = Repository::read(&checkout).ok().and_then(|repo| DeployPlaces::of(&repo, env).ok())
+      else {
+        continue;
+      };
+
+      if !places.iter().any(|held| held.deploy_root == found.deploy_root) {
+        places.push(found);
+      }
+    }
+
+    Self {
+      places,
+      unread: None,
+    }
+  }
+}
+
+// The deployments' build trees' target directories that outlived their span, removed or, in a dry run, named.
+fn prune_build_targets(args: &PruneArgs, deployments: &Deployments, now: i64) -> Vec<String> {
+  let said = &VERBS.prune;
+  let days = PRUNE.deploy_build_days;
+  let verb = if args.dry_run { &said.dry } else { &said.removed };
+  let mut lines = vec![fill_marks(&said.build_heading, &[("days", &days.to_string()), ("verb", verb)])];
+
+  if let Some(unread) = &deployments.unread {
+    lines.push(unread.clone());
+  }
+
+  let mut names = Vec::new();
+  let mut bytes = 0;
+  let mut failed = Vec::new();
+
+  for places in &deployments.places {
+    let Some(target) = idle_build_target(places, now, days * DAY_MS) else { continue };
+    let held = directory_bytes(&target);
+    let removed = if args.dry_run { Ok(()) } else { remove_build_target(places, &target) };
+
+    match removed {
+      Ok(()) => {
+        names.push(
+          places
+            .deploy_root
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_default(),
+        );
+        bytes += held;
+      }
+      Err(why) => failed.push(fill_marks(
+        &said.build_not_removed,
+        &[("target", &target.to_string_lossy()), ("why", &why)],
+      )),
+    }
+  }
+
+  let named = if names.is_empty() {
+    String::new()
+  } else {
+    fill_marks(&said.named, &[("names", &names.join(", "))])
+  };
+
+  lines.push(fill_marks(
+    &said.build_counts,
+    &[("count", &names.len().to_string()), ("named", &named), ("size", &gigabytes(bytes))],
+  ));
+  lines.extend(failed);
+  lines
+}
+
+/// `prune` over the build directory at `root` and the build trees of `deployments`: what it says and the code
+/// it ends with.
+pub fn prune_in(args: &PruneArgs, root: &Path, deployments: &Deployments, hook: &Hook) -> Said {
+  let said = &VERBS.prune;
+  let refused = |line: String| Said {
+    err: vec![line],
+    code: REFUSED_EXIT_CODE,
+    ..Said::default()
+  };
+  let days = args.older_than.unwrap_or(PRUNE.older_than_days as f64);
+  let hours = args.incremental_older_than.unwrap_or(PRUNE.incremental_hours as f64);
+
+  if !hours.is_finite() || hours <= 0.0 {
+    return refused(said.no_hours.clone());
+  }
+
+  if !days.is_finite() || days <= PRUNE.relatime_days as f64 {
+    return refused(fill_marks(&said.too_short, &[("days", &PRUNE.relatime_days.to_string())]));
+  }
+
+  let mut answer = prune_shared(args, root, days, hours, hook);
+
+  if answer.code == REFUSED_EXIT_CODE {
+    return answer;
+  }
+
+  answer.out.extend(prune_build_targets(args, deployments, now_ms()));
+  answer
+}
+
+/// `prune` over the shared build directory and the build trees of the deployments the machine's registry
+/// names, its events to the hook the environment or the repository it is run in names.
 pub fn prune(args: &PruneArgs) -> u8 {
   let env = process_env();
   let repo = Repository::read(&std::env::current_dir().unwrap_or_default()).ok();
+  let deployments = Deployments::of_registry(&registry_path(&data_root(), &env), &env);
 
-  prune_in(args, &cargo_target_root(), &Hook::of(repo.as_ref(), &env)).print()
+  prune_in(args, &cargo_target_root(), &deployments, &Hook::of(repo.as_ref(), &env)).print()
 }

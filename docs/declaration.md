@@ -110,7 +110,7 @@ step that fails stops the deployment with every service untouched.
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `root` | path | none | The directory holding the deploy tree's link, `deploy-releases/` and `deploy-expand`; a repository with none deploys nothing |
+| `root` | path | none | The directory holding the deploy tree's link, `deploy-releases/` and `deploy-expand`, whose target directory the prune takes three days after the last deployment (`docs/deploy.md`, 「The releases」); a repository with none deploys nothing |
 | `link` | string | `deploy` | The deploy tree's link name inside `root` |
 | `data_root` | path | required with `root` | The repository's runtime data, inside no checkout |
 | `env_links` | list of tables | `[]` | Each with `link`, a path inside a release, and `target`, a file under the data root; every target must exist |

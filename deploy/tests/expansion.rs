@@ -1,9 +1,13 @@
 //! The build tree (docs/deploy.md, 「The releases」): the trees a workspace names by a path outside the
-//! repository, laid beside a release and the build tree from the checkout that carries them.
+//! repository, laid beside a release and the build tree from the checkout that carries them; and its target
+//! directory, which outlives the last deployment by its span unless a deployment is running.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-use bmo_testbed_deploy::expansion::lay_outside_trees;
+use bmo_testbed_deploy::deployment::DeployPlaces;
+use bmo_testbed_deploy::expansion::{
+  build_target, idle_build_target, last_deployed_ms, lay_outside_trees, remove_build_target,
+};
 
 // A package standing in a folder, its library empty.
 fn package(dir: &Path, name: &str) {
@@ -425,4 +429,90 @@ fn a_commit_moved_in_the_build_tree_stamps_the_paths_it_changed() {
   let stamped = std::fs::metadata(&file).unwrap().modified().unwrap();
 
   assert!(stamped > old, "the file the commit moved stands newer than the build before it");
+}
+
+const DAY_MS: i64 = 24 * 60 * 60 * 1000;
+
+// The places of a deploy root under `root`, as a declaration naming it would lay them.
+fn places(root: &Path) -> DeployPlaces {
+  let deploy_root = root.join("deploy-root");
+
+  DeployPlaces {
+    source: root.join("checkout"),
+    deploy_dir: deploy_root.join("deploy"),
+    data_root: root.join("data"),
+    backup_dir: None,
+    unit_dir: root.join("units"),
+    record: deploy_root.join("deployed.json"),
+    log: deploy_root.join("deployed.log"),
+    progress: deploy_root.join("deploy-progress.json"),
+    bot_unit: None,
+    deploy_root,
+  }
+}
+
+fn deployed_at(places: &DeployPlaces, at: &str) {
+  std::fs::write(
+    &places.record,
+    format!(r#"{{ "commit": "c0ffee", "subject": "a change", "at": "{at}", "backup": "" }}"#),
+  )
+  .unwrap();
+}
+
+// A progress record of a run by `pid`, ended or not.
+fn progress(places: &DeployPlaces, pid: u32, ended: bool) {
+  let ending = if ended { r#", "ending": { "outcome": "live", "at": 2, "why": null }"# } else { "" };
+
+  std::fs::write(&places.progress, format!(r#"{{ "unit": null, "pid": {pid}, "startedAt": 1{ending} }}"#))
+    .unwrap();
+}
+
+fn built(places: &DeployPlaces) -> PathBuf {
+  let target = build_target(&places.deploy_dir);
+
+  std::fs::create_dir_all(target.join("release")).unwrap();
+  std::fs::write(target.join("release/app"), "built").unwrap();
+  target
+}
+
+// "The prune ... removes it once the deployment record was written more than three days ago and no deployment of
+// the deploy root is running ... A deploy root holding no record that reads keeps its build tree's target
+// directory, and the build tree itself always stays."
+#[test]
+fn a_build_tree_s_target_goes_once_the_last_deployment_outlived_its_span_and_none_runs() {
+  let dir = tempfile::tempdir().unwrap();
+  let places = places(dir.path());
+  let at = last_deployed_ms(&places.record);
+
+  assert_eq!(at, None);
+
+  let target = built(&places);
+  let now = chrono::DateTime::parse_from_rfc3339("2026-01-10T00:00:00Z").unwrap().timestamp_millis();
+  let span = 3 * DAY_MS;
+
+  // No record: it stays.
+  assert_eq!(idle_build_target(&places, now, span), None);
+
+  // Laid down two days ago: it stays; four days ago: it goes.
+  deployed_at(&places, "2026-01-08T00:00:00.000Z");
+  assert_eq!(idle_build_target(&places, now, span), None);
+  deployed_at(&places, "2026-01-06T00:00:00.000Z");
+  assert_eq!(last_deployed_ms(&places.record), Some(now - 4 * DAY_MS));
+  assert_eq!(idle_build_target(&places, now, span), Some(target.clone()));
+
+  // A run without an ending whose process lives holds it; one ended, or whose process is gone, does not.
+  progress(&places, std::process::id(), false);
+  assert_eq!(idle_build_target(&places, now, span), None);
+  assert!(remove_build_target(&places, &target).is_err());
+  assert!(target.is_dir());
+
+  progress(&places, std::process::id(), true);
+  assert_eq!(idle_build_target(&places, now, span), Some(target.clone()));
+  progress(&places, 999_999_999, false);
+  assert_eq!(idle_build_target(&places, now, span), Some(target.clone()));
+
+  remove_build_target(&places, &target).unwrap();
+  assert!(!target.exists());
+  assert!(target.parent().unwrap().is_dir());
+  assert_eq!(idle_build_target(&places, now, span), None);
 }

@@ -88,12 +88,18 @@ tree-sitter-html = "0.23.2"
 tree-sitter-rust = "0.24.2"
 url = "2.5.8"
 
-# Debug information is kept down to line numbers: a backtrace still reads in full, and every test
-# binary stays small enough to link quickly. Incremental state is not kept, since every checkout's
-# crates build under names of their own in the one shared build directory.
+# The build profiles bmo-chat's docs/conventions.md, 「Rust builds」, states, which the cargo-profile quick
+# check holds: debug information down to line numbers in a development build, none in a test binary, whose
+# panics still name their file and line, and no incremental state, since every checkout's crates build
+# under names of their own in the one shared build directory.
 [profile.dev]
 debug = "line-tables-only"
 split-debuginfo = "unpacked"
+incremental = false
+
+[profile.test]
+debug = "line-tables-only"
+strip = "debuginfo"
 incremental = false
 
 [profile.release]

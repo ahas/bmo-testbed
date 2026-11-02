@@ -18,6 +18,7 @@ use crate::run::{file_groups, script_runner};
 use crate::selection::changed_paths;
 use crate::static_check::{CheckStep, TimedRun, declared_steps, run_timed, spawn_step};
 use crate::test_server::test_postgres;
+use crate::test_targets::TargetTests;
 use crate::tool_checks::CheckedTool;
 use crate::touched::{Touched, touched};
 use crate::workspace::OwnProject;
@@ -112,6 +113,24 @@ fn cargo(verb: &str, crates: &[String], env: Vec<(String, String)>) -> Step {
   }
 }
 
+// One target's tests of one crate, whole or by its modules' filters.
+fn target_step(one: &TargetTests, env: Vec<(String, String)>) -> Step {
+  let mut command = cargo_verb_line(&["test", "--locked"]);
+
+  command.extend(["-p".to_owned(), one.krate.clone(), "--test".to_owned(), one.target.clone()]);
+
+  if !one.filters.is_empty() {
+    command.push("--".to_owned());
+    command.extend(one.filters.iter().cloned());
+  }
+
+  Step {
+    name: format!("cargo test -p {} --test {}", one.krate, one.target),
+    step: plain(".", command, env),
+    tests: false,
+  }
+}
+
 // A command that fails with the reason it could not run, as the suite's unit for it fails.
 fn refusal(why: String) -> Vec<String> {
   ["sh", "-c", "printf '%s\\n' \"$1\" >&2; exit 1", "sh"]
@@ -192,8 +211,21 @@ pub fn plan(repo: &Repository, ask: &CheckAsk) -> Result<CheckPlan, String> {
     }
   }
 
-  if !touched.tested_crates.is_empty() {
-    steps.push(cargo("test", &touched.tested_crates, database));
+  // The crates owing their tests whole run in one step; a crate whose only changed paths are its test files runs
+  // those tests alone, a step for each target they reach.
+  let whole: Vec<String> = touched
+    .tested_crates
+    .iter()
+    .filter(|name| !touched.targets.iter().any(|one| one.krate == **name))
+    .cloned()
+    .collect();
+
+  if !whole.is_empty() {
+    steps.push(cargo("test", &whole, database.clone()));
+  }
+
+  for one in &touched.targets {
+    steps.push(target_step(one, database.clone()));
   }
 
   for project in &touched.projects {

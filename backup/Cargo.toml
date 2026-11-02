@@ -5,6 +5,9 @@ version.workspace = true
 edition.workspace = true
 publish.workspace = true
 license.workspace = true
+# One test target, the harness at tests/main.rs, with a module per file of tests (bmo-chat's
+# docs/conventions.md, 「Rust builds」).
+autotests = false
 
 [dependencies]
 # The policy loader, the lock and the event hook.
@@ -28,3 +31,7 @@ url.workspace = true
 # The test server's address.
 bmo-testbed-scratch-database = { path = "../scratch-database" }
 tempfile.workspace = true
+
+[[test]]
+name = "main"
+path = "tests/main.rs"

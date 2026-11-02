@@ -192,6 +192,8 @@ not_pinned = "could not bring the submodules of {tree} to their pins"
 trees_unread = "the trees {tree} names outside it could not be read: {said}"
 tree_absent = "{at}, which {tree} names outside it, stands nowhere beside the checkout: {why}"
 tree_unlinked = "{at} could not be laid beside {tree}: {why}"
+# The prune's removal of a build tree's target directory meeting a deployment begun since it was found idle.
+target_in_use = "a deployment began since it was found idle"
 
 # What a rollback says as it goes (docs/deploy.md, 「Rollback」): {commit} a short commit, {release} a
 # release, {names} units, {why} what a call came to.

@@ -5,6 +5,9 @@ version.workspace = true
 edition.workspace = true
 publish.workspace = true
 license.workspace = true
+# One test target, the harness at tests/main.rs, with a module per file of tests (bmo-chat's
+# docs/conventions.md, 「Rust builds」).
+autotests = false
 
 [dev-dependencies]
 # The test kit's ids, read by the TypeScript parser to hold the two sets the same.
@@ -12,3 +15,7 @@ oxc_allocator.workspace = true
 oxc_ast.workspace = true
 oxc_parser.workspace = true
 oxc_span.workspace = true
+
+[[test]]
+name = "main"
+path = "tests/main.rs"

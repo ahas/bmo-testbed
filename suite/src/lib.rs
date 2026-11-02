@@ -23,6 +23,7 @@ pub mod superseded;
 pub mod sweep;
 pub mod template;
 pub mod test_server;
+pub mod test_targets;
 pub mod titles;
 pub mod tool_checks;
 pub mod touched;

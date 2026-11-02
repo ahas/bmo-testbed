@@ -23,4 +23,5 @@ mod static_check;
 mod suite;
 mod superseded;
 mod template;
+mod test_targets;
 mod workspace;

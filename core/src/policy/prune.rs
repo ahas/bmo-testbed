@@ -10,6 +10,7 @@ pub struct Prune {
   pub relatime_days: i64,
   pub incremental_hours: i64,
   pub own_grace_hours: i64,
+  pub deploy_build_days: i64,
   pub shared_ceiling_bytes: u64,
   pub checkout_ceiling_bytes: u64,
 }

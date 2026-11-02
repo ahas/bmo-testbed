@@ -347,6 +347,7 @@ fn usage(text: &str) -> String {
       ("verb", BINARY),
       ("days", &PRUNE.older_than_days.to_string()),
       ("hours", &PRUNE.incremental_hours.to_string()),
+      ("build_days", &PRUNE.deploy_build_days.to_string()),
       ("listen", &SERVICE.listen),
     ],
   )

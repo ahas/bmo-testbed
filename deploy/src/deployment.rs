@@ -30,7 +30,9 @@ use crate::boot::{
   HealthWatch, StayUp, boot_report, boot_scene, stands_up, stay_report, unit_gave_up, unit_status,
   wait_for_health,
 };
-use crate::expansion::{BuildTree, bring_submodules, expansion_tree, lay_outside_trees, put_build_tree};
+use crate::expansion::{
+  BuildTree, bring_submodules, build_target, expansion_tree, lay_outside_trees, put_build_tree,
+};
 use crate::progress::{DeployRun, DeployStart, Outcome, Part, Stage, begin_deploy, deploy_progress_path};
 use crate::release::{
   LiveProcess, Preparing, differing_binaries, flip, link_of, live_processes, live_release, logged_before,
@@ -673,7 +675,7 @@ impl<'a> Laying<'a> {
     lay_outside_trees(&tree, &places.source)?;
 
     let profile = &build.cargo_profile;
-    let target = tree.join("target");
+    let target = build_target(&places.deploy_dir);
     let cargo = tree.join("Cargo.toml").exists();
     let failed_at = |id: &str, ran: &StepRan| {
       fill_marks(

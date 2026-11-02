@@ -5,6 +5,9 @@ version.workspace = true
 edition.workspace = true
 publish.workspace = true
 license.workspace = true
+# One test target, the harness at tests/main.rs, with a module per file of tests (bmo-chat's
+# docs/conventions.md, 「Rust builds」).
+autotests = false
 
 [lib]
 name = "bmo_testbed_cli"
@@ -40,3 +43,7 @@ toml.workspace = true
 [dev-dependencies]
 libc.workspace = true
 tempfile.workspace = true
+
+[[test]]
+name = "main"
+path = "tests/main.rs"

@@ -18,6 +18,10 @@ incremental_hours = 3
 # hours: a build that failed leaves such units, and its harness mends it and builds again within that.
 own_grace_hours = 12
 
+# How long a deployment's build tree keeps its target directory after the last deployment was laid down, in
+# days (docs/deploy.md, 「The releases」).
+deploy_build_days = 3
+
 # What the build directory holds in its normal standing apart from the checkouts, in bytes: every
 # dependency compiled once in each profile, the deployment's release build, and the projects of their own.
 shared_ceiling_bytes = 120_000_000_000

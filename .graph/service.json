@@ -7,7 +7,7 @@
       "service/src/lib.rs",
       "service/src/events.rs",
       "service/src/queues.rs",
-      "service/tests/integration/service.rs",
+      "service/tests/service.rs",
       "cli/src/serve.rs",
       "policy/service.toml",
       "docs/boundary.md"
@@ -21,6 +21,6 @@
       "core/policy-loader"
     ],
     "base": "f0ea222081d9134d939b3c4528f01c62dfabfc7c",
-    "changed": 1792530535697
+    "changed": 1793602777322
   }
 ]

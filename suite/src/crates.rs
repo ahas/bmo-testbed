@@ -26,6 +26,15 @@ pub struct CrateDeclaration {
   pub binaries: Vec<String>,
   /// Whether it has a library of its own.
   pub library: bool,
+  /// Its test targets, the integration tests Cargo builds as binaries of their own.
+  pub tests: Vec<TestTarget>,
+}
+
+/// One test target of a crate: its name, which `--test` takes, and its source from the checkout's root.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct TestTarget {
+  pub name: String,
+  pub path: String,
 }
 
 /// Whether a path, from the checkout's root, is one of the workspace's own files rather than a package's: its
@@ -326,6 +335,17 @@ pub fn workspace_crates(root: &Path) -> Result<Vec<CrateDeclaration>, String> {
           .filter_map(|target| target["name"].as_str().map(str::to_owned))
           .collect(),
         library: targets(one).any(|target| of_kind(target, LIBRARY_KINDS)),
+        tests: targets(one)
+          .filter(|target| of_kind(target, &["test"]))
+          .filter_map(|target| {
+            let source = Path::new(target["src_path"].as_str()?);
+
+            Some(TestTarget {
+              name: target["name"].as_str()?.to_owned(),
+              path: source.strip_prefix(&root).ok()?.to_string_lossy().into_owned(),
+            })
+          })
+          .collect(),
       })
       .collect(),
   )

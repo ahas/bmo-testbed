@@ -677,6 +677,67 @@ fn a_service_checkout_s_change_runs_exactly_what_its_own_declaration_and_layout_
   assert_eq!(given("tests/ts/harness.test.ts").touched.tests, ["tests/ts/harness.test.ts"]);
 }
 
+// "a crate whose only changed paths are its test files runs those tests alone, a step of its own for each test
+// target they reach ... any other path of the crate ... runs the crate's tests whole"
+#[test]
+fn a_change_to_test_files_alone_runs_their_targets_and_modules_and_any_other_path_the_crate_whole() {
+  let dir = service_checkout();
+  let root = dir.path();
+
+  write(
+    root,
+    "part/Cargo.toml",
+    "[package]\nname = \"part\"\nversion = \"0.1.0\"\nedition = \"2024\"\nautotests = false\n\n[[test]]\nname = \"main\"\npath = \"tests/main.rs\"\n",
+  );
+  write(root, "part/tests/main.rs", "mod alpha;\nmod beta;\n");
+  write(root, "part/tests/alpha.rs", "#[test]\nfn one() {\n  assert_eq!(part::one(), 1);\n}\n");
+  write(
+    root,
+    "part/tests/beta.rs",
+    "#[test]\nfn two() {\n  assert_eq!(part::one() + 1, 2);\n}\n",
+  );
+
+  let repo = repo(root);
+  let given = |changed: &[&str]| plan(&repo, &files(changed)).unwrap();
+  let last = |planned: &CheckPlan| planned.steps.last().unwrap().step.command.clone();
+
+  // A module of the harness runs by its filter, two modules of one harness in one step.
+  let one = given(&["part/tests/alpha.rs"]);
+
+  assert_eq!(names(&one).last().unwrap(), "cargo test -p part --test main");
+  assert!(last(&one).ends_with(&[
+    "--test".to_owned(),
+    "main".to_owned(),
+    "--".to_owned(),
+    "alpha::".to_owned()
+  ]));
+
+  let two = given(&["part/tests/alpha.rs", "part/tests/beta.rs"]);
+
+  assert!(last(&two).ends_with(&["--".to_owned(), "alpha::".to_owned(), "beta::".to_owned()]));
+
+  // The harness's own source runs it whole; so does a test target of a file of its own.
+  assert!(last(&given(&["part/tests/main.rs"])).ends_with(&["--test".to_owned(), "main".to_owned()]));
+
+  let own = given(&["tests/service.rs"]);
+
+  assert_eq!(names(&own).last().unwrap(), "cargo test -p service --test service");
+  assert!(last(&own).ends_with(&["--test".to_owned(), "service".to_owned()]));
+
+  // A source of the crate beside its test file, and a helper of per-file targets, run the crate whole.
+  let whole = given(&["part/tests/alpha.rs", "part/src/lib.rs"]);
+
+  assert_eq!(names(&whole).last().unwrap(), "cargo test");
+  assert!(last(&whole).ends_with(&["-p".to_owned(), "part".to_owned()]));
+  assert_eq!(names(&given(&["tests/support/mod.rs"])).last().unwrap(), "cargo test");
+
+  // A crate run whole and another by its targets are steps of their own.
+  let both = given(&["src/lib.rs", "part/tests/beta.rs"]);
+
+  assert_eq!(names(&both)[names(&both).len() - 2..], ["cargo test", "cargo test -p part --test main"]);
+  assert_eq!(both.touched.tested_crates, ["part", "service"]);
+}
+
 #[test]
 fn a_log_left_unnamed_is_one_file_per_checkout_under_the_data_root() {
   let data = Path::new("/data");

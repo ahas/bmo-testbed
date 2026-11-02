@@ -533,6 +533,7 @@ mod the_crates {
       reads: strings(reads),
       binaries: Vec::new(),
       library: true,
+      tests: Vec::new(),
     };
 
     vec![
@@ -641,6 +642,7 @@ mod the_crates {
       reads: Vec::new(),
       binaries: strings(&["delta-tool"]),
       library: true,
+      tests: Vec::new(),
     });
 
     let selection = select_packages(
@@ -712,6 +714,7 @@ mod the_crates {
           reads: strings(&["docs/alpha.md"]),
           binaries: vec![],
           library: true,
+          tests: Vec::new(),
         },
         CrateDeclaration {
           dir: "crates/beta".to_owned(),
@@ -720,6 +723,7 @@ mod the_crates {
           reads: vec![],
           binaries: strings(&["beta"]),
           library: false,
+          tests: Vec::new(),
         },
       ]
     );
@@ -972,6 +976,7 @@ mod a_tool_checked_by_its_manifest {
       reads: Vec::new(),
       binaries: Vec::new(),
       library: true,
+      tests: Vec::new(),
     };
     let layout = Layout::of_parts(&fixture.repo(), vec![held]);
 

@@ -1,5 +1,5 @@
 [Unit]
-Description=Prune of the shared Cargo build directory: what no live checkout's build stands on, and gone checkouts' target directories
+Description=Prune of the shared Cargo build directory: what no live checkout's build stands on, gone checkouts' target directories, and the target directories of deploy build trees idle three days
 # docs/deploy.md, 「The Cargo build directory」. Started by its timer, which every deployment of this
 # repository links with this unit and starts (docs/deploy.md, 「The unit links」). It waits at the front of
 # Cargo's own build locks, never in the testbed's line, so it never removes anything under a build and

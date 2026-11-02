@@ -1,17 +1,21 @@
 //! The build tree (docs/deploy.md, 「The releases」): `deploy-expand` beside the deploy tree, a detached
 //! worktree moved to each commit deployed, where the release build runs, so its own target directory keeps
-//! the build warm from one deployment to the next.
+//! the build warm from one deployment to the next, until the prune takes it once the last deployment has
+//! outlived its span.
 
 use std::path::{Component, Path, PathBuf};
 
 use bmo_testbed_core::policy::deploy::DEPLOY;
 use bmo_testbed_core::policy::fill_shown;
+use bmo_testbed_core::queue::process_alive;
 use serde_json::Value;
 
+use crate::deployment::DeployPlaces;
+use crate::progress::read_deploy_progress;
 use crate::release::{beside, put_link};
 use crate::remove::remove_tree;
 use crate::run::{Ran, command, words};
-use crate::tree::short;
+use crate::tree::{read_deploy_record, short};
 use crate::unit::first_chars;
 
 /// Runs one command to its end in a directory: whether it passed, and what it printed on both streams.
@@ -20,6 +24,48 @@ pub type CommandRun<'a> = &'a dyn Fn(&[String], &Path) -> Ran;
 /// The build tree: beside the deploy tree, named after it with `-expand`.
 pub fn expansion_tree(deploy_dir: &Path) -> PathBuf {
   beside(deploy_dir, "-expand")
+}
+
+/// The build tree's target directory, where the release build keeps its output between deployments.
+pub fn build_target(deploy_dir: &Path) -> PathBuf {
+  expansion_tree(deploy_dir).join("target")
+}
+
+/// Whether a deployment of the deploy root is running: its progress record holds a run with no ending whose
+/// process is alive.
+pub fn deployment_running(progress: &Path) -> bool {
+  read_deploy_progress(std::fs::read_to_string(progress).ok().as_deref())
+    .is_some_and(|run| run.ending.is_none() && process_alive(run.pid))
+}
+
+/// When the deploy root's last deployment was laid down, in milliseconds since the epoch, as its deployment
+/// record says; none where no record reads.
+pub fn last_deployed_ms(record: &Path) -> Option<i64> {
+  let record = read_deploy_record(record)?;
+
+  chrono::DateTime::parse_from_rfc3339(&record.at).ok().map(|at| at.timestamp_millis())
+}
+
+/// The build tree's target directory of a deployment where it has outlived its span (docs/deploy.md, 「The
+/// releases」): the last deployment was laid down more than `span_ms` before `now`, and none is running. None
+/// where it stays, or there is none.
+pub fn idle_build_target(places: &DeployPlaces, now: i64, span_ms: i64) -> Option<PathBuf> {
+  let target = build_target(&places.deploy_dir);
+
+  (target.is_dir()
+    && last_deployed_ms(&places.record).is_some_and(|at| at < now - span_ms)
+    && !deployment_running(&places.progress))
+  .then_some(target)
+}
+
+/// The build tree's target directory removed through the guarded removal, unless a deployment began since it
+/// was found idle.
+pub fn remove_build_target(places: &DeployPlaces, target: &Path) -> Result<(), String> {
+  if deployment_running(&places.progress) {
+    return Err(DEPLOY.expansion.target_in_use.clone());
+  }
+
+  remove_tree(target, &places.data_root)
 }
 
 /// The build tree put at a commit.

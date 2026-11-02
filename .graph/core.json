@@ -6,7 +6,7 @@
     "files": [
       "core/src/answer.rs",
       "docs/boundary.md",
-      "core/tests/integration/answer.rs"
+      "core/tests/answer.rs"
     ],
     "symbols": [],
     "aliases": [],
@@ -14,7 +14,7 @@
       "core/policy-loader"
     ],
     "base": "f0ea222081d9134d939b3c4528f01c62dfabfc7c",
-    "changed": 1792530535601
+    "changed": 1793602777302
   },
   {
     "id": "core/close-line",
@@ -23,7 +23,7 @@
     "files": [
       "core/src/close_line.rs",
       "docs/testbed.md",
-      "core/tests/integration/close_line.rs"
+      "core/tests/close_line.rs"
     ],
     "symbols": [],
     "aliases": [],
@@ -32,7 +32,7 @@
       "core/policy-loader"
     ],
     "base": "45332e08134fa2ecb86de60b6b1a24c854d34448",
-    "changed": 1792498861660
+    "changed": 1793602777302
   },
   {
     "id": "core/declaration",
@@ -42,7 +42,7 @@
       "core/src/declaration.rs",
       "testbed.toml",
       "docs/declaration.md",
-      "core/tests/integration/declaration.rs"
+      "core/tests/declaration.rs"
     ],
     "symbols": [],
     "aliases": [],
@@ -52,7 +52,7 @@
       "core/policy-loader"
     ],
     "base": "5e955f94545d613b245e997b5b2e197509b07d4c",
-    "changed": 1792505134653
+    "changed": 1793602777302
   },
   {
     "id": "core/event-hook",
@@ -80,8 +80,8 @@
       "core/src/queue.rs",
       "core/src/memory.rs",
       "docs/testbed.md",
-      "core/tests/integration/turn.rs",
-      "core/tests/integration/memory.rs"
+      "core/tests/turn.rs",
+      "core/tests/memory.rs"
     ],
     "symbols": [],
     "aliases": [],
@@ -89,7 +89,7 @@
       "core/policy-loader"
     ],
     "base": "45332e08134fa2ecb86de60b6b1a24c854d34448",
-    "changed": 1792498861673
+    "changed": 1793602777302
   },
   {
     "id": "core/languages",
@@ -102,13 +102,13 @@
       "core/src/languages/cargo.rs",
       "core/src/languages/browser.rs",
       "docs/testbed.md",
-      "core/tests/integration/languages.rs"
+      "core/tests/languages.rs"
     ],
     "symbols": [],
     "aliases": [],
     "needs": [],
     "base": "45332e08134fa2ecb86de60b6b1a24c854d34448",
-    "changed": 1792498861678
+    "changed": 1793602777302
   },
   {
     "id": "core/placement",
@@ -118,7 +118,7 @@
       "core/src/placement.rs",
       "cli/src/placement.rs",
       "docs/boundary.md",
-      "cli/tests/integration/placement.rs"
+      "cli/tests/placement.rs"
     ],
     "symbols": [],
     "aliases": [],
@@ -127,7 +127,7 @@
       "core/policy-loader"
     ],
     "base": "f0ea222081d9134d939b3c4528f01c62dfabfc7c",
-    "changed": 1792530535641
+    "changed": 1793602774737
   },
   {
     "id": "core/policy-loader",
@@ -172,13 +172,13 @@
       "policy/static-check.toml",
       "policy/suite.toml",
       "policy/verbs.toml",
-      "core/tests/integration/policy.rs"
+      "core/tests/policy.rs"
     ],
     "symbols": [],
     "aliases": [],
     "needs": [],
     "base": "9f2e4a307c3f3b9e7d161034b1a18e6b126ad094",
-    "changed": 1792535517897
+    "changed": 1793602777302
   },
   {
     "id": "core/run-verb-and-status",
@@ -190,9 +190,9 @@
       "core/src/witness.rs",
       "docs/testbed.md",
       "docs/boundary.md",
-      "core/tests/integration/run.rs",
-      "core/tests/integration/verb.rs",
-      "cli/tests/integration/verb.rs"
+      "core/tests/run.rs",
+      "core/tests/verb.rs",
+      "cli/tests/verb.rs"
     ],
     "symbols": [],
     "aliases": [],
@@ -204,6 +204,6 @@
       "core/policy-loader"
     ],
     "base": "f0ea222081d9134d939b3c4528f01c62dfabfc7c",
-    "changed": 1792530535660
+    "changed": 1793602777302
   }
 ]

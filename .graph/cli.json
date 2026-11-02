@@ -11,8 +11,8 @@
       "cli/src/own.rs",
       "docs/boundary.md",
       "README.md",
-      "cli/tests/integration/own.rs",
-      "cli/tests/integration/nouns.rs",
+      "cli/tests/own.rs",
+      "cli/tests/nouns.rs",
       "cli/src/main.rs",
       "suite/src/own_binary.rs"
     ],
@@ -38,7 +38,7 @@
       "plugin/harness-plugin"
     ],
     "base": "3f517b909bac2ec983965a1657e50719736c9e5d",
-    "changed": 1792534245925
+    "changed": 1793602774737
   },
   {
     "id": "cli/classify",
@@ -47,8 +47,8 @@
     "files": [
       "cli/src/classify.rs",
       "cli/src/shell.rs",
-      "cli/tests/integration/classify.rs",
-      "cli/tests/integration/shell.rs"
+      "cli/tests/classify.rs",
+      "cli/tests/shell.rs"
     ],
     "symbols": [],
     "aliases": [],
@@ -57,7 +57,7 @@
       "core/policy-loader"
     ],
     "base": "45332e08134fa2ecb86de60b6b1a24c854d34448",
-    "changed": 1792498861639
+    "changed": 1793602774737
   },
   {
     "id": "cli/daily-full-run",
@@ -66,7 +66,7 @@
     "files": [
       "cli/src/full.rs",
       "docs/suite.md",
-      "cli/tests/integration/full.rs"
+      "cli/tests/full.rs"
     ],
     "symbols": [],
     "aliases": [],
@@ -81,6 +81,6 @@
       "core/policy-loader"
     ],
     "base": "45332e08134fa2ecb86de60b6b1a24c854d34448",
-    "changed": 1792498861643
+    "changed": 1793602774737
   }
 ]

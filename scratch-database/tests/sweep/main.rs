@@ -4,7 +4,7 @@
 
 // The integration tests' migrators, of which the sweep hands in one.
 #[allow(dead_code)]
-#[path = "../integration/migrators.rs"]
+#[path = "../migrators.rs"]
 mod migrators;
 
 use bmo_testbed_scratch_database::{SCRATCH, Scratch, connect};

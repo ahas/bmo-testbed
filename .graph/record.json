@@ -5,7 +5,7 @@
     "what": "The record: one SQLite file under the data root's testbed/record/ holding test runs, deployments, their log lines, restarts and an event for each change, written by the verbs and read by the service; the binary's witness keeps runs in it.",
     "files": [
       "record/src/lib.rs",
-      "record/tests/integration/record.rs",
+      "record/tests/record.rs",
       "cli/src/recorded.rs",
       "policy/record.toml",
       "docs/boundary.md"
@@ -18,6 +18,6 @@
       "core/run-verb-and-status"
     ],
     "base": "f0ea222081d9134d939b3c4528f01c62dfabfc7c",
-    "changed": 1792530535679
+    "changed": 1793602777313
   }
 ]

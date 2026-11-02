@@ -19,7 +19,7 @@
 |---|---|
 | Deploy tree | A symbolic link to the live release: the one stable path every unit, every link and every caller names, moved from one release to the next by a single rename |
 | Releases | `deploy-releases/` beside the link, one release per deployed commit, named by its first twelve hex digits |
-| Build tree | `deploy-expand` beside the link, a detached worktree moved to each commit, where the release build runs, its target directory kept warm between deployments |
+| Build tree | `deploy-expand` beside the link, a detached worktree moved to each commit, where the release build runs, its target directory kept warm between deployments until the prune takes it (「The releases」) |
 | Data root | The repository's runtime data, inside no checkout and inside no release |
 | Deployment record | `deployed.json` under the deploy root, naming the commit that runs, its subject, the reason it was deployed, the release's version, when it was laid down and the backup behind it |
 | Deployment log | `deployed.log` under the deploy root, one line per deployment |
@@ -62,6 +62,11 @@
   time against what it built before, and the build tree is kept warm between deployments. Every path
   the new commit changed is therefore stamped with the moment the tree is put at it, so a build the
   commit moves is a build that runs; a path the commit removed is none to stamp.
+- **The build tree's target directory lasts three days past the last deployment.** The prune (「The Cargo
+  build directory」) removes it once the deployment record was written more than three days ago and no
+  deployment of the deploy root is running: the progress record holds no run without an ending whose
+  process is alive. The next deployment builds its release from nothing. A deploy root holding no record
+  that reads keeps its build tree's target directory, and the build tree itself always stays.
 - **A binary is placed into a release once.** A binary whose bytes equal the previous release's is
   hard-linked to that file; a binary that differs is copied in. What differs is what the deployment
   restarts (「The unit links」).
@@ -386,7 +391,7 @@
   its own, and never fails its build.
 - **The prune,** the `prune` verb, run every six hours by `bmo-cargo-prune.timer`, holding Cargo's own
   build lock in every profile directory and standing at the front of each lock's line, never in the
-  testbed's:
+  testbed's, removes from the shared directory:
   - a unit of a checkout's own crates no live checkout's record names, built more than half a day ago;
   - any other unit no build has read for two days, or `--older-than` days, never a day or less;
   - incremental state unchanged for three hours, or `--incremental-older-than` hours;
@@ -396,12 +401,21 @@
   - never a unit a live checkout's current outputs or record stand on, nor anything Cargo does not name
     by a unit hash, nor a `target/` a Cargo process is working in or that is the shared directory
     itself.
+- **The same prune takes the deployments' build trees' target directories** that have outlived their
+  span (「The releases」). It finds the deploy roots through the machine's registry of checkouts
+  (`docs/suite.md`, 「The dependents of a major change」): each checkout's declaration names its deploy
+  root, and a deploy root several checkouts name is read once. A registry that does not read is said and
+  passed over; a checkout whose declaration does not read or deploys nothing names no deploy root. The
+  removal is the guarded one (「What it refuses」), and `--all` and the spans of the shared directory do not
+  change it.
 - **A lock a build holds is waited for** until that build lets go, however long it takes, the prune saying
   every thirty seconds which profile directory it waits on.
-- **`--dry-run`** says what it would remove; **`--all`** clears the whole directory but Cargo's lock
-  files, run by hand only.
+- **`--dry-run`** says what it would remove, the build trees' target directories with it; **`--all`**
+  clears the whole directory but Cargo's lock files, run by hand only.
 - **Its ceiling is 120 GB, and 8 GB more for each live checkout that records its builds.** A timed prune
   that leaves it over sends a `cargo-target-over-ceiling` event, each run it stays over.
 - **What it says:** how many units, incremental directories, loose files, checkout target directories and
   stray checkout `target/` directories it removed, about how much disk they held, the disk's free space
-  before and after, and what the directory holds against its ceiling.
+  before and after, and what the directory holds against its ceiling; then the build trees' target
+  directories it removed, by their deploy roots, about how much disk they held, and each one it could not
+  remove with why.

@@ -132,10 +132,12 @@
   changes run this repository's suite (`docs/suite.md`, 「The dependents of a major change」); the
   `dependencies` check reads `base_libraries` alone.
 - **`cargo-profile`:** the repository's root `Cargo.toml` holds every profile setting that keeps each
-  build's output small: `[profile.dev]` with `debug = "line-tables-only"`, `split-debuginfo =
-  "unpacked"` and `incremental = false`, and `[profile.release]` with `debug = false` and `strip =
-  "debuginfo"`. A setting left out or set otherwise is named with what it should be; a repository with no
-  root `Cargo.toml` has nothing to hold. Setting them is each repository's own change.
+  build's output small, as bmo-chat's `docs/conventions.md`, 「Rust builds」, states them: `[profile.dev]`
+  with `debug = "line-tables-only"`, `split-debuginfo = "unpacked"` and `incremental = false`,
+  `[profile.test]` with `debug = "line-tables-only"`, `strip = "debuginfo"` and `incremental = false`, and
+  `[profile.release]` with `debug = false` and `strip = "debuginfo"`. A setting left out or set otherwise
+  is named with what it should be; a repository with no root `Cargo.toml` has nothing to hold. Setting
+  them is each repository's own change.
 - **`quick` runs every enabled one** and prints a line for each, ending non-zero where any failed.
 
 ## The change check
@@ -152,6 +154,19 @@
 - **What it touches is one function's answer:** a crate a changed path belongs to or declares it reads
   is tested, and it and every crate depending on it are checked; a test file runs where it changed
   itself or loads a changed file through its imports.
+- **A crate whose only changed paths are its test files runs those tests alone,** a step of its own for
+  each test target they reach, read from `cargo metadata`; any other path of the crate, or one its `reads`
+  match, runs the crate's tests whole. Both layouts of a crate's tests are read the same way:
+  - a changed file that is a test target's own source runs that target whole, `--test <target>`, and
+    so does a change to a harness's `main.rs`;
+  - a changed `.rs` file in the folder of a harness, a target whose source is a `main.rs`, is that
+    harness's module named by the file, or by the folder it stands in below the harness's folder, and runs
+    by the module's name filter, `--test <target> -- <module>::`, the filters of one target's modules in one
+    step; where several harnesses' folders hold it, the deepest one's;
+  - a module whose files carry no test attribute, `#[test]` or one ending in `::test`, or that another
+    file under the crate's `tests/` names by a path through it or by a `#[path]` attribute, is shared, and
+    runs the crate's tests whole; so does a changed file under `tests/` that is neither, such as a
+    fixture or a helper of per-file targets.
 - **Every step runs to its end**, and the heavy ones wait for the testbed's turn.
 - **All the output goes to one log,** one per checkout under the data root's `testbed/` unless `--log`
   names another, written afresh by every run. What it prints is a line per step with its outcome and times,

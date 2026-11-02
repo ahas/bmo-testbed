@@ -5,6 +5,9 @@ version.workspace = true
 edition.workspace = true
 publish.workspace = true
 license.workspace = true
+# One test target, the harness at tests/main.rs, with a module per file of tests (bmo-chat's
+# docs/conventions.md, 「Rust builds」).
+autotests = false
 
 [dependencies]
 # The policy loader its names and numbers are read through.
@@ -16,3 +19,12 @@ sqlx.workspace = true
 tokio.workspace = true
 # The test server's address, with another database in place of its own.
 url.workspace = true
+
+[[test]]
+name = "main"
+path = "tests/main.rs"
+
+# The sweep's one test makes its binary's first template, so it has a process of its own.
+[[test]]
+name = "sweep"
+path = "tests/sweep/main.rs"

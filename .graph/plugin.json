@@ -10,7 +10,7 @@
       "plugin/src/openapi.rs",
       "plugin/skills/bmo-testbed/SKILL.md",
       "cli/examples/openapi.rs",
-      "cli/tests/integration/plugin.rs",
+      "cli/tests/plugin.rs",
       "docs/openapi.json",
       "policy/plugin.toml"
     ],
@@ -21,6 +21,6 @@
       "core/policy-loader"
     ],
     "base": "5e955f94545d613b245e997b5b2e197509b07d4c",
-    "changed": 1792529689623
+    "changed": 1793602774737
   }
 ]
