@@ -72,9 +72,15 @@
   declaring the paths that reach it runs only for a change touching one of them; a check of every path
   runs them all.
 - **A Cargo workspace's check comes last,** where a crate is marked: `cargo fmt --check`, then
-  `cargo clippy --workspace --all-targets --locked` with every warning an error, both through the
-  Cargo verb, in the wide lane, run again where the kernel killed it for want of memory; formatting
-  compiles nothing and runs at once.
+  `cargo clippy --all-targets --locked` with every warning an error, both through the Cargo verb, in
+  the wide lane, run again where the kernel killed it for want of memory; formatting compiles nothing
+  and runs at once.
+  - **Both judge the repository's own packages and no other:** the whole workspace where every member
+    stands inside the repository's root, and otherwise each member inside it, named. Formatting never
+    follows a path dependency, so a sibling repository's crate the workspace names, and the workspace
+    that crate belongs to, are never formatted; the lints reach the workspace's members alone, and a
+    path dependency is compiled as a dependency, its warnings shown and never denied. A workspace Cargo
+    cannot read is judged whole, and one with no member inside the root owes neither step.
 - **Cargo runs only through `bmo-testbed cargo`,** never plain `cargo`. The verb sets the shared build
   directory (`docs/deploy.md`, 「The Cargo build directory」) so dependencies compile once; a plain
   `cargo` lands in the checkout's own `target/`, which shares nothing and which the prune takes away.

@@ -211,6 +211,17 @@
    leaves it out where the caller already ran it, and so does a declaration with `gate = false`. The
    deployment asks the gate through a hand of its own, which the binary answers with the suite's
    static check and run, so a test stands in for it.
+   - **The gate judges the deployed repository alone.** Its formatting and its lints read the
+     repository's own packages, the members of its Cargo workspace standing inside its root, and never
+     a package outside it: neither a sibling repository's crate the workspace names by a path, nor the
+     other members of the workspace that crate belongs to. A sibling is read only where the repository's
+     own crates compile against it, as it stands in its checkout, since a path dependency is read from
+     where its manifest names it and the testbed has no committed copy of it to put there; its warnings
+     are shown and never denied. A sibling's uncommitted formatting or lints therefore never fail a
+     deployment, while every file of the repository's own is judged in full (`docs/checks.md`,
+     「The static check」). A sibling whose tree as it stands does not compile still fails the gate,
+     since the repository's crates that depend on it cannot be checked, and the release build, which
+     reads the same tree (「The releases」), would fail on it as well.
    - **A major change runs its consumer's suites as well.** The major of the commit's `VERSION` is
      compared with the version in the deployment record of the release live before it; where they
      differ, the deployment runs `dependents --run` (`docs/suite.md`, 「The dependents of a major

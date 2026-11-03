@@ -16,7 +16,7 @@ use bmo_testbed_core::turn::{
 };
 
 use crate::cargo::cargo_verb_line;
-use crate::crates::workspace_crates;
+use crate::crates::{CrateDeclaration, workspace_crates};
 use crate::own_binary::testbed_line;
 use crate::selection::{Layout, changed_paths, glob_matches, select_crates};
 
@@ -65,18 +65,70 @@ pub fn quick_check() -> CheckStep {
   CheckStep::own(DeployStep::Quick, testbed_line(&["check", "quick"]))
 }
 
-/// The Cargo workspace's formatting, through the Cargo verb, which runs it at once since it compiles nothing.
-pub fn cargo_format() -> CheckStep {
-  CheckStep::own(DeployStep::CargoFormat, cargo_verb_line(&["fmt", "--all", "--check"]))
+/// The packages of a Cargo workspace its formatting and lints judge: the repository's own, none of a sibling
+/// repository's (docs/checks.md, 「The static check」).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum OwnPackages {
+  /// The whole workspace, where every member stands inside the repository's root, or where Cargo cannot read
+  /// the workspace.
+  Workspace,
+  /// The members inside the root, by name, where a member stands outside it.
+  Named(Vec<String>),
 }
 
-/// The Cargo workspace's lints, which check every crate as they lint it, through the Cargo verb, which runs
-/// them in the wide lane and again after an out-of-memory kill.
-pub fn cargo_lint() -> CheckStep {
-  CheckStep::own(
-    DeployStep::CargoLint,
-    cargo_verb_line(&["clippy", "--workspace", "--all-targets", "--locked", "--", "-D", "warnings"]),
-  )
+impl OwnPackages {
+  /// The packages of the workspace at `root`, as Cargo reads its members.
+  pub fn of(root: &Path) -> Self {
+    workspace_crates(root).map_or(Self::Workspace, |crates| Self::among(&crates))
+  }
+
+  /// The packages among a workspace's crates, a crate outside the root named by its whole path.
+  pub fn among(crates: &[CrateDeclaration]) -> Self {
+    if crates.iter().all(|one| !Path::new(&one.dir).is_absolute()) {
+      return Self::Workspace;
+    }
+
+    Self::Named(
+      crates
+        .iter()
+        .filter(|one| !Path::new(&one.dir).is_absolute())
+        .map(|one| one.name.clone())
+        .collect(),
+    )
+  }
+
+  // Cargo's words selecting them, `whole` the words for the whole workspace.
+  fn args(&self, whole: &[&str]) -> Vec<String> {
+    match self {
+      Self::Workspace => whole.iter().map(|&word| word.to_owned()).collect(),
+      Self::Named(names) => names.iter().flat_map(|name| ["-p".to_owned(), name.clone()]).collect(),
+    }
+  }
+
+  /// Whether there is anything of the repository's own to judge.
+  pub fn any(&self) -> bool {
+    !matches!(self, Self::Named(names) if names.is_empty())
+  }
+}
+
+/// The formatting of the repository's own packages, through the Cargo verb, which runs it at once since it
+/// compiles nothing. No path dependency is followed, so a sibling repository's files are never read.
+pub fn cargo_format(own: &OwnPackages) -> CheckStep {
+  let args: Vec<String> = ["fmt", "--check"].into_iter().map(str::to_owned).chain(own.args(&[])).collect();
+
+  CheckStep::own(DeployStep::CargoFormat, cargo_verb_line(&args))
+}
+
+/// The lints of the repository's own packages, which check every crate as they lint it, through the Cargo
+/// verb, which runs them in the wide lane and again after an out-of-memory kill. A path dependency is
+/// compiled as a dependency, and its warnings are never denied.
+pub fn cargo_lint(own: &OwnPackages) -> CheckStep {
+  let args: Vec<String> = std::iter::once("clippy".to_owned())
+    .chain(own.args(&["--workspace"]))
+    .chain(["--all-targets", "--locked", "--", "-D", "warnings"].into_iter().map(str::to_owned))
+    .collect();
+
+  CheckStep::own(DeployStep::CargoLint, cargo_verb_line(&args))
 }
 
 // What a change from `since` changed; none where every path is reached: a run with no range, or a range the
@@ -120,15 +172,19 @@ pub fn declared_steps(repo: &Repository, changed: Option<&[String]>) -> Vec<Chec
     .collect()
 }
 
-/// The steps a change from `since` owes: the repository's own, then the Cargo workspace's formatting and
-/// lints where a crate is marked (docs/checks.md, 「The static check」).
+/// The steps a change from `since` owes: the repository's own, then the formatting and lints of the Cargo
+/// workspace's own packages where a crate is marked (docs/checks.md, 「The static check」).
 pub fn check_steps(repo: &Repository, since: Option<&str>) -> Vec<CheckStep> {
   let changed = changed_since(&repo.root, since);
   let changed = changed.as_deref();
   let mut steps = declared_steps(repo, changed);
 
   if cargo_selected(repo, changed) {
-    steps.extend([cargo_format(), cargo_lint()]);
+    let own = OwnPackages::of(&repo.root);
+
+    if own.any() {
+      steps.extend([cargo_format(&own), cargo_lint(&own)]);
+    }
   }
 
   steps

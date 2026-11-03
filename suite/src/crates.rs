@@ -14,7 +14,7 @@ pub const CARGO_CONFIGURATION_DIR: &str = ".cargo/";
 /// One crate of the workspace.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct CrateDeclaration {
-  /// The crate's directory from the checkout's root.
+  /// The crate's directory from the checkout's root, or its whole path where it stands outside the root.
   pub dir: String,
   pub name: String,
   /// The crates of this workspace it depends on, by name.
@@ -244,9 +244,11 @@ fn relative_dir(root: &Path, manifest: &str) -> String {
   let manifest = Path::new(manifest);
   let dir = manifest.parent().unwrap_or(manifest);
 
-  dir
-    .strip_prefix(root)
-    .unwrap_or(dir)
+  let Ok(inside) = dir.strip_prefix(root) else {
+    return dir.to_string_lossy().into_owned();
+  };
+
+  inside
     .components()
     .map(|part| part.as_os_str().to_string_lossy().into_owned())
     .collect::<Vec<_>>()

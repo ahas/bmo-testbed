@@ -10,9 +10,11 @@ use bmo_testbed_core::policy::deploy_steps::DeployStep;
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::static_check::STATIC_CHECK;
 use bmo_testbed_core::turn::{Lane, NOT_RUN_EXIT_CODE, TURN_TIMES_VARIABLE, times_words};
+use bmo_testbed_suite::cargo::cargo_invocation;
+use bmo_testbed_suite::crates::CrateDeclaration;
 use bmo_testbed_suite::static_check::{
-  CheckStep, StepDone, TimedRun, cargo_format, cargo_lint, check_steps, newest_vetted, quick_check,
-  run_static_check, run_timed, step_words,
+  CheckStep, OwnPackages, StepDone, TimedRun, cargo_format, cargo_lint, check_steps, newest_vetted,
+  quick_check, run_static_check, run_timed, step_words,
 };
 
 fn write(root: &Path, file: &str, text: &str) {
@@ -179,7 +181,7 @@ mod which_steps_a_change_owes {
     let steps = check_steps(&space.repo(), Some(&start));
 
     assert_eq!(ids(&steps), [DeployStep::Quick.name(), "types", "cargo format", "cargo lint"]);
-    assert_eq!(steps[2..], [cargo_format(), cargo_lint()]);
+    assert_eq!(steps[2..], [cargo_format(&OwnPackages::Workspace), cargo_lint(&OwnPackages::Workspace)]);
   }
 
   // "a run with no range and one that cannot be read owe every step"
@@ -376,5 +378,146 @@ mod where_a_selected_run_begins {
 
     assert_eq!(newest_vetted(space.root(), &[Some("f".repeat(40)), None]), None);
     assert_eq!(newest_vetted(space.root(), &[]), None);
+  }
+}
+
+mod the_gate_judges_the_repository_alone {
+  use super::*;
+
+  const FORMATTED: &str = "pub fn one() -> u8 {\n    1\n}\n";
+  const UNFORMATTED: &str = "pub fn   one( ) -> u8 { 1 }\n";
+
+  fn package(name: &str, dependencies: &str) -> String {
+    format!(
+      "[package]\nname = \"{name}\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\n{dependencies}"
+    )
+  }
+
+  // Two repositories side by side: a sibling whose workspace holds a client and a host, and the deployed one,
+  // whose crate names the sibling's client by a path, the way a workspace reaches a sibling repository.
+  struct Siblings {
+    dir: tempfile::TempDir,
+  }
+
+  impl Siblings {
+    fn new() -> Self {
+      let dir = tempfile::tempdir().unwrap();
+      let sibling = dir.path().join("sibling");
+      let deployed = dir.path().join("deployed");
+
+      write(
+        &sibling,
+        "Cargo.toml",
+        "[workspace]\nresolver = \"3\"\nmembers = [\"client\", \"host\"]\n",
+      );
+      write(&sibling, "client/Cargo.toml", &package("sibling-client", ""));
+      write(&sibling, "client/src/lib.rs", FORMATTED);
+      write(&sibling, "host/Cargo.toml", &package("sibling-host", ""));
+      write(&sibling, "host/src/lib.rs", FORMATTED);
+      write(&deployed, "testbed.toml", "testbed = 0\n");
+      write(&deployed, "Cargo.toml", "[workspace]\nresolver = \"3\"\nmembers = [\"crates/app\"]\n");
+      write(
+        &deployed,
+        "crates/app/Cargo.toml",
+        &package("app", "sibling-client = { path = \"../../../sibling/client\" }\n"),
+      );
+      write(&deployed, "crates/app/src/lib.rs", FORMATTED);
+
+      for root in [&sibling, &deployed] {
+        git(root, &["init", "-q", "-b", "main"]);
+        git(root, &["add", "-A"]);
+        git(root, &["commit", "-qm", "start"]);
+      }
+
+      Self { dir }
+    }
+
+    fn sibling(&self) -> PathBuf {
+      self.dir.path().join("sibling")
+    }
+
+    fn deployed(&self) -> PathBuf {
+      self.dir.path().join("deployed")
+    }
+
+    // The deployed repository's formatting step run as the Cargo verb runs it: whether it passed.
+    fn formatting_passes(&self) -> bool {
+      let repo = Repository::read(&self.deployed()).unwrap();
+      let steps = check_steps(&repo, None);
+      let step = steps.iter().find(|step| step.id == DeployStep::CargoFormat.name()).unwrap();
+      let invocation = cargo_invocation(&self.deployed(), &step.command[2..]);
+      let done = invocation.command(&self.deployed()).output().unwrap();
+
+      done.status.success()
+    }
+  }
+
+  // "a sibling's unformatted uncommitted file does not fail the deployed repository's formatting"
+  #[test]
+  fn a_sibling_s_unformatted_uncommitted_file_does_not_fail_the_deployed_repository_s_formatting() {
+    let siblings = Siblings::new();
+
+    write(&siblings.sibling(), "host/src/lib.rs", UNFORMATTED);
+    write(&siblings.sibling(), "client/src/lib.rs", UNFORMATTED);
+
+    assert!(siblings.formatting_passes());
+  }
+
+  // "the deployed repository's own unformatted file still fails its formatting"
+  #[test]
+  fn the_deployed_repository_s_own_unformatted_file_still_fails_its_formatting() {
+    let siblings = Siblings::new();
+
+    write(&siblings.deployed(), "crates/app/src/lib.rs", UNFORMATTED);
+
+    assert!(!siblings.formatting_passes());
+  }
+
+  fn member(name: &str, dir: &str) -> CrateDeclaration {
+    CrateDeclaration {
+      name: name.to_owned(),
+      dir: dir.to_owned(),
+      ..CrateDeclaration::default()
+    }
+  }
+
+  // "a workspace inside its root is judged whole, and one reaching outside names its own members"
+  #[test]
+  fn a_workspace_inside_its_root_is_judged_whole_and_one_reaching_outside_names_its_own_members() {
+    let inside = [member("app", "crates/app"), member("root", "")];
+
+    assert_eq!(OwnPackages::among(&inside), OwnPackages::Workspace);
+
+    let reaching = [
+      member("app", "crates/app"),
+      member("other", "/elsewhere/other"),
+      member("tool", "tools/tool"),
+    ];
+    let own = OwnPackages::among(&reaching);
+
+    assert_eq!(own, OwnPackages::Named(vec!["app".to_owned(), "tool".to_owned()]));
+    assert_eq!(cargo_format(&own).command[1..], ["cargo", "fmt", "--check", "-p", "app", "-p", "tool"]);
+    assert_eq!(
+      cargo_lint(&own).command[1..],
+      [
+        "cargo",
+        "clippy",
+        "-p",
+        "app",
+        "-p",
+        "tool",
+        "--all-targets",
+        "--locked",
+        "--",
+        "-D",
+        "warnings"
+      ]
+    );
+    assert_eq!(
+      cargo_lint(&OwnPackages::Workspace).command[1..],
+      ["cargo", "clippy", "--workspace", "--all-targets", "--locked", "--", "-D", "warnings"]
+    );
+    assert_eq!(cargo_format(&OwnPackages::Workspace).command[1..], ["cargo", "fmt", "--check"]);
+    assert!(!OwnPackages::Named(Vec::new()).any());
   }
 }
