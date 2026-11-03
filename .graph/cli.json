@@ -37,8 +37,8 @@
       "service/http-service",
       "plugin/harness-plugin"
     ],
-    "base": "3f517b909bac2ec983965a1657e50719736c9e5d",
-    "changed": 1793602774737
+    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
+    "changed": 1793664723499
   },
   {
     "id": "cli/classify",
@@ -56,8 +56,8 @@
       "core/languages",
       "core/policy-loader"
     ],
-    "base": "45332e08134fa2ecb86de60b6b1a24c854d34448",
-    "changed": 1793602774737
+    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
+    "changed": 1793664723505
   },
   {
     "id": "cli/daily-full-run",
@@ -80,7 +80,7 @@
       "core/lanes-and-turn",
       "core/policy-loader"
     ],
-    "base": "45332e08134fa2ecb86de60b6b1a24c854d34448",
-    "changed": 1793602774737
+    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
+    "changed": 1793664723510
   }
 ]

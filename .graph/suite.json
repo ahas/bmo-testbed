@@ -23,8 +23,8 @@
       "suite/change-selection",
       "core/policy-loader"
     ],
-    "base": "eb8cf86b4307e8dff49a65e4aaf6d2efeb9860c8",
-    "changed": 1793602777328
+    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
+    "changed": 1793664723613
   },
   {
     "id": "suite/change-check",
@@ -52,8 +52,8 @@
       "core/policy-loader",
       "calls/bmo-text"
     ],
-    "base": "fc864c39902db707eca8187a54299b6eba54359f",
-    "changed": 1793603183314
+    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
+    "changed": 1793664723620
   },
   {
     "id": "suite/change-selection",
@@ -78,8 +78,34 @@
       "core/languages",
       "core/policy-loader"
     ],
-    "base": "45332e08134fa2ecb86de60b6b1a24c854d34448",
-    "changed": 1793602777328
+    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
+    "changed": 1793664723626
+  },
+  {
+    "id": "suite/dependents",
+    "title": "Dependents",
+    "what": "The dependents verb: the machine's registry of checkouts read, the consumers whose own declarations name this repository as an upstream listed, and with --run each consumer's suite run in turn. Lives in suite/src/dependents.rs and cli/src/dependents.rs.",
+    "files": [
+      "suite/src/dependents.rs",
+      "cli/src/dependents.rs",
+      "core/src/policy/dependents.rs",
+      "policy/dependents.toml",
+      "docs/suite.md"
+    ],
+    "symbols": [
+      "consumers",
+      "registry_path",
+      "read_registry",
+      "FaultKind",
+      "CHECKOUTS_VARIABLE"
+    ],
+    "aliases": [],
+    "needs": [
+      "suite/suite-run",
+      "core/declaration"
+    ],
+    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
+    "changed": 1793664692379
   },
   {
     "id": "suite/moved-imports",
@@ -98,8 +124,8 @@
       "suite/change-selection",
       "core/policy-loader"
     ],
-    "base": "45332e08134fa2ecb86de60b6b1a24c854d34448",
-    "changed": 1793602777328
+    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
+    "changed": 1793664723633
   },
   {
     "id": "suite/personal-data",
@@ -115,13 +141,13 @@
       "개인정보 금지"
     ],
     "needs": [],
-    "base": "3f517b909bac2ec983965a1657e50719736c9e5d",
-    "changed": 1793602777328
+    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
+    "changed": 1793664723639
   },
   {
     "id": "suite/quick-checks",
     "title": "Quick checks",
-    "what": "The quick checks a repository enables: wording against its glossary and lines that are not English against a ledger, both by bmo-text's verdicts, dashes in people's text, the layout of folders and manifests, the dependency check and the Cargo profile check, run by check quick and its parts.",
+    "what": "The quick checks a repository enables: wording and lines that are not English by bmo-text's verdicts, dashes in people's text, the layout of folders and manifests, dependencies, the Cargo profile and the shared versions, run by check quick and its parts.",
     "files": [
       "suite/src/quick/mod.rs",
       "suite/src/quick/wording.rs",
@@ -130,6 +156,7 @@
       "suite/src/quick/cargo_profile.rs",
       "suite/src/quick/layout.rs",
       "suite/src/quick/dependencies.rs",
+      "suite/src/quick/shared_versions.rs",
       "suite/src/quick/source.rs",
       "suite/src/quick/files.rs",
       "cli/src/check.rs",
@@ -147,8 +174,8 @@
       "core/policy-loader",
       "calls/bmo-text"
     ],
-    "base": "45332e08134fa2ecb86de60b6b1a24c854d34448",
-    "changed": 1793602777328
+    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
+    "changed": 1793664698777
   },
   {
     "id": "suite/static-check",
@@ -169,8 +196,8 @@
       "core/lanes-and-turn",
       "core/policy-loader"
     ],
-    "base": "45332e08134fa2ecb86de60b6b1a24c854d34448",
-    "changed": 1793602777328
+    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
+    "changed": 1793664723645
   },
   {
     "id": "suite/suite-run",
@@ -201,8 +228,8 @@
       "core/policy-loader",
       "core/run-verb-and-status"
     ],
-    "base": "45332e08134fa2ecb86de60b6b1a24c854d34448",
-    "changed": 1793602777328
+    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
+    "changed": 1793664723651
   },
   {
     "id": "suite/test-count",
@@ -220,8 +247,8 @@
     "needs": [
       "core/policy-loader"
     ],
-    "base": "45332e08134fa2ecb86de60b6b1a24c854d34448",
-    "changed": 1793602777328
+    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
+    "changed": 1793664723657
   },
   {
     "id": "suite/test-log",
@@ -239,8 +266,8 @@
       "core/answer-ceiling",
       "core/policy-loader"
     ],
-    "base": "45332e08134fa2ecb86de60b6b1a24c854d34448",
-    "changed": 1793602777328
+    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
+    "changed": 1793664723663
   },
   {
     "id": "suite/test-template",
@@ -259,7 +286,7 @@
       "core/declaration",
       "core/policy-loader"
     ],
-    "base": "45332e08134fa2ecb86de60b6b1a24c854d34448",
-    "changed": 1793602777328
+    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
+    "changed": 1793664723668
   }
 ]

@@ -13,8 +13,8 @@
     "needs": [
       "core/policy-loader"
     ],
-    "base": "f0ea222081d9134d939b3c4528f01c62dfabfc7c",
-    "changed": 1793602777302
+    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
+    "changed": 1793664723521
   },
   {
     "id": "core/close-line",
@@ -31,8 +31,8 @@
       "core/lanes-and-turn",
       "core/policy-loader"
     ],
-    "base": "45332e08134fa2ecb86de60b6b1a24c854d34448",
-    "changed": 1793602777302
+    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
+    "changed": 1793664723526
   },
   {
     "id": "core/declaration",
@@ -51,8 +51,8 @@
       "core/lanes-and-turn",
       "core/policy-loader"
     ],
-    "base": "5e955f94545d613b245e997b5b2e197509b07d4c",
-    "changed": 1793602777302
+    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
+    "changed": 1793664723531
   },
   {
     "id": "core/event-hook",
@@ -68,8 +68,8 @@
       "core/declaration",
       "core/policy-loader"
     ],
-    "base": "f0ea222081d9134d939b3c4528f01c62dfabfc7c",
-    "changed": 1792530535621
+    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
+    "changed": 1793664723537
   },
   {
     "id": "core/lanes-and-turn",
@@ -88,8 +88,8 @@
     "needs": [
       "core/policy-loader"
     ],
-    "base": "45332e08134fa2ecb86de60b6b1a24c854d34448",
-    "changed": 1793602777302
+    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
+    "changed": 1793664723543
   },
   {
     "id": "core/languages",
@@ -107,8 +107,8 @@
     "symbols": [],
     "aliases": [],
     "needs": [],
-    "base": "45332e08134fa2ecb86de60b6b1a24c854d34448",
-    "changed": 1793602777302
+    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
+    "changed": 1793664723549
   },
   {
     "id": "core/placement",
@@ -126,8 +126,8 @@
       "core/lanes-and-turn",
       "core/policy-loader"
     ],
-    "base": "f0ea222081d9134d939b3c4528f01c62dfabfc7c",
-    "changed": 1793602774737
+    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
+    "changed": 1793664723554
   },
   {
     "id": "core/policy-loader",
@@ -177,8 +177,8 @@
     "symbols": [],
     "aliases": [],
     "needs": [],
-    "base": "9f2e4a307c3f3b9e7d161034b1a18e6b126ad094",
-    "changed": 1793602777302
+    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
+    "changed": 1793664723559
   },
   {
     "id": "core/run-verb-and-status",
@@ -203,7 +203,7 @@
       "core/close-line",
       "core/policy-loader"
     ],
-    "base": "f0ea222081d9134d939b3c4528f01c62dfabfc7c",
-    "changed": 1793602777302
+    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
+    "changed": 1793664723564
   }
 ]

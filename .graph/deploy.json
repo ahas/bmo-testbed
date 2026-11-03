@@ -21,8 +21,8 @@
       "deploy/releases-and-rollback",
       "core/policy-loader"
     ],
-    "base": "eb8cf86b4307e8dff49a65e4aaf6d2efeb9860c8",
-    "changed": 1793602777307
+    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
+    "changed": 1793664723569
   },
   {
     "id": "deploy/deploy-run",
@@ -56,8 +56,38 @@
       "core/policy-loader",
       "record/record"
     ],
-    "base": "eb8cf86b4307e8dff49a65e4aaf6d2efeb9860c8",
-    "changed": 1793602777307
+    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
+    "changed": 1793664723574
+  },
+  {
+    "id": "deploy/hosted-deploy-tool",
+    "title": "Hosted deploy tool",
+    "what": "The testbed/deploy tool the tool host runs: one call read from standard input, the commit put live through the deploy verb from outside the caller's harness, the deployment waited out and what came of it answered. Lives in tools/deploy.",
+    "files": [
+      "tools/deploy/src/lib.rs",
+      "tools/deploy/src/main.rs",
+      "tools/deploy/src/call.rs",
+      "tools/deploy/src/checkout.rs",
+      "tools/deploy/src/deployment.rs",
+      "tools/deploy/tool.toml",
+      "tools/deploy/deploy.json",
+      "core/src/policy/deploy_tool.rs",
+      "policy/deploy-tool.toml",
+      "docs/deploy.md"
+    ],
+    "symbols": [
+      "answer",
+      "read_handed",
+      "Handed",
+      "Ground",
+      "deploy"
+    ],
+    "aliases": [],
+    "needs": [
+      "deploy/deploy-run"
+    ],
+    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
+    "changed": 1793664692384
   },
   {
     "id": "deploy/releases-and-rollback",
@@ -83,7 +113,7 @@
     "needs": [
       "core/policy-loader"
     ],
-    "base": "eb8cf86b4307e8dff49a65e4aaf6d2efeb9860c8",
-    "changed": 1793602777307
+    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
+    "changed": 1793664723579
   }
 ]

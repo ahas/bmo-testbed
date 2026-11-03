@@ -11,8 +11,8 @@
     "symbols": [],
     "aliases": [],
     "needs": [],
-    "base": "bc0df588009be7d649792ae7c422d3dab8edb2d0",
-    "changed": 1792534545134,
+    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
+    "changed": 1793664723493,
     "boundary": {
       "side": "calls",
       "repository": "bmo-text",
