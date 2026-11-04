@@ -21,8 +21,8 @@
       "deploy/releases-and-rollback",
       "core/policy-loader"
     ],
-    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
-    "changed": 1793664723569
+    "base": "43bfb58f6d9669b5ce425ae9d87d24576d7698f4",
+    "changed": 1793779891705
   },
   {
     "id": "deploy/deploy-run",
@@ -41,7 +41,8 @@
       "deploy/tests/progress.rs",
       "deploy/tests/boot.rs",
       "cli/tests/deploy_verbs.rs",
-      "deploy/tests/expansion.rs"
+      "deploy/tests/expansion.rs",
+      "cli/tests/deploy_gate.rs"
     ],
     "symbols": [],
     "aliases": [],
@@ -56,8 +57,8 @@
       "core/policy-loader",
       "record/record"
     ],
-    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
-    "changed": 1793664723574
+    "base": "43bfb58f6d9669b5ce425ae9d87d24576d7698f4",
+    "changed": 1793779855037
   },
   {
     "id": "deploy/hosted-deploy-tool",
@@ -86,8 +87,8 @@
     "needs": [
       "deploy/deploy-run"
     ],
-    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
-    "changed": 1793664692384
+    "base": "43bfb58f6d9669b5ce425ae9d87d24576d7698f4",
+    "changed": 1793779891717
   },
   {
     "id": "deploy/releases-and-rollback",
@@ -113,7 +114,7 @@
     "needs": [
       "core/policy-loader"
     ],
-    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
-    "changed": 1793664723579
+    "base": "43bfb58f6d9669b5ce425ae9d87d24576d7698f4",
+    "changed": 1793779891711
   }
 ]

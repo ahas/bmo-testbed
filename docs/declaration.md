@@ -38,7 +38,7 @@
 | `file_guard_seconds` | integer | none | Read and given no effect: a unit runs until it ends |
 | `test_timeout_seconds` | integer | none | Read and given no effect: no per-test limit is handed to the runner, and one a runner keeps by default is lifted (`docs/suite.md`, 「Every unit runs to its end」) |
 | `memory_gb` | integer | 12 | The fence's memory ceiling, which `BMO_SUITE_MEMORY_GB` overrides |
-| `setup` | list of commands | `[]` | Run in order to set up a fresh tree: a release, the daily whole run's tree, a bench copy on another machine |
+| `setup` | list of commands | `[]` | Run in order to set up a fresh tree: the checkout a deployment's gate reads, a release, the daily whole run's tree, a bench copy on another machine |
 
 ### `[test.database]`: the test database
 

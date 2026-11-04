@@ -23,8 +23,8 @@
       "suite/change-selection",
       "core/policy-loader"
     ],
-    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
-    "changed": 1793664723613
+    "base": "43bfb58f6d9669b5ce425ae9d87d24576d7698f4",
+    "changed": 1793779891722
   },
   {
     "id": "suite/change-check",
@@ -52,8 +52,8 @@
       "core/policy-loader",
       "calls/bmo-text"
     ],
-    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
-    "changed": 1793664723620
+    "base": "43bfb58f6d9669b5ce425ae9d87d24576d7698f4",
+    "changed": 1793779891733
   },
   {
     "id": "suite/change-selection",
@@ -78,8 +78,8 @@
       "core/languages",
       "core/policy-loader"
     ],
-    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
-    "changed": 1793664723626
+    "base": "43bfb58f6d9669b5ce425ae9d87d24576d7698f4",
+    "changed": 1793779891738
   },
   {
     "id": "suite/dependents",
@@ -124,8 +124,8 @@
       "suite/change-selection",
       "core/policy-loader"
     ],
-    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
-    "changed": 1793664723633
+    "base": "43bfb58f6d9669b5ce425ae9d87d24576d7698f4",
+    "changed": 1793779891742
   },
   {
     "id": "suite/personal-data",
@@ -174,8 +174,8 @@
       "core/policy-loader",
       "calls/bmo-text"
     ],
-    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
-    "changed": 1793664698777
+    "base": "43bfb58f6d9669b5ce425ae9d87d24576d7698f4",
+    "changed": 1793779891748
   },
   {
     "id": "suite/static-check",
@@ -196,8 +196,8 @@
       "core/lanes-and-turn",
       "core/policy-loader"
     ],
-    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
-    "changed": 1793664723645
+    "base": "43bfb58f6d9669b5ce425ae9d87d24576d7698f4",
+    "changed": 1793779891728
   },
   {
     "id": "suite/suite-run",
@@ -247,8 +247,8 @@
     "needs": [
       "core/policy-loader"
     ],
-    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
-    "changed": 1793664723657
+    "base": "43bfb58f6d9669b5ce425ae9d87d24576d7698f4",
+    "changed": 1793779891753
   },
   {
     "id": "suite/test-log",

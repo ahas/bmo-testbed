@@ -2,6 +2,7 @@ mod backup;
 mod check;
 mod classify;
 mod dependents;
+mod deploy_gate;
 mod deploy_verbs;
 mod full;
 mod imports;

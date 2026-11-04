@@ -617,6 +617,27 @@ impl<'a> Laying<'a> {
     }
   }
 
+  // The declared setup steps run in order in the tree given, so a fresh tree holds what its check and its
+  // release read.
+  fn set_up_test_tree(&self, tree: &Path) -> Result<(), String> {
+    for setup in &self.repo.declaration.test.setup {
+      let ran = self.hands.run(&shell_words(setup), tree);
+
+      if !ran.ok {
+        return Err(fill_marks(
+          &DEPLOY.run.setup_failed,
+          &[
+            ("command", setup),
+            ("release", &tree.to_string_lossy()),
+            ("said", &first_chars(&ran.out, DEPLOY.numbers.quoted_chars)),
+          ],
+        ));
+      }
+    }
+
+    Ok(())
+  }
+
   // A release set up the way any checkout of the repository is: its submodules brought to their pins, the
   // declared setup steps, then the declared env links.
   fn set_up(&self, release: &Path) -> Result<(), String> {
@@ -624,21 +645,7 @@ impl<'a> Laying<'a> {
 
     bring_submodules(release, &self.places.data_root, &run)?;
     lay_outside_trees(release, &self.places.source)?;
-
-    for setup in &self.repo.declaration.test.setup {
-      let ran = self.hands.run(&shell_words(setup), release);
-
-      if !ran.ok {
-        return Err(fill_marks(
-          &DEPLOY.run.setup_failed,
-          &[
-            ("command", setup),
-            ("release", &release.to_string_lossy()),
-            ("said", &first_chars(&ran.out, DEPLOY.numbers.quoted_chars)),
-          ],
-        ));
-      }
-    }
+    self.set_up_test_tree(release)?;
 
     for link in &self.repo.declaration.deploy.env_links {
       let at = release.join(&link.link);
@@ -1146,6 +1153,16 @@ pub async fn deploy(
   if ask.no_check || !repo.declaration.deploy.gate {
     run.say(&said.gate_left_out);
   } else {
+    // The gate reads the checkout, so the declared setup runs there before it, and a fresh checkout holds
+    // the packages its check needs (docs/deploy.md, 「What the deploy run does, in order」).
+    if let Err(why) = run.set_up_test_tree(source) {
+      return run.failed(
+        Stage::Check,
+        fill_marks(&said.gate_failed, &[("commit", &shown), ("reason", &why)]),
+        Outcome::Stopped,
+      );
+    }
+
     let since = run.previous.as_ref().map(|previous| previous.commit.clone());
     let passed = gate.pass(&GateAsk {
       root: source,

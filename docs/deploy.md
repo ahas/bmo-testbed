@@ -211,6 +211,11 @@
    leaves it out where the caller already ran it, and so does a declaration with `gate = false`. The
    deployment asks the gate through a hand of its own, which the binary answers with the suite's
    static check and run, so a test stands in for it.
+   - **The tree the gate reads is set up first.** The declared `[test].setup` steps run there, in order,
+     before the static check and the suite, so a fresh checkout holds the packages its check needs
+     (`docs/declaration.md`). A step that fails stops the deployment in the check stage with nothing
+     changed. The gate is left out by `--no-check` or `gate = false`, and the setup with it. A release
+     prepared later is set up again in its own tree (「The releases」).
    - **The gate judges the deployed repository alone.** Its formatting and its lints read the
      repository's own packages, the members of its Cargo workspace standing inside its root, and never
      a package outside it: neither a sibling repository's crate the workspace names by a path, nor the
