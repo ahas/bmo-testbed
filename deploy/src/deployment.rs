@@ -50,7 +50,7 @@ use crate::tree::{
   retired_units, set_aside_plain_units, short, timer_service, tree_fault, unit_link_plan, unit_links,
   units_to_link, user_unit_dir_from, write_deploy_record,
 };
-use crate::unit::{first_chars, upload_unit_name};
+use crate::unit::{first_chars, move_to_cgroup, own_cgroup, upload_unit_name};
 
 /// The variable naming another backup directory over the declaration's.
 pub const BACKUP_DIR_VARIABLE: &str = "BMO_BACKUP_DIR";
@@ -1148,6 +1148,10 @@ pub async fn deploy(
   // 3. The gate.
   run.stage(Stage::Check);
 
+  // A gate's suite runs in this process, and its fence moves the process into a scope of its own; where it
+  // stood before the gate is captured, so it is put back there once the gate answers and everything it says
+  // afterwards, a failed stage's line with it, is read from the deployment unit's journal.
+  let unit_cgroup = ask.unit.is_some().then(own_cgroup).flatten();
   let mut flaky = Vec::new();
 
   if ask.no_check || !repo.declaration.deploy.gate {
@@ -1169,6 +1173,10 @@ pub async fn deploy(
       commit: &commit,
       since: since.as_deref(),
     });
+
+    if let Some(cgroup) = &unit_cgroup {
+      let _ = move_to_cgroup(cgroup);
+    }
 
     for step in &passed.steps {
       run.step_done(&step.name, None, step.code, step.waited_seconds, step.ran_seconds);
@@ -1200,6 +1208,10 @@ pub async fn deploy(
       commit: &commit,
       since: run.previous.as_ref().map(|previous| previous.commit.as_str()),
     });
+
+    if let Some(cgroup) = &unit_cgroup {
+      let _ = move_to_cgroup(cgroup);
+    }
 
     for step in &passed.steps {
       run.step_done(&step.name, None, step.code, step.waited_seconds, step.ran_seconds);

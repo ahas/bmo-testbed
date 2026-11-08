@@ -88,18 +88,62 @@ fn git(run: CommandRun<'_>, args: &[&str], cwd: &Path) -> Ran {
   run(&line, cwd)
 }
 
+/// Whether the tree is a worktree of the source: the common git directory each names is the one directory.
+/// A tree whose git directory cannot be read is none of the source's.
+pub fn worktree_of(tree: &Path, source: &Path, run: CommandRun<'_>) -> bool {
+  common_dir(tree, run)
+    .zip(common_dir(source, run))
+    .is_some_and(|(tree, source)| tree == source)
+}
+
+// The common git directory a directory names, absolute; none where git cannot read one there.
+fn common_dir(dir: &Path, run: CommandRun<'_>) -> Option<PathBuf> {
+  let read = git(run, &["rev-parse", "--path-format=absolute", "--git-common-dir"], dir);
+  let named = read.out.trim();
+
+  if !read.ok || named.is_empty() {
+    return None;
+  }
+
+  let named = PathBuf::from(named);
+
+  Some(std::fs::canonicalize(&named).unwrap_or(named))
+}
+
+// A build tree that is not the source's taken away through the repository it does belong to, so its
+// registration there goes with it; what git cannot take away goes through the guarded removal.
+fn discard_build_tree(tree: &Path, data_root: &Path, run: CommandRun<'_>) -> Result<(), String> {
+  let removed = git(run, &["worktree", "remove", "--force", &tree.to_string_lossy()], tree);
+
+  if removed.ok && !tree.exists() {
+    return Ok(());
+  }
+
+  remove_tree(tree, data_root)
+    .map_err(|why| fill_shown(&DEPLOY.expansion.not_discarded, &[("tree", &tree.display()), ("why", &why)]))
+}
+
 /// Puts the build tree at the commit, made where it is not there yet, with the submodules the commit pins
-/// brought to their pins, and every file the commit moved made new to the clock a build reads.
+/// brought to their pins, and every file the commit moved made new to the clock a build reads. A tree made
+/// from another checkout, or one whose git directory cannot be read, is discharged and made again from the
+/// source, so a checkout the deployment's source has moved away from leaves no stale tree behind.
 pub fn put_build_tree(build: &BuildTree<'_>, run: CommandRun<'_>) -> Result<(), String> {
   let tree = &build.tree;
-  let before = if tree.join(".git").exists() {
+  let claimed = tree.join(".git").exists();
+  let owned = claimed && worktree_of(tree, build.source, run);
+
+  if claimed && !owned {
+    discard_build_tree(tree, build.data_root, run)?;
+  }
+
+  let before = if owned {
     let read = git(run, &["rev-parse", "HEAD"], tree);
 
     read.ok.then(|| read.out.trim().to_owned()).filter(|head| !head.is_empty())
   } else {
     None
   };
-  let placed = if tree.join(".git").exists() {
+  let placed = if owned {
     git(run, &["checkout", "--force", "--detach", build.head], tree)
   } else {
     // A worktree taken away by hand is still registered, and git refuses to make a second one under a

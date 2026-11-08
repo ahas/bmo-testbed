@@ -184,6 +184,7 @@ fell = "{unit} answered and was not running: {why}"
 # short commit, {what} the step, {said} and {why} what a command or a call came to.
 [expansion]
 not_placed = "the build tree {tree} could not be put at {commit}: {said}"
+not_discarded = "the build tree {tree}, made from another checkout, could not be removed: {why}"
 not_emptied = "could not empty {at} for its submodule: {why}"
 # A git step that failed, followed by what it said.
 failed = "{what}: {said}"

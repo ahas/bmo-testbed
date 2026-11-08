@@ -45,7 +45,9 @@
       "cli/tests/deploy_gate.rs"
     ],
     "symbols": [],
-    "aliases": [],
+    "aliases": [
+      "빌드 트리"
+    ],
     "needs": [
       "core/declaration",
       "deploy/releases-and-rollback",
@@ -58,7 +60,7 @@
       "record/record"
     ],
     "base": "43bfb58f6d9669b5ce425ae9d87d24576d7698f4",
-    "changed": 1793779855037
+    "changed": 1794125035891
   },
   {
     "id": "deploy/hosted-deploy-tool",

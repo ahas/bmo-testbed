@@ -7,7 +7,7 @@
 //! This is the mechanism alone. What a verb's unit is called, what it is handed and which of its runs go
 //! through here are the verb's own.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use bmo_testbed_core::policy::deploy::DEPLOY;
 use bmo_testbed_core::policy::fill_shown;
@@ -27,6 +27,30 @@ pub const UPLOAD_UNIT_PREFIX: &str = "bmo-backup-upload-";
 /// The unit this process stands in as a deployment, or none where it stands in none.
 pub fn deploy_unit_of_process() -> Option<String> {
   std::env::var(DEPLOY_UNIT_MARKER).ok().filter(|unit| !unit.is_empty())
+}
+
+/// The control group this process stands in, as the unified hierarchy names it; none where it names none.
+pub fn own_cgroup() -> Option<String> {
+  std::fs::read_to_string("/proc/self/cgroup")
+    .ok()?
+    .lines()
+    .find_map(|line| line.strip_prefix("0::"))
+    .map(str::trim)
+    .filter(|path| !path.is_empty())
+    .map(str::to_owned)
+}
+
+/// Puts this process back into a control group it stood in before, so what it says afterwards is read from
+/// the journal of the unit that group belongs to. A process already there is left alone, and a move the
+/// kernel refuses is reported with nothing changed about the run.
+pub fn move_to_cgroup(cgroup: &str) -> Result<(), String> {
+  if own_cgroup().as_deref() == Some(cgroup) {
+    return Ok(());
+  }
+
+  let at = Path::new("/sys/fs/cgroup").join(cgroup.trim_start_matches('/')).join("cgroup.procs");
+
+  std::fs::write(&at, format!("{}\n", std::process::id())).map_err(|why| why.to_string())
 }
 
 /// A fresh deployment unit's name: `bmo-deploy-<stamp>`, the stamp in milliseconds.

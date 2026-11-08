@@ -169,6 +169,7 @@ pub struct BootWords {
 #[serde(deny_unknown_fields)]
 pub struct ExpansionWords {
   pub not_placed: String,
+  pub not_discarded: String,
   pub not_emptied: String,
   pub failed: String,
   pub no_addresses: String,

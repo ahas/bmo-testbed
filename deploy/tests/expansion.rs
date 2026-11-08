@@ -368,6 +368,16 @@ fn runner() -> impl Fn(&[String], &Path) -> bmo_testbed_deploy::run::Ran {
   }
 }
 
+fn init_repo(dir: &Path) {
+  std::fs::create_dir_all(dir.join("src")).unwrap();
+  std::fs::write(
+    dir.join("Cargo.toml"),
+    "[package]\nname = \"app\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+  )
+  .unwrap();
+  assert!(runner()(&["git".to_owned(), "init".to_owned(), "--quiet".to_owned()], dir).ok);
+}
+
 fn commit(dir: &Path, text: &str) -> String {
   std::fs::write(dir.join("src/lib.rs"), text).unwrap();
   let run = runner();
@@ -429,6 +439,86 @@ fn a_commit_moved_in_the_build_tree_stamps_the_paths_it_changed() {
   let stamped = std::fs::metadata(&file).unwrap().modified().unwrap();
 
   assert!(stamped > old, "the file the commit moved stands newer than the build before it");
+}
+
+// "whether a tree is a worktree of the source: the common git directory each names"
+#[test]
+fn a_tree_belongs_to_the_source_whose_common_git_directory_it_names() {
+  use bmo_testbed_deploy::expansion::worktree_of;
+
+  let root = tempfile::tempdir().unwrap();
+  let source = root.path().join("source");
+  let other = root.path().join("other");
+  let tree = root.path().join("deploy-expand");
+  let run = runner();
+
+  init_repo(&source);
+  init_repo(&other);
+  let one = commit(&source, "one\n");
+  let added = run(
+    &[
+      "git".to_owned(),
+      "worktree".to_owned(),
+      "add".to_owned(),
+      "--detach".to_owned(),
+      tree.to_string_lossy().into_owned(),
+      one,
+    ],
+    &source,
+  );
+
+  assert!(added.ok, "{}", added.out);
+  assert!(worktree_of(&tree, &source, &run));
+  assert!(!worktree_of(&tree, &other, &run), "another checkout is another repository");
+  assert!(
+    !worktree_of(&root.path().join("missing"), &source, &run),
+    "a tree whose git directory cannot be read belongs to no source"
+  );
+}
+
+// "a build tree made from another checkout of the repository is discarded and made again"
+#[test]
+fn a_build_tree_made_from_another_checkout_is_made_again_from_the_source() {
+  use bmo_testbed_deploy::expansion::{put_build_tree, worktree_of};
+
+  let root = tempfile::tempdir().unwrap();
+  let first = root.path().join("first");
+  let second = root.path().join("second");
+  let tree = root.path().join("deploy-expand");
+  let run = runner();
+
+  init_repo(&first);
+  let one = commit(&first, "one\n");
+  let cloned = run(
+    &[
+      "git".to_owned(),
+      "clone".to_owned(),
+      "--quiet".to_owned(),
+      first.to_string_lossy().into_owned(),
+      second.to_string_lossy().into_owned(),
+    ],
+    root.path(),
+  );
+
+  assert!(cloned.ok, "{}", cloned.out);
+
+  let two = commit(&second, "two\n");
+
+  put_build_tree(&tree_at(&first, &tree, root.path(), &one), &run).unwrap();
+  assert_eq!(std::fs::read_to_string(tree.join("src/lib.rs")).unwrap(), "one\n");
+
+  // The first checkout never fetched the second's commit, so a tree kept from it cannot be put there.
+  put_build_tree(&tree_at(&second, &tree, root.path(), &two), &run).unwrap();
+
+  let head = run(&["git".to_owned(), "rev-parse".to_owned(), "HEAD".to_owned()], &tree)
+    .out
+    .trim()
+    .to_owned();
+
+  assert_eq!(head, two);
+  assert_eq!(std::fs::read_to_string(tree.join("src/lib.rs")).unwrap(), "two\n");
+  assert!(worktree_of(&tree, &second, &run), "the tree now belongs to the source");
+  assert!(!worktree_of(&tree, &first, &run), "the earlier checkout no longer owns it");
 }
 
 const DAY_MS: i64 = 24 * 60 * 60 * 1000;

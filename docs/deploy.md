@@ -67,6 +67,10 @@
   deployment of the deploy root is running: the progress record holds no run without an ending whose
   process is alive. The next deployment builds its release from nothing. A deploy root holding no record
   that reads keeps its build tree's target directory, and the build tree itself always stays.
+- **A build tree made from a checkout that is no longer the deployment's source is discarded and made
+  again.** The tree belongs to the deployment's source only while the common git directory it names is
+  that source's. A tree naming another checkout, or one whose git directory cannot be read, is removed
+  through the repository it belongs to, and a new worktree is made from the source at the commit.
 - **A binary is placed into a release once.** A binary whose bytes equal the previous release's is
   hard-linked to that file; a binary that differs is copied in. What differs is what the deployment
   restarts (「The unit links」).
@@ -145,6 +149,10 @@
 - **The unit is handed `PATH` and the roots the caller resolved,** so the run aims at exactly what the
   caller aimed at, and `BMO_TESTBED_FRONT=1`, so every heavy command of the run stands at the front of
   its lane.
+- **A gate's suite leaves the run where it stood.** The suite runs in the deployment's process, and its
+  fence moves that process into a scope of its own; once the gate answers, the run is put back into its
+  unit's control group, so every line it says afterwards, a failed stage's line with it, is read from
+  the deployment unit's journal.
 - **A dry run and a refusal stay in the caller's process:** a refusal exits 2 there, and `--dry-run`
   says there what the run would do, changing nothing and starting no unit.
 
