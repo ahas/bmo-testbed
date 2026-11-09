@@ -88,6 +88,9 @@
   (`docs/testbed.md`).
 - **Every step runs to its end,** a failing one stopping none after it, and each says its exit code,
   how long it waited for its turn and how long it ran.
+- **A step ends when its command ends.** Its output is taken through files of the run's own, never a
+  pipe, so a process the step left running, a server a test stood up or a stand-in it never stopped,
+  holds nothing the check waits on.
 
 ## The quick checks
 

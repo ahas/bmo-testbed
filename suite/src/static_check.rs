@@ -230,20 +230,32 @@ fn output_of(
   times: &Path,
   held: Option<(&'static str, String)>,
 ) -> (RunEnd, String) {
-  let done = Command::new(&command[0])
-    .args(&command[1..])
-    .current_dir(cwd)
-    .envs(env.iter().map(|(name, value)| (name, value)))
-    .envs(held)
-    .env(TURN_TIMES_VARIABLE, times)
-    .stdin(Stdio::null())
-    .output();
+  // The output goes to files of the run's own and never a pipe: a process the command leaves running keeps
+  // a pipe open, and a reader of it would wait for that process long after the command ended.
+  let said = times.with_extension("out");
+  let failed = times.with_extension("err");
+  let done = std::fs::File::create(&said)
+    .and_then(|out| Ok((out, std::fs::File::create(&failed)?)))
+    .and_then(|(out, errors)| {
+      Command::new(&command[0])
+        .args(&command[1..])
+        .current_dir(cwd)
+        .envs(env.iter().map(|(name, value)| (name, value)))
+        .envs(held)
+        .env(TURN_TIMES_VARIABLE, times)
+        .stdin(Stdio::null())
+        .stdout(out)
+        .stderr(errors)
+        .status()
+    });
+  let taken = |path: &Path| String::from_utf8_lossy(&std::fs::read(path).unwrap_or_default()).into_owned();
+  let output = format!("{}{}", taken(&said), taken(&failed));
+
+  let _ = std::fs::remove_file(&said);
+  let _ = std::fs::remove_file(&failed);
 
   match done {
-    Ok(done) => (
-      RunEnd::from(done.status),
-      format!("{}{}", String::from_utf8_lossy(&done.stdout), String::from_utf8_lossy(&done.stderr)),
-    ),
+    Ok(status) => (RunEnd::from(status), output),
     Err(why) => (
       RunEnd {
         code: Some(127),

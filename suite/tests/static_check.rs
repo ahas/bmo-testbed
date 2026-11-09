@@ -350,6 +350,19 @@ mod a_run_with_its_waits_read_back {
     assert!(run.waited_seconds > 0.0 && run.waited_seconds <= 0.25);
     assert!(run.ran_seconds >= 0.0);
   }
+
+  // "A step ends when its command ends"
+  #[test]
+  fn a_step_ends_with_its_command_whatever_it_left_running_and_keeps_both_its_streams() {
+    let script = "sleep 20 & echo said; echo failed >&2; exit 3";
+    let command = vec!["sh".to_owned(), "-c".to_owned(), script.to_owned()];
+    let began = std::time::Instant::now();
+    let run = run_timed(&command, &std::env::temp_dir(), &[]);
+
+    assert!(began.elapsed().as_secs() < 10, "the step waited on what it left running");
+    assert_eq!(run.code, 3);
+    assert_eq!(run.output, "said\nfailed\n");
+  }
 }
 
 mod where_a_selected_run_begins {
