@@ -52,8 +52,8 @@
       "core/policy-loader",
       "calls/bmo-text"
     ],
-    "base": "43bfb58f6d9669b5ce425ae9d87d24576d7698f4",
-    "changed": 1793779891733
+    "base": "95a986f9facd7b2c260f292ec454c9ced2ea2bdf",
+    "changed": 1794219181615
   },
   {
     "id": "suite/change-selection",
@@ -78,8 +78,8 @@
       "core/languages",
       "core/policy-loader"
     ],
-    "base": "43bfb58f6d9669b5ce425ae9d87d24576d7698f4",
-    "changed": 1793779891738
+    "base": "95a986f9facd7b2c260f292ec454c9ced2ea2bdf",
+    "changed": 1794219181621
   },
   {
     "id": "suite/dependents",
@@ -124,8 +124,8 @@
       "suite/change-selection",
       "core/policy-loader"
     ],
-    "base": "43bfb58f6d9669b5ce425ae9d87d24576d7698f4",
-    "changed": 1793779891742
+    "base": "95a986f9facd7b2c260f292ec454c9ced2ea2bdf",
+    "changed": 1794219181626
   },
   {
     "id": "suite/personal-data",
@@ -174,8 +174,8 @@
       "core/policy-loader",
       "calls/bmo-text"
     ],
-    "base": "43bfb58f6d9669b5ce425ae9d87d24576d7698f4",
-    "changed": 1793779891748
+    "base": "95a986f9facd7b2c260f292ec454c9ced2ea2bdf",
+    "changed": 1794219181632
   },
   {
     "id": "suite/static-check",
@@ -196,8 +196,8 @@
       "core/lanes-and-turn",
       "core/policy-loader"
     ],
-    "base": "43bfb58f6d9669b5ce425ae9d87d24576d7698f4",
-    "changed": 1793779891728
+    "base": "95a986f9facd7b2c260f292ec454c9ced2ea2bdf",
+    "changed": 1794219181638
   },
   {
     "id": "suite/suite-run",
@@ -247,8 +247,8 @@
     "needs": [
       "core/policy-loader"
     ],
-    "base": "43bfb58f6d9669b5ce425ae9d87d24576d7698f4",
-    "changed": 1793779891753
+    "base": "95a986f9facd7b2c260f292ec454c9ced2ea2bdf",
+    "changed": 1794219181643
   },
   {
     "id": "suite/test-log",
