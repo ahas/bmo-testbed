@@ -273,6 +273,27 @@ fn a_machine_the_settings_name_runs_the_command_in_a_bench_there() {
   assert!(!bench.join("ignored.txt").exists());
 }
 
+// "a bench whose place stands as a plain folder, a tree an earlier run copied there, is made a repository in it"
+#[test]
+fn a_bench_whose_place_stands_as_a_copied_folder_is_made_a_repository_there() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let repo = dir.join("repo");
+  let ssh = dir.join("ssh");
+  let bench = dir.join("bench/repo");
+
+  install(SSH, &ssh);
+  settle(&dir, &ssh, "stand");
+  checkout(&repo, "testbed = 0\n");
+  std::fs::create_dir_all(&bench).unwrap();
+  std::fs::write(bench.join("copied.txt"), "an earlier run's copy").unwrap();
+
+  let done = on_machine(&repo, &dir, &["run", "--adapter", "plain", "--", "sh", "-c", "exit 0"]);
+
+  assert_eq!(done.code, 0, "{}\n{}", done.out, done.err);
+  assert_eq!(git(&bench, &["rev-parse", "HEAD"]), git(&repo, &["rev-parse", "HEAD"]));
+}
+
 // "a machine that cannot be reached, or settings that do not read, leave the run here and say so"
 #[test]
 fn a_machine_out_of_reach_or_settings_that_do_not_read_leave_the_run_here() {

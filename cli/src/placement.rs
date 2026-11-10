@@ -177,7 +177,9 @@ pub fn ready_bench(bench: &Bench, source: &BenchSource<'_>) -> Result<(), String
   } else {
     format!("git clone -q {} {path}", quoted(remote))
   };
-  let made = ssh(format!("test -d {path}/.git || {make}"));
+  // A folder an earlier run copied there as another checkout's outside tree is made a repository in place; the
+  // push then carries what it lacks.
+  let made = ssh(format!("test -d {path}/.git || {{ test -d {path} && git init -q {path}; }} || {make}"));
 
   if !succeeded(&made) {
     return Err(failed(&said_of.failed, &made));

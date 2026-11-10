@@ -617,7 +617,8 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   on a line.
 - **The caller makes the bench ready** before it runs: where the checkout's place under the bench root
   holds no repository it clones the checkout's remote there, or makes an empty repository where the
-  checkout has none; it pushes the commit there as the branch `bmo-bench` and checks it out detached;
+  checkout has none, and where the place stands as a folder already — a tree an earlier run copied there
+  beside another checkout — it makes the repository in that folder; it pushes the commit there as the branch `bmo-bench` and checks it out detached;
   for a run it copies its open files over with `rsync`, the files git ignores and the `.git` directory
   left out, and for a deployment it copies none and takes every untracked file away, since the release is
   the commit alone; and it copies
