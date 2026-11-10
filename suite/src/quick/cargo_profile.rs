@@ -50,7 +50,8 @@ pub fn checkout_cargo_profile(root: &Path) -> Findings {
         ("wanted", &wanted_shown),
       ];
 
-      match standing.and_then(|one| one.get(key)) {
+      // A key with dots in it is a path through the profile's tables, `package.*.debug` among them.
+      match standing.and_then(|one| key.split('.').try_fold(one, |at, part| at.get(part))) {
         None => findings.push(fill_marks(&words.missing, &at)),
         Some(found) if found != wanted => {
           let found = shown(found);

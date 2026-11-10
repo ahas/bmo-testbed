@@ -7,7 +7,7 @@ use bmo_testbed_suite::quick::cargo_profile::checkout_cargo_profile;
 
 use crate::quick::checkout;
 
-const SMALL: &str = "[workspace]\nmembers = []\n\n[profile.dev]\ndebug = \"line-tables-only\"\nsplit-debuginfo = \"unpacked\"\nincremental = false\n\n[profile.test]\ndebug = \"line-tables-only\"\nstrip = \"debuginfo\"\nincremental = false\n\n[profile.release]\ndebug = false\nstrip = \"debuginfo\"\n";
+const SMALL: &str = "[workspace]\nmembers = []\n\n[profile.dev]\ndebug = \"line-tables-only\"\nsplit-debuginfo = \"unpacked\"\nincremental = false\n\n[profile.dev.package.\"*\"]\ndebug = false\n\n[profile.test]\ndebug = \"line-tables-only\"\nstrip = \"debuginfo\"\nincremental = false\n\n[profile.test.package.\"*\"]\ndebug = false\n\n[profile.release]\ndebug = false\nstrip = \"debuginfo\"\n";
 
 // "a manifest holding every setting passes, each setting read"
 #[test]
@@ -17,7 +17,7 @@ fn a_manifest_holding_every_setting_passes() {
   assert_eq!(
     checkout_cargo_profile(dir.path()),
     Findings {
-      paths: 8,
+      paths: 10,
       findings: vec![],
     }
   );
@@ -35,8 +35,10 @@ fn a_setting_set_otherwise_or_left_out_is_named_with_what_it_should_be() {
     checkout_cargo_profile(dir.path()).findings,
     [
       "Cargo.toml: [profile.dev] debug is true where it should be \"line-tables-only\"",
+      "Cargo.toml: [profile.dev] package.*.debug is not set where it should be false",
       "Cargo.toml: [profile.release] strip is not set where it should be \"debuginfo\"",
       "Cargo.toml: [profile.test] incremental is true where it should be false",
+      "Cargo.toml: [profile.test] package.*.debug is not set where it should be false",
       "Cargo.toml: [profile.test] strip is not set where it should be \"debuginfo\"",
     ]
   );

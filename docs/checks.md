@@ -143,7 +143,8 @@
 - **`cargo-profile`:** the repository's root `Cargo.toml` holds every profile setting that keeps each
   build's output small, as bmo-chat's `docs/conventions.md`, 「Rust builds」, states them: `[profile.dev]`
   with `debug = "line-tables-only"`, `split-debuginfo = "unpacked"` and `incremental = false`,
-  `[profile.test]` with `debug = "line-tables-only"`, `strip = "debuginfo"` and `incremental = false`, and
+  `[profile.test]` with `debug = "line-tables-only"`, `strip = "debuginfo"` and `incremental = false`,
+  `[profile.dev.package."*"]` and `[profile.test.package."*"]` with `debug = false`, and
   `[profile.release]` with `debug = false` and `strip = "debuginfo"`. A setting left out or set otherwise
   is named with what it should be; a repository with no root `Cargo.toml` has nothing to hold. Setting
   them is each repository's own change.

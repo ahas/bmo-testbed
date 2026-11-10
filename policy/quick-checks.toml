@@ -54,16 +54,19 @@ not_manifest = "{manifest} does not read as a Cargo manifest: {why}"
 
 # The settings that keep every build's output small, as bmo-chat's docs/conventions.md, 「Rust builds」,
 # states them: debug information down to line numbers and kept beside the objects, none in a test binary,
-# no incremental state, and none kept in a release.
+# no incremental state, none for a dependency, and none kept in a release. A key with dots in it is a path
+# through the profile's tables: `package.*.debug` is the setting of `[profile.<name>.package."*"]`.
 [cargo_profile.wanted.dev]
 debug = "line-tables-only"
 split-debuginfo = "unpacked"
 incremental = false
+"package.*.debug" = false
 
 [cargo_profile.wanted.test]
 debug = "line-tables-only"
 strip = "debuginfo"
 incremental = false
+"package.*.debug" = false
 
 [cargo_profile.wanted.release]
 debug = false
