@@ -228,7 +228,7 @@ impl Gate for PlacedGate<'_> {
       return Some(Err(fill_marks(&LANES.run.exit, &[("code", &built.code.to_string())])));
     }
 
-    Some(self.machine.fetch_binaries(ask.profile, ask.binaries, ask.built))
+    Some(self.machine.fetch_binaries(&bench, ask.profile, ask.binaries, ask.built))
   }
 }
 

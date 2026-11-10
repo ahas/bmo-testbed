@@ -611,7 +611,7 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   | `bench` | string | `~/.local/share/bmo/bench` | The bench root there: every tree copied over stands under it at the path it has under this machine's home |
   | `ssh` | list of strings | `["ssh"]` | The `ssh` program and its options |
   | `testbed` | string | `~/.local/share/bmo-testbed/deploy/bin/bmo-testbed` | The testbed binary there |
-  | `cargo_target` | string | `~/.local/share/bmo/cargo-target` | That machine's shared Cargo build directory, which a deployment's build is read back from |
+  | `cargo_target` | string | `~/.local/share/bmo/cargo-target` | That machine's shared Cargo build directory; a deployment's build is read back from the bench's own directory under it, the one that machine's Cargo verb builds in (`docs/deploy.md`, 「The Cargo build directory」) |
 
   A `~` opening a path there is that machine's home. A file that does not read is no placement, said
   on a line.

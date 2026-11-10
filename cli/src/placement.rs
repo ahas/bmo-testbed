@@ -12,6 +12,7 @@ use bmo_testbed_core::placement::{PlaceAsk, Placement};
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::turn::{Env, Lane, NOT_RUN_EXIT_CODE, process_env, stands_at_front, stands_next};
+use bmo_testbed_suite::crates::checkout_target_name;
 use bmo_testbed_suite::quick::shared_versions::shared_root;
 use futures_util::StreamExt as _;
 use serde::{Deserialize, Serialize};
@@ -542,13 +543,34 @@ impl MachinePlacement {
     }
   }
 
-  /// The binaries read back from the machine's shared Cargo build directory into a directory here.
-  pub fn fetch_binaries(&self, profile: &str, binaries: &[String], into: &Path) -> Result<(), String> {
+  /// The binaries read back into a directory here from the bench's own directory under the machine's shared
+  /// Cargo build directory, the one that machine's Cargo verb builds the bench in.
+  pub fn fetch_binaries(
+    &self,
+    bench: &ReadyBench,
+    profile: &str,
+    binaries: &[String],
+    into: &Path,
+  ) -> Result<(), String> {
     let words = &LANES.placed;
     let ssh_command = self.settings.ssh.iter().map(|word| quoted(word)).collect::<Vec<_>>().join(" ");
-    let built = format!("{}/{}", self.settings.cargo_target.trim_end_matches('/'), profile);
     let unfetched =
       |what: &str| fill_marks(&words.unfetched, &[("machine", self.settings.label()), ("said", what)]);
+    // The bench's whole path there, which that machine's testbed names its build directory by.
+    let there = self.ssh().arg(format!("cd {} && pwd", far_path(&bench.path))).output();
+
+    if !succeeded(&there) {
+      return Err(unfetched(&said(&there)));
+    }
+
+    let whole = there
+      .map(|done| String::from_utf8_lossy(&done.stdout).trim().to_owned())
+      .unwrap_or_default();
+    let built = format!(
+      "{}/checkouts/{}/{profile}",
+      self.settings.cargo_target.trim_end_matches('/'),
+      checkout_target_name(Path::new(&whole))
+    );
 
     std::fs::create_dir_all(into).map_err(|why| unfetched(&why.to_string()))?;
 
