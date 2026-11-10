@@ -33,6 +33,8 @@ pub fn testbed(dir: &Path, data: &Path, args: &[&str]) -> Command {
     .env_remove("BMO_TESTBED_FRONT")
     .env_remove("BMO_TESTBED_NEXT")
     .env_remove("BMO_TESTBED_PLACEMENT")
+    .env_remove("BMO_TESTBED_PLACED")
+    .env_remove("BMO_TESTBED_CHECKOUTS")
     .env_remove("BMO_DEPLOY_UNIT")
     .stdin(Stdio::null())
     .stdout(Stdio::piped())
