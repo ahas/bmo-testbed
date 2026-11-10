@@ -196,7 +196,9 @@ pub fn ready_bench(bench: &Bench, source: &BenchSource<'_>) -> Result<(), String
     return Err(failed(&said_of.unpushed, &pushed));
   }
 
-  let checked_out = ssh(format!("cd {path} && git checkout -q --force --detach {BENCH_BRANCH}"));
+  // A bench for a deployment is the commit alone: whatever an earlier run's open files left standing goes.
+  let clean = if source.open_files { "" } else { " && git clean -qfd" };
+  let checked_out = ssh(format!("cd {path} && git checkout -q --force --detach {BENCH_BRANCH}{clean}"));
 
   if !succeeded(&checked_out) {
     return Err(failed(&said_of.failed, &checked_out));

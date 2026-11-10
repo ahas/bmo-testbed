@@ -619,7 +619,8 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   holds no repository it clones the checkout's remote there, or makes an empty repository where the
   checkout has none; it pushes the commit there as the branch `bmo-bench` and checks it out detached;
   for a run it copies its open files over with `rsync`, the files git ignores and the `.git` directory
-  left out, and for a deployment it copies none, since the release is the commit alone; and it copies
+  left out, and for a deployment it copies none and takes every untracked file away, since the release is
+  the commit alone; and it copies
   every tree the checkout's workspace names outside the repository, the base libraries and the
   sibling crates among them, and the checkout holding the shared versions the declaration names, found
   through this machine's registry, each to its own place under the bench root the same way, so a path a

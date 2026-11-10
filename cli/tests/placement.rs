@@ -128,7 +128,9 @@ fn an_answer_of_local_runs_here_and_the_endpoint_is_told_the_run() {
 #[test]
 fn an_endpoint_that_does_not_answer_or_does_not_read_leaves_the_run_here() {
   let dir = tempfile::tempdir().unwrap();
-  let gone = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap();
+  // A port nothing listens on, on the IPv6 loopback: the IPv4 one refuses nowhere a mirrored-network WSL machine
+  // runs the suite.
+  let gone = std::net::TcpListener::bind("[::1]:0").unwrap().local_addr().unwrap();
   let unread = endpoint(json!({ "place": "moon" }), Vec::new());
   let opening = fill_marks(&LANES.placed.local, &[("endpoint", "")]);
   let opening = opening.split("{why}").next().unwrap().split(" gave").next().unwrap();
