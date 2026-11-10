@@ -495,9 +495,10 @@ impl MachinePlacement {
 
     line.push_str(" --");
 
+    // The testbed binary there is named from that machine's home, which its shell resolves.
     for word in words {
       line.push(' ');
-      line.push_str(&quoted(word));
+      line.push_str(&if word == &self.settings.testbed { far_path(word) } else { quoted(word) });
     }
 
     eprintln!("{}", fill_marks(&said.running, &[("machine", self.settings.label()), ("bench", bench)]));
