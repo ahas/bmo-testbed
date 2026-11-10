@@ -265,6 +265,11 @@ pub struct CheckArgs {
 #[derive(Debug, Subcommand)]
 pub enum CheckPart {
   Quick,
+  /// The static check a deployment's gate passes, alone: no test runs.
+  Static {
+    #[arg(long)]
+    since: Option<String>,
+  },
   Wording,
   Layout,
   Dependencies,

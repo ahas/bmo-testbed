@@ -15,6 +15,7 @@ use bmo_testbed_suite::check::{CheckAsk, default_log, plan, run_check, run_step}
 use bmo_testbed_suite::quick::language::{language_report, settle};
 use bmo_testbed_suite::quick::shared_versions::shared_versions_report;
 use bmo_testbed_suite::quick::{Checked, enabled_checks, quick_check};
+use bmo_testbed_suite::static_check::{check_steps, run_static_check, spawn_step};
 use bmo_testbed_suite::test_server::test_server_up;
 
 use crate::own::{called_from, run_own};
@@ -36,6 +37,24 @@ pub fn check(args: CheckArgs) -> u8 {
   match args.part {
     Some(part) => checked_part(part, &repo, &env, &called_from()).print(),
     None => change(args.since, args.files, args.log, args.json, &repo),
+  }
+}
+
+// The static check a deployment's gate passes, alone: the steps the change since the commit reaches, each run
+// to its end and said as it ends; 1 where one failed.
+fn static_alone(repo: &Repository, since: Option<&str>) -> Said {
+  let failed = run_static_check(
+    &repo.root,
+    &check_steps(repo, since),
+    &mut |text| eprint!("{text}"),
+    &spawn_step,
+    &mut |_| {},
+  );
+
+  Said {
+    out: failed.iter().cloned().collect(),
+    code: u8::from(failed.is_some()),
+    ..Said::default()
   }
 }
 
@@ -107,6 +126,7 @@ fn printed(checks: &[Checked]) -> Said {
 pub fn checked_part(part: CheckPart, repo: &Repository, env: &Env, base: &Path) -> Said {
   let named = match &part {
     CheckPart::Quick => return printed(&enabled_checks(repo, env)),
+    CheckPart::Static { since } => return static_alone(repo, since.as_deref()),
     CheckPart::Wording => QuickCheck::Wording,
     CheckPart::Layout => QuickCheck::Layout,
     CheckPart::Dependencies => QuickCheck::Dependencies,

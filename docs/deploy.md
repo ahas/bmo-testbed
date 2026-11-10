@@ -150,8 +150,8 @@
 - **The gate and the Cargo release build go to the placed machine** where the machine's settings name
   one (`docs/boundary.md`, 「Placement」, 「The placed machine」). The deployment benches the commit
   there, the checkout's outside trees as they stand with it, and sets the bench up with the declared
-  setup steps; the static check and the suite then run there, each as that machine's own testbed verb in
-  its own turn, and the Cargo release build runs there in that machine's shared Cargo build directory,
+  setup steps; the static check (`check static`, no test among it) and the suite then run there, each as
+  that machine's own testbed verb in its own turn, and the Cargo release build runs there in that machine's shared Cargo build directory,
   from which the deployment reads the built binaries back over `rsync` into its own build directory
   before it places them. The declared `[build]` steps, which write into the release and read the data
   root, run where the deployment runs, as does everything after the build. A placed machine that

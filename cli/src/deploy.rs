@@ -173,7 +173,7 @@ impl Gate for PlacedGate<'_> {
       }
     };
     let since = ask.since.iter().flat_map(|since| ["--since".to_owned(), (*since).to_owned()]);
-    let check = [self.testbed(), "check".to_owned()]
+    let check = [self.testbed(), "check".to_owned(), "static".to_owned()]
       .into_iter()
       .chain(since.clone())
       .collect::<Vec<_>>();
