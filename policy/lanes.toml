@@ -78,6 +78,7 @@ tree_uncopied = "the tree {tree} could not be copied: {said}"
 unfetched = "the binaries could not be read back from {machine}: {said}"
 broken = "the connection to it broke"
 setup_failed = "testbed: the setup step {command} failed with code {code}"
+no_registry = "testbed: the run's registry of checkouts could not be written at {file}: {why}"
 
 # A command's wait and run, as every step of a check says them.
 [times]

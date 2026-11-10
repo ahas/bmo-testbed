@@ -237,7 +237,10 @@ fn a_machine_the_settings_name_runs_the_command_in_a_bench_there() {
 
   install(SSH, &ssh);
   settle(&dir, &ssh, "stand");
-  checkout(&repo, "testbed = 0\n\n[test]\nsetup = [\"touch set-up.txt\"]\n");
+  checkout(
+    &repo,
+    "testbed = 0\n\n[test]\nsetup = [\"cp \\\"$BMO_TESTBED_CHECKOUTS\\\" set-up.txt\"]\n",
+  );
   std::fs::write(repo.join(".gitignore"), "ignored.txt\nset-up.txt\n").unwrap();
   std::fs::write(repo.join("ignored.txt"), "left out").unwrap();
   std::fs::write(repo.join("open.txt"), "not yet committed").unwrap();
@@ -252,7 +255,19 @@ fn a_machine_the_settings_name_runs_the_command_in_a_bench_there() {
   assert!(done.out.contains("testbed: FAILED"), "{}", done.out);
   assert_eq!(git(&bench, &["rev-parse", "HEAD"]), git(&repo, &["rev-parse", "HEAD"]));
   assert_eq!(std::fs::read_to_string(bench.join("open.txt")).unwrap(), "not yet committed");
-  assert!(bench.join("set-up.txt").exists(), "the declared setup ran in the bench");
+  // The declared setup ran in the bench, handed the run's own registry, which names the bench and is taken away
+  // as the run ends.
+  let registry =
+    std::fs::read_to_string(bench.join("set-up.txt")).expect("the declared setup ran in the bench");
+
+  assert!(registry.contains(&format!("\"{}\"", bench.display())), "{registry}");
+  assert!(
+    std::fs::read_dir(dir.join("testbed")).unwrap().all(|entry| !entry
+      .unwrap()
+      .file_name()
+      .to_string_lossy()
+      .starts_with("placed-checkouts-"))
+  );
   assert!(!bench.join("ignored.txt").exists());
 }
 

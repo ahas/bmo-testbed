@@ -34,6 +34,7 @@ use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::policy::verbs::VERBS;
 use bmo_testbed_core::turn::{Env, NOT_RUN_EXIT_CODE, process_env};
 use bmo_testbed_core::verb::{self, REFUSED_EXIT_CODE, RunWords, VerbGround, data_root};
+use bmo_testbed_suite::dependents::CHECKOUTS_VARIABLE;
 
 use crate::classify::{TakesTurn, answer, heavy_command};
 use crate::placement::{HttpPlacement, MachinePlacement};
@@ -62,6 +63,44 @@ pub fn placement_of(env: &Env, dir: &Path) -> Box<dyn Placement> {
   }
 }
 
+// A placed run's own registry of checkouts, under the data root's `testbed/`, named by this process; none where
+// the run was handed no checkout. The line saying why where it could not be written.
+fn placed_registry(data_root: &Path, checkouts: &[String]) -> Result<Option<PathBuf>, String> {
+  if checkouts.is_empty() {
+    return Ok(None);
+  }
+
+  let dir = data_root.join("testbed");
+  let file = dir.join(format!("placed-checkouts-{}.toml", std::process::id()));
+  let mut document = toml_edit::DocumentMut::new();
+  let mut list = toml_edit::Array::new();
+
+  for checkout in checkouts {
+    list.push(checkout.as_str());
+  }
+
+  document["checkouts"] = toml_edit::value(list);
+  std::fs::create_dir_all(&dir)
+    .and_then(|()| std::fs::write(&file, document.to_string()))
+    .map_err(|why| {
+      fill_marks(
+        &LANES.placed.no_registry,
+        &[("file", &file.to_string_lossy()), ("why", &why.to_string())],
+      )
+    })?;
+
+  Ok(Some(file))
+}
+
+// A file taken away as the run ends.
+struct TakenAway(PathBuf);
+
+impl Drop for TakenAway {
+  fn drop(&mut self) {
+    let _ = std::fs::remove_file(&self.0);
+  }
+}
+
 /// The account's home the environment names.
 pub fn home_of(env: &Env) -> PathBuf {
   env.get("HOME").map(PathBuf::from).unwrap_or_default()
@@ -72,17 +111,35 @@ pub fn home_of(env: &Env) -> PathBuf {
 fn placed(args: PlacedArgs) -> u8 {
   let said = &LANES.placed;
   let cwd = std::env::current_dir().unwrap_or_default();
+  // The checkouts this run knows: a registry of its own, written for it and taken away as it ends.
+  let registry = placed_registry(&data_root(), &args.checkouts);
+  let registry = match &registry {
+    Ok(Some(file)) => Some(file.clone()),
+    Ok(None) => None,
+    Err(why) => {
+      eprintln!("{why}");
+      return NOT_RUN_EXIT_CODE;
+    }
+  };
+  let _taken_away = registry.clone().map(TakenAway);
+  let handed = |command: &mut Command| {
+    command.env(PLACED_VARIABLE, "1");
+
+    if let Some(file) = &registry {
+      command.env(CHECKOUTS_VARIABLE, file);
+    }
+  };
 
   if args.setup
     && let Ok(repo) = Repository::read(&cwd)
   {
     for step in &repo.declaration.test.setup {
-      let ran = Command::new("sh")
-        .args(["-c", step])
-        .current_dir(&repo.root)
-        .env(PLACED_VARIABLE, "1")
-        .stdin(Stdio::null())
-        .status();
+      let mut command = Command::new("sh");
+
+      command.args(["-c", step]).current_dir(&repo.root).stdin(Stdio::null());
+      handed(&mut command);
+
+      let ran = command.status();
       let code = ran.ok().and_then(|status| status.code()).unwrap_or(1);
 
       if code != 0 {
@@ -96,14 +153,12 @@ fn placed(args: PlacedArgs) -> u8 {
   let Some((program, rest)) = args.command.split_first() else {
     return REFUSED_EXIT_CODE;
   };
-  let ran = Command::new(program)
-    .args(rest)
-    .current_dir(&cwd)
-    .env(PLACED_VARIABLE, "1")
-    .stdin(Stdio::null())
-    .status();
+  let mut command = Command::new(program);
 
-  match ran {
+  command.args(rest).current_dir(&cwd).stdin(Stdio::null());
+  handed(&mut command);
+
+  match command.status() {
     Ok(status) => status.code().and_then(|code| u8::try_from(code).ok()).unwrap_or(1),
     Err(why) => {
       eprintln!("{why}");

@@ -73,7 +73,7 @@ bmo-testbed run [--narrow] [--adapter <name>] [--json] -- <command…>
 ### `placed`
 
 ```
-bmo-testbed placed [--setup] -- <command…>
+bmo-testbed placed [--setup] [--checkout <path>…] -- <command…>
 ```
 
 - The far side of a placed run (「Placement」): run in the bench by the placing machine over `ssh`.
@@ -81,6 +81,10 @@ bmo-testbed placed [--setup] -- <command…>
   bench holds what its check and its run read; a step that fails exits 75 with a line naming it. It then
   runs the words as a command of its own, with `BMO_TESTBED_PLACED` set so the run is never placed
   again, and ends with that command's exit code; the command's output is this verb's.
+- **The checkouts the run knows are the ones `--checkout` names:** the bench and the trees copied beside
+  it. They stand in a registry written for this run alone under the data root's `testbed/`, handed to
+  the setup and the command as `BMO_TESTBED_CHECKOUTS`, and taken away as the run ends; with none named,
+  the run reads this machine's own registry. A registry that cannot be written exits 75.
 - The words are a whole command line: `bmo-testbed suite --again`, `bmo-testbed cargo build …`, or
   any program. A testbed verb among them takes its own turn here.
 - Exits 2 where its words do not read (no `--`, no command).
@@ -617,9 +621,11 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   for a run it copies its open files over with `rsync`, the files git ignores and the `.git` directory
   left out, and for a deployment it copies none, since the release is the commit alone; and it copies
   every tree the checkout's workspace names outside the repository, the base libraries and the
-  sibling crates among them, to its own place under the bench root the same way, so a path a manifest
-  names resolves there as it does here. A step that fails ends the run as not run, exit code 75, with a
-  line naming the step and what it said.
+  sibling crates among them, and the checkout holding the shared versions the declaration names, found
+  through this machine's registry, each to its own place under the bench root the same way, so a path a
+  manifest names resolves there as it does here and the quick checks find what they read. The bench and
+  every tree copied are the checkouts the run there knows (「`placed`」). A step that fails ends the run as
+  not run, exit code 75, with a line naming the step and what it said.
 - **The run is then one `ssh` command:** the testbed binary there, in the bench, asked the `placed`
   verb with the words. Its standard error is this run's standard error, its standard output its one
   result line, and its exit code this run's exit code.

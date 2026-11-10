@@ -11,7 +11,8 @@ use bmo_testbed_core::declaration::Repository;
 use bmo_testbed_core::placement::{PlaceAsk, Placement};
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
-use bmo_testbed_core::turn::{Env, Lane, NOT_RUN_EXIT_CODE, stands_at_front, stands_next};
+use bmo_testbed_core::turn::{Env, Lane, NOT_RUN_EXIT_CODE, process_env, stands_at_front, stands_next};
+use bmo_testbed_suite::quick::shared_versions::shared_root;
 use futures_util::StreamExt as _;
 use serde::{Deserialize, Serialize};
 use sse_stream::SseStream;
@@ -406,6 +407,13 @@ impl MachineSettings {
   }
 }
 
+/// A bench made ready: its path on the placed machine, and the checkouts a run there knows, the bench and
+/// every tree copied beside it.
+pub struct ReadyBench {
+  pub path: String,
+  pub checkouts: Vec<String>,
+}
+
 /// The placed machine, a member of the placement type: every run goes there over `ssh`, as the testbed's
 /// `placed` verb in a bench copy of the checkout.
 pub struct MachinePlacement {
@@ -460,17 +468,31 @@ impl MachinePlacement {
     false
   }
 
-  /// The bench of a checkout made ready at a commit, its outside trees with it; the bench's path there.
-  pub fn ready(&self, checkout: &Path, commit: &str, open_files: bool) -> Result<String, String> {
+  /// The bench of a checkout made ready at a commit, its outside trees with it, and the checkout holding the
+  /// shared versions the declaration names, found through this machine's registry; the bench's path there,
+  /// and the far places of every tree copied, which are that run's checkouts there.
+  pub fn ready(&self, checkout: &Path, commit: &str, open_files: bool) -> Result<ReadyBench, String> {
     let remote = git(checkout, &["remote", "get-url", "origin"]);
-    let trees = bmo_testbed_deploy::expansion::outside_roots(checkout, checkout)?
+    let mut trees = bmo_testbed_deploy::expansion::outside_roots(checkout, checkout)?;
+
+    if let Some(shared) =
+      Repository::read(checkout).ok().and_then(|repo| repo.declaration.check.shared_versions)
+    {
+      trees.push(shared_root(&shared.repository, &process_env())?);
+    }
+
+    trees.sort();
+    trees.dedup();
+
+    let trees: Vec<(PathBuf, String)> = trees
       .into_iter()
-      .map(|tree| {
-        let place = self.settings.place_of(&tree, &self.home);
-        (tree, place)
-      })
+      .map(|tree| (self.settings.place_of(&tree, &self.home).clone(), tree))
+      .map(|(place, tree)| (tree, place))
       .collect();
     let path = self.settings.place_of(checkout, &self.home);
+    let checkouts = std::iter::once(path.clone())
+      .chain(trees.iter().map(|(_, place)| place.clone()))
+      .collect();
     let source = BenchSource {
       checkout,
       remote: &remote,
@@ -480,17 +502,22 @@ impl MachinePlacement {
     };
 
     ready_bench(&self.settings.as_bench(path.clone()), &source)?;
-    Ok(path)
+    Ok(ReadyBench { path, checkouts })
   }
 
   /// The words run in the bench through the `placed` verb, the output and the result this process's; the
   /// code it ended with, 75 where the connection broke.
-  pub fn run(&self, bench: &str, words: &[String], setup: bool) -> u8 {
+  pub fn run(&self, bench: &ReadyBench, words: &[String], setup: bool) -> u8 {
     let said = &LANES.placed;
-    let mut line = format!("cd {} && {} placed", far_path(bench), far_path(&self.settings.testbed));
+    let mut line = format!("cd {} && {} placed", far_path(&bench.path), far_path(&self.settings.testbed));
 
     if setup {
       line.push_str(" --setup");
+    }
+
+    for checkout in &bench.checkouts {
+      line.push_str(" --checkout ");
+      line.push_str(&far_path(checkout));
     }
 
     line.push_str(" --");
@@ -501,7 +528,10 @@ impl MachinePlacement {
       line.push_str(&if word == &self.settings.testbed { far_path(word) } else { quoted(word) });
     }
 
-    eprintln!("{}", fill_marks(&said.running, &[("machine", self.settings.label()), ("bench", bench)]));
+    eprintln!(
+      "{}",
+      fill_marks(&said.running, &[("machine", self.settings.label()), ("bench", &bench.path)])
+    );
 
     let status = self.ssh().arg(line).stdout(Stdio::inherit()).stderr(Stdio::inherit()).status();
 

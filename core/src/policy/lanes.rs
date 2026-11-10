@@ -71,6 +71,7 @@ pub struct PlacedWords {
   pub unfetched: String,
   pub broken: String,
   pub setup_failed: String,
+  pub no_registry: String,
 }
 
 #[derive(Debug, Deserialize)]

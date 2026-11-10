@@ -136,6 +136,9 @@ pub struct PlacedArgs {
   /// The declared setup steps first.
   #[arg(long)]
   pub setup: bool,
+  /// A checkout the run knows on this machine: the bench and the trees copied beside it.
+  #[arg(long = "checkout", value_name = "PATH")]
+  pub checkouts: Vec<String>,
   /// The command, after `--`.
   #[arg(last = true, required = true, num_args = 1..)]
   pub command: Vec<String>,

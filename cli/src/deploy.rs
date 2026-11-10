@@ -31,7 +31,7 @@ use bmo_testbed_suite::run::{SuiteAsk, SuiteWords, ask_of};
 use bmo_testbed_suite::static_check::{check_steps, run_static_check, spawn_step};
 
 use crate::home_of;
-use crate::placement::MachinePlacement;
+use crate::placement::{MachinePlacement, ReadyBench};
 use crate::recorded::suite_record;
 use crate::suite::repository;
 use crate::words::{BINARY, DeployFlags};
@@ -139,7 +139,7 @@ impl PlacedGate<'_> {
   }
 
   // One verb of the machine's testbed run in the bench, timed: its step.
-  fn step(&self, bench: &str, name: &str, words: &[String], setup: bool) -> GateStep {
+  fn step(&self, bench: &ReadyBench, name: &str, words: &[String], setup: bool) -> GateStep {
     let started = Instant::now();
     let code = self.machine.run(bench, words, setup);
 
