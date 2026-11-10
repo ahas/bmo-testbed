@@ -65,6 +65,12 @@ pub struct PlacedWords {
   pub unread: String,
   pub no_result: String,
   pub running: String,
+  pub unsettled: String,
+  pub unreached: String,
+  pub tree_uncopied: String,
+  pub unfetched: String,
+  pub broken: String,
+  pub setup_failed: String,
 }
 
 #[derive(Debug, Deserialize)]

@@ -1325,6 +1325,7 @@
   "x-calls": [],
   "x-commands": [
     "run",
+    "placed",
     "status",
     "classify",
     "suite",

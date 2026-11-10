@@ -260,18 +260,10 @@ fn empty_folder(folder: &Path, data_root: &Path) -> Result<(), String> {
   entries.flatten().try_for_each(|entry| remove_tree(&entry.path(), data_root))
 }
 
-/// The trees outside the repository that its manifests name by a path — the base libraries and the
-/// sibling repositories' crates a release build reads — laid beside `tree` where those paths point, out
-/// of the checkout at the same place. A worktree of the repository carries nothing beside it, so a
-/// release built in one reads such a tree from a path only the workspace around the checkout makes.
-///
-/// A tree that is a member of another Cargo workspace is laid at that workspace's root, through which
-/// the named path resolves and the member finds the root it inherits from; the trees named inside one
-/// workspace share that one link. A standalone package is laid by itself.
-///
-/// The list comes from the checkout's own workspace: a release or a build tree reads no manifest until
-/// the trees its manifests name stand, and the checkout is the one place they do.
-pub fn lay_outside_trees(tree: &Path, checkout: &Path) -> Result<(), String> {
+/// The trees a workspace names by a path outside the repository, each as the root laid for it: a member of
+/// another Cargo workspace is its workspace root, a standalone package itself; a tree inside another is
+/// reached through it and is not among them. Read from the checkout's workspace for the tree given.
+pub fn outside_roots(tree: &Path, checkout: &Path) -> Result<Vec<PathBuf>, String> {
   let mut laid: Vec<PathBuf> = Vec::new();
 
   for named in outside_trees(tree, checkout)? {
@@ -297,7 +289,22 @@ pub fn lay_outside_trees(tree: &Path, checkout: &Path) -> Result<(), String> {
     }
   }
 
-  for source in kept {
+  Ok(kept)
+}
+
+/// The trees outside the repository that its manifests name by a path — the base libraries and the
+/// sibling repositories' crates a release build reads — laid beside `tree` where those paths point, out
+/// of the checkout at the same place. A worktree of the repository carries nothing beside it, so a
+/// release built in one reads such a tree from a path only the workspace around the checkout makes.
+///
+/// A tree that is a member of another Cargo workspace is laid at that workspace's root, through which
+/// the named path resolves and the member finds the root it inherits from; the trees named inside one
+/// workspace share that one link. A standalone package is laid by itself.
+///
+/// The list comes from the checkout's own workspace: a release or a build tree reads no manifest until
+/// the trees its manifests name stand, and the checkout is the one place they do.
+pub fn lay_outside_trees(tree: &Path, checkout: &Path) -> Result<(), String> {
+  for source in outside_roots(tree, checkout)? {
     let Some(relative) = upward(checkout, &source) else {
       continue;
     };

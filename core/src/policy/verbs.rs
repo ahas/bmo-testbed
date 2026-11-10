@@ -23,6 +23,7 @@ pub struct UsageWords {
   pub deploy: String,
   pub backups: String,
   pub backup: String,
+  pub placed: String,
   pub serve: String,
   pub mcp: String,
 }

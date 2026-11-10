@@ -60,7 +60,7 @@ bmo-testbed run [--narrow] [--adapter <name>] [--json] -- <command…>
   that claims it or the one `--adapter` names (`bun`, `cargo`, `node`, `browser`, `plain`), waiting for
   the turn however long the line takes and running the command until it ends. `--guard <seconds>` and
   `--wait <seconds>` are read and given no effect.
-- Placed first where the placement endpoint answers so (「Placement」), unless inside a held turn.
+- Placed first where the machine's placement sends it elsewhere (「Placement」), unless inside a held turn.
 - Every run that is not placed elsewhere is a test run of kind `command` in the record (「The
   record」), written as its turn comes and ended with its counts.
 - Prints the waits, the one `testbed:` result line, and under a failure at most sixty failure lines.
@@ -69,6 +69,21 @@ bmo-testbed run [--narrow] [--adapter <name>] [--json] -- <command…>
 - Exits 0 where it passed, the command's own code where it failed, 75 where it was not run, 2 where its
   words do not read (no `--`, no command, a flag missing its value, an unknown adapter, which the line
   names with the adapters there are), and 1 on an internal error.
+
+### `placed`
+
+```
+bmo-testbed placed [--setup] -- <command…>
+```
+
+- The far side of a placed run (「Placement」): run in the bench by the placing machine over `ssh`.
+  With `--setup` it first runs the declared `[test].setup` steps in the bench, in order, so a fresh
+  bench holds what its check and its run read; a step that fails exits 75 with a line naming it. It then
+  runs the words as a command of its own, with `BMO_TESTBED_PLACED` set so the run is never placed
+  again, and ends with that command's exit code; the command's output is this verb's.
+- The words are a whole command line: `bmo-testbed suite --again`, `bmo-testbed cargo build …`, or
+  any program. A testbed verb among them takes its own turn here.
+- Exits 2 where its words do not read (no `--`, no command).
 
 ### `status`
 
@@ -330,7 +345,7 @@ verb's own name, and each noun takes what that verb takes.
 
 | Variable | Read by | Meaning |
 |---|---|---|
-| `BMO_DATA_DIR` | every verb, the hosted deploy tool | The testbed's data root: logs and the record under `testbed/`, locks under `locks/`, the data backup's settings under `env/`. Default `$HOME/.local/share/bmo/data` |
+| `BMO_DATA_DIR` | every verb, the hosted deploy tool | The testbed's data root: logs and the record under `testbed/`, locks under `locks/`, the data backup's and the placement's settings under `env/`. Default `$HOME/.local/share/bmo/data` |
 | `TMPDIR` | the turn | Where the lane locks stand. Default `/tmp` |
 | `BMO_TESTBED_LOCK` | the turn | Another wide lane lock, the narrow one beside it |
 | `BMO_TESTBED_HELD` | the turn | Set by a holder for its children: its process number. A command finding it holding its lane runs at once |
@@ -342,7 +357,8 @@ verb's own name, and each noun takes what that verb takes.
 | `BMO_TESTBED_SCOPE` | the turn, the record | The caller's opaque scope, which a ticket, a holder and a test run carry and the testbed never reads |
 | `BMO_TESTBED_TOKEN` | `serve`, `mcp` | The HTTP service's bearer token |
 | `BMO_TESTBED_SERVICE` | `mcp` | The HTTP service's address the reading tools call |
-| `BMO_TESTBED_PLACEMENT` | `run`, `suite` | The placement endpoint, over the declaration's |
+| `BMO_TESTBED_PLACEMENT` | `run`, `suite` | The placement endpoint, over the settings and the declaration |
+| `BMO_TESTBED_PLACED` | the turn, `placed` | Set by `placed` for the run it starts: `1`. A run finding it is never placed again |
 | `BMO_TESTBED_CHECKOUTS` | `dependents`, `deploy`, `prune`, `check shared-versions`, the hosted deploy tool | The machine's registry of checkouts, over the data root's `testbed/checkouts.toml` |
 | `BMO_TESTBED_EVENT_HOOK` | every verb that sends events | The event hook, over the declaration's, and the hook for a verb run outside a repository |
 | `BMO_SUITE_MEMORY_GB` | the suite | The fence's memory ceiling |
@@ -564,11 +580,55 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
 
 ## Placement
 
-- **Where a heavy run goes is the placement endpoint's answer;** the default is local, so a testbed
-  with no endpoint runs everything where it was started.
-- **The endpoint** is an HTTP address, `BMO_TESTBED_PLACEMENT` or the declaration's `[runner]
-  placement`. Before asking for its turn, a `run` or a `suite` not inside a held turn posts one JSON
-  object to it:
+- **Where a heavy run goes is the machine's placement:** the default is local, so a testbed with no
+  placement runs everything where it was started. A placement is one of two members: a placed machine
+  the settings name, reached over `ssh`; or a placement endpoint asked over HTTP. The endpoint is
+  `BMO_TESTBED_PLACEMENT` where set, else the declaration's `[runner] placement`; the placed machine is
+  `<data root>/env/placement.toml`. The variable is read first, then the settings file, then the
+  declaration.
+- **A run started on a placed machine is never placed again:** the remote side runs it inside a held
+  turn of its own, and the `placed` verb marks its run with `BMO_TESTBED_PLACED`.
+- **A run inside a held turn, or inside a whole run's unit, is never placed.** A deployment's own heavy
+  work — its gate and its Cargo release build — goes to the placed machine the settings name
+  (`docs/deploy.md`, 「Where a deployment runs」) and nowhere else; anything else a deployment's unit
+  runs stays where it is.
+- **In the crates the placement is a trait** in `core` with one method, asked with the run's words and
+  answering here or elsewhere with an exit code; the local placement, always here, is the default, and
+  the placed machine and the HTTP placement in `cli` are members of it.
+
+### The placed machine
+
+- **The settings** are one TOML file, `<data root>/env/placement.toml`:
+
+  | Key | Type | Default | Meaning |
+  |---|---|---|---|
+  | `machine` | string | the destination | The label the lines name the machine by |
+  | `destination` | string | required | The machine as this machine's `ssh` reaches it |
+  | `bench` | string | `~/.local/share/bmo/bench` | The bench root there: every tree copied over stands under it at the path it has under this machine's home |
+  | `ssh` | list of strings | `["ssh"]` | The `ssh` program and its options |
+  | `testbed` | string | `~/.local/share/bmo-testbed/deploy/bin/bmo-testbed` | The testbed binary there |
+  | `cargo_target` | string | `~/.local/share/bmo/cargo-target` | That machine's shared Cargo build directory, which a deployment's build is read back from |
+
+  A `~` opening a path there is that machine's home. A file that does not read is no placement, said
+  on a line.
+- **The caller makes the bench ready** before it runs: where the checkout's place under the bench root
+  holds no repository it clones the checkout's remote there, or makes an empty repository where the
+  checkout has none; it pushes the commit there as the branch `bmo-bench` and checks it out detached;
+  for a run it copies its open files over with `rsync`, the files git ignores and the `.git` directory
+  left out, and for a deployment it copies none, since the release is the commit alone; and it copies
+  every tree the checkout's workspace names outside the repository, the base libraries and the
+  sibling crates among them, to its own place under the bench root the same way, so a path a manifest
+  names resolves there as it does here. A step that fails ends the run as not run, exit code 75, with a
+  line naming the step and what it said.
+- **The run is then one `ssh` command:** the testbed binary there, in the bench, asked the `placed`
+  verb with the words. Its standard error is this run's standard error, its standard output its one
+  result line, and its exit code this run's exit code.
+- **A connection that cannot be made is local:** the caller says so on a line and runs here. A
+  connection that breaks once the run has begun ends the run as not run, exit code 75.
+
+### The placement endpoint
+
+- **Before asking for its turn, a `run` or a `suite` posts one JSON object to the endpoint:**
 
   | Field | Type | Meaning |
   |---|---|---|
@@ -589,25 +649,18 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   | `path` | string | The bench directory on that machine |
   | `ssh` | list of strings, optional | The `ssh` program and its options; `["ssh"]` where absent |
 
-- **The caller makes the bench ready** before it reads the run: where `path` holds no repository it
-  clones the checkout's remote there, or makes an empty repository where the checkout has none; it
-  pushes its `HEAD` there as the branch `bmo-bench` and checks it out detached; and it copies its open
-  files over with `rsync`, the files git ignores and the `.git` directory left out. A step that fails
-  ends the run as not run, exit code 75, with a line naming the step and what it said.
+- **The caller makes the bench ready** the way it does for a placed machine, at the path the answer
+  names, its open files copied over.
 - **The run address is an event stream,** asked once the bench is ready, which runs the bench's
   declared setup and the command in that machine's own turn. Each `output` event's data is one line of
   the run's output, which the caller writes to its standard error; one `result` event's data is one
   JSON object with `line`, the testbed's result line, which the caller writes to its standard output,
   and `code`, the exit code it ends with.
-- **Anything else is local:** no endpoint, one whose connection is refused or breaks, an error, or an
-  answer that does not read. The caller waits for the endpoint's answer however long it takes. The caller says so on a line and runs here.
+- **Anything else is local:** one whose connection is refused or breaks, an error, or an answer that
+  does not read. The caller waits for the endpoint's answer however long it takes. The caller says so
+  on a line and runs here.
 - **A stream that ends with no `result`** ends the run as not run, exit code 75.
-- **A run started on a placed machine is never placed again:** the remote side runs it inside a held
-  turn of its own.
-- **A run inside a held turn, or inside a deployment's or a whole run's unit, is never placed.**
-- **In the crates the placement is a trait** in `core` with one method, asked with the run's words and
-  answering here or elsewhere with an exit code; the local placement, always here, is the default, and
-  the HTTP placement in `cli` is a member of it.
+- **A deployment never asks the endpoint:** its gate and its build go to a placed machine alone.
 
 ## The crates
 

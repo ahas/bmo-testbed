@@ -76,7 +76,8 @@ adopted = "the deploy tree {dir} was adopted into {release}; the directory retir
 adopt_failed = "the deploy tree could not be adopted into a release: {why}; no service was touched"
 gate_left_out = "the gate is left out, so no check or suite runs before the backup"
 gate_failed = "the deployment of {commit} did not pass its gate, so nothing went live: {reason}"
-# The gate's reason where its suite did not pass, {code} the suite's exit.
+# The gate's reason where its static check or its suite did not pass, {code} the exit.
+gate_check = "the static check ended with exit {code}"
 gate_suite = "the suite ended with exit {code}"
 flaky = "flaky: {test} ({unit}) passed only when run once more"
 backup_none = "no backup is declared, so none is taken"

@@ -26,6 +26,7 @@ pub struct Words {
 #[derive(Debug, Subcommand)]
 pub enum Verb {
   Run(RunArgs),
+  Placed(PlacedArgs),
   Status(StatusArgs),
   Classify(ClassifyArgs),
   Suite(SuiteArgs),
@@ -128,6 +129,16 @@ pub enum BackupWord {
 pub struct BackupPruneArgs {
   #[arg(long)]
   pub dry_run: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct PlacedArgs {
+  /// The declared setup steps first.
+  #[arg(long)]
+  pub setup: bool,
+  /// The command, after `--`.
+  #[arg(last = true, required = true, num_args = 1..)]
+  pub command: Vec<String>,
 }
 
 #[derive(Debug, Args)]
@@ -376,6 +387,7 @@ pub fn read(args: impl IntoIterator<Item = OsString>) -> Result<Words, clap::Err
   let command = Words::command()
     .override_help(usage(&said.binary))
     .mut_subcommand("run", |verb| verb.override_help(usage(&said.run)))
+    .mut_subcommand("placed", |verb| verb.override_help(usage(&said.placed)))
     .mut_subcommand("status", |verb| verb.override_help(usage(&said.status)))
     .mut_subcommand("classify", |verb| verb.override_help(usage(&said.classify)))
     .mut_subcommand("suite", |verb| verb.override_help(usage(&said.suite)))

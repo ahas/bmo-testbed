@@ -166,9 +166,27 @@ pub struct GateOutcome {
   pub steps: Vec<GateStep>,
 }
 
-/// The gate a deployment passes before anything changes: the declared static check and the suite.
+/// The Cargo release build asked of the gate: the commit, the build tree it is read from, the profile, the
+/// binaries wanted, and the directory they are to stand in once built.
+pub struct BuildAsk<'a> {
+  pub root: &'a Path,
+  pub commit: &'a str,
+  pub tree: &'a Path,
+  pub profile: &'a str,
+  pub binaries: &'a [String],
+  pub built: &'a Path,
+}
+
+/// The gate a deployment passes before anything changes: the declared static check and the suite; and the
+/// Cargo release build, where the gate's machine builds elsewhere.
 pub trait Gate {
   fn pass(&self, ask: &GateAsk<'_>) -> GateOutcome;
+
+  /// The Cargo release build run elsewhere, its binaries brought into the directory asked, or none where
+  /// the build runs here.
+  fn build(&self, _: &BuildAsk<'_>) -> Option<Result<(), String>> {
+    None
+  }
 
   /// The suites of the repositories that build on this one, run where the change is major. A gate that keeps
   /// none passes.
@@ -445,6 +463,7 @@ struct Laying<'a> {
   places: &'a DeployPlaces,
   ask: &'a DeployAsk,
   hands: &'a dyn DeployHands,
+  gate: &'a dyn Gate,
   hook: &'a Hook,
   progress: Option<DeployRun>,
   commit: String,
@@ -691,34 +710,6 @@ impl<'a> Laying<'a> {
       )
     };
 
-    if cargo {
-      let ask = StepAsk {
-        id: OwnStep::CargoRelease.name().to_owned(),
-        command: release_build(profile, &target),
-        cwd: tree.clone(),
-        lane: Some(Lane::Wide),
-      };
-      let ran = self.step(&ask);
-
-      if ran.code != 0 {
-        return Err(failed_at(&ask.id, &ran));
-      }
-    }
-
-    for one in &build.steps {
-      let ask = StepAsk {
-        id: one.id.clone(),
-        command: shell_words(&one.command),
-        cwd: one.dir.as_ref().map_or_else(|| tree.clone(), |dir| tree.join(dir)),
-        lane: one.lane,
-      };
-      let ran = self.step(&ask);
-
-      if ran.code != 0 {
-        return Err(failed_at(&ask.id, &ran));
-      }
-    }
-
     let binaries = match (&build.binaries, cargo) {
       (Some(declared), _) => declared.clone(),
       (None, true) => {
@@ -743,6 +734,55 @@ impl<'a> Laying<'a> {
     };
     // Cargo writes the `dev` profile under `debug`, every other under its own name.
     let built = target.join(if profile == "dev" { "debug" } else { profile.as_str() });
+
+    if cargo {
+      let elsewhere = self.gate.build(&BuildAsk {
+        root: &self.repo.root,
+        commit: &self.commit,
+        tree: &tree,
+        profile,
+        binaries: &binaries,
+        built: &built,
+      });
+
+      match elsewhere {
+        Some(Ok(())) => {}
+        Some(Err(why)) => {
+          return Err(fill_marks(
+            &said.build_failed,
+            &[("step", OwnStep::CargoRelease.name()), ("code", "75"), ("said", &why)],
+          ));
+        }
+        None => {
+          let ask = StepAsk {
+            id: OwnStep::CargoRelease.name().to_owned(),
+            command: release_build(profile, &target),
+            cwd: tree.clone(),
+            lane: Some(Lane::Wide),
+          };
+          let ran = self.step(&ask);
+
+          if ran.code != 0 {
+            return Err(failed_at(&ask.id, &ran));
+          }
+        }
+      }
+    }
+
+    for one in &build.steps {
+      let ask = StepAsk {
+        id: one.id.clone(),
+        command: shell_words(&one.command),
+        cwd: one.dir.as_ref().map_or_else(|| tree.clone(), |dir| tree.join(dir)),
+        lane: one.lane,
+      };
+      let ran = self.step(&ask);
+
+      if ran.code != 0 {
+        return Err(failed_at(&ask.id, &ran));
+      }
+    }
+
     let bin = release.join("bin");
     let changed = place_binaries(&binaries, &built, live.map(|live| live.join("bin")).as_deref(), &bin)
       .map_err(|why| fill_marks(&said.place_failed, &[("why", &why.to_string())]))?;
@@ -984,6 +1024,7 @@ pub async fn deploy(
     places,
     ask,
     hands,
+    gate,
     hook,
     progress: None,
     commit: String::new(),

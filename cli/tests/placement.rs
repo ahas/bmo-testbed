@@ -1,7 +1,9 @@
-//! A run placed through the placement endpoint (docs/boundary.md, 「Placement」), against a stand-in
-//! endpoint the test serves: an answer of local, or one that does not come or does not read, runs here; an
-//! answer of remote makes the bench ready over a stand-in `ssh` that runs its line on this machine, and the
-//! run's output and result come back off its stream.
+//! A run placed elsewhere (docs/boundary.md, 「Placement」). Through the placement endpoint, against a
+//! stand-in endpoint the test serves: an answer of local, or one that does not come or does not read, runs
+//! here; an answer of remote makes the bench ready over a stand-in `ssh` that runs its line on this machine,
+//! and the run's output and result come back off its stream. On the placed machine the settings name: the
+//! bench made ready over the same stand-in, the run the testbed's `placed` verb there, and a machine that
+//! cannot be reached, or settings that do not read, leaving the run here.
 
 use std::convert::Infallible;
 use std::path::Path;
@@ -199,4 +201,92 @@ fn a_run_dropped_before_its_result_ends_as_not_run() {
 
   assert_eq!(never.code, i32::from(NOT_RUN_EXIT_CODE), "{}", never.err);
   assert_eq!(never.out, format!("{}\n", dropped(&failed)));
+}
+
+// The settings naming this machine as the placed one, reached through the stand-in `ssh`, with the bench
+// root and the testbed binary under the directory given.
+fn settle(dir: &Path, ssh: &Path, destination: &str) {
+  let env = dir.join("env");
+
+  std::fs::create_dir_all(&env).unwrap();
+  std::fs::write(
+    env.join("placement.toml"),
+    format!(
+      "machine = \"machine-2\"\ndestination = \"{destination}\"\nbench = \"{}\"\nssh = [\"{}\"]\ntestbed = \"{}\"\n",
+      dir.join("bench").display(),
+      ssh.display(),
+      env!("CARGO_BIN_EXE_bmo-testbed"),
+    ),
+  )
+  .unwrap();
+}
+
+// A run of the binary in a checkout under the directory as the account's home, placed by the settings.
+fn on_machine(repo: &Path, dir: &Path, args: &[&str]) -> Ran {
+  ran(testbed(repo, dir, args).env("HOME", dir).env_remove("BMO_TESTBED_PLACEMENT"))
+}
+
+// "the placed machine the settings name runs the command in a bench there, set up first, and its code and
+// output come back"
+#[test]
+fn a_machine_the_settings_name_runs_the_command_in_a_bench_there() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let repo = dir.join("repo");
+  let ssh = dir.join("ssh");
+
+  install(SSH, &ssh);
+  settle(&dir, &ssh, "stand");
+  checkout(&repo, "testbed = 0\n\n[test]\nsetup = [\"touch set-up.txt\"]\n");
+  std::fs::write(repo.join(".gitignore"), "ignored.txt\nset-up.txt\n").unwrap();
+  std::fs::write(repo.join("ignored.txt"), "left out").unwrap();
+  std::fs::write(repo.join("open.txt"), "not yet committed").unwrap();
+
+  let done = on_machine(&repo, &dir, &["run", "--adapter", "plain", "--", "sh", "-c", "echo far; exit 3"]);
+  let bench = dir.join("bench/repo");
+  let running =
+    fill_marks(&LANES.placed.running, &[("machine", "machine-2"), ("bench", &bench.to_string_lossy())]);
+
+  assert_eq!(done.code, 3, "{}\n{}", done.out, done.err);
+  assert!(done.err.contains(&running), "{}", done.err);
+  assert!(done.out.contains("testbed: FAILED"), "{}", done.out);
+  assert_eq!(git(&bench, &["rev-parse", "HEAD"]), git(&repo, &["rev-parse", "HEAD"]));
+  assert_eq!(std::fs::read_to_string(bench.join("open.txt")).unwrap(), "not yet committed");
+  assert!(bench.join("set-up.txt").exists(), "the declared setup ran in the bench");
+  assert!(!bench.join("ignored.txt").exists());
+}
+
+// "a machine that cannot be reached, or settings that do not read, leave the run here and say so"
+#[test]
+fn a_machine_out_of_reach_or_settings_that_do_not_read_leave_the_run_here() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let repo = dir.join("repo");
+  let refusing = dir.join("refusing-ssh");
+
+  install("#!/bin/sh\necho 'no route to stand' >&2\nexit 255\n", &refusing);
+  settle(&dir, &refusing, "stand");
+  checkout(&repo, "testbed = 0\n");
+
+  let here = on_machine(&repo, &dir, &["run", "--adapter", "plain", "--", "sh", "-c", "echo here; exit 4"]);
+  let unreached =
+    fill_marks(&LANES.placed.unreached, &[("machine", "machine-2"), ("said", "no route to stand")]);
+
+  assert_eq!(here.code, 4, "{}\n{}", here.out, here.err);
+  assert!(here.err.contains(&unreached), "{}", here.err);
+  assert!(!dir.join("bench").exists());
+
+  std::fs::write(dir.join("env/placement.toml"), "bench = 3\n").unwrap();
+
+  let unsettled = on_machine(&repo, &dir, &["run", "--adapter", "plain", "--", "sh", "-c", "exit 5"]);
+  let file = dir.join("env/placement.toml");
+
+  assert_eq!(unsettled.code, 5, "{}\n{}", unsettled.out, unsettled.err);
+  assert!(
+    unsettled
+      .err
+      .contains(&format!("testbed: the placement settings {} do not read", file.display())),
+    "{}",
+    unsettled.err
+  );
 }

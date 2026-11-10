@@ -65,6 +65,7 @@ pub fn suite(args: SuiteArgs) -> u8 {
   if !runs_here(&env) {
     let placed = placement_of(&env, &repo.root).place(&PlaceAsk {
       command: &command,
+      adapter: None,
       lane: Lane::Wide,
       cwd: std::env::current_dir().unwrap_or_default(),
       env: &env,

@@ -22,29 +22,93 @@ pub mod suite;
 pub mod words;
 
 use std::ffi::OsString;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 
 use bmo_testbed_core::close_line::close_line_path;
+use bmo_testbed_core::declaration::Repository;
 use bmo_testbed_core::languages::LANGUAGES;
-use bmo_testbed_core::placement::{Local, Placement};
+use bmo_testbed_core::placement::{Local, PLACED_VARIABLE, Placement};
 use bmo_testbed_core::policy::fill_marks;
+use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::policy::verbs::VERBS;
-use bmo_testbed_core::turn::{Env, process_env};
+use bmo_testbed_core::turn::{Env, NOT_RUN_EXIT_CODE, process_env};
 use bmo_testbed_core::verb::{self, REFUSED_EXIT_CODE, RunWords, VerbGround, data_root};
 
 use crate::classify::{TakesTurn, answer, heavy_command};
-use crate::placement::HttpPlacement;
+use crate::placement::{HttpPlacement, MachinePlacement};
 use crate::recorded::{Recorded, command_run};
 use crate::words::{
-  CargoArgs, CargoWord, ClassifyArgs, CountArgs, DeployArgs, DeployWord, LogArgs, RunArgs, TestArgs,
-  TestWord, Verb,
+  CargoArgs, CargoWord, ClassifyArgs, CountArgs, DeployArgs, DeployWord, LogArgs, PlacedArgs, RunArgs,
+  TestArgs, TestWord, Verb,
 };
 
-/// The placement a run started in a directory asks: the endpoint named for it, or the local one.
+/// The placement a run started in a directory asks: the endpoint the environment names, the placed machine the
+/// settings name, the endpoint the declaration names, or the local one.
 pub fn placement_of(env: &Env, dir: &Path) -> Box<dyn Placement> {
+  if let Some(endpoint) = env.get(placement::PLACEMENT_VARIABLE).filter(|named| !named.is_empty()) {
+    return Box::new(HttpPlacement {
+      endpoint: endpoint.clone(),
+    });
+  }
+
+  if let Some(machine) = MachinePlacement::named(&data_root(), &home_of(env)) {
+    return Box::new(machine);
+  }
+
   match HttpPlacement::named(env, dir) {
     Some(http) => Box::new(http),
     None => Box::new(Local),
+  }
+}
+
+/// The account's home the environment names.
+pub fn home_of(env: &Env) -> PathBuf {
+  env.get("HOME").map(PathBuf::from).unwrap_or_default()
+}
+
+/// The far side of a placed run (docs/boundary.md, 「`placed`」): the declared setup where asked, then the
+/// words run as a command of their own, marked so the run is never placed again; its code.
+fn placed(args: PlacedArgs) -> u8 {
+  let said = &LANES.placed;
+  let cwd = std::env::current_dir().unwrap_or_default();
+
+  if args.setup
+    && let Ok(repo) = Repository::read(&cwd)
+  {
+    for step in &repo.declaration.test.setup {
+      let ran = Command::new("sh")
+        .args(["-c", step])
+        .current_dir(&repo.root)
+        .env(PLACED_VARIABLE, "1")
+        .stdin(Stdio::null())
+        .status();
+      let code = ran.ok().and_then(|status| status.code()).unwrap_or(1);
+
+      if code != 0 {
+        eprintln!("{}", fill_marks(&said.setup_failed, &[("command", step), ("code", &code.to_string())]));
+
+        return NOT_RUN_EXIT_CODE;
+      }
+    }
+  }
+
+  let Some((program, rest)) = args.command.split_first() else {
+    return REFUSED_EXIT_CODE;
+  };
+  let ran = Command::new(program)
+    .args(rest)
+    .current_dir(&cwd)
+    .env(PLACED_VARIABLE, "1")
+    .stdin(Stdio::null())
+    .status();
+
+  match ran {
+    Ok(status) => status.code().and_then(|code| u8::try_from(code).ok()).unwrap_or(1),
+    Err(why) => {
+      eprintln!("{why}");
+      NOT_RUN_EXIT_CODE
+    }
   }
 }
 
@@ -188,6 +252,7 @@ pub fn main(args: impl IntoIterator<Item = OsString>) -> u8 {
 
   match words.verb {
     Verb::Run(args) => run(args),
+    Verb::Placed(args) => placed(args),
     Verb::Status(args) => status(args.json),
     Verb::Classify(args) => classify(args),
     Verb::Suite(args) => suite::suite(args),

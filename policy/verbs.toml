@@ -7,6 +7,7 @@ binary = """
 usage: {verb} <verb> [<words>…]
 
 run       a heavy test or build command, run in the machine's turn
+placed    the far side of a run placed on this machine: the setup, then the command
 status    each lane and the repository's close line: who holds it, and who waits behind
 classify  whether a shell line holds a heavy command started outside the testbed
 suite     the repository's units, every one or those a change reaches
@@ -212,6 +213,14 @@ prune      the rotation alone; --dry-run says what it would remove
 
 Exits 1 where any step failed, the rest done all the same, 2 where the settings do not read, and 75
 where another run of the same word holds the lock."""
+placed = """
+usage: {verb} placed [--setup] -- <command…>
+
+The far side of a run another machine placed here (docs/boundary.md): run in the bench by that
+machine over ssh. With --setup the declared setup steps run first, in order; the words then run as
+a command of their own, marked so they are never placed again, and this verb ends with their code.
+
+--setup   the declared [test].setup steps first, in the bench"""
 serve = """
 usage: {verb} serve [--listen <address>] [--token <token>]
 

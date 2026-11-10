@@ -91,6 +91,7 @@ fn a_run_inside_a_held_turn_or_a_unit_is_never_placed() {
 fn placed(env: &Env) -> PlaceAsk<'_> {
   PlaceAsk {
     command: &[],
+    adapter: None,
     lane: Lane::Wide,
     cwd: std::env::temp_dir(),
     env,

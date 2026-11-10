@@ -16,7 +16,8 @@ use bmo_testbed_core::queue::{LockWait, now_ms, take_lock};
 use bmo_testbed_core::turn::{Env, FRONT_VARIABLE, NOT_RUN_EXIT_CODE, harness_pid, process_env};
 use bmo_testbed_core::verb::{REFUSED_EXIT_CODE, data_root};
 use bmo_testbed_deploy::deployment::{
-  DeployAsk, DeployPlaces, Gate, GateAsk, GateOutcome, GateStep, Machine, Passed, deploy as deploy_run,
+  BuildAsk, DeployAsk, DeployPlaces, Gate, GateAsk, GateOutcome, GateStep, Machine, Passed,
+  deploy as deploy_run,
 };
 use bmo_testbed_deploy::progress::DEPLOY_PROGRESS_VARIABLE;
 use bmo_testbed_deploy::unit::{
@@ -29,6 +30,8 @@ use bmo_testbed_suite::once_more::run_judged;
 use bmo_testbed_suite::run::{SuiteAsk, SuiteWords, ask_of};
 use bmo_testbed_suite::static_check::{check_steps, run_static_check, spawn_step};
 
+use crate::home_of;
+use crate::placement::MachinePlacement;
 use crate::recorded::suite_record;
 use crate::suite::repository;
 use crate::words::{BINARY, DeployFlags};
@@ -116,6 +119,116 @@ impl Gate for SuiteGate<'_> {
       steps: vec![step],
       ..GateOutcome::default()
     }
+  }
+}
+
+/// The gate passed on the placed machine the settings name (docs/deploy.md, 「Where a deployment runs」): the
+/// commit benched there with the checkout's outside trees, the static check and the suite run there as that
+/// machine's own verbs, and the Cargo release build run there and read back. The gate here stands in where
+/// the machine cannot be reached.
+pub struct PlacedGate<'a> {
+  pub machine: MachinePlacement,
+  pub here: &'a dyn Gate,
+  /// Whether the gate is passed at all; the build goes to the machine either way.
+  pub checked: bool,
+}
+
+impl PlacedGate<'_> {
+  fn testbed(&self) -> String {
+    self.machine.settings.testbed.clone()
+  }
+
+  // One verb of the machine's testbed run in the bench, timed: its step.
+  fn step(&self, bench: &str, name: &str, words: &[String], setup: bool) -> GateStep {
+    let started = Instant::now();
+    let code = self.machine.run(bench, words, setup);
+
+    GateStep {
+      name: name.to_owned(),
+      code: i64::from(code),
+      waited_seconds: 0.0,
+      ran_seconds: started.elapsed().as_secs_f64(),
+    }
+  }
+}
+
+impl Gate for PlacedGate<'_> {
+  fn pass(&self, ask: &GateAsk<'_>) -> GateOutcome {
+    if !self.checked {
+      return self.here.pass(ask);
+    }
+
+    if !self.machine.reached() {
+      return self.here.pass(ask);
+    }
+
+    let bench = match self.machine.ready(ask.root, ask.commit, false) {
+      Ok(bench) => bench,
+      Err(why) => {
+        return GateOutcome {
+          passed: false,
+          reason: why,
+          ..GateOutcome::default()
+        };
+      }
+    };
+    let since = ask.since.iter().flat_map(|since| ["--since".to_owned(), (*since).to_owned()]);
+    let check = [self.testbed(), "check".to_owned()]
+      .into_iter()
+      .chain(since.clone())
+      .collect::<Vec<_>>();
+    let mut steps = vec![self.step(&bench, "check", &check, true)];
+
+    if steps[0].code != 0 {
+      return GateOutcome {
+        passed: false,
+        reason: fill_marks(&DEPLOY.run.gate_check, &[("code", &steps[0].code.to_string())]),
+        steps,
+        ..GateOutcome::default()
+      };
+    }
+
+    let suite = [self.testbed(), "suite".to_owned(), "--again".to_owned()]
+      .into_iter()
+      .chain(since)
+      .collect::<Vec<_>>();
+
+    steps.push(self.step(&bench, OwnStep::Tests.name(), &suite, false));
+
+    let code = steps[1].code;
+
+    GateOutcome {
+      passed: code == 0,
+      reason: fill_marks(&DEPLOY.run.gate_suite, &[("code", &code.to_string())]),
+      steps,
+      ..GateOutcome::default()
+    }
+  }
+
+  fn dependents(&self, ask: &GateAsk<'_>) -> GateOutcome {
+    self.here.dependents(ask)
+  }
+
+  fn build(&self, ask: &BuildAsk<'_>) -> Option<Result<(), String>> {
+    if !self.machine.reached() {
+      return None;
+    }
+
+    let bench = match self.machine.ready(ask.root, ask.commit, false) {
+      Ok(bench) => bench,
+      Err(why) => return Some(Err(why)),
+    };
+    let build = [self.testbed(), "cargo".to_owned()]
+      .into_iter()
+      .chain(["build", "--workspace", "--locked", "--profile", ask.profile].map(str::to_owned))
+      .collect::<Vec<_>>();
+    let built = self.step(&bench, OwnStep::CargoRelease.name(), &build, true);
+
+    if built.code != 0 {
+      return Some(Err(fill_marks(&LANES.run.exit, &[("code", &built.code.to_string())])));
+    }
+
+    Some(self.machine.fetch_binaries(ask.profile, ask.binaries, ask.built))
   }
 }
 
@@ -212,7 +325,13 @@ pub fn deploy(args: &DeployFlags) -> u8 {
     repo: &repo,
     hook: &hook,
   };
-  let gate: &dyn Gate = if args.no_check { &Passed } else { &suite };
+  let here: &dyn Gate = if args.no_check { &Passed } else { &suite };
+  let placed = MachinePlacement::named(&data_root(), &home_of(&env)).map(|machine| PlacedGate {
+    machine,
+    here,
+    checked: !args.no_check,
+  });
+  let gate: &dyn Gate = placed.as_ref().map_or(here, |placed| placed);
   let runtime = match tokio::runtime::Builder::new_current_thread().enable_all().build() {
     Ok(runtime) => runtime,
     Err(why) => return refused(&why.to_string()),

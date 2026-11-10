@@ -8,10 +8,14 @@ use crate::turn::{Env, HELD_VARIABLE, Lane};
 
 /// The variable a deployment's or a whole run's unit is named by inside it.
 pub const DEPLOY_UNIT_VARIABLE: &str = "BMO_DEPLOY_UNIT";
+/// The variable the `placed` verb marks the run it starts with: a run on a placed machine, never placed again.
+pub const PLACED_VARIABLE: &str = "BMO_TESTBED_PLACED";
 
 /// A run asked about before its turn: its words and where its caller stands.
 pub struct PlaceAsk<'a> {
   pub command: &'a [String],
+  /// The language the caller named to read the command, where it named one.
+  pub adapter: Option<&'a str>,
   pub lane: Lane,
   /// The directory the run was started in.
   pub cwd: PathBuf,
@@ -34,9 +38,9 @@ impl Placement for Local {
 }
 
 /// Whether a run goes where it stands whatever a placement would answer: one started inside a turn its
-/// caller holds, a placed machine's own run among them, and one inside a deployment's or a whole run's unit.
+/// caller holds, one on a placed machine, and one inside a deployment's or a whole run's unit.
 pub fn runs_here(env: &Env) -> bool {
-  [HELD_VARIABLE, DEPLOY_UNIT_VARIABLE]
+  [HELD_VARIABLE, DEPLOY_UNIT_VARIABLE, PLACED_VARIABLE]
     .iter()
     .any(|name| env.get(*name).is_some_and(|value| !value.is_empty()))
 }

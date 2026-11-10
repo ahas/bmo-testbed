@@ -1,7 +1,8 @@
-//! The placement endpoint asked over HTTP (docs/boundary.md, 「Placement」), a member of the placement type:
-//! before its turn a run posts what it is, and runs here unless the answer sends it to another machine.
-//! There it runs in a bench copy of the checkout the caller makes ready over `ssh`, its commit pushed into
-//! the bench and its open files copied over, and its output and result come back on the run's event stream.
+//! The two placements that send a run elsewhere (docs/boundary.md, 「Placement」), members of the placement
+//! type: the placed machine the settings name, reached over `ssh`, where the run is the testbed's `placed`
+//! verb in a bench copy of the checkout; and the placement endpoint asked over HTTP, whose answer names the
+//! bench and the run's event stream. Either way the caller makes the bench ready over `ssh`: the commit
+//! pushed into it, the open files and the outside trees copied over, and the output and the result come back.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
@@ -14,6 +15,8 @@ use bmo_testbed_core::turn::{Env, Lane, NOT_RUN_EXIT_CODE, stands_at_front, stan
 use futures_util::StreamExt as _;
 use serde::{Deserialize, Serialize};
 use sse_stream::SseStream;
+
+use crate::words::BINARY;
 
 /// The variable naming the placement endpoint over the declaration's.
 pub const PLACEMENT_VARIABLE: &str = "BMO_TESTBED_PLACEMENT";
@@ -117,10 +120,41 @@ fn succeeded(output: &std::io::Result<Output>) -> bool {
   output.as_ref().is_ok_and(|done| done.status.success())
 }
 
+/// A checkout the bench is made from: its root, its remote, the commit the bench is put at, whether its open
+/// files go over, and the outside trees copied to their own places under the bench root.
+pub struct BenchSource<'a> {
+  pub checkout: &'a Path,
+  pub remote: &'a str,
+  pub commit: &'a str,
+  pub open_files: bool,
+  /// Each outside tree, and where it stands under the bench root.
+  pub trees: Vec<(PathBuf, String)>,
+}
+
+// A path on the placed machine as its shell reads it: `~` opening it is that machine's home, left for the
+// shell; the rest is quoted.
+fn far_path(path: &str) -> String {
+  match path.strip_prefix("~/") {
+    Some(rest) => format!("~/{}", quoted(rest)),
+    None => quoted(path),
+  }
+}
+
+fn rsync_over(ssh_command: &str, from: &Path, to: &str) -> std::io::Result<Output> {
+  Command::new("rsync")
+    .args(["-a", "--delete", "--filter=:- .gitignore", "--exclude", ".git", "-e", ssh_command])
+    .arg(format!("{}/", from.display()))
+    .arg(format!("{to}/"))
+    .stdin(Stdio::null())
+    .output()
+}
+
 /// The bench made ready from a checkout: made where it holds no repository, from the checkout's remote or
-/// empty, handed the checkout's commit and checked out at it, and the checkout's open files copied over it.
-/// The line saying what failed where a step did.
-pub fn ready_bench(bench: &Bench, checkout: &Path, remote: &str) -> Result<(), String> {
+/// empty, handed the commit and checked out at it, the checkout's open files copied over it where asked, and
+/// each outside tree copied to its place. The line saying what failed where a step did.
+pub fn ready_bench(bench: &Bench, source: &BenchSource<'_>) -> Result<(), String> {
+  let checkout = source.checkout;
+  let remote = source.remote;
   let said_of = &LANES.placed;
   let failed = |line: &str, output: &std::io::Result<Output>| fill_marks(line, &[("said", &said(output))]);
   let Some((program, options)) = bench.ssh.split_first() else {
@@ -135,13 +169,13 @@ pub fn ready_bench(bench: &Bench, checkout: &Path, remote: &str) -> Result<(), S
       .stdin(Stdio::null())
       .output()
   };
-  let path = quoted(&bench.path);
+  let path = far_path(&bench.path);
   let make = if remote.is_empty() {
     format!("git init -q {path}")
   } else {
     format!("git clone -q {} {path}", quoted(remote))
   };
-  let made = ssh(format!("test -d {} || {make}", quoted(&format!("{}/.git", bench.path))));
+  let made = ssh(format!("test -d {path}/.git || {make}"));
 
   if !succeeded(&made) {
     return Err(failed(&said_of.failed, &made));
@@ -150,7 +184,7 @@ pub fn ready_bench(bench: &Bench, checkout: &Path, remote: &str) -> Result<(), S
   let pushed = Command::new("git")
     .args(["push", "-q", "--force"])
     .arg(format!("{}:{}", bench.destination, bench.path))
-    .arg(format!("HEAD:refs/heads/{BENCH_BRANCH}"))
+    .arg(format!("{}:refs/heads/{BENCH_BRANCH}", source.commit))
     .current_dir(checkout)
     .env("GIT_SSH_COMMAND", &ssh_command)
     .stdin(Stdio::null())
@@ -166,15 +200,29 @@ pub fn ready_bench(bench: &Bench, checkout: &Path, remote: &str) -> Result<(), S
     return Err(failed(&said_of.failed, &checked_out));
   }
 
-  let copied = Command::new("rsync")
-    .args(["-a", "--delete", "--filter=:- .gitignore", "--exclude", ".git", "-e", &ssh_command])
-    .arg(format!("{}/", checkout.display()))
-    .arg(format!("{}:{}/", bench.destination, bench.path))
-    .stdin(Stdio::null())
-    .output();
+  if source.open_files {
+    let copied = rsync_over(&ssh_command, checkout, &format!("{}:{}", bench.destination, bench.path));
 
-  if !succeeded(&copied) {
-    return Err(failed(&said_of.uncopied, &copied));
+    if !succeeded(&copied) {
+      return Err(failed(&said_of.uncopied, &copied));
+    }
+  }
+
+  for (tree, place) in &source.trees {
+    let made = ssh(format!("mkdir -p {}", far_path(place)));
+
+    if !succeeded(&made) {
+      return Err(failed(&said_of.failed, &made));
+    }
+
+    let copied = rsync_over(&ssh_command, tree, &format!("{}:{}", bench.destination, place));
+
+    if !succeeded(&copied) {
+      return Err(fill_marks(
+        &said_of.tree_uncopied,
+        &[("tree", &tree.to_string_lossy()), ("said", &said(&copied))],
+      ));
+    }
   }
 
   Ok(())
@@ -256,7 +304,15 @@ impl HttpPlacement {
         bench,
         run,
       }) => {
-        if let Err(said) = ready_bench(&bench, &checkout, &remote) {
+        let source = BenchSource {
+          checkout: &checkout,
+          remote: &remote,
+          commit: &asked.commit,
+          open_files: true,
+          trees: Vec::new(),
+        };
+
+        if let Err(said) = ready_bench(&bench, &source) {
           return Some(dropped(&machine, &said));
         }
 
@@ -277,5 +333,254 @@ impl Placement for HttpPlacement {
     let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().ok()?;
 
     runtime.block_on(self.placed(ask))
+  }
+}
+
+/// The placed machine the settings name (docs/boundary.md, 「The placed machine」), read from
+/// `<data root>/env/placement.toml`.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct MachineSettings {
+  pub destination: String,
+  #[serde(default)]
+  pub machine: Option<String>,
+  #[serde(default = "MachineSettings::bench")]
+  pub bench: String,
+  #[serde(default = "Bench::ssh")]
+  pub ssh: Vec<String>,
+  #[serde(default = "MachineSettings::testbed")]
+  pub testbed: String,
+  #[serde(default = "MachineSettings::cargo_target")]
+  pub cargo_target: String,
+}
+
+/// The settings file's name under the data root's `env/`.
+pub const PLACEMENT_SETTINGS: &str = "placement.toml";
+
+impl MachineSettings {
+  fn bench() -> String {
+    "~/.local/share/bmo/bench".to_owned()
+  }
+
+  fn testbed() -> String {
+    "~/.local/share/bmo-testbed/deploy/bin/bmo-testbed".to_owned()
+  }
+
+  fn cargo_target() -> String {
+    "~/.local/share/bmo/cargo-target".to_owned()
+  }
+
+  /// The settings under a data root: none where no file stands there, the reason where one does not read.
+  pub fn read(data_root: &Path) -> Option<Result<Self, String>> {
+    let file = data_root.join("env").join(PLACEMENT_SETTINGS);
+    let text = std::fs::read_to_string(&file).ok()?;
+
+    Some(toml::from_str::<Self>(&text).map_err(|why| {
+      fill_marks(&LANES.placed.unsettled, &[("file", &file.to_string_lossy()), ("why", &why.to_string())])
+    }))
+  }
+
+  /// The label the lines name the machine by.
+  pub fn label(&self) -> &str {
+    self.machine.as_deref().unwrap_or(&self.destination)
+  }
+
+  /// Where a tree of this machine stands under the bench root: at its path under this machine's home, or at
+  /// its whole path where it stands outside it.
+  pub fn place_of(&self, tree: &Path, home: &Path) -> String {
+    let relative = tree.strip_prefix(home).unwrap_or(tree);
+
+    format!(
+      "{}/{}",
+      self.bench.trim_end_matches('/'),
+      relative.to_string_lossy().trim_start_matches('/')
+    )
+  }
+
+  fn as_bench(&self, path: String) -> Bench {
+    Bench {
+      destination: self.destination.clone(),
+      path,
+      ssh: self.ssh.clone(),
+    }
+  }
+}
+
+/// The placed machine, a member of the placement type: every run goes there over `ssh`, as the testbed's
+/// `placed` verb in a bench copy of the checkout.
+pub struct MachinePlacement {
+  pub settings: MachineSettings,
+  pub home: PathBuf,
+}
+
+/// What a run on the placed machine came to: it ran there, with its code; or the machine could not be
+/// reached, said on a line, and the run is the caller's.
+pub enum Placed {
+  Ran(u8),
+  Unreached,
+}
+
+impl MachinePlacement {
+  /// The placement under a data root for an account's home: none where the settings name no machine or do
+  /// not read, the reason said on a line.
+  pub fn named(data_root: &Path, home: &Path) -> Option<Self> {
+    match MachineSettings::read(data_root)? {
+      Ok(settings) => Some(Self {
+        settings,
+        home: home.to_path_buf(),
+      }),
+      Err(why) => {
+        eprintln!("{why}");
+        None
+      }
+    }
+  }
+
+  fn ssh(&self) -> Command {
+    let (program, options) = self.settings.ssh.split_first().map_or(("ssh", &[][..]), |(p, o)| (p, o));
+    let mut command = Command::new(program);
+
+    command.args(options).arg(&self.settings.destination).stdin(Stdio::null());
+    command
+  }
+
+  /// Whether the machine answers; what `ssh` said where it does not, on the `unreached` line.
+  pub fn reached(&self) -> bool {
+    let probed = self.ssh().arg("true").output();
+
+    if succeeded(&probed) {
+      return true;
+    }
+
+    eprintln!(
+      "{}",
+      fill_marks(&LANES.placed.unreached, &[("machine", self.settings.label()), ("said", &said(&probed))])
+    );
+
+    false
+  }
+
+  /// The bench of a checkout made ready at a commit, its outside trees with it; the bench's path there.
+  pub fn ready(&self, checkout: &Path, commit: &str, open_files: bool) -> Result<String, String> {
+    let remote = git(checkout, &["remote", "get-url", "origin"]);
+    let trees = bmo_testbed_deploy::expansion::outside_roots(checkout, checkout)?
+      .into_iter()
+      .map(|tree| {
+        let place = self.settings.place_of(&tree, &self.home);
+        (tree, place)
+      })
+      .collect();
+    let path = self.settings.place_of(checkout, &self.home);
+    let source = BenchSource {
+      checkout,
+      remote: &remote,
+      commit,
+      open_files,
+      trees,
+    };
+
+    ready_bench(&self.settings.as_bench(path.clone()), &source)?;
+    Ok(path)
+  }
+
+  /// The words run in the bench through the `placed` verb, the output and the result this process's; the
+  /// code it ended with, 75 where the connection broke.
+  pub fn run(&self, bench: &str, words: &[String], setup: bool) -> u8 {
+    let said = &LANES.placed;
+    let mut line = format!("cd {} && {} placed", far_path(bench), far_path(&self.settings.testbed));
+
+    if setup {
+      line.push_str(" --setup");
+    }
+
+    line.push_str(" --");
+
+    for word in words {
+      line.push(' ');
+      line.push_str(&quoted(word));
+    }
+
+    eprintln!("{}", fill_marks(&said.running, &[("machine", self.settings.label()), ("bench", bench)]));
+
+    let status = self.ssh().arg(line).stdout(Stdio::inherit()).stderr(Stdio::inherit()).status();
+
+    match status.ok().and_then(|status| status.code()) {
+      // 255 is `ssh`'s own: the connection broke or was never made.
+      Some(255) | None => dropped(self.settings.label(), &said.broken),
+      Some(code) => u8::try_from(code).unwrap_or(1),
+    }
+  }
+
+  /// The binaries read back from the machine's shared Cargo build directory into a directory here.
+  pub fn fetch_binaries(&self, profile: &str, binaries: &[String], into: &Path) -> Result<(), String> {
+    let words = &LANES.placed;
+    let ssh_command = self.settings.ssh.iter().map(|word| quoted(word)).collect::<Vec<_>>().join(" ");
+    let built = format!("{}/{}", self.settings.cargo_target.trim_end_matches('/'), profile);
+    let unfetched =
+      |what: &str| fill_marks(&words.unfetched, &[("machine", self.settings.label()), ("said", what)]);
+
+    std::fs::create_dir_all(into).map_err(|why| unfetched(&why.to_string()))?;
+
+    for binary in binaries {
+      let fetched = Command::new("rsync")
+        .args(["-a", "-e", &ssh_command])
+        .arg(format!("{}:{built}/{binary}", self.settings.destination))
+        .arg(format!("{}/", into.display()))
+        .stdin(Stdio::null())
+        .output();
+
+      if !succeeded(&fetched) {
+        return Err(unfetched(&said(&fetched)));
+      }
+    }
+
+    Ok(())
+  }
+
+  /// A run placed on the machine: the bench made ready at the checkout's `HEAD` with its open files, and
+  /// the words run there as the testbed's own `run`.
+  fn placed(&self, ask: &PlaceAsk<'_>) -> Placed {
+    if !self.reached() {
+      return Placed::Unreached;
+    }
+
+    let found = git(&ask.cwd, &["rev-parse", "--show-toplevel"]);
+    let checkout = if found.is_empty() { ask.cwd.clone() } else { PathBuf::from(found) };
+    let commit = git(&checkout, &["rev-parse", "HEAD"]);
+    let bench = match self.ready(&checkout, &commit, true) {
+      Ok(bench) => bench,
+      Err(said) => return Placed::Ran(dropped(self.settings.label(), &said)),
+    };
+    let mut words = vec![self.settings.testbed.clone()];
+
+    // A verb of this binary, the suite's, runs as the same verb of the testbed there; anything else as a
+    // run of its own there.
+    if ask.command.first().is_some_and(|first| first == BINARY) {
+      words.extend(ask.command.iter().skip(1).cloned());
+    } else {
+      words.push("run".to_owned());
+
+      if ask.lane == Lane::Narrow {
+        words.push("--narrow".to_owned());
+      }
+
+      if let Some(adapter) = ask.adapter {
+        words.extend(["--adapter".to_owned(), adapter.to_owned()]);
+      }
+
+      words.push("--".to_owned());
+      words.extend(ask.command.iter().cloned());
+    }
+
+    Placed::Ran(self.run(&bench, &words, true))
+  }
+}
+
+impl Placement for MachinePlacement {
+  fn place(&self, ask: &PlaceAsk<'_>) -> Option<u8> {
+    match self.placed(ask) {
+      Placed::Ran(code) => Some(code),
+      Placed::Unreached => None,
+    }
   }
 }

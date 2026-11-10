@@ -68,6 +68,16 @@ uncopied = "the checkout's open files could not be copied: {said}"
 unread = "its run could not be read: {why}"
 no_result = "its run ended with no result"
 running = "testbed: running on {machine} in {bench}"
+# The placed machine the settings name (docs/boundary.md, 「The placed machine」): its settings file that does
+# not read, {file} the file and {why} what it came to; the machine that cannot be reached, {said} what `ssh`
+# said; an outside tree that could not be copied; the binaries that could not be read back; and the
+# connection that broke once the run had begun.
+unsettled = "testbed: the placement settings {file} do not read ({why}); running here"
+unreached = "testbed: the placed machine {machine} cannot be reached ({said}); running here"
+tree_uncopied = "the tree {tree} could not be copied: {said}"
+unfetched = "the binaries could not be read back from {machine}: {said}"
+broken = "the connection to it broke"
+setup_failed = "testbed: the setup step {command} failed with code {code}"
 
 # A command's wait and run, as every step of a check says them.
 [times]

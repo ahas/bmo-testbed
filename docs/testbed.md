@@ -208,17 +208,21 @@ flowchart TD
 ## A run on another machine
 
 - **A heavy run may be placed on another machine** before it asks for its turn, unless it was started
-  inside a turn already held or inside a deployment's or a whole run's unit. Where it goes is the placement endpoint's answer
-  (`docs/boundary.md`, 「Placement」); with no endpoint, or one that does not answer, the run stays
-  on the machine it was started on.
+  inside a turn already held or inside a whole run's unit. Where it goes is the machine's placement
+  (`docs/boundary.md`, 「Placement」): the placed machine its settings name, reached over `ssh`, or the
+  placement endpoint's answer; with neither, or one that does not answer, the run stays on the machine
+  it was started on.
 - **There it runs in a bench copy of the caller's checkout under that machine's own testbed:** the
-  caller pushes its commit into a clone of the checkout's remote where the endpoint's answer names the
-  bench, and copies its open files over, ignored ones left out; the checkout's setup then runs there,
-  and the command in that machine's own turn. Its output and its one result line come back to the
-  caller.
+  caller pushes its commit into a clone of the checkout's remote in the bench, copies its open files
+  over, ignored ones left out, and copies every tree the checkout's workspace names outside the
+  repository to its own place under the bench root; the checkout's setup then runs there, and the
+  command in that machine's own turn. Its output and its one result line come back to the caller.
+- **A deployment's gate and its Cargo release build go to the placed machine** the settings name
+  (`docs/deploy.md`, 「Where a deployment runs」), so the machine that serves is not the machine that
+  checks and builds.
 - **A run started on a placed machine stays there.**
 - **A machine that drops it** ends the run as not run, exit code 75, and the same command run again
-  goes where the endpoint sends it next.
+  goes where the placement sends it next.
 
 ## Seeing the queue
 

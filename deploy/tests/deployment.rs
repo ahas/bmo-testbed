@@ -13,8 +13,8 @@ use bmo_testbed_core::declaration::Repository;
 use bmo_testbed_core::events::Hook;
 use bmo_testbed_core::turn::Env;
 use bmo_testbed_deploy::deployment::{
-  DeployAsk, DeployHands, DeployPlaces, Gate, GateAsk, GateOutcome, Machine, StepAsk, StepRan, deploy,
-  major_change, release_build, version_major, workspace_binaries,
+  BuildAsk, DeployAsk, DeployHands, DeployPlaces, Gate, GateAsk, GateOutcome, Machine, StepAsk, StepRan,
+  deploy, major_change, release_build, version_major, workspace_binaries,
 };
 use bmo_testbed_deploy::progress::{Outcome, read_deploy_progress};
 use bmo_testbed_deploy::release::{LiveProcess, release_dir};
@@ -116,6 +116,30 @@ impl Gate for Told {
       flaky: if self.0 { vec![("a test".to_owned(), "a.test.ts".to_owned())] } else { Vec::new() },
       steps: Vec::new(),
     }
+  }
+}
+
+// A gate whose machine builds elsewhere: it passes, and the Cargo release build it is asked puts a binary
+// of its own into the directory asked, keeping what it was asked.
+#[derive(Default)]
+struct BuiltElsewhere(RefCell<Vec<(String, String, Vec<String>)>>);
+
+impl Gate for BuiltElsewhere {
+  fn pass(&self, _: &GateAsk<'_>) -> GateOutcome {
+    GateOutcome {
+      passed: true,
+      ..GateOutcome::default()
+    }
+  }
+
+  fn build(&self, ask: &BuildAsk<'_>) -> Option<Result<(), String>> {
+    self
+      .0
+      .borrow_mut()
+      .push((ask.commit.to_owned(), ask.profile.to_owned(), ask.binaries.to_vec()));
+    std::fs::create_dir_all(ask.built).unwrap();
+    std::fs::write(ask.built.join("app"), "built elsewhere").unwrap();
+    Some(Ok(()))
   }
 }
 
@@ -470,6 +494,34 @@ fn a_first_deployment_lays_the_trees_outside_the_workspace_from_the_checkout() {
     said(&hands)
   );
   assert!(scene.at("live/deploy/bin/app").exists(), "{}", said(&hands));
+}
+
+// "the Cargo release build goes to the gate's machine where it builds elsewhere, and the binaries it brings
+// back are placed"
+#[test]
+fn a_release_build_the_gate_makes_elsewhere_is_placed_from_what_it_brought_back() {
+  let scene = Scene::over_an_outside_tree();
+  let hands = Hands::default();
+  let gate = BuiltElsewhere::default();
+  let ask = DeployAsk {
+    record: Some(scene.at("data")),
+    ..DeployAsk::default()
+  };
+  let code = scene.run_with(&ask, &gate, &hands, &scene.env());
+  let head = must(&["rev-parse", "HEAD"], &scene.source);
+
+  assert_eq!(code, 0, "{}", said(&hands));
+  assert_eq!(
+    std::fs::read_to_string(scene.at("live/deploy/bin/app")).unwrap(),
+    "built elsewhere",
+    "{}",
+    said(&hands)
+  );
+  assert_eq!(
+    gate.0.borrow().as_slice(),
+    [(head, "release".to_owned(), vec!["app".to_owned()])],
+    "the gate is asked the commit, the profile and the workspace's binaries"
+  );
 }
 
 // "the records stand under the deploy root, and a data root another deployment records into is left alone"

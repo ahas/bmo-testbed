@@ -178,6 +178,7 @@ pub fn run(words: &RunWords, ground: &VerbGround<'_>) -> RunOutcome {
   if !runs_here(&env) {
     let ask = PlaceAsk {
       command: &words.command,
+      adapter: words.adapter.as_deref(),
       lane: words.lane(),
       cwd: cwd.clone(),
       env: &env,

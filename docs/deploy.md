@@ -144,8 +144,20 @@
   not already inside a deployment's unit starts one, prints its name and the command that reads its
   journal, and exits 0; the caller's death reaches nothing from then on.
 - **A unit that cannot be started is a refusal.**
-- **What runs inside a deployment's unit runs where it is:** the unit is started with
-  `BMO_DEPLOY_UNIT` naming it, and every process in it inherits the variable.
+- **What runs inside a deployment's unit runs where it is,** but for the gate and the Cargo release
+  build: the unit is started with `BMO_DEPLOY_UNIT` naming it, and every process in it inherits the
+  variable.
+- **The gate and the Cargo release build go to the placed machine** where the machine's settings name
+  one (`docs/boundary.md`, 「Placement」, 「The placed machine」). The deployment benches the commit
+  there, the checkout's outside trees as they stand with it, and sets the bench up with the declared
+  setup steps; the static check and the suite then run there, each as that machine's own testbed verb in
+  its own turn, and the Cargo release build runs there in that machine's shared Cargo build directory,
+  from which the deployment reads the built binaries back over `rsync` into its own build directory
+  before it places them. The declared `[build]` steps, which write into the release and read the data
+  root, run where the deployment runs, as does everything after the build. A placed machine that
+  cannot be reached leaves the gate and the build where the deployment runs, said on a line; a bench
+  that cannot be made ready, or a run the machine drops once begun, fails the stage. The flaky tests a
+  placed gate found stay in that machine's record, so the deployment reports none.
 - **The unit is handed `PATH` and the roots the caller resolved,** so the run aims at exactly what the
   caller aimed at, and `BMO_TESTBED_FRONT=1`, so every heavy command of the run stands at the front of
   its lane.
@@ -215,7 +227,8 @@
    and check it is on the remote. Adopt a deploy tree that is still a directory. Check every unit link
    will still find its unit file.
 3. **Pass the gate:** the declared static check and the suite over the range from the deployed commit,
-   holding every lane at the front (`docs/testbed.md`), with what failed run once more. `--no-check`
+   holding every lane at the front (`docs/testbed.md`), with what failed run once more, on the placed
+   machine where the settings name one (「Where a deployment runs」). `--no-check`
    leaves it out where the caller already ran it, and so does a declaration with `gate = false`. The
    deployment asks the gate through a hand of its own, which the binary answers with the suite's
    static check and run, so a test stands in for it.
@@ -243,7 +256,8 @@
 4. **Take the backup,** before anything changes (「Backups」).
 5. **Prepare the release,** pruning the releases first. A release of that commit still standing whose
    `bin/built-from` names it is taken as it stands; otherwise it is made afresh.
-6. **Build,** for a release made afresh: the declared `[build]` steps in the build tree, then the
+6. **Build,** for a release made afresh: the Cargo release build, on the placed machine where the
+   settings name one, then the declared `[build]` steps in the build tree, then the
    declared binaries placed into the release's `bin/`, hard-linked or copied, the ones that differ
    noted. `bin/built-from` is written last. A taken release is compared with the live one instead. A
    build that fails stops the deployment with every service untouched.
