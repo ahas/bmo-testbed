@@ -214,13 +214,14 @@ prune      the rotation alone; --dry-run says what it would remove
 Exits 1 where any step failed, the rest done all the same, 2 where the settings do not read, and 75
 where another run of the same word holds the lock."""
 placed = """
-usage: {verb} placed [--setup] -- <command…>
+usage: {verb} placed [--setup] [--checkout <path>…] -- <command…>
 
 The far side of a run another machine placed here (docs/boundary.md): run in the bench by that
 machine over ssh. With --setup the declared setup steps run first, in order; the words then run as
 a command of their own, marked so they are never placed again, and this verb ends with their code.
 
---setup   the declared [test].setup steps first, in the bench"""
+--setup     the declared [test].setup steps first, in the bench
+--checkout  a checkout the run knows here, the bench and each tree copied beside it; named once each"""
 serve = """
 usage: {verb} serve [--listen <address>] [--token <token>]
 
