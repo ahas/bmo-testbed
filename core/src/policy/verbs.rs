@@ -12,6 +12,7 @@ pub struct UsageWords {
   pub classify: String,
   pub suite: String,
   pub dependents: String,
+  pub passed: String,
   pub count: String,
   pub log: String,
   pub template: String,
@@ -120,6 +121,14 @@ pub struct ImportsWords {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct PassedWords {
+  pub found: String,
+  pub none: String,
+  pub no_commit: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PruneWords {
   pub gone: String,
   pub noatime: String,
@@ -157,6 +166,7 @@ pub struct Verbs {
   pub imports: ImportsWords,
   pub words: ValueWords,
   pub backups: BackupsWords,
+  pub passed: PassedWords,
   pub prune: PruneWords,
 }
 

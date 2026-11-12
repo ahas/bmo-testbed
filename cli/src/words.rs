@@ -31,6 +31,7 @@ pub enum Verb {
   Classify(ClassifyArgs),
   Suite(SuiteArgs),
   Dependents(DependentsArgs),
+  Passed(PassedArgs),
   Count(CountArgs),
   Log(LogArgs),
   Template(TemplateArgs),
@@ -207,6 +208,15 @@ pub struct SuiteArgs {
 pub struct DependentsArgs {
   #[arg(long)]
   pub run: bool,
+}
+
+/// `passed`: the passed run of the whole suite on a commit that this machine's record holds.
+#[derive(Debug, Args)]
+pub struct PassedArgs {
+  #[arg(long)]
+  pub commit: Option<String>,
+  #[arg(long)]
+  pub json: bool,
 }
 
 #[derive(Debug, Args)]
@@ -400,6 +410,7 @@ pub fn read(args: impl IntoIterator<Item = OsString>) -> Result<Words, clap::Err
     .mut_subcommand("classify", |verb| verb.override_help(usage(&said.classify)))
     .mut_subcommand("suite", |verb| verb.override_help(usage(&said.suite)))
     .mut_subcommand("dependents", |verb| verb.override_help(usage(&said.dependents)))
+    .mut_subcommand("passed", |verb| verb.override_help(usage(&said.passed)))
     .mut_subcommand("count", |verb| verb.override_help(usage(&said.count)))
     .mut_subcommand("log", |verb| verb.override_help(usage(&said.log)))
     .mut_subcommand("template", |verb| verb.override_help(usage(&said.template)))

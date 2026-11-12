@@ -158,6 +158,13 @@
   cannot be reached leaves the gate and the build where the deployment runs, said on a line; a bench
   that cannot be made ready, or a run the machine drops once begun, fails the stage. The flaky tests a
   placed gate found stay in that machine's record, so the deployment reports none.
+- **A passed suite is looked for in each machine's own record,** since a record is per machine and a run
+  placed elsewhere is written by the machine it ran on (`docs/boundary.md`, 「The record」). The
+  deployment reads its own machine's record first, before the gate is asked or placed, which holds a
+  close's suite that ran here. Where that holds none and the gate stands on the placed machine, the gate
+  asks that machine's record once its static check there has passed, through that testbed's `passed`
+  verb in the bench, which holds a close's suite placed there. A placed machine whose testbed does not
+  answer it with a run runs the suite.
 - **The unit is handed `PATH` and the roots the caller resolved,** so the run aims at exactly what the
   caller aimed at, and `BMO_TESTBED_FRONT=1`, so every heavy command of the run stands at the front of
   its lane.
@@ -232,6 +239,18 @@
    leaves it out where the caller already ran it, and so does a declaration with `gate = false`. The
    deployment asks the gate through a hand of its own, which the binary answers with the suite's
    static check and run, so a test stands in for it.
+   - **The suite is left out where it already passed on the commit.** The close that landed the commit
+     ran the repository's whole suite on it (`docs/testbed.md`, 「The close line」), so a passed run of
+     it is taken in place of the gate's own. The run taken is the newest test run of the repository's
+     whole suite (`docs/boundary.md`, 「Members」: kind `suite`, `whole`) begun on exactly the commit,
+     from a checkout with no uncommitted changes to tracked files (`clean`), within the policy's hours,
+     twenty-four; where it passed, the gate runs its static check alone, and the deployment says on one
+     line that the suite is left out, naming the run: its id, when it began, the checkout it ran in with
+     the machine where that is not this one, and its log. Anything less certain runs the suite: no such run; the newest one failed, was
+     not run, still runs or is gone; a run on another commit, from a tree with uncommitted changes, or
+     begun before the limit; a run whose commit, tree or wholeness the record does not hold. The record
+     is asked where the run would have been written (「Where a deployment runs」). The suites a major
+     change runs are never left out.
    - **The tree the gate reads is set up first.** The declared `[test].setup` steps run there, in order,
      before the static check and the suite, so a fresh checkout holds the packages its check needs
      (`docs/declaration.md`). A step that fails stops the deployment in the check stage with nothing

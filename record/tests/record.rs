@@ -17,6 +17,8 @@ fn test_run(checkout: &str, pid: i64) -> TestRun {
     checkout: checkout.to_owned(),
     repository_name: None,
     commit: None,
+    whole: None,
+    clean: None,
     command: "cargo test".to_owned(),
     scope: Some("scope-1".to_owned()),
     unit_name: None,
@@ -252,4 +254,73 @@ fn events_narrow_by_kind_and_a_resume_past_the_window_is_gone() {
   assert!(
     matches!(record.events(last.id - 1, &[], None).unwrap(), EventsRead::Page(page) if page.items.len() == 1)
   );
+}
+
+// A run of the repository's suite on a commit, whole or not and from a clean tree or not, begun the given
+// milliseconds before now and ended as asked; its id.
+fn suite_run(
+  record: &mut Record,
+  commit: &str,
+  whole: Option<bool>,
+  clean: Option<bool>,
+  ago: i64,
+  state: TestRunState,
+) -> i64 {
+  let begun = record
+    .begin_test_run(&TestRun {
+      kind: TestRunKind::Suite,
+      repository_name: Some("repository".to_owned()),
+      commit: Some(commit.to_owned()),
+      whole,
+      clean,
+      started_at: bmo_testbed_core::queue::now_ms() - ago,
+      ..test_run("/checkout", own_pid())
+    })
+    .unwrap();
+  let end = TestRunEnd {
+    state,
+    passed_count: 1,
+    failed_count: 0,
+    skipped_count: 0,
+    ended_at: begun.started_at + 1,
+  };
+
+  record.end_test_run(begun.id, &end).unwrap();
+  begun.id
+}
+
+// "the passed suite a deployment takes is the newest whole run of the repository on the commit from a clean
+// tree since the moment asked, where it passed; a run whose wholeness or tree is not held is none"
+#[test]
+fn the_passed_suite_is_the_newest_whole_clean_run_on_the_commit_where_it_passed() {
+  let dir = tempfile::tempdir().unwrap();
+  let mut record = Record::open(dir.path()).unwrap();
+  let now = bmo_testbed_core::queue::now_ms();
+  let since = now - 10_000;
+  let passed = |record: &Record, commit: &str| {
+    record.passed_suite("repository", commit, since).unwrap().map(|run| run.id)
+  };
+
+  let first = suite_run(&mut record, "aaa", Some(true), Some(true), 1_000, TestRunState::Passed);
+
+  assert_eq!(passed(&record, "aaa"), Some(first));
+  assert_eq!(passed(&record, "bbb"), None);
+  assert_eq!(record.passed_suite("another", "aaa", since).unwrap(), None);
+
+  // Runs that do not count leave the passed one standing.
+  suite_run(&mut record, "aaa", Some(false), Some(true), 500, TestRunState::Failed);
+  suite_run(&mut record, "aaa", Some(true), Some(false), 500, TestRunState::Failed);
+  suite_run(&mut record, "aaa", None, None, 500, TestRunState::Passed);
+  assert_eq!(passed(&record, "aaa"), Some(first));
+
+  // A run begun before the moment asked is none, and so is one held without its wholeness or its tree.
+  suite_run(&mut record, "old", Some(true), Some(true), 60_000, TestRunState::Passed);
+  suite_run(&mut record, "unknown", None, Some(true), 1_000, TestRunState::Passed);
+  suite_run(&mut record, "unknown", Some(true), None, 1_000, TestRunState::Passed);
+  assert_eq!(passed(&record, "old"), None);
+  assert_eq!(passed(&record, "unknown"), None);
+
+  // A newer whole clean run that failed outweighs the older one that passed.
+  suite_run(&mut record, "aaa", Some(true), Some(true), 100, TestRunState::Failed);
+  assert_eq!(passed(&record, "aaa"), None);
 }

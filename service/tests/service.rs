@@ -91,6 +91,8 @@ fn test_run(checkout: &str) -> TestRun {
     checkout: checkout.to_owned(),
     repository_name: Some("repository".to_owned()),
     commit: None,
+    whole: None,
+    clean: None,
     command: "bmo-testbed suite".to_owned(),
     scope: None,
     unit_name: None,

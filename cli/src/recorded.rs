@@ -19,7 +19,6 @@ pub struct Recorded {
   pub data_root: PathBuf,
   pub kind: TestRunKind,
   pub repository_name: Option<String>,
-  pub commit: Option<String>,
 }
 
 impl Recorded {
@@ -29,7 +28,6 @@ impl Recorded {
       data_root: data_root.to_path_buf(),
       kind: TestRunKind::Command,
       repository_name: None,
-      commit: None,
     }
   }
 
@@ -46,12 +44,22 @@ impl Recorded {
 
 impl RunWitness for Recorded {
   fn began(&self, run: &RunBegun<'_>) -> Option<i64> {
+    // What the run stands on as its turn comes: the checkout's commit, and whether its tracked files stand
+    // unchanged against it, each none where git cannot tell.
+    let commit = git_lines(run.checkout, &["rev-parse", "HEAD"])
+      .ok()
+      .and_then(|lines| lines.into_iter().next());
+    let clean = git_lines(run.checkout, &["status", "--porcelain", "--untracked-files=no"])
+      .ok()
+      .map(|changed| changed.is_empty());
     let begun = TestRun {
       id: 0,
       kind: self.kind,
       checkout: run.checkout.to_string_lossy().into_owned(),
       repository_name: self.repository_name.clone(),
-      commit: self.commit.clone(),
+      commit,
+      whole: Some(run.whole),
+      clean,
       command: run.command.to_owned(),
       scope: scope_of(run.env),
       unit_name: run.env.get(DEPLOY_UNIT_VARIABLE).filter(|unit| !unit.is_empty()).cloned(),
@@ -86,12 +94,8 @@ impl RunWitness for Recorded {
 }
 
 /// Where a suite run of the repository keeps its own log and its test run: under the data root, its words
-/// as given, the repository's name and the commit it runs at.
+/// as given, and the repository's name.
 pub fn suite_record(data_root: &Path, repo: &Repository, command: String) -> SuiteRecord {
-  let commit = git_lines(&repo.root, &["rev-parse", "HEAD"])
-    .ok()
-    .and_then(|lines| lines.into_iter().next());
-
   SuiteRecord {
     log_dir: data_root.join("testbed"),
     command,
@@ -99,7 +103,6 @@ pub fn suite_record(data_root: &Path, repo: &Repository, command: String) -> Sui
       data_root: data_root.to_path_buf(),
       kind: TestRunKind::Suite,
       repository_name: Some(repo.name()),
-      commit,
     }),
   }
 }

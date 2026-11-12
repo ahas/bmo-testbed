@@ -417,6 +417,7 @@ pub fn run_saying(repo: &Repository, ask: &SuiteAsk, heard: &(dyn Fn(&str) + Syn
       log: path,
       started_at: now_ms(),
       env: &env,
+      whole: ask.since.is_none() && ask.picked.is_empty() && ask.extra.is_empty(),
     }),
     _ => None,
   };

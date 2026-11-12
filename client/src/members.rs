@@ -153,7 +153,14 @@ pub struct TestRun {
   pub kind: TestRunKind,
   pub checkout: String,
   pub repository_name: Option<String>,
+  /// The checkout's `HEAD` as the run began; none where git could not tell.
   pub commit: Option<String>,
+  /// Whether it was a suite run of every unit, with no range, no word naming a path and no word for the
+  /// runner; none for a run written before the record held it.
+  pub whole: Option<bool>,
+  /// Whether the checkout's tracked files stood unchanged against its `HEAD` as the run began; none where
+  /// git could not tell, or for a run written before the record held it.
+  pub clean: Option<bool>,
   /// The words run, as one line.
   pub command: String,
   pub scope: Option<String>,

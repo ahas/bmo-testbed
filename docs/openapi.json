@@ -674,11 +674,19 @@
           "checkout": {
             "type": "string"
           },
+          "clean": {
+            "description": "Whether the checkout's tracked files stood unchanged against its `HEAD` as the run began; none where\ngit could not tell, or for a run written before the record held it.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
           "command": {
             "description": "The words run, as one line.",
             "type": "string"
           },
           "commit": {
+            "description": "The checkout's `HEAD` as the run began; none where git could not tell.",
             "type": [
               "string",
               "null"
@@ -742,6 +750,13 @@
               "string",
               "null"
             ]
+          },
+          "whole": {
+            "description": "Whether it was a suite run of every unit, with no range, no word naming a path and no word for the\nrunner; none for a run written before the record held it.",
+            "type": [
+              "boolean",
+              "null"
+            ]
           }
         },
         "required": [
@@ -750,6 +765,8 @@
           "checkout",
           "repositoryName",
           "commit",
+          "whole",
+          "clean",
           "command",
           "scope",
           "unitName",
@@ -1330,6 +1347,7 @@
     "classify",
     "suite",
     "dependents",
+    "passed",
     "count",
     "log",
     "template",

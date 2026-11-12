@@ -234,6 +234,41 @@ impl Record {
     Ok(paged(items, limit))
   }
 
+  /// The run of a repository's whole suite a deployment's gate takes in place of its own (docs/deploy.md,
+  /// 「What the deploy run does, in order」): the newest test run of kind `suite` of the repository, whole,
+  /// begun on the commit from a clean tree no earlier than the moment given, as it reads now, where it
+  /// passed; none where that run did not pass or none stands. A run whose commit, wholeness or tree the
+  /// record does not hold is none of them.
+  pub fn passed_suite(
+    &self,
+    repository: &str,
+    commit: &str,
+    since: i64,
+  ) -> Result<Option<TestRun>, String> {
+    let member: Option<String> = self
+      .connection
+      .query_row(
+        "SELECT member FROM test_runs
+          WHERE started_at >= ?1
+            AND json_extract(member, '$.kind') = 'suite'
+            AND json_extract(member, '$.repositoryName') = ?2
+            AND json_extract(member, '$.commit') = ?3
+            AND json_extract(member, '$.whole') = 1
+            AND json_extract(member, '$.clean') = 1
+          ORDER BY id DESC LIMIT 1",
+        params![since, repository, commit],
+        |row| row.get(0),
+      )
+      .optional()
+      .map_err(failed)?;
+    let Some(member) = member else {
+      return Ok(None);
+    };
+    let run = test_run_now(member_of(&member)?);
+
+    Ok((run.state == TestRunState::Passed).then_some(run))
+  }
+
   /// The deployment a run began, by the process that began it and when; none where the record holds none.
   pub fn deployment_of(&self, pid: i64, started_at: i64) -> Result<Option<i64>, String> {
     self

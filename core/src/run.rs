@@ -188,6 +188,7 @@ pub fn run_in_testbed(ask: &RunAsk<'_>) -> Result<TestbedResult, String> {
     log: &log,
     started_at,
     env: &ask.turn.env,
+    whole: false,
   });
   let tell_ended = |verdict: RunVerdict, tally: Option<&Tally>| {
     if let Some(id) = test_run {

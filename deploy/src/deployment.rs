@@ -15,6 +15,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
+use bmo_testbed_client::TestRun;
 use bmo_testbed_core::declaration::{DeployStep, Phase, Repository};
 use bmo_testbed_core::events::{Event, Hook};
 use bmo_testbed_core::policy::deploy::DEPLOY;
@@ -25,6 +26,7 @@ use bmo_testbed_core::turn::{
   Env, FRONT_VARIABLE, Lane, NOT_RUN_EXIT_CODE, TurnAsk, harness_pid, process_env, take_turn,
 };
 use bmo_testbed_core::verb::REFUSED_EXIT_CODE;
+use bmo_testbed_record::Record;
 use serde_json::{Value, json};
 
 use crate::adopt::{Adopting, adopt, prune_retired};
@@ -143,11 +145,21 @@ pub struct DeployAsk {
   pub record: Option<PathBuf>,
 }
 
-/// What the gate is asked: the commit, in the checkout it is taken from, over the range from what was live.
+/// What the gate is asked: the commit, in the checkout it is taken from, over the range from what was live,
+/// and whether its suite runs: not where a passed run of the whole suite on the commit stands already.
 pub struct GateAsk<'a> {
   pub root: &'a Path,
   pub commit: &'a str,
   pub since: Option<&'a str>,
+  pub suite: bool,
+}
+
+/// A passed run of the whole suite on the commit, which the gate takes in place of its own suite: the test
+/// run as the record holding it reads, and the machine whose record that is where it is not this one.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SuitePassed {
+  pub run: TestRun,
+  pub machine: Option<String>,
 }
 
 /// One heavy step the gate ran, as the progress record writes it.
@@ -160,13 +172,50 @@ pub struct GateStep {
 }
 
 /// What the gate came to: whether the commit passed, why not where it did not, the tests that passed only
-/// when run once more, each with its unit, and the steps it ran.
+/// when run once more, each with its unit, the steps it ran, and the passed run it took in place of its
+/// suite where it found one.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct GateOutcome {
   pub passed: bool,
   pub reason: String,
   pub flaky: Vec<(String, String)>,
   pub steps: Vec<GateStep>,
+  pub suite_passed: Option<SuitePassed>,
+}
+
+/// The passed run of a repository's whole suite on a commit that the record under a data root holds, begun
+/// within the policy's hours before the moment given (docs/deploy.md, 「What the deploy run does, in
+/// order」); none where it holds none, or cannot be read.
+pub fn passed_suite(data_root: &Path, repository: &str, commit: &str, now_ms: i64) -> Option<TestRun> {
+  let since = now_ms.saturating_sub(DEPLOY.numbers.passed_suite_hours.saturating_mul(60 * 60 * 1000));
+
+  Record::open(data_root)
+    .and_then(|record| record.passed_suite(repository, commit, since))
+    .ok()
+    .flatten()
+}
+
+/// The line saying the gate's suite is left out for a passed run: the run, when it began, where and its log.
+pub fn suite_left_out(passed: &SuitePassed) -> String {
+  let said = &DEPLOY.run;
+  let run = &passed.run;
+  let on = passed
+    .machine
+    .as_deref()
+    .map(|machine| fill_marks(&said.on, &[("machine", machine)]))
+    .unwrap_or_default();
+
+  fill_marks(
+    &said.suite_left_out,
+    &[
+      ("id", &run.id.to_string()),
+      ("commit", &short(run.commit.as_deref().unwrap_or_default())),
+      ("when", &iso(run.started_at)),
+      ("checkout", &run.checkout),
+      ("on", &on),
+      ("log", &run.log_path),
+    ],
+  )
 }
 
 /// The Cargo release build asked of the gate: the commit, the build tree it is read from, the profile, the
@@ -472,7 +521,8 @@ impl ServiceHands for Services<'_> {
   }
 }
 
-fn iso(at_ms: i64) -> String {
+/// A moment, epoch milliseconds, as an ISO 8601 time in UTC.
+pub fn iso(at_ms: i64) -> String {
   chrono::DateTime::from_timestamp_millis(at_ms)
     .unwrap_or_default()
     .format("%Y-%m-%dT%H:%M:%S%.3fZ")
@@ -1239,14 +1289,33 @@ pub async fn deploy(
     }
 
     let since = run.previous.as_ref().map(|previous| previous.commit.clone());
+    // A passed run of the whole suite on the commit, in this machine's own record, leaves the gate's suite
+    // out; the gate asks its own machine's record where it stands elsewhere.
+    let passed_here = ask
+      .record
+      .as_deref()
+      .and_then(|data_root| passed_suite(data_root, &repo.name(), &commit, hands.now_ms()));
+
+    if let Some(found) = &passed_here {
+      run.say(&suite_left_out(&SuitePassed {
+        run: found.clone(),
+        machine: None,
+      }));
+    }
+
     let passed = gate.pass(&GateAsk {
       root: source,
       commit: &commit,
       since: since.as_deref(),
+      suite: passed_here.is_none(),
     });
 
     if let Some(cgroup) = &unit_cgroup {
       let _ = move_to_cgroup(cgroup);
+    }
+
+    if let Some(found) = &passed.suite_passed {
+      run.say(&suite_left_out(found));
     }
 
     for step in &passed.steps {
@@ -1278,6 +1347,7 @@ pub async fn deploy(
       root: source,
       commit: &commit,
       since: run.previous.as_ref().map(|previous| previous.commit.as_str()),
+      suite: true,
     });
 
     if let Some(cgroup) = &unit_cgroup {

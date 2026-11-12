@@ -52,6 +52,9 @@ unit_check_ms = 5000
 journal_lines = 40
 # How long the wait for quiet rests between asks of the declared `quiet` command, in milliseconds.
 quiet_poll_ms = 15000
+# How many hours back a passed run of the whole suite on the commit leaves the gate's own suite out
+# (docs/deploy.md, 「What the deploy run does, in order」); a run begun earlier is none.
+passed_suite_hours = 24
 
 # What the deploy run says as it goes (docs/deploy.md, 「What the deploy run does, in order」): {commit} a
 # short commit, {release}, {path}, {dir} and {data} places, {unit} and {name} units, {said} and {why}
@@ -83,6 +86,11 @@ gate_failed = "the deployment of {commit} did not pass its gate, so nothing went
 # The gate's reason where its static check or its suite did not pass, {code} the exit.
 gate_check = "the static check ended with exit {code}"
 gate_suite = "the suite ended with exit {code}"
+# The gate's suite left out for a passed run of the whole suite on the commit: {id} the test run, {commit} a
+# short commit, {when} when it began, {checkout} where it ran, {on} the line below or nothing, {log} its log.
+suite_left_out = "the suite is left out: test run {id} passed the whole suite on {commit} from a clean tree, begun {when} in {checkout}{on}; its log is {log}"
+# The machine whose record holds the run, where it is not this one: {machine} its label.
+on = " on {machine}"
 flaky = "flaky: {test} ({unit}) passed only when run once more"
 backup_none = "no backup is declared, so none is taken"
 backup_unnamed = "the backup could not be named: ninety-nine backups were already taken this second; nothing was changed"

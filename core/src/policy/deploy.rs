@@ -42,6 +42,7 @@ pub struct Numbers {
   pub unit_check_ms: u64,
   pub journal_lines: usize,
   pub quiet_poll_ms: u64,
+  pub passed_suite_hours: i64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -71,6 +72,8 @@ pub struct RunWords {
   pub gate_failed: String,
   pub gate_check: String,
   pub gate_suite: String,
+  pub suite_left_out: String,
+  pub on: String,
   pub flaky: String,
   pub backup_none: String,
   pub backup_unnamed: String,

@@ -146,6 +146,22 @@ bmo-testbed suite [--since <commit>] [--again] [--json] [<word>…]
 - Exits 0 where it passed, 1 where anything failed, 75 where it was not run, 2 where its words or the
   declaration do not read.
 
+### `passed`
+
+```
+bmo-testbed passed [--commit <sha>] [--json]
+```
+
+- Answers from this machine's record (「The record」) the run of the repository's whole suite a
+  deployment's gate takes in place of its own (`docs/deploy.md`, 「What the deploy run does, in
+  order」, step 3): the newest test run of kind `suite` of the repository it is run in that is `whole`,
+  begun on the commit, the checkout's `HEAD` by default, with `clean` true, within the policy's hours,
+  where that run passed. It runs nothing and takes no turn.
+- Prints one line naming the run: its id, the commit, when it began, its checkout and its log.
+  **`--json`** prints the test run (「Members」) instead.
+- Exits 0 where such a run stands, 1 where none does, the line saying so, and 2 where its words or the
+  declaration do not read or the commit names none.
+
 ### `dependents`
 
 ```
@@ -458,6 +474,11 @@ keep (`docs/deploy.md`, 「The unit links」).
   `suite`, kind `suite`, a deployment's gate and the daily whole run among them. It is written once
   its turn has come and ended with its counts; a run ending not run from there on ends `not-run`. A run placed elsewhere is written by the
   machine it runs on.
+- **A test run carries what it ran on, read as its turn comes:** the checkout's `HEAD`, whether the
+  checkout's tracked files stood unchanged against it (`git status --porcelain --untracked-files=no`
+  answering nothing), and whether it was a run of the whole suite. A deployment's gate reads them to
+  leave its suite out (`docs/deploy.md`, 「What the deploy run does, in order」, step 3); a run written
+  before the record held them holds null, which never stands for a passed whole suite.
 - **A deployment** is written as the deploy run begins its progress record and changed with it
   (`docs/deploy.md`, 「What a deployment says of itself as it runs」), and every line the deploy run
   says is one of its log lines.
@@ -508,9 +529,14 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   `checkout`, `command` (one line), `pid`, `askedAt`, `heldAt` (null while waiting), and the booleans
   `front` and `next`, and `kept`, always false, since no place is kept for a waiter that left.
 - **Test run:** `id`, `kind` (`suite` or `command`), `checkout`, `repositoryName` (string or null),
-  `commit` (string or null), `command` (the words run, as one line), `scope` (string or null),
-  `unitName` (the unit it runs in, from `BMO_DEPLOY_UNIT`, or null), `pid`, `state`, `passedCount`,
-  `failedCount`, `skippedCount`, `logPath`, `startedAt`, `endedAt` (null while it runs).
+  `commit` (the checkout's `HEAD` as the run began, or null where git could not tell), `whole` (boolean
+  or null: true for a suite run of every unit, with no range, no word naming a path and no word for the
+  runner; false for any other run), `clean` (boolean or null: whether the checkout's tracked files stood
+  unchanged against its `HEAD` as the run began, null where git could not tell), `command` (the words
+  run, as one line), `scope` (string or null), `unitName` (the unit it runs in, from `BMO_DEPLOY_UNIT`,
+  or null), `pid`, `state`, `passedCount`, `failedCount`, `skippedCount`, `logPath`, `startedAt`,
+  `endedAt` (null while it runs). `whole` and `clean` are null for a run written before the record held
+  them.
   - Its `state` is `running`, then one of `passed`, `failed` or `not-run`; a run whose process went
     without ending it is answered `gone`.
 - **Deployment:** `id`, `repositoryName` (string or null), `unitName` (the deployment's unit, or

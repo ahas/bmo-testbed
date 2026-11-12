@@ -133,6 +133,10 @@ flowchart TD
   git directory, so every worktree of one repository shares it.
 - **One close checks at a time because a check is of what lands.** In the line each close rebases onto
   the main the close before it landed, so its check runs once, on the commit that lands.
+- **The deployment of that commit takes the close's suite as its own.** The close's whole suite is a
+  test run in the record of the machine it ran on, with the commit and whether the tree was clean as it
+  began; where it passed, the deployment's gate runs its static check and leaves its suite out
+  (`docs/deploy.md`, 「What the deploy run does, in order」, step 3), so the suite runs once per commit.
 - **A close waits its turn out** while its harness lives, and leaves the line once its harness is gone.
 - **It holds the wide lane through each part of its check** while it holds the line, and lets the
   lane go while it rebases, lands and writes down. Between the two parts a deployment waiting at the
@@ -145,7 +149,8 @@ flowchart TD
 ## A check held whole
 
 - **A deployment's check takes every lane once and holds them to its end:** from its static check's
-  first step to the end of its suite, so no other heavy command comes in between its steps.
+  first step to the end of its suite, or of the static check where its suite is left out, so no other
+  heavy command comes in between its steps.
 - **Where its suite is placed on another machine, it lets the lanes go first,** since that machine's
   own testbed has the turn there.
 - **A check that fails lets them go at once.**

@@ -312,6 +312,7 @@ pub fn main(args: impl IntoIterator<Item = OsString>) -> u8 {
     Verb::Classify(args) => classify(args),
     Verb::Suite(args) => suite::suite(args),
     Verb::Dependents(args) => dependents::dependents(&args),
+    Verb::Passed(args) => suite::passed(&args),
     Verb::Count(args) => run_count(args),
     Verb::Log(args) => run_log(args),
     Verb::Template(args) => suite::template(&args),

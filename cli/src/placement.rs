@@ -512,10 +512,8 @@ impl MachinePlacement {
     Ok(ReadyBench { path, checkouts })
   }
 
-  /// The words run in the bench through the `placed` verb, the output and the result this process's; the
-  /// code it ended with, 75 where the connection broke.
-  pub fn run(&self, bench: &ReadyBench, words: &[String], setup: bool) -> u8 {
-    let said = &LANES.placed;
+  // The one `ssh` command running the words in the bench through the `placed` verb.
+  fn placed_line(&self, bench: &ReadyBench, words: &[String], setup: bool) -> String {
     let env = process_env();
     // The caller's place in the line goes with it, so a deployment stands at the front there as it does here.
     let place = [(FRONT_VARIABLE, stands_at_front(&env)), (NEXT_VARIABLE, stands_next(&env))]
@@ -543,6 +541,15 @@ impl MachinePlacement {
       line.push_str(&if word == &self.settings.testbed { far_path(word) } else { quoted(word) });
     }
 
+    line
+  }
+
+  /// The words run in the bench through the `placed` verb, the output and the result this process's; the
+  /// code it ended with, 75 where the connection broke.
+  pub fn run(&self, bench: &ReadyBench, words: &[String], setup: bool) -> u8 {
+    let said = &LANES.placed;
+    let line = self.placed_line(bench, words, setup);
+
     eprintln!(
       "{}",
       fill_marks(&said.running, &[("machine", self.settings.label()), ("bench", &bench.path)])
@@ -555,6 +562,20 @@ impl MachinePlacement {
       Some(255) | None => dropped(self.settings.label(), &said.broken),
       Some(code) => u8::try_from(code).unwrap_or(1),
     }
+  }
+
+  /// The words run in the bench through the `placed` verb with no setup, what they say on standard error this
+  /// process's; what they printed on standard output where they ended 0, none otherwise.
+  pub fn read(&self, bench: &ReadyBench, words: &[String]) -> Option<String> {
+    let done = self
+      .ssh()
+      .arg(self.placed_line(bench, words, false))
+      .stdout(Stdio::piped())
+      .stderr(Stdio::inherit())
+      .output()
+      .ok()?;
+
+    done.status.success().then(|| String::from_utf8_lossy(&done.stdout).into_owned())
   }
 
   /// The binaries read back into a directory here from the bench's own directory under the machine's shared

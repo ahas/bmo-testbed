@@ -9,11 +9,15 @@ use bmo_testbed_core::declaration::{Repository, root_of};
 use bmo_testbed_core::events::Hook;
 use bmo_testbed_core::placement::{PlaceAsk, runs_here};
 use bmo_testbed_core::policy::count::COUNT;
+use bmo_testbed_core::policy::deploy::DEPLOY;
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::suite::SUITE;
 use bmo_testbed_core::policy::verbs::VERBS;
+use bmo_testbed_core::queue::now_ms;
 use bmo_testbed_core::turn::{Lane, process_env};
 use bmo_testbed_core::verb::{REFUSED_EXIT_CODE, data_root};
+use bmo_testbed_deploy::deployment::{iso, passed_suite};
+use bmo_testbed_deploy::tree::short;
 use bmo_testbed_suite::count::{GitRange, count_range, tree_count};
 use bmo_testbed_suite::log::{
   failed_files_of, failed_tests_of, failures_of, tally_of, unstarted_of, verdict_of,
@@ -21,13 +25,14 @@ use bmo_testbed_suite::log::{
 use bmo_testbed_suite::once_more::run_judged;
 use bmo_testbed_suite::run::{SuiteAsk, SuiteWords, ask_of, run, verdict_line};
 use bmo_testbed_suite::template::{TemplateVerb, template as template_on};
+use bmo_testbed_suite::workspace::git_lines;
 use serde_json::json;
 
 use crate::own::run_own;
 use crate::placement_of;
 use crate::recorded::{command_run, suite_record};
 use crate::said::Said;
-use crate::words::{BINARY, CountArgs, LogArgs, SuiteArgs, TemplateArgs, TemplateWord};
+use crate::words::{BINARY, CountArgs, LogArgs, PassedArgs, SuiteArgs, TemplateArgs, TemplateWord};
 
 /// The repository the verb runs in, or the code it ends with where its declaration does not read.
 pub fn repository() -> Result<Repository, u8> {
@@ -93,6 +98,55 @@ pub fn suite(args: SuiteArgs) -> u8 {
   }
 
   ended.code
+}
+
+/// `passed`: the passed run of the repository's whole suite on the commit, from a clean tree within the
+/// policy's hours, that this machine's record holds; 0 where it stands, 1 where none does.
+pub fn passed(args: &PassedArgs) -> u8 {
+  let said = &VERBS.passed;
+  let repo = match repository() {
+    Ok(repo) => repo,
+    Err(code) => return code,
+  };
+  let named = args.commit.as_deref().unwrap_or("HEAD");
+  let Some(commit) =
+    git_lines(&repo.root, &["rev-parse", "--verify", "--quiet", &format!("{named}^{{commit}}")])
+      .ok()
+      .and_then(|lines| lines.into_iter().next())
+  else {
+    eprintln!("{}", fill_marks(&said.no_commit, &[("named", named)]));
+    return REFUSED_EXIT_CODE;
+  };
+  let Some(run) = passed_suite(&data_root(), &repo.name(), &commit, now_ms()) else {
+    println!(
+      "{}",
+      fill_marks(
+        &said.none,
+        &[("commit", &short(&commit)), ("hours", &DEPLOY.numbers.passed_suite_hours.to_string())]
+      )
+    );
+    return 1;
+  };
+
+  if args.json {
+    println!("{}", serde_json::to_string(&run).unwrap_or_default());
+  } else {
+    println!(
+      "{}",
+      fill_marks(
+        &said.found,
+        &[
+          ("id", &run.id.to_string()),
+          ("commit", &short(&commit)),
+          ("when", &iso(run.started_at)),
+          ("checkout", &run.checkout),
+          ("log", &run.log_path),
+        ],
+      )
+    );
+  }
+
+  0
 }
 
 /// `count`: the tests the checkout holds, and with a range the tests it removed, each accounted for or not.

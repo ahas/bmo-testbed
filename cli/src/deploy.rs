@@ -5,6 +5,7 @@
 use std::path::Path;
 use std::time::Instant;
 
+use bmo_testbed_client::{TestRun, TestRunState};
 use bmo_testbed_core::declaration::Repository;
 use bmo_testbed_core::events::{Event, Hook};
 use bmo_testbed_core::policy::deploy::DEPLOY;
@@ -16,7 +17,7 @@ use bmo_testbed_core::queue::{LockWait, now_ms, take_lock};
 use bmo_testbed_core::turn::{Env, FRONT_VARIABLE, NOT_RUN_EXIT_CODE, harness_pid, process_env};
 use bmo_testbed_core::verb::{REFUSED_EXIT_CODE, data_root};
 use bmo_testbed_deploy::deployment::{
-  BuildAsk, DeployAsk, DeployPlaces, Gate, GateAsk, GateOutcome, GateStep, Machine, Passed,
+  BuildAsk, DeployAsk, DeployPlaces, Gate, GateAsk, GateOutcome, GateStep, Machine, Passed, SuitePassed,
   deploy as deploy_run,
 };
 use bmo_testbed_deploy::progress::DEPLOY_PROGRESS_VARIABLE;
@@ -37,7 +38,7 @@ use crate::suite::repository;
 use crate::words::{BINARY, DeployFlags};
 
 /// The gate a deployment passes: the declared static check over the range from what was live, then the
-/// suite over the same range, what failed run once more.
+/// suite over the same range, what failed run once more, unless the deployment left the suite out.
 pub struct SuiteGate<'a> {
   pub repo: &'a Repository,
   pub hook: &'a Hook,
@@ -65,6 +66,14 @@ impl Gate for SuiteGate<'_> {
       return GateOutcome {
         passed: false,
         reason: line,
+        steps,
+        ..GateOutcome::default()
+      };
+    }
+
+    if !ask.suite {
+      return GateOutcome {
+        passed: true,
         steps,
         ..GateOutcome::default()
       };
@@ -100,6 +109,7 @@ impl Gate for SuiteGate<'_> {
       reason: fill_marks(&DEPLOY.run.gate_suite, &[("code", &code.to_string())]),
       flaky: flaky.tests.iter().map(|one| (one.test.clone(), one.file.clone())).collect(),
       steps,
+      suite_passed: None,
     }
   }
 
@@ -124,8 +134,9 @@ impl Gate for SuiteGate<'_> {
 
 /// The gate passed on the placed machine the settings name (docs/deploy.md, 「Where a deployment runs」): the
 /// commit benched there with the checkout's outside trees, the static check and the suite run there as that
-/// machine's own verbs, and the Cargo release build run there and read back. The gate here stands in where
-/// the machine cannot be reached.
+/// machine's own verbs, the suite left out where that machine's record holds a passed run of the whole suite
+/// on the commit, and the Cargo release build run there and read back. The gate here stands in where the
+/// machine cannot be reached.
 pub struct PlacedGate<'a> {
   pub machine: MachinePlacement,
   pub here: &'a dyn Gate,
@@ -149,6 +160,29 @@ impl PlacedGate<'_> {
       waited_seconds: 0.0,
       ran_seconds: started.elapsed().as_secs_f64(),
     }
+  }
+
+  // The passed run of the whole suite on the commit that the machine's own record holds, asked of its
+  // `passed` verb in the bench; none where it answers none, answers a run that is not one, or does not answer
+  // at all.
+  fn passed_there(&self, bench: &ReadyBench, commit: &str) -> Option<SuitePassed> {
+    let words = [
+      self.testbed(),
+      "passed".to_owned(),
+      "--commit".to_owned(),
+      commit.to_owned(),
+      "--json".to_owned(),
+    ];
+    let run: TestRun = serde_json::from_str(self.machine.read(bench, &words)?.trim()).ok()?;
+    let taken = run.commit.as_deref() == Some(commit)
+      && run.whole == Some(true)
+      && run.clean == Some(true)
+      && run.state == TestRunState::Passed;
+
+    taken.then(|| SuitePassed {
+      run,
+      machine: Some(self.machine.settings.label().to_owned()),
+    })
   }
 }
 
@@ -184,6 +218,19 @@ impl Gate for PlacedGate<'_> {
         passed: false,
         reason: fill_marks(&DEPLOY.run.gate_check, &[("code", &steps[0].code.to_string())]),
         steps,
+        ..GateOutcome::default()
+      };
+    }
+
+    // Where the deploying machine's record held no passed run of the whole suite on the commit, the placed
+    // machine's own record is asked, since a suite placed there is written there alone.
+    let suite_passed = if ask.suite { self.passed_there(&bench, ask.commit) } else { None };
+
+    if !ask.suite || suite_passed.is_some() {
+      return GateOutcome {
+        passed: true,
+        steps,
+        suite_passed,
         ..GateOutcome::default()
       };
     }

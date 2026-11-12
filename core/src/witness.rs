@@ -16,6 +16,9 @@ pub struct RunBegun<'a> {
   pub started_at: i64,
   /// The environment the run was started in, which names the caller's scope and the unit it runs in.
   pub env: &'a Env,
+  /// Whether it runs the whole suite: every unit, with no range, no word naming a path and no word for the
+  /// runner.
+  pub whole: bool,
 }
 
 /// What a test run came to.

@@ -8,19 +8,19 @@ use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use bmo_testbed_client::{DeploymentState, PageQuery, RestartsQuery};
+use bmo_testbed_client::{DeploymentState, PageQuery, RestartsQuery, TestRun, TestRunKind, TestRunState};
 use bmo_testbed_core::declaration::Repository;
 use bmo_testbed_core::events::Hook;
 use bmo_testbed_core::turn::Env;
 use bmo_testbed_deploy::deployment::{
   BuildAsk, DeployAsk, DeployHands, DeployPlaces, Gate, GateAsk, GateOutcome, Machine, StepAsk, StepRan,
-  deploy, major_change, release_build, version_major, workspace_binaries,
+  SuitePassed, deploy, major_change, release_build, version_major, workspace_binaries,
 };
 use bmo_testbed_deploy::progress::{Outcome, read_deploy_progress};
 use bmo_testbed_deploy::release::{LiveProcess, release_dir};
 use bmo_testbed_deploy::run::{Ran, run_quiet};
 use bmo_testbed_deploy::tree::read_deploy_record;
-use bmo_testbed_record::Record;
+use bmo_testbed_record::{Record, TestRunEnd};
 use serde_json::Value;
 
 use crate::stand::must;
@@ -115,6 +115,26 @@ impl Gate for Told {
       reason: if self.0 { String::new() } else { "the suite failed: a.test.ts".to_owned() },
       flaky: if self.0 { vec![("a test".to_owned(), "a.test.ts".to_owned())] } else { Vec::new() },
       steps: Vec::new(),
+      suite_passed: None,
+    }
+  }
+}
+
+// A gate that passes, keeping whether each ask ran its suite, and answering the passed run it is handed as
+// one its own machine's record held.
+#[derive(Default)]
+struct Asked {
+  suites: RefCell<Vec<bool>>,
+  passed_there: Option<SuitePassed>,
+}
+
+impl Gate for Asked {
+  fn pass(&self, ask: &GateAsk<'_>) -> GateOutcome {
+    self.suites.borrow_mut().push(ask.suite);
+    GateOutcome {
+      passed: true,
+      suite_passed: self.passed_there.clone(),
+      ..GateOutcome::default()
     }
   }
 }
@@ -848,4 +868,201 @@ fn a_major_change_runs_the_dependents_and_a_minor_one_does_not() {
   let counted = Counted::default();
   assert_eq!(scene.run_with(&DeployAsk::default(), &counted, &hands, &scene.env()), 0);
   assert_eq!(*counted.0.borrow(), 1);
+}
+
+// What a run of the suite written into the scene's record stood on, and how it ended.
+struct Seeded<'a> {
+  commit: &'a str,
+  whole: bool,
+  clean: bool,
+  state: TestRunState,
+  hours_ago: i64,
+}
+
+impl Scene {
+  // A test run of the repository's suite written into the record under the scene's data root; its id.
+  fn seed(&self, seeded: &Seeded<'_>) -> i64 {
+    let mut record = Record::open(&self.at("testbed-data")).unwrap();
+    let started_at = Machine.now_ms() - seeded.hours_ago * 60 * 60 * 1000;
+    let begun = record
+      .begin_test_run(&TestRun {
+        id: 0,
+        kind: TestRunKind::Suite,
+        checkout: "/elsewhere/checkout".to_owned(),
+        repository_name: Some(Repository::read(&self.source).unwrap().name()),
+        commit: Some(seeded.commit.to_owned()),
+        whole: Some(seeded.whole),
+        clean: Some(seeded.clean),
+        command: "bmo-testbed suite".to_owned(),
+        scope: None,
+        unit_name: None,
+        pid: i64::from(std::process::id()),
+        state: TestRunState::Running,
+        passed_count: 0,
+        failed_count: 0,
+        skipped_count: 0,
+        log_path: "/logs/suite.log".to_owned(),
+        started_at,
+        ended_at: None,
+      })
+      .unwrap();
+    let end = TestRunEnd {
+      state: seeded.state,
+      passed_count: 3,
+      failed_count: 0,
+      skipped_count: 0,
+      ended_at: started_at + 1000,
+    };
+
+    record.end_test_run(begun.id, &end).unwrap();
+    begun.id
+  }
+
+  // The deployment run against the scene's record with a gate keeping whether it was asked for its suite.
+  fn run_asked(&self, gate: &Asked, hands: &Hands) -> u8 {
+    let ask = DeployAsk {
+      record: Some(self.at("testbed-data")),
+      ..DeployAsk::default()
+    };
+
+    self.run_with(&ask, gate, hands, &self.env())
+  }
+}
+
+// "a passed run of the whole suite on the commit, from a clean tree, leaves the gate's suite out and the
+// deployment says so, naming the run"
+#[test]
+fn a_passed_whole_suite_on_the_commit_from_a_clean_tree_leaves_the_gate_suite_out() {
+  let scene = Scene::new();
+  let hands = Hands::default();
+  let head = must(&["rev-parse", "HEAD"], &scene.source);
+  let id = scene.seed(&Seeded {
+    commit: &head,
+    whole: true,
+    clean: true,
+    state: TestRunState::Passed,
+    hours_ago: 1,
+  });
+  let gate = Asked::default();
+  let code = scene.run_asked(&gate, &hands);
+
+  assert_eq!(code, 0, "{}", said(&hands));
+  assert_eq!(*gate.suites.borrow(), [false], "{}", said(&hands));
+  assert!(
+    said(&hands).contains(&format!(
+      "the suite is left out: test run {id} passed the whole suite on {}",
+      &head[..12]
+    )),
+    "{}",
+    said(&hands)
+  );
+  assert!(
+    said(&hands).contains("in /elsewhere/checkout; its log is /logs/suite.log"),
+    "{}",
+    said(&hands)
+  );
+}
+
+// "anything less certain runs the suite: a dirty tree, a failed run, another commit, an old run, a run of
+// part of the suite"
+#[test]
+fn a_dirty_failed_other_old_or_partial_run_leaves_the_gate_suite_in() {
+  const OTHER: &str = "0123456789abcdef0123456789abcdef01234567";
+  // Each case: the commit the run stood on, the scene's own where none is named, whether it was whole and
+  // clean, how it ended, and how many hours ago it began.
+  let cases = [
+    ("a dirty tree", None, true, false, TestRunState::Passed, 1),
+    ("a failed run", None, true, true, TestRunState::Failed, 1),
+    ("another commit", Some(OTHER), true, true, TestRunState::Passed, 1),
+    ("an old run", None, true, true, TestRunState::Passed, 25),
+    ("part of the suite", None, false, true, TestRunState::Passed, 1),
+  ];
+
+  for (case, commit, whole, clean, state, hours_ago) in cases {
+    let scene = Scene::new();
+    let hands = Hands::default();
+    let head = must(&["rev-parse", "HEAD"], &scene.source);
+
+    scene.seed(&Seeded {
+      commit: commit.unwrap_or(&head),
+      whole,
+      clean,
+      state,
+      hours_ago,
+    });
+
+    let gate = Asked::default();
+    let code = scene.run_asked(&gate, &hands);
+
+    assert_eq!(code, 0, "{case}: {}", said(&hands));
+    assert_eq!(*gate.suites.borrow(), [true], "{case}: {}", said(&hands));
+    assert!(!said(&hands).contains("the suite is left out"), "{case}: {}", said(&hands));
+  }
+}
+
+// "a newer run of the whole suite on the commit that failed outweighs an older one that passed"
+#[test]
+fn a_newer_failed_whole_suite_on_the_commit_leaves_the_gate_suite_in() {
+  let scene = Scene::new();
+  let hands = Hands::default();
+  let head = must(&["rev-parse", "HEAD"], &scene.source);
+
+  for state in [TestRunState::Passed, TestRunState::Failed] {
+    scene.seed(&Seeded {
+      commit: &head,
+      whole: true,
+      clean: true,
+      state,
+      hours_ago: 1,
+    });
+  }
+
+  let gate = Asked::default();
+
+  assert_eq!(scene.run_asked(&gate, &hands), 0, "{}", said(&hands));
+  assert_eq!(*gate.suites.borrow(), [true], "{}", said(&hands));
+}
+
+// "a passed run the gate's own machine's record holds is named with that machine"
+#[test]
+fn a_passed_run_the_gate_found_on_its_machine_is_named_with_the_machine() {
+  let scene = Scene::new();
+  let hands = Hands::default();
+  let head = must(&["rev-parse", "HEAD"], &scene.source);
+  let found = TestRun {
+    id: 41,
+    kind: TestRunKind::Suite,
+    checkout: "/bench/checkout".to_owned(),
+    repository_name: Some("sample".to_owned()),
+    commit: Some(head.clone()),
+    whole: Some(true),
+    clean: Some(true),
+    command: "bmo-testbed suite".to_owned(),
+    scope: None,
+    unit_name: None,
+    pid: 1,
+    state: TestRunState::Passed,
+    passed_count: 3,
+    failed_count: 0,
+    skipped_count: 0,
+    log_path: "/far/suite.log".to_owned(),
+    started_at: 0,
+    ended_at: Some(1),
+  };
+  let gate = Asked {
+    passed_there: Some(SuitePassed {
+      run: found,
+      machine: Some("the-placed-machine".to_owned()),
+    }),
+    ..Asked::default()
+  };
+
+  assert_eq!(scene.run_asked(&gate, &hands), 0, "{}", said(&hands));
+  assert_eq!(*gate.suites.borrow(), [true], "{}", said(&hands));
+  assert!(said(&hands).contains("test run 41 passed the whole suite"), "{}", said(&hands));
+  assert!(
+    said(&hands).contains("in /bench/checkout on the-placed-machine; its log is /far/suite.log"),
+    "{}",
+    said(&hands)
+  );
 }
