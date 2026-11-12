@@ -19,7 +19,7 @@ use regex::Regex;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
-use crate::crates::{cargo_target_root, checkout_target_dir, resolved, workspace_crates};
+use crate::crates::{checkout_target_dir, resolved, workspace_crates};
 
 /// The message format a build that is swept asks Cargo for: its JSON on standard output, its diagnostics on
 /// standard error as a person reads them.
@@ -51,7 +51,8 @@ pub fn unit_hash(name: &str) -> Option<&str> {
   PATTERN.captures(name).and_then(|found| found.get(1)).map(|hash| hash.as_str())
 }
 
-/// Where a checkout's builds stand: the shared build directory and the checkout's own target directory.
+/// Where a checkout's builds stand: its build directory and its target directory, one directory of its own under
+/// the build root.
 #[derive(Clone, Debug)]
 pub struct Builds {
   pub root: PathBuf,
@@ -64,7 +65,7 @@ impl Builds {
   pub fn of(root: &Path) -> Self {
     Self {
       root: root.to_path_buf(),
-      build_root: cargo_target_root(),
+      build_root: checkout_target_dir(root),
       target_dir: checkout_target_dir(root),
     }
   }

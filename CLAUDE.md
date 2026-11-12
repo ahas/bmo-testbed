@@ -46,10 +46,11 @@ These rules hold every change to this repository.
 
 ## Building
 
-- **Run Cargo only through `bmo-testbed cargo`,** never plain `cargo`. The verb builds in the one
-  shared build directory (`docs/deploy.md`, 「The Cargo build directory」; `docs/checks.md`), so
-  dependencies compile once across every checkout and scratch clone. A plain `cargo` lands in the
-  checkout's own `target/`, which shares nothing and which the prune takes away.
+- **Run Cargo only through `bmo-testbed cargo`,** never plain `cargo`. The verb builds in the
+  checkout's own directory under the one build root (`docs/deploy.md`, 「The Cargo build directory」;
+  `docs/checks.md`), which the prune keeps in bounds and where builds of different checkouts run side by
+  side. A plain
+  `cargo` lands in the checkout's own `target/`, outside the build root, which the prune takes away.
 
 ## The stages of a change
 

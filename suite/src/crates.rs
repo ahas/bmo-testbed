@@ -205,9 +205,9 @@ fn compiler_wrapper(root: &Path, target: &Path) -> PathBuf {
   wrapper
 }
 
-/// The environment Cargo builds in for the checkout at `root`: the shared build directory, the checkout's
-/// own target directory and workspace wrapper, and the toolchain's homes. The checkout's path is written
-/// into its target directory, which the prune reads.
+/// The environment Cargo builds in for the checkout at `root`: the checkout's own directory under the build root
+/// as its build and target directory at once, its workspace wrapper, and the toolchain's homes. The checkout's
+/// path is written into its directory, which the prune reads.
 pub fn cargo_environment(root: &Path) -> Vec<(String, String)> {
   let target = checkout_target_dir(root);
   let checkout = resolved(root).to_string_lossy().into_owned();
@@ -219,8 +219,10 @@ pub fn cargo_environment(root: &Path) -> Vec<(String, String)> {
 
   let wrapper = compiler_wrapper(root, &target);
 
+  // Cargo locks a build directory for a whole build, so each checkout builds in its own and the checkouts'
+  // builds run side by side.
   let mut env = vec![
-    ("CARGO_BUILD_BUILD_DIR".to_owned(), cargo_target_root().to_string_lossy().into_owned()),
+    ("CARGO_BUILD_BUILD_DIR".to_owned(), target.to_string_lossy().into_owned()),
     ("CARGO_TARGET_DIR".to_owned(), target.to_string_lossy().into_owned()),
     ("RUSTC_WORKSPACE_WRAPPER".to_owned(), wrapper.to_string_lossy().into_owned()),
   ];

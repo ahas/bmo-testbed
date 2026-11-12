@@ -151,7 +151,7 @@
   one (`docs/boundary.md`, 「Placement」, 「The placed machine」). The deployment benches the commit
   there, the checkout's outside trees as they stand with it, and sets the bench up with the declared
   setup steps; the static check (`check static`, no test among it) and the suite then run there, each as
-  that machine's own testbed verb in its own turn, and the Cargo release build runs there in that machine's shared Cargo build directory,
+  that machine's own testbed verb in its own turn, and the Cargo release build runs there in that machine's Cargo build root,
   from which the deployment reads the built binaries back over `rsync` into its own build directory
   before it places them. The declared `[build]` steps, which write into the release and read the data
   root, run where the deployment runs, as does everything after the build. A placed machine that
@@ -558,10 +558,12 @@ flowchart TD
 
 ## The Cargo build directory
 
-- **One build directory is shared** by every checkout of every repository that builds through the Cargo
-  verb, `~/.local/share/bmo/cargo-target` unless `BMO_CARGO_TARGET_DIR` names another, so dependencies
-  compile once rather than once per checkout. Each checkout's own crates build under names of their
-  own, and its target directory under `checkouts/` holds what its builds hand back.
+- **One build root holds every checkout's builds:** `~/.local/share/bmo/cargo-target` unless
+  `BMO_CARGO_TARGET_DIR` names another. Each checkout that builds through the Cargo verb builds in a
+  directory of its own under its `checkouts/`, its build directory and its target directory at once.
+  Cargo holds one lock over a build directory for the whole of a build, so a directory of its own is
+  what lets the checkouts' builds run side by side, each in its own seat. Each checkout compiles its
+  dependencies once in its own directory, and builds after its first keep them.
 - **Every build goes through the Cargo verb,** which sets the build directory for whatever checkout it
   runs in, a scratch clone as much as a repository of the umbrella. A build typed outside the verb,
   plain `cargo`, lands in the checkout's own `target/` and shares nothing; such a `target/` is a
@@ -574,23 +576,25 @@ flowchart TD
   holds it at that moment, leaving what it found to the next build otherwise; it stands in no queue of
   its own, and never fails its build.
 - **The prune,** the `prune` verb, run every six hours by `bmo-cargo-prune.timer`, holding Cargo's own
-  build lock in every profile directory and standing at the front of each lock's line, never in the
-  testbed's, removes from the shared directory:
-  - a unit of a checkout's own crates no live checkout's record names, built more than half a day ago;
-  - any other unit no build has read for two days, or `--older-than` days, never a day or less;
-  - incremental state unchanged for three hours, or `--incremental-older-than` hours;
-  - the target directory of a checkout that no longer exists;
+  build lock in every profile directory of the build root and of each checkout's directory, and standing
+  at the front of each lock's line, never in the testbed's, removes:
+  - from a profile directory standing at the build root itself, a unit of a checkout's own crates no live
+    checkout's record names, built more than half a day ago, and any other unit no build has read for
+    two days, or `--older-than` days, never a day or less;
+  - incremental state unchanged for three hours, or `--incremental-older-than` hours, at the build root
+    and in each live checkout's directory, whose compiled units its own outputs stand on and stay;
+  - the directory of a checkout that no longer exists;
   - the whole `target/` directory of a live checkout, a stray a build typed outside the Cargo verb
-    left, where it stands apart from the shared directory and no Cargo process is working in it;
+    left, where it stands apart from the build root and no Cargo process is working in it;
   - never a unit a live checkout's current outputs or record stand on, nor anything Cargo does not name
-    by a unit hash, nor a `target/` a Cargo process is working in or that is the shared directory
+    by a unit hash, nor a `target/` a Cargo process is working in or that is the build root
     itself.
 - **The same prune takes the deployments' build trees' target directories** that have outlived their
   span (「The releases」). It finds the deploy roots through the machine's registry of checkouts
   (`docs/suite.md`, 「The dependents of a major change」): each checkout's declaration names its deploy
   root, and a deploy root several checkouts name is read once. A registry that does not read is said and
   passed over; a checkout whose declaration does not read or deploys nothing names no deploy root. The
-  removal is the guarded one (「What it refuses」), and `--all` and the spans of the shared directory do not
+  removal is the guarded one (「What it refuses」), and `--all` and the spans of the build root do not
   change it.
 - **A lock a build holds is waited for** until that build lets go, however long it takes, the prune saying
   every thirty seconds which profile directory it waits on.

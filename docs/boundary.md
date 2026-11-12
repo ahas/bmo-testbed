@@ -256,7 +256,7 @@ bmo-testbed imports [<file…>] [--fix]
 bmo-testbed cargo <cargo arguments…>
 ```
 
-- Runs Cargo through the shared build directory with the checkout's own crates apart in it, in the wide
+- Runs Cargo in the checkout's own directory under the build root, in the wide
   lane where the command compiles, run again where the kernel killed it for want of memory, then
   removes what the build superseded. Exits with Cargo's own code, 75 where its harness went away
   before the turn came, and 124 where, holding the turn with its standard output and error both files,

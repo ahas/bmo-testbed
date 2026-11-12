@@ -508,6 +508,7 @@ pub fn plan_prune(root: &Path, older_than_ms: i64, now: i64, incremental_older_t
   let mut plan = PrunePlan::default();
   let mut live_inodes = HashSet::new();
   let mut recorded = HashSet::new();
+  let mut live_checkouts = Vec::new();
   let mut hold_links = |dir: &Path| {
     walk(dir, &mut |_, held| {
       if held.is_file() {
@@ -527,6 +528,7 @@ pub fn plan_prune(root: &Path, older_than_ms: i64, now: i64, incremental_older_t
       plan.checkouts.push(dir);
     } else {
       hold_links(&dir);
+      live_checkouts.push(dir.clone());
 
       // A record of an earlier form names its units with no places; they are as much what it stands on.
       let read = read_record(&dir.join(BUILT_UNITS_NAME));
@@ -544,6 +546,14 @@ pub fn plan_prune(root: &Path, older_than_ms: i64, now: i64, incremental_older_t
 
   for profile in profile_dirs(root) {
     plan_profile(&profile, cutoff, now - incremental_older_than_ms, &standing, &mut plan);
+  }
+
+  // A live checkout builds in its own directory, whose every file its outputs stand on, so what goes there is
+  // its stale incremental state alone.
+  for checkout in &live_checkouts {
+    for profile in profile_dirs(checkout) {
+      plan_profile(&profile, cutoff, now - incremental_older_than_ms, &standing, &mut plan);
+    }
   }
 
   // Every build belongs to the shared directory, so a live checkout's own `target/` is a stray the prune takes
@@ -654,8 +664,11 @@ pub fn directory_bytes(root: &Path) -> u64 {
 /// held, `waiting` is told the profile directory once every `notice_seconds`.
 pub fn take_prune_locks(root: &Path, notice_seconds: f64, waiting: &dyn Fn(&Path)) -> Vec<HeldLock> {
   let mut held = Vec::new();
+  // Each checkout builds in a directory of its own, so its profile directories carry locks of their own.
+  let checkouts = entries_of(&root.join("checkouts")).into_iter().filter(is_dir).map(|entry| entry.path());
+  let profiles = profile_dirs(root).into_iter().chain(checkouts.flat_map(|dir| profile_dirs(&dir)));
 
-  for profile in profile_dirs(root) {
+  for profile in profiles {
     let path = profile.join(CARGO_BUILD_LOCK_NAME);
     let mut wait_on = |_: Option<&str>| -> Option<i64> {
       waiting(&profile);
