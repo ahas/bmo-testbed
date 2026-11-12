@@ -98,13 +98,18 @@
 
 ## Every unit runs to its end
 
-- **Nothing of the suite's cuts a unit or a test.** A file, a crate's tests, a project's check and a
-  declared package check each run until they end, however long that takes, and every unit is started.
+- **Nothing of the suite's cuts a unit or a test for its length.** A file, a crate's tests, a project's
+  check and a declared package check each run until they end, however long that takes, and every unit is
+  started.
 - **A runner's own per-test limit is lifted** where the runner keeps one by default: `bun test` is handed
   `--timeout 0`. A caller that names a limit in its words keeps its own, and a limit a test sets for itself
   is the test's.
-- **A unit that does not end holds the run open** until someone stops it; the run says nothing of its own
-  about it, and the unit's process group is the one to stop.
+- **A unit that writes nothing for the silence limit is ended as hung** (`docs/testbed.md`, 「A holder
+  whose command falls silent lets go」): the run watches the pipes it reads the unit's output through, ends
+  the unit's process group once they stay silent, and the unit fails with exit code 124, the line naming it
+  in its output. While a unit writes, the run touches the file its own holder handed it in
+  `BMO_TESTBED_HEARD`, since the unit's output reaches the run's own only once the unit ends. A unit that
+  writes but never ends holds the run open until someone stops it.
 - **A unit's output closes once it has ended:** whatever it left standing in its process group is killed
   at once, and so is any process outside the group still holding its output, so the run reads the output
   whole and goes on. A process the run started itself is never taken for such a holder: one the run is

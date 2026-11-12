@@ -11,6 +11,7 @@ use bmo_testbed_core::memory::{MachineHands, MemoryLimits, RunEnd, run_in_turn};
 use bmo_testbed_core::policy::deploy_steps::DeployStep;
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::static_check::STATIC_CHECK;
+use bmo_testbed_core::silence::{Output, Silence, Watch};
 use bmo_testbed_core::turn::{
   Lane, NOT_RUN_EXIT_CODE, TURN_TIMES_VARIABLE, process_env, read_turn_times, times_words,
 };
@@ -288,18 +289,22 @@ fn timed(run: impl FnOnce(&Path) -> (i32, String)) -> TimedRun {
   }
 }
 
-// A command started with its output taken, `times` the file its heavy commands write their waits into.
+// A command started with its output taken, `times` the file its heavy commands write their waits into, and
+// ended as hung where it is watched for `silence` and writes nothing for it.
 fn output_of(
   command: &[String],
   cwd: &Path,
   env: &[(String, String)],
   times: &Path,
   held: Option<(&'static str, String)>,
+  silence: Option<Silence>,
 ) -> (RunEnd, String) {
   // The output goes to files of the run's own and never a pipe: a process the command leaves running keeps
   // a pipe open, and a reader of it would wait for that process long after the command ended.
   let said = times.with_extension("out");
   let failed = times.with_extension("err");
+  let watched = if silence.is_some() { vec![said.clone(), failed.clone()] } else { Vec::new() };
+  let watch = Watch::new(Output::Files(watched), silence.unwrap_or_default());
   let done = std::fs::File::create(&said)
     .and_then(|out| Ok((out, std::fs::File::create(&failed)?)))
     .and_then(|(out, errors)| {
@@ -308,20 +313,27 @@ fn output_of(
         .current_dir(cwd)
         .envs(env.iter().map(|(name, value)| (name, value)))
         .envs(held)
+        .envs(watch.variable())
         .env(TURN_TIMES_VARIABLE, times)
         .stdin(Stdio::null())
         .stdout(out)
         .stderr(errors)
-        .status()
-    });
+        .spawn()
+    })
+    .map(|mut child| watch.wait(&mut child, &command.join(" ")));
   let taken = |path: &Path| String::from_utf8_lossy(&std::fs::read(path).unwrap_or_default()).into_owned();
-  let output = format!("{}{}", taken(&said), taken(&failed));
+  let mut output = format!("{}{}", taken(&said), taken(&failed));
 
   let _ = std::fs::remove_file(&said);
   let _ = std::fs::remove_file(&failed);
 
+  if let Some(hung) = done.as_ref().ok().and_then(|waited| waited.hung.as_ref()) {
+    output.push_str(hung);
+    output.push('\n');
+  }
+
   match done {
-    Ok(status) => (RunEnd::from(status), output),
+    Ok(waited) => (RunEnd::from(&waited), output),
     Err(why) => (
       RunEnd {
         code: Some(127),
@@ -332,11 +344,17 @@ fn output_of(
   }
 }
 
-/// A command run to its end where it stands with its output taken, each heavy command under it writing its
-/// wait for the machine's turn into a file of the run's own.
-pub fn run_timed(command: &[String], cwd: &Path, env: &[(String, String)]) -> TimedRun {
+/// A command run to its end where it stands with its output taken, ended as hung where it is watched for
+/// `silence` and writes nothing for it, each heavy command under it writing its wait for the machine's turn
+/// into a file of the run's own.
+pub fn run_timed(
+  command: &[String],
+  cwd: &Path,
+  env: &[(String, String)],
+  silence: Option<Silence>,
+) -> TimedRun {
   timed(|times| {
-    let (end, output) = output_of(command, cwd, env, times, None);
+    let (end, output) = output_of(command, cwd, env, times, None, silence);
 
     (i32::from(end.exit_code()), output)
   })
@@ -446,15 +464,17 @@ pub fn run_static_check(
 }
 
 /// A step run in the tree, its heavy commands' waits read back as the step's wait: where it stands, or in
-/// its lane's turn, run again after an out-of-memory kill where it asks to be.
+/// its lane's turn, watched for silence and run again after an out-of-memory kill where it asks to be.
 pub fn spawn_step(root: &Path, step: &CheckStep) -> TimedRun {
   let cwd = root.join(&step.dir);
-  let Some(lane) = step.lane else { return run_timed(&step.command, &cwd, &step.env) };
+  let Some(lane) = step.lane else {
+    return run_timed(&step.command, &cwd, &step.env, None);
+  };
 
   timed(|times| {
     let mut output = String::new();
     let mut start = |held: Option<(&'static str, String)>| {
-      let (end, said) = output_of(&step.command, &cwd, &step.env, times, held);
+      let (end, said) = output_of(&step.command, &cwd, &step.env, times, held, Some(Silence::default()));
 
       output.push_str(&said);
       end

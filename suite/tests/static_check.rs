@@ -4,11 +4,13 @@
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::time::Duration;
 
 use bmo_testbed_core::declaration::{Declaration, Repository};
 use bmo_testbed_core::policy::deploy_steps::DeployStep;
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::static_check::STATIC_CHECK;
+use bmo_testbed_core::silence::{HUNG_EXIT_CODE, Silence};
 use bmo_testbed_core::turn::{Lane, NOT_RUN_EXIT_CODE, TURN_TIMES_VARIABLE, times_words};
 use bmo_testbed_suite::cargo::cargo_invocation;
 use bmo_testbed_suite::crates::CrateDeclaration;
@@ -343,7 +345,7 @@ mod a_run_with_its_waits_read_back {
     });
     let script = format!("printf '%s\\n' \"$1\" >> \"${TURN_TIMES_VARIABLE}\"; echo built");
     let command = vec!["sh".to_owned(), "-c".to_owned(), script, "sh".to_owned(), times.to_string()];
-    let run = run_timed(&command, &std::env::temp_dir(), &[]);
+    let run = run_timed(&command, &std::env::temp_dir(), &[], None);
 
     assert_eq!(run.code, 0);
     assert_eq!(run.output, "built\n");
@@ -357,11 +359,44 @@ mod a_run_with_its_waits_read_back {
     let script = "sleep 20 & echo said; echo failed >&2; exit 3";
     let command = vec!["sh".to_owned(), "-c".to_owned(), script.to_owned()];
     let began = std::time::Instant::now();
-    let run = run_timed(&command, &std::env::temp_dir(), &[]);
+    let run = run_timed(&command, &std::env::temp_dir(), &[], None);
 
     assert!(began.elapsed().as_secs() < 10, "the step waited on what it left running");
     assert_eq!(run.code, 3);
     assert_eq!(run.output, "said\nfailed\n");
+  }
+
+  // A silence of a fraction of a second, so a test of it ends in seconds.
+  fn short() -> Silence {
+    Silence {
+      limit: Duration::from_millis(400),
+      grace: Duration::from_millis(300),
+      look: Duration::from_millis(50),
+    }
+  }
+
+  // "a step holding a lane's turn that writes nothing to its output files for the silence limit is ended as
+  // hung and fails with exit code 124"
+  #[test]
+  fn a_watched_step_that_writes_nothing_for_the_limit_is_ended_as_hung() {
+    let command = vec!["sh".to_owned(), "-c".to_owned(), "echo once; sleep 30".to_owned()];
+    let began = std::time::Instant::now();
+    let run = run_timed(&command, &std::env::temp_dir(), &[], Some(short()));
+
+    assert!(began.elapsed().as_secs() < 10, "the hung step was not ended");
+    assert_eq!(run.code, i32::from(HUNG_EXIT_CODE));
+    assert!(run.output.starts_with("once\ntestbed: sh -c echo once; sleep 30 "), "{}", run.output);
+  }
+
+  // "every step runs to its end": a watched step that keeps writing past the limit is not ended.
+  #[test]
+  fn a_watched_step_that_keeps_writing_past_the_limit_runs_to_its_end() {
+    let script = "for i in 1 2 3 4 5 6 7 8 9 10 11 12; do echo $i >&2; sleep 0.1; done";
+    let command = vec!["sh".to_owned(), "-c".to_owned(), script.to_owned()];
+    let run = run_timed(&command, &std::env::temp_dir(), &[], Some(short()));
+
+    assert_eq!(run.code, 0, "{}", run.output);
+    assert!(run.ran_seconds > 0.4);
   }
 }
 

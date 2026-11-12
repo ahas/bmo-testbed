@@ -2,13 +2,15 @@
 //! result」).
 
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use bmo_testbed_core::languages::{LANGUAGES, Language, PLAIN, Tally};
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::queue::{LockWait, take_lock};
 use bmo_testbed_core::run::{RunAsk, TestbedResult, run_in_testbed};
-use bmo_testbed_core::turn::{Env, Lane, NOT_RUN_EXIT_CODE, TurnAsk};
+use bmo_testbed_core::silence::{HUNG_EXIT_CODE, Silence};
+use bmo_testbed_core::turn::{Env, Lane, NOT_RUN_EXIT_CODE, TurnAsk, read_queue};
 use bmo_testbed_core::witness::Unwitnessed;
 
 fn quiet(_: &str) {}
@@ -33,6 +35,16 @@ fn ask<'a>(dir: &Path, command: &[&str], languages: &'a [&'static dyn Language])
     },
     command,
     witness: &Unwitnessed,
+    silence: Silence::default(),
+  }
+}
+
+// A silence of a fraction of a second, so a test of it ends in seconds.
+fn short() -> Silence {
+  Silence {
+    limit: Duration::from_millis(400),
+    grace: Duration::from_millis(300),
+    look: Duration::from_millis(50),
   }
 }
 
@@ -111,7 +123,7 @@ fn a_build_says_its_exit_code_and_the_last_lines_where_nothing_named_a_failure()
   assert_eq!(failed.exit_code(), 3);
 }
 
-// "runs a command until it ends, however long that takes"
+// "a command that keeps writing runs until it ends, however long that takes"
 #[test]
 fn a_command_runs_until_it_ends() {
   let dir = tempfile::tempdir().unwrap();
@@ -119,6 +131,47 @@ fn a_command_runs_until_it_ends() {
 
   assert!(result.ran && result.ok);
   assert!(result.seconds >= 1.0);
+}
+
+// "a command holding a lane's turn that writes nothing for the limit is ended as hung, and the turn passes on":
+// the run fails with the hung code, the line naming it first under the result and last in its log.
+#[test]
+fn a_run_that_writes_nothing_for_the_limit_is_ended_as_hung_and_lets_the_turn_go() {
+  let dir = tempfile::tempdir().unwrap();
+  let mut asked = ask(dir.path(), &["sh", "-c", "echo once; sleep 30"], &LANGUAGES);
+
+  asked.silence = short();
+
+  let started = Instant::now();
+  let result = run(&asked);
+  let log = std::fs::read_to_string(result.log.as_ref().unwrap()).unwrap();
+  let hung = &result.failures[0];
+
+  assert!(started.elapsed() < Duration::from_secs(10));
+  assert!(result.ran && !result.ok);
+  assert_eq!((result.code, result.exit_code()), (Some(i32::from(HUNG_EXIT_CODE)), HUNG_EXIT_CODE));
+  assert!(hung.contains("sh -c echo once; sleep 30"), "{hung}");
+  assert!(hung.contains(&*result.log.as_ref().unwrap().to_string_lossy()), "{hung}");
+  assert_eq!(log.lines().last(), Some(hung.as_str()));
+  assert_eq!(read_queue(&dir.path().join("testbed.lock")).holder, None);
+}
+
+// "its length alone never cuts it": a run that keeps writing past the limit passes.
+#[test]
+fn a_run_that_keeps_writing_past_the_limit_is_not_ended() {
+  let dir = tempfile::tempdir().unwrap();
+  let mut asked = ask(
+    dir.path(),
+    &["sh", "-c", "for i in 1 2 3 4 5 6 7 8 9 10 11 12; do echo $i; sleep 0.1; done"],
+    &LANGUAGES,
+  );
+
+  asked.silence = short();
+
+  let result = run(&asked);
+
+  assert!(result.ran && result.ok, "{:?}", result.failures);
+  assert!(result.seconds > 0.4);
 }
 
 // "runs nothing where the harness it waits for goes away before the turn comes, and says so"

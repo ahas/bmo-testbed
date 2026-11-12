@@ -20,6 +20,12 @@ failure_lines = 60
 log_keep_days = 7
 # The narrow lane's width: the machine's width divided by this, never less than one.
 narrow_divisor = 4
+# How long a command holding a turn may write nothing before it is ended as hung, how long it is given to end
+# once sent a TERM before whatever still stands is sent a KILL, and how often its output is looked at
+# (docs/testbed.md, 「A holder whose command falls silent lets go」).
+silence_seconds = 600
+silence_grace_seconds = 10
+silence_look_seconds = 3
 
 # How a command killed for want of memory is run again (docs/testbed.md, 「Memory」): how long it waits
 # before it looks at the memory at all, how many gigabytes have to be available, how often it looks, and
@@ -83,6 +89,13 @@ no_registry = "testbed: the run's registry of checkouts could not be written at 
 # A command's wait and run, as every step of a check says them.
 [times]
 line = "waited {waited}s, ran {ran}s"
+
+# A command holding a turn ended for writing nothing (docs/testbed.md, 「A holder whose command falls silent
+# lets go」): {command} the command, {output} where its output went, the files it went to or `piped`, and
+# {seconds} the silence limit.
+[silence]
+hung = "testbed: {command} ended as hung: nothing written to {output} for {seconds}s"
+piped = "its output"
 
 # The one result a run ends on (docs/testbed.md, 「The result」).
 [run]

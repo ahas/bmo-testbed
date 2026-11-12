@@ -46,6 +46,7 @@ release. The version rules at the end are over this document.
 | 1 | Ran and failed: a test, a check, a step, a deployment |
 | 2 | Refused: words that do not read, a declaration that does not read or names another major, a change that cannot be read, a refusal a verb names |
 | 75 | Not run: the harness it waited for went away before the turn came, or a placed machine dropped the run. Run the same command again |
+| 124 | Ended as hung: the command holding a lane's turn wrote nothing for the silence limit (`docs/testbed.md`, 「A holder whose command falls silent lets go」) |
 | any other | `run` only: the command's own exit code, passed through |
 
 ## The verbs
@@ -58,16 +59,17 @@ bmo-testbed run [--narrow] [--adapter <name>] [--json] -- <command…>
 
 - Runs the command in the wide lane's turn, or the narrow lane's with `--narrow`, read by the language
   that claims it or the one `--adapter` names (`bun`, `cargo`, `node`, `browser`, `plain`), waiting for
-  the turn however long the line takes and running the command until it ends. `--guard <seconds>` and
-  `--wait <seconds>` are read and given no effect.
+  the turn however long the line takes and running the command until it ends, or until it writes nothing
+  to its log for the silence limit. `--guard <seconds>` and `--wait <seconds>` are read and given no
+  effect.
 - Placed first where the machine's placement sends it elsewhere (「Placement」), unless inside a held turn.
 - Every run that is not placed elsewhere is a test run of kind `command` in the record (「The
   record」), written as its turn comes and ended with its counts.
 - Prints the waits, the one `testbed:` result line, and under a failure at most sixty failure lines.
 - **`--json`** prints those lines on standard error instead, and on standard output one command run
   (「Members」) once the run has ended; the exit code is the same.
-- Exits 0 where it passed, the command's own code where it failed, 75 where it was not run, 2 where its
-  words do not read (no `--`, no command, a flag missing its value, an unknown adapter, which the line
+- Exits 0 where it passed, the command's own code where it failed, 75 where it was not run, 124 where it
+  was ended as hung, 2 where its words do not read (no `--`, no command, a flag missing its value, an unknown adapter, which the line
   names with the adapters there are), and 1 on an internal error.
 
 ### `placed`
@@ -130,8 +132,8 @@ bmo-testbed suite [--since <commit>] [--again] [--json] [<word>…]
 - Runs the repository's units (`docs/suite.md`): all of them, or those the change since `--since`
   reaches. A word naming a path narrows the files; a word that is a unit's name exactly picks that
   unit; every other word goes to each file's runner. `--again` runs what failed once more. Every unit
-  runs until it ends; `--guard`, `--file-guard` and `--turn-wait`, each with seconds, are read and given
-  no effect.
+  runs until it ends, or fails with exit code 124 once it writes nothing for the silence limit;
+  `--guard`, `--file-guard` and `--turn-wait`, each with seconds, are read and given no effect.
 - Writes its `suite:` lines and each unit's output to standard error, to be redirected to a file, and
   the same to a log of its own under the data root's `testbed/`.
 - Every run is a test run of kind `suite` in the record (「The record」), its log the run's own.
@@ -235,7 +237,8 @@ bmo-testbed cargo <cargo arguments…>
 - Runs Cargo through the shared build directory with the checkout's own crates apart in it, in the wide
   lane where the command compiles, run again where the kernel killed it for want of memory, then
   removes what the build superseded. Exits with Cargo's own code, 75 where its harness went away
-  before the turn came.
+  before the turn came, and 124 where, holding the turn with its standard output and error both files,
+  it wrote nothing to them for the silence limit.
 
 ### `prune`
 
@@ -361,6 +364,7 @@ verb's own name, and each noun takes what that verb takes.
 | `BMO_TESTBED_HELD` | the turn | Set by a holder for its children: its process number. A command finding it holding its lane runs at once |
 | `BMO_TESTBED_FRONT` | the turn | `1` stands the caller at the front, unless it is inside a harness's call |
 | `BMO_TESTBED_NEXT` | the turn | `1` stands the caller next after the front |
+| `BMO_TESTBED_HEARD` | the turn | Set by a holder watching its command for silence: a file of its own. A watch under it touches the file while its own command writes, which the holder counts as its command writing |
 | `BMO_TESTBED_TIMES` | the turn | A file each turn taken adds a line to: the command, its lane, its wait and its run |
 | `BMO_TEST_PARALLEL` | the turn, the suite | The wide lane's width; set by the turn for a language's runner |
 | `CLAUDE_PID` | the turn, `deploy` | The process of the harness whose call the caller runs in: a caller with one is inside a harness's call, its holder is watched, and `deploy` refuses it |

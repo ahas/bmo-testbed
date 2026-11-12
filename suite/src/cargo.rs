@@ -2,9 +2,10 @@
 //! build directory」; docs/boundary.md, the `cargo` verb; docs/testbed.md): through the shared build
 //! directory with the checkout's own crates apart in it, `clippy` as a check through the checkout's own clippy
 //! wrapper, on the account's own toolchain, and — where it compiles — in the machine's turn behind the other
-//! heavy commands on this machine, run again where the kernel killed it for want of memory. Formatting and the
-//! other reading verbs compile nothing and run at once. A build that passed removes, inside the same turn, what
-//! the checkout's earlier build of its shape left.
+//! heavy commands on this machine, run again where the kernel killed it for want of memory, and ended as hung
+//! where its standard output and error are both files and nothing is written to them for the silence limit.
+//! Formatting and the other reading verbs compile nothing and run at once. A build that passed removes, inside
+//! the same turn, what the checkout's earlier build of its shape left.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -13,6 +14,7 @@ use bmo_testbed_core::languages::cargo_compiles as compiles;
 use bmo_testbed_core::memory::{MachineHands, MemoryLimits, RunEnd, run_in_turn};
 use bmo_testbed_core::policy::fill_shown;
 use bmo_testbed_core::policy::suite::SUITE;
+use bmo_testbed_core::silence::{Output, Silence, Watch};
 use bmo_testbed_core::turn::{Env, Lane, process_env};
 
 use crate::crates::{
@@ -154,17 +156,34 @@ pub fn remove_superseded_after(root: &Path, args: &[String], say: &mut dyn FnMut
 }
 
 /// Cargo with `args` in the checkout at `root`, answering the exit code the caller ends on: a command that
-/// compiles nothing at once, one that compiles in the machine's turn and run again after an out-of-memory
-/// kill, with what it superseded removed once it has passed.
+/// compiles nothing at once, one that compiles in the machine's turn, watched for silence and run again after
+/// an out-of-memory kill, with what it superseded removed once it has passed. Cargo stays in this process's
+/// own process group, so a terminal's interrupt still reaches it; a hung one is ended with every process
+/// under it.
 pub fn run_cargo(root: &Path, args: &[String]) -> u8 {
   let invocation = cargo_invocation(root, args);
+  let compiling = compiles(args);
+  let what = std::iter::once("cargo")
+    .chain(args.iter().map(String::as_str))
+    .collect::<Vec<_>>()
+    .join(" ");
   let mut start = |held: Option<(&'static str, String)>| {
+    let output = if compiling { Output::own() } else { Output::Files(Vec::new()) };
+    let watch = Watch::new(output, Silence::default());
     let mut command = invocation.command(root);
 
-    command.envs(held);
+    command.envs(held).envs(watch.variable());
 
-    match command.status() {
-      Ok(status) => RunEnd::from(status),
+    match command.spawn() {
+      Ok(mut child) => {
+        let waited = watch.wait(&mut child, &what);
+
+        if let Some(hung) = &waited.hung {
+          eprintln!("{hung}");
+        }
+
+        RunEnd::from(&waited)
+      }
       Err(why) => {
         eprintln!(
           "{}",
@@ -179,7 +198,7 @@ pub fn run_cargo(root: &Path, args: &[String]) -> u8 {
     }
   };
 
-  if !compiles(args) {
+  if !compiling {
     return start(None).exit_code();
   }
 

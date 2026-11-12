@@ -323,7 +323,7 @@ impl TestbedTurn {
 }
 
 // Every process under one, read from the kernel's own children lists, nearest first.
-fn descendants_of(pid: i64) -> Vec<i64> {
+pub(crate) fn descendants_of(pid: i64) -> Vec<i64> {
   let mut found: Vec<i64> = Vec::new();
   let mut next = vec![pid];
 
@@ -347,7 +347,7 @@ fn descendants_of(pid: i64) -> Vec<i64> {
   found
 }
 
-fn signal(pids: &[i64], signal: i32) {
+pub(crate) fn signal(pids: &[i64], signal: i32) {
   for pid in pids {
     // SAFETY: a signal to a process of this holder's own tree.
     unsafe { libc::kill(*pid as i32, signal) };

@@ -8,6 +8,7 @@ use std::time::{Duration, Instant};
 
 use crate::policy::fill_marks;
 use crate::policy::lanes::LANES;
+use crate::silence::{HUNG_EXIT_CODE, Waited};
 use crate::turn::{
   Env, Lane, NOT_RUN_EXIT_CODE, TestbedTurn, TurnAsk, record_turn_times, take_turn, times_words,
 };
@@ -64,6 +65,19 @@ impl RunEnd {
     match (self.signal, self.code) {
       (Some(signal), _) => fill_marks(&said.signal, &[("signal", &signal.to_string())]),
       (None, code) => fill_marks(&said.exit, &[("code", &code.unwrap_or(1).to_string())]),
+    }
+  }
+}
+
+impl From<&Waited> for RunEnd {
+  /// A watched run: the hung code where it was ended as hung, its status otherwise.
+  fn from(waited: &Waited) -> Self {
+    match (&waited.hung, waited.status) {
+      (Some(_), _) | (None, None) => Self {
+        code: waited.code(),
+        signal: None,
+      },
+      (None, Some(status)) => Self::from(status),
     }
   }
 }
@@ -179,9 +193,11 @@ pub fn fence_reached<'a>(before: &[MemoryFence], after: &'a [MemoryFence]) -> Op
 /// kills rose. The kill may land on a process the command started rather than the command itself, and the
 /// command then fails with a code of its own rather than the signal. A failure of the code that met an
 /// unrelated kill only runs once more, and fails again without one. A count that cannot be read takes
-/// nothing for a kill.
+/// nothing for a kill, and neither does a run ended as hung, which would hang again.
 pub fn killed_for_memory(run: RunEnd, before: Option<u64>, after: Option<u64>) -> bool {
-  !run.passed() && matches!((before, after), (Some(before), Some(after)) if after > before)
+  !run.passed()
+    && run.code != Some(i32::from(HUNG_EXIT_CODE))
+    && matches!((before, after), (Some(before), Some(after)) if after > before)
 }
 
 fn gigabytes(bytes: u64) -> String {

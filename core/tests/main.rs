@@ -6,5 +6,6 @@ mod languages;
 mod memory;
 mod policy;
 mod run;
+mod silence;
 mod turn;
 mod verb;

@@ -9,6 +9,7 @@ use std::process::{Command, Stdio};
 use bmo_testbed_core::declaration::{Repository, Test};
 use bmo_testbed_core::policy::suite::SUITE;
 use bmo_testbed_core::policy::{fill_marks, fill_shown};
+use bmo_testbed_core::silence::Silence;
 use bmo_testbed_core::turn::{Lane, NOT_RUN_EXIT_CODE, TurnAsk, process_env, take_turn};
 use sha2::{Digest, Sha256};
 
@@ -372,7 +373,8 @@ pub fn run_step(root: &Path, step: &Step) -> TimedRun {
 
   handed.extend(turn.held_variable().map(|(name, value)| (name.to_owned(), value)));
 
-  let mut done = run_timed(&step.step.command, &root.join(&step.step.dir), &handed);
+  let mut done =
+    run_timed(&step.step.command, &root.join(&step.step.dir), &handed, Some(Silence::default()));
 
   done.waited_seconds += turn.waited_seconds();
   done

@@ -309,7 +309,9 @@
   `build`, `before`, `restart`, `stay-up`, `after`; `rollback` is never planned. Each stage is written
   with when it began.
 - **Each heavy step is written as it begins and as it ends,** with its exit code, how long it waited
-  for its turn and how long it ran, under the stage it ended in. Steps are named by their declared
+  for its turn and how long it ran, under the stage it ended in. A heavy step that writes nothing for the
+  silence limit while it holds its lane's turn is ended as hung and fails with exit code 124
+  (`docs/testbed.md`, 「A holder whose command falls silent lets go」). Steps are named by their declared
   English ids. A declared step the static check left out as repeating the Cargo workspace check is
   written as passed, exit 0 with no wait and no run (`docs/checks.md`, 「The static check」).
 - **It ends with an outcome:** `live`, `rolled-back`, `failed`, or `stopped` where nothing went live by

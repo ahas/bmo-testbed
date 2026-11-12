@@ -11,6 +11,8 @@
 use std::os::unix::process::CommandExt as _;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use bmo_testbed_core::declaration::{DeployStep, Phase, Repository};
@@ -18,6 +20,7 @@ use bmo_testbed_core::events::{Event, Hook};
 use bmo_testbed_core::policy::deploy::DEPLOY;
 use bmo_testbed_core::policy::deploy_steps::DeployStep as OwnStep;
 use bmo_testbed_core::policy::fill_marks;
+use bmo_testbed_core::silence::{Output, Silence, Watch};
 use bmo_testbed_core::turn::{
   Env, FRONT_VARIABLE, Lane, NOT_RUN_EXIT_CODE, TurnAsk, harness_pid, process_env, take_turn,
 };
@@ -211,7 +214,7 @@ impl Gate for Passed {
 }
 
 /// A step of the run's own or a declared one: its id, its words, where it runs, and the lane whose turn it
-/// takes. It runs until it ends.
+/// takes. It runs until it ends, or, holding a lane's turn, until it writes nothing for the silence limit.
 #[derive(Debug, Clone)]
 pub struct StepAsk {
   pub id: String,
@@ -235,7 +238,7 @@ pub struct StepRan {
 pub trait DeployHands {
   /// A command run to its end in a directory, its output gathered.
   fn run(&self, line: &[String], cwd: &Path) -> Ran;
-  /// A step run to its end, in its lane's turn where it names one, stopped past its time.
+  /// A step run to its end, in its lane's turn where it names one, ended as hung there once it falls silent.
   fn step(&self, ask: &StepAsk) -> StepRan;
   fn say(&self, line: &str);
   fn now_ms(&self) -> i64;
@@ -246,8 +249,11 @@ pub trait DeployHands {
 /// The hands of the machine the run stands on.
 pub struct Machine;
 
-// A child's output read to its end on a thread of its own, written on as it comes.
-fn gathered(mut from: impl std::io::Read + Send + 'static) -> std::thread::JoinHandle<Vec<u8>> {
+// A child's output read to its end on a thread of its own, written on as it comes and counted into `heard`.
+fn gathered(
+  mut from: impl std::io::Read + Send + 'static,
+  heard: Arc<AtomicU64>,
+) -> std::thread::JoinHandle<Vec<u8>> {
   std::thread::spawn(move || {
     let mut all = Vec::new();
     let mut chunk = [0u8; 16 * 1024];
@@ -257,6 +263,7 @@ fn gathered(mut from: impl std::io::Read + Send + 'static) -> std::thread::JoinH
         break;
       }
 
+      heard.fetch_add(read as u64, Ordering::Relaxed);
       let _ = std::io::Write::write_all(&mut std::io::stderr(), &chunk[..read]);
       all.extend_from_slice(&chunk[..read]);
     }
@@ -301,10 +308,19 @@ impl DeployHands for Machine {
     }
 
     let started = Instant::now();
+    let heard = Arc::new(AtomicU64::new(0));
+    // A step holding a lane's turn is watched for silence; one that holds none runs until it ends.
+    let output = if turn.is_some() {
+      Output::Read(Arc::clone(&heard))
+    } else {
+      Output::Files(Vec::new())
+    };
+    let watch = Watch::new(output, Silence::default());
     let mut command = crate::run::command(&ask.command, Some(&ask.cwd));
 
     command
       .envs(turn.as_ref().and_then(|turn| turn.held_variable()))
+      .envs(watch.variable())
       .stdout(Stdio::piped())
       .stderr(Stdio::piped())
       .process_group(0);
@@ -320,18 +336,24 @@ impl DeployHands for Machine {
         };
       }
     };
-    let out = gathered(child.stdout.take().expect("the output is piped"));
-    let err = gathered(child.stderr.take().expect("the errors are piped"));
-    // The step is waited for until it ends, however long that takes.
-    let status = child.wait().ok();
-    let said = format!(
+    let out = gathered(child.stdout.take().expect("the output is piped"), Arc::clone(&heard));
+    let err = gathered(child.stderr.take().expect("the errors are piped"), heard);
+    // The step is waited for until it ends, however long that takes while it writes.
+    let waited = watch.wait(&mut child, &ask.command.join(" "));
+    let mut said = format!(
       "{}{}",
       String::from_utf8_lossy(&out.join().unwrap_or_default()),
       String::from_utf8_lossy(&err.join().unwrap_or_default())
     );
 
+    // A step ended as hung says so first, where the start of what it said is kept.
+    if let Some(hung) = &waited.hung {
+      eprintln!("{hung}");
+      said = format!("{hung}\n{said}");
+    }
+
     StepRan {
-      code: status.and_then(|status| status.code()).map_or(1, i64::from),
+      code: waited.code().map_or(1, i64::from),
       waited_seconds,
       ran_seconds: started.elapsed().as_secs_f64(),
       said: first_chars(said.trim(), DEPLOY.numbers.quoted_chars),

@@ -12,6 +12,7 @@ use crate::languages::{Language, PLAIN, Tally, failures_of_log, tally_of_log};
 use crate::policy::fill_marks;
 use crate::policy::lanes::LANES;
 use crate::queue::now_ms;
+use crate::silence::{Output, Silence, Watch};
 use crate::turn::{NOT_RUN_EXIT_CODE, TurnAsk, lane_width, machine_threads, record_turn_times, take_turn};
 use crate::witness::{RunBegun, RunEnded, RunVerdict, RunWitness};
 
@@ -105,6 +106,8 @@ pub struct RunAsk<'a> {
   pub turn: TurnAsk<'a>,
   /// Whoever keeps the record of the run, told as it begins and as it ends.
   pub witness: &'a dyn RunWitness,
+  /// How long the command may write nothing to its log before it is ended as hung.
+  pub silence: Silence,
 }
 
 // The logs older than the days the policy keeps them, taken away as the next run starts.
@@ -126,6 +129,17 @@ fn prune_logs(dir: &Path, now: SystemTime) {
   }
 }
 
+// A line added at the end of a run's log. A log that cannot be written to keeps what it has, and the line
+// still stands under the result.
+fn append_line(log: &Path, line: &str) {
+  use std::io::Write as _;
+
+  let _ = std::fs::File::options()
+    .append(true)
+    .open(log)
+    .and_then(|mut file| writeln!(file, "{line}"));
+}
+
 /// A run's log, named by when it started, what runs it and this process.
 pub fn log_name(started_ms: i64, language: &str) -> String {
   let at = chrono::DateTime::from_timestamp_millis(started_ms)
@@ -134,8 +148,8 @@ pub fn log_name(started_ms: i64, language: &str) -> String {
   format!("{at}-{language}-{}.log", std::process::id())
 }
 
-/// The command run in its turn, wide, until it ends, its output into a log of its own; or the words of
-/// why it could not run at all.
+/// The command run in its turn, wide, until it ends or falls silent, its output into a log of its own; or the
+/// words of why it could not run at all.
 pub fn run_in_testbed(ask: &RunAsk<'_>) -> Result<TestbedResult, String> {
   let turn = take_turn(&ask.turn);
   let not_run = || TestbedResult {
@@ -196,12 +210,14 @@ pub fn run_in_testbed(ask: &RunAsk<'_>) -> Result<TestbedResult, String> {
     tell_ended(RunVerdict::NotRun, None);
     return Ok(not_run());
   };
+  let watch = Watch::new(Output::Files(vec![log.clone()]), ask.silence);
   // A process group of its own, so what the command started stands together under it.
   let mut child = Command::new(program)
     .args(args)
     .current_dir(&ask.cwd)
     .envs(&widened.env)
     .envs(turn.held_variable())
+    .envs(watch.variable())
     .stdin(Stdio::null())
     .stdout(out)
     .stderr(errors)
@@ -211,8 +227,8 @@ pub fn run_in_testbed(ask: &RunAsk<'_>) -> Result<TestbedResult, String> {
       tell_ended(RunVerdict::Failed, None);
       fill_marks(&said.unstarted, &[("program", program), ("why", &why.to_string())])
     })?;
-  let status = child.wait().ok();
-  let code = status.and_then(|status| status.code());
+  let waited = watch.wait(&mut child, &ask.turn.command);
+  let code = waited.code();
   let text = String::from_utf8_lossy(&std::fs::read(&log).unwrap_or_default()).into_owned();
   let ok = code == Some(0);
   let seconds = started.elapsed().as_secs_f64();
@@ -221,6 +237,12 @@ pub fn run_in_testbed(ask: &RunAsk<'_>) -> Result<TestbedResult, String> {
 
   let read = if ok { Vec::new() } else { failures_of_log(ask.languages, &text) };
   let mut failures = if read.is_empty() && !ok { PLAIN.failures(&text) } else { read };
+
+  // A command ended as hung says so first, and its log ends on the same line.
+  if let Some(hung) = &waited.hung {
+    failures.insert(0, hung.clone());
+    append_line(&log, hung);
+  }
 
   failures.truncate(LANES.numbers.failure_lines);
 

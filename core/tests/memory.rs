@@ -10,6 +10,7 @@ use bmo_testbed_core::memory::{
   HeavyHands, MemoryFence, MemoryLimits, RunEnd, killed_for_memory, proc_number, run_in_turn,
 };
 use bmo_testbed_core::policy::lanes::LANES;
+use bmo_testbed_core::silence::HUNG_EXIT_CODE;
 use bmo_testbed_core::turn::{NOT_RUN_EXIT_CODE, TestbedTurn};
 
 // A machine in a test: the runs it ends with, the kill count each reading gives, and what it said.
@@ -224,6 +225,17 @@ fn an_unread_kill_count_takes_nothing_for_a_kill() {
   assert!(!killed_for_memory(KILLED, None, Some(4)));
   assert!(!killed_for_memory(PASSED, Some(3), Some(4)));
   assert!(killed_for_memory(FAILED, Some(3), Some(4)));
+}
+
+// "a command ended as hung is not run again, since it would hang again"
+#[test]
+fn a_run_ended_as_hung_is_never_taken_for_a_kill() {
+  let hung = RunEnd {
+    code: Some(i32::from(HUNG_EXIT_CODE)),
+    signal: None,
+  };
+
+  assert!(!killed_for_memory(hung, Some(3), Some(4)));
 }
 
 #[test]

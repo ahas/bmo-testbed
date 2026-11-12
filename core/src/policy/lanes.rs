@@ -19,6 +19,9 @@ pub struct Numbers {
   pub failure_lines: usize,
   pub log_keep_days: u64,
   pub narrow_divisor: usize,
+  pub silence_seconds: u64,
+  pub silence_grace_seconds: u64,
+  pub silence_look_seconds: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -78,6 +81,13 @@ pub struct PlacedWords {
 #[serde(deny_unknown_fields)]
 pub struct TimesWords {
   pub line: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SilenceWords {
+  pub hung: String,
+  pub piped: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -145,6 +155,7 @@ pub struct Lanes {
   pub settled: SettledWords,
   pub placed: PlacedWords,
   pub times: TimesWords,
+  pub silence: SilenceWords,
   pub run: RunWords,
   pub status: StatusWords,
   pub verb: VerbWords,

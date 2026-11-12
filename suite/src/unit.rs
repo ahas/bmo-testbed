@@ -1,16 +1,21 @@
-//! One unit of a run in a process of its own, heading a process group of its own, run until it ends
-//! (docs/suite.md, 「One sweep, a process per file」). Its output is held until it ends, since the
-//! units beside it would otherwise interleave with it, and is then written out whole with the verdict on
-//! the unit ahead of it. Whatever the unit started and left behind goes once it ends: its group, and any
-//! process outside the group still holding its output.
+//! One unit of a run in a process of its own, heading a process group of its own, run until it ends or falls
+//! silent (docs/suite.md, 「One sweep, a process per file」 and 「Every unit runs to its end」). Its output is
+//! held until it ends, since the units beside it would otherwise interleave with it, and is then written out
+//! whole with the verdict on the unit ahead of it; while it writes, the holder above the run is told so.
+//! Whatever the unit started and left behind goes once it ends: its group, and any process outside the group
+//! still holding its output.
 
 use std::io::Read;
 use std::os::fd::AsRawFd;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Command, Stdio};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread::JoinHandle;
 use std::time::Instant;
+
+use bmo_testbed_core::silence::{Output, Silence, Waited, Watch};
 
 /// How a unit is started.
 pub struct UnitCommand {
@@ -21,6 +26,8 @@ pub struct UnitCommand {
   pub env: Vec<(String, String)>,
   /// A home of its own, removed once the unit ends.
   pub home: Option<PathBuf>,
+  /// How long it may write nothing before it is ended as hung.
+  pub silence: Silence,
 }
 
 impl UnitCommand {
@@ -34,6 +41,7 @@ impl UnitCommand {
       cwd,
       env,
       home,
+      silence: Silence::default(),
     }
   }
 }
@@ -55,11 +63,21 @@ struct Gathered {
   reader: JoinHandle<Vec<u8>>,
 }
 
-fn gather(mut stream: impl Read + AsRawFd + Send + 'static) -> Gathered {
+// The stream read beside the unit, every byte taken added to `heard` as it comes.
+fn gather(mut stream: impl Read + AsRawFd + Send + 'static, heard: Arc<AtomicU64>) -> Gathered {
   let pipe = std::fs::read_link(format!("/proc/self/fd/{}", stream.as_raw_fd())).ok();
   let reader = std::thread::spawn(move || {
     let mut bytes = Vec::new();
-    let _ = stream.read_to_end(&mut bytes);
+    let mut chunk = [0u8; 16 * 1024];
+
+    while let Ok(read) = stream.read(&mut chunk) {
+      if read == 0 {
+        break;
+      }
+
+      heard.fetch_add(read as u64, Ordering::Relaxed);
+      bytes.extend_from_slice(&chunk[..read]);
+    }
 
     bytes
   });
@@ -116,26 +134,35 @@ fn signal_group(leader: u32, signal: i32) {
   unsafe { libc::kill(-(leader as i32), signal) };
 }
 
-// The code the unit ended with, and the signal that ended it, where one did.
-fn ended(child: &mut Child) -> (i32, Option<i32>) {
-  match child.wait() {
-    Ok(status) => {
+// The code the unit ended with, and the signal that ended it, where one did; a unit ended as hung ends on the
+// hung code, its own signal no part of it.
+fn ended(waited: &Waited) -> (i32, Option<i32>) {
+  if waited.hung.is_some() {
+    return (waited.code().unwrap_or(1), None);
+  }
+
+  match waited.status {
+    Some(status) => {
       let signal = std::os::unix::process::ExitStatusExt::signal(&status);
 
       (status.code().unwrap_or_else(|| 128 + signal.unwrap_or(0)), signal)
     }
-    Err(_) => (1, None),
+    None => (1, None),
   }
 }
 
-/// Runs one unit to its end, however long that takes.
+/// Runs one unit to its end, however long that takes while it writes, or until it has written nothing for
+/// its silence.
 pub fn run_unit(unit: &UnitCommand) -> UnitRun {
   let started = Instant::now();
+  let heard = Arc::new(AtomicU64::new(0));
+  let watch = Watch::new(Output::Read(Arc::clone(&heard)), unit.silence);
   let spawned = Command::new(&unit.program)
     .args(&unit.args)
     .current_dir(&unit.cwd)
     .env_clear()
     .envs(unit.env.iter().map(|(name, value)| (name, value)))
+    .envs(watch.variable())
     .stdin(Stdio::null())
     .stdout(Stdio::piped())
     .stderr(Stdio::piped())
@@ -153,9 +180,11 @@ pub fn run_unit(unit: &UnitCommand) -> UnitRun {
     }
   };
   let leader = child.id();
-  let out = gather(child.stdout.take().expect("the output is piped"));
-  let err = gather(child.stderr.take().expect("the errors are piped"));
-  let (code, signal) = ended(&mut child);
+  let out = gather(child.stdout.take().expect("the output is piped"), Arc::clone(&heard));
+  let err = gather(child.stderr.take().expect("the errors are piped"), heard);
+  let what = std::iter::once(&unit.program).chain(&unit.args).cloned().collect::<Vec<_>>().join(" ");
+  let waited = watch.wait(&mut child, &what);
+  let (code, signal) = ended(&waited);
 
   // What the unit left standing in its group goes at once, and so does anything outside it still holding the
   // output, so the output closes.
@@ -168,10 +197,21 @@ pub fn run_unit(unit: &UnitCommand) -> UnitRun {
     let _ = std::fs::remove_dir_all(home);
   }
 
+  let mut output = format!("{said}{warned}");
+
+  if let Some(hung) = &waited.hung {
+    if !output.is_empty() && !output.ends_with('\n') {
+      output.push('\n');
+    }
+
+    output.push_str(hung);
+    output.push('\n');
+  }
+
   UnitRun {
     code,
     signal,
     seconds: started.elapsed().as_secs_f64(),
-    output: format!("{said}{warned}"),
+    output,
   }
 }

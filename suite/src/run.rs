@@ -17,6 +17,7 @@ use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::suite::SUITE;
 use bmo_testbed_core::queue::now_ms;
 use bmo_testbed_core::run::log_name;
+use bmo_testbed_core::silence::Silence;
 use bmo_testbed_core::turn::{self, Lane, NOT_RUN_EXIT_CODE, TestbedTurn, TurnAsk};
 use bmo_testbed_core::witness::{RunBegun, RunEnded, RunVerdict, RunWitness};
 
@@ -753,6 +754,7 @@ fn run_held(
         cwd: root.join(&tool.dir),
         env,
         home: None,
+        silence: Silence::default(),
       };
     }
 
@@ -773,6 +775,7 @@ fn run_held(
         cwd: root.to_path_buf(),
         env,
         home: Some(home),
+        silence: Silence::default(),
       };
     }
 

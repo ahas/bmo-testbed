@@ -39,7 +39,7 @@ flowchart TD
   H --> R
   W -- harness gone --> K[ends: not run]
   W -- not yet --> W
-  R --> V[runs to its end: one result line, log kept]
+  R --> V[runs to its end, or is ended once silent too long: one result line, log kept]
 ```
 
 ## What goes through it
@@ -169,8 +169,29 @@ flowchart TD
 - **A harness that dies holding the turn lets it go too.** The holder of a harness's turn watches the harness's
   process named in `CLAUDE_PID`; once that process is gone the watch kills the holder and every process
   under it at once, since nobody is left to read what they would answer, and the turn goes with them.
-- **A run runs until it ends,** however long that takes: nothing of the testbed's cuts it. A person who
-  wants it gone stops it.
+
+## A holder whose command falls silent lets go
+
+- **A command holding a lane's turn that writes nothing for ten minutes is ended as hung,** and the turn
+  passes on. Its length alone never cuts it: a command that keeps writing runs until it ends, however long
+  that takes, and a person who wants it gone stops it.
+- **The holder watches where its command's output goes,** every three seconds: the log of a `run`, the
+  files a check step's output is taken into, the pipes a suite's unit or a deployment's heavy step is read
+  through, and the files the Cargo verb's own standard output and error stand in. Once none of them has
+  grown for the limit, the command is hung.
+- **A command under it that is watched in turn speaks for it.** The holder hands its command
+  `BMO_TESTBED_HEARD`, a file of its own; a watch under it, such as a suite's over a unit whose output it
+  holds back until the unit ends, touches that file while its own command writes, and the holder counts the
+  touch as its command writing.
+- **A hung command is ended whole:** its process group where it heads one, and every process under it, are
+  sent a TERM, and whatever still stands ten seconds later a KILL.
+- **It says so in one line,** `testbed:` first, naming the command, where its output went and the limit,
+  and ends as failed with exit code 124, never as passed: a `run` on that code, a check's step and a suite's
+  unit as failed with it.
+- **A person's command whose output is a terminal or a pipe is not watched:** the Cargo verb whose
+  standard output or error is a screen, another program or anything but a file runs until it ends, since
+  nothing the testbed reads says whether it still writes there.
+- The limit, the pause before the KILL and how often the holder looks stand in the lane policy.
 
 ## Memory
 
@@ -178,7 +199,7 @@ flowchart TD
   further run the testbed waits at least thirty seconds, then until six gigabytes are free, however long
   that takes, saying every ten minutes that it still waits. The Cargo
   verb and a declared check step that asks for it do so (`docs/declaration.md`); a plain `run` does
-  not.
+  not. A command ended as hung is not run again, since it would hang again.
 
 ## The width
 

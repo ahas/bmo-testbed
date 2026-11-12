@@ -12,6 +12,7 @@ use crate::policy::fill_marks;
 use crate::policy::lanes::LANES;
 use crate::queue::now_ms;
 use crate::run::{RunAsk, run_in_testbed};
+use crate::silence::Silence;
 use crate::turn::{
   Env, Lane, TurnAsk, TurnEntry, lane_width, lock_path, machine_threads, process_env, read_queue,
 };
@@ -207,6 +208,7 @@ pub fn run(words: &RunWords, ground: &VerbGround<'_>) -> RunOutcome {
       notice_seconds: None,
     },
     witness: ground.witness,
+    silence: Silence::default(),
   };
   let result = match run_in_testbed(&ask) {
     Ok(result) => result,

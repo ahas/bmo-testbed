@@ -105,7 +105,9 @@
   The harness hook refuses a plain heavy `cargo` and names the verb line to run instead
   (`docs/testbed.md`).
 - **Every step runs to its end,** a failing one stopping none after it, and each says its exit code,
-  how long it waited for its turn and how long it ran.
+  how long it waited for its turn and how long it ran. A step holding a lane's turn that writes nothing to
+  its output files for the silence limit is ended as hung and fails with exit code 124 (`docs/testbed.md`,
+  「A holder whose command falls silent lets go」).
 - **A step ends when its command ends.** Its output is taken through files of the run's own, never a
   pipe, so a process the step left running, a server a test stood up or a stand-in it never stopped,
   holds nothing the check waits on.
@@ -220,7 +222,8 @@
     file under the crate's `tests/` names by a path through it or by a `#[path]` attribute, is shared, and
     runs the crate's tests whole; so does a changed file under `tests/` that is neither, such as a
     fixture or a helper of per-file targets.
-- **Every step runs to its end**, and the heavy ones wait for the testbed's turn.
+- **Every step runs to its end**, and the heavy ones wait for the testbed's turn; a heavy one that falls
+  silent for the silence limit is ended as hung, as the static check's are.
 - **All the output goes to one log,** one per checkout under the data root's `testbed/` unless `--log`
   names another, written afresh by every run. What it prints is a line per step with its outcome and times,
   the first lines a failing static step printed, and the tests' totals and failures.
