@@ -7,9 +7,10 @@ use std::time::Instant;
 
 use bmo_testbed_core::answer::{Cut, cap_items};
 use bmo_testbed_core::declaration::{QuickCheck, Repository};
+use bmo_testbed_core::placement::{PlaceAsk, runs_here, wide_lane_full};
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::verbs::VERBS;
-use bmo_testbed_core::turn::{Env, process_env};
+use bmo_testbed_core::turn::{Env, Lane, process_env};
 use bmo_testbed_core::verb::{REFUSED_EXIT_CODE, data_root};
 use bmo_testbed_suite::check::{CheckAsk, default_log, plan, run_check, run_step};
 use bmo_testbed_suite::quick::language::{language_report, settle};
@@ -19,10 +20,11 @@ use bmo_testbed_suite::static_check::{check_steps, run_static_check, spawn_step}
 use bmo_testbed_suite::test_server::test_server_up;
 
 use crate::own::{called_from, run_own};
+use crate::placement_of;
 use crate::recorded::command_run;
 use crate::said::Said;
 use crate::suite::repository;
-use crate::words::{CheckArgs, CheckPart};
+use crate::words::{BINARY, CheckArgs, CheckPart};
 
 /// `check`: the code the call ends with.
 pub fn check(args: CheckArgs) -> u8 {
@@ -36,8 +38,44 @@ pub fn check(args: CheckArgs) -> u8 {
 
   match args.part {
     Some(part) => checked_part(part, &repo, &env, &called_from()).print(),
-    None => change(args.since, args.files, args.log, args.json, &repo),
+    None => placed_change(args.since.as_deref(), &args.files, args.json, &repo, &env)
+      .unwrap_or_else(|| change(args.since, args.files, args.log, args.json, &repo)),
   }
+}
+
+// The change check placed whole where the machine's placement sends it elsewhere while every seat of this
+// machine's wide lane is taken (docs/testbed.md, 「A run on another machine」): the code it ended with there, or
+// none where it runs here.
+fn placed_change(
+  since: Option<&str>,
+  files: &[String],
+  json: bool,
+  repo: &Repository,
+  env: &Env,
+) -> Option<u8> {
+  if runs_here(env) || !wide_lane_full(env) {
+    return None;
+  }
+
+  let mut command = vec![BINARY.to_owned(), "check".to_owned()];
+
+  if let Some(since) = since {
+    command.extend(["--since".to_owned(), since.to_owned()]);
+  }
+
+  if json {
+    command.push("--json".to_owned());
+  }
+
+  command.extend(files.iter().cloned());
+
+  placement_of(env, &repo.root).place(&PlaceAsk {
+    command: &command,
+    adapter: None,
+    lane: Lane::Wide,
+    cwd: called_from(),
+    env,
+  })
 }
 
 // The static check a deployment's gate passes, alone: the steps the change since the commit reaches, each run

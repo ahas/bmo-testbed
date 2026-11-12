@@ -4,7 +4,7 @@
 
 use std::path::PathBuf;
 
-use crate::turn::{Env, HELD_VARIABLE, Lane};
+use crate::turn::{Env, HELD_VARIABLE, Lane, lock_path, read_queue};
 
 /// The variable a deployment's or a whole run's unit is named by inside it.
 pub const DEPLOY_UNIT_VARIABLE: &str = "BMO_DEPLOY_UNIT";
@@ -43,4 +43,12 @@ pub fn runs_here(env: &Env) -> bool {
   [HELD_VARIABLE, DEPLOY_UNIT_VARIABLE, PLACED_VARIABLE]
     .iter()
     .any(|name| env.get(*name).is_some_and(|value| !value.is_empty()))
+}
+
+/// Whether this machine's wide lane has no seat for a run now: every seat held, or someone already waiting for
+/// one. A run that may go either way goes elsewhere only then, so this machine's own seats are used first.
+pub fn wide_lane_full(env: &Env) -> bool {
+  let line = read_queue(&lock_path(env, Lane::Wide));
+
+  line.holders.len() >= Lane::Wide.seats(env) || !line.waiting.is_empty()
 }

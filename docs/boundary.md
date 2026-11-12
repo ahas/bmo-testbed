@@ -223,7 +223,10 @@ bmo-testbed check dashes <file…> [--write]
 - With no part named, the change check (`docs/checks.md`, 「The change check」): exits 1 where any step
   failed, 2 where the change could not be read. **`--json`** prints its lines on standard error
   instead, and on standard output one command run (「Members」) once the check has ended: its log, the
-  waits of its steps added up, and its whole time.
+  waits of its steps added up, and its whole time. Started while every seat of this machine's wide lane is
+  held or waited for, outside a held turn, a deployment's or a whole run's unit and a placed machine, it is
+  placed first where the machine's placement sends it elsewhere (「Placement」) and runs there as that testbed's change check with the same `--since`, `--json` and
+  files; `--log` then names nothing here, and the log is that machine's.
 - **`static`** is the static check a deployment's gate passes, alone (`docs/checks.md`, 「The static check」):
   the quick checks, the declared steps the change since the commit reaches, then the workspace's formatting
   and lints, and no test; a declared step that only repeats those formatting and lints is left out, said in
@@ -259,8 +262,9 @@ bmo-testbed cargo <cargo arguments…>
   before the turn came, and 124 where, holding the turn with its standard output and error both files,
   it wrote nothing to them for the silence limit.
 - Placed first where the machine's placement sends it elsewhere (「Placement」) when its subcommand is
-  `test`, `check` or `clippy`, it holds no `--no-run` and no word names an absolute path, and it was
-  started outside a held turn, a deployment's or a whole run's unit and a placed machine: it then runs as
+  `test`, `check` or `clippy`, it holds no `--no-run` and no word names an absolute path, every seat of
+  this machine's wide lane is held or waited for, and it was started outside a held turn, a deployment's
+  or a whole run's unit and a placed machine: it then runs as
   the `cargo` verb of the testbed there, and its output and exit code are that run's.
 
 ### `prune`
