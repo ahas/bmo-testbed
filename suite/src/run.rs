@@ -34,7 +34,7 @@ use crate::selection::{
 use crate::sweep::{SweepPlan, largest_first, sweep};
 use crate::test_server::{template_name, test_postgres, test_server_up};
 use crate::tool_checks::{CheckedTool, package_check};
-use crate::unit::{UnitCommand, run_unit};
+use crate::unit::{UnitCommand, UnitRun, run_unit};
 use crate::workspace::{OwnProject, git_lines, own_projects, project_browser_files, repository_paths};
 
 fn stderr(line: &str) {
@@ -186,6 +186,34 @@ pub fn ask_of(given: &SuiteWords, test: &Test) -> SuiteAsk {
       .collect(),
     record: None,
   }
+}
+
+/// What the log holds of one unit, written whole as it ends: its heading, what it said, and how its process
+/// ended where it was ended by a signal or failed having said nothing.
+pub fn unit_account(file: &str, ran: &UnitRun) -> String {
+  let said = &SUITE.file;
+  let heading = fill_marks(
+    &said.heading,
+    &[("mark", mark(ran.code)), ("seconds", &format!("{:.1}", ran.seconds)), ("file", file)],
+  );
+  let ending = match ran.signal {
+    Some(signal) => Some(fill_marks(&said.signalled, &[("signal", &signal.to_string())])),
+    None if ran.code != 0 && ran.output.trim().is_empty() => {
+      Some(fill_marks(&said.silent, &[("code", &ran.code.to_string())]))
+    }
+    None => None,
+  };
+  let mut account = format!("\n{heading}\n{}", ran.output);
+
+  if let Some(ending) = ending {
+    if !account.ends_with('\n') {
+      account.push('\n');
+    }
+    account.push_str(&ending);
+    account.push('\n');
+  }
+
+  account
 }
 
 /// The one line a run always ends on: how it came out, how long it took and what happened.
@@ -786,14 +814,7 @@ fn run_held(
 
     let ran = run_unit(&unit_command(file));
 
-    say(&format!(
-      "\n{}\n{}",
-      fill_marks(
-        &SUITE.file.heading,
-        &[("mark", mark(ran.code)), ("seconds", &format!("{:.1}", ran.seconds)), ("file", file)],
-      ),
-      ran.output
-    ));
+    say(&unit_account(file, &ran));
 
     ran.code
   };

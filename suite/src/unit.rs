@@ -7,7 +7,7 @@
 use std::io::Read;
 use std::os::fd::AsRawFd;
 use std::os::unix::process::CommandExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::thread::JoinHandle;
 use std::time::Instant;
@@ -41,7 +41,10 @@ impl UnitCommand {
 /// What one unit came to.
 #[derive(Clone, Debug)]
 pub struct UnitRun {
+  /// The code it ended with, a signal that ended it read as the shell reads it.
   pub code: i32,
+  /// The signal that ended it, where one did.
+  pub signal: Option<i32>,
   pub seconds: f64,
   pub output: String,
 }
@@ -64,24 +67,34 @@ fn gather(mut stream: impl Read + AsRawFd + Send + 'static) -> Gathered {
   Gathered { pipe, reader }
 }
 
-// Every process but this one holding the pipe open: what the unit started and left outside its group.
-fn holders_of(pipe: &PathBuf) -> Vec<i32> {
-  let me = std::process::id().to_string();
+// The process that started this one, from the `PPid` field of its status file.
+fn parent_of(process: &Path) -> Option<u32> {
+  let status = std::fs::read_to_string(process.join("status")).ok()?;
+
+  status.lines().find_map(|line| line.strip_prefix("PPid:")?.trim().parse().ok())
+}
+
+/// Every process holding the pipe open but this one and the ones it started itself: what the unit started
+/// and left outside its group. A process this one is still starting holds every pipe open here until it
+/// becomes its own program, so it is no holder; and this process is no subreaper, so nothing a unit left
+/// behind is its child.
+pub fn holders_of(pipe: &Path) -> Vec<i32> {
+  let me = std::process::id();
   let Ok(processes) = std::fs::read_dir("/proc") else { return Vec::new() };
 
   processes
     .flatten()
     .filter_map(|process| {
-      let pid = process.file_name().to_string_lossy().into_owned();
+      let pid: u32 = process.file_name().to_str()?.parse().ok()?;
 
-      if pid == me || !pid.bytes().all(|byte| byte.is_ascii_digit()) {
+      if pid == me || parent_of(&process.path()) == Some(me) {
         return None;
       }
 
       let fds = std::fs::read_dir(process.path().join("fd")).ok()?;
       let holds = fds.flatten().any(|fd| std::fs::read_link(fd.path()).is_ok_and(|link| link == *pipe));
 
-      holds.then(|| pid.parse().ok()).flatten()
+      holds.then_some(pid as i32)
     })
     .collect()
 }
@@ -103,13 +116,15 @@ fn signal_group(leader: u32, signal: i32) {
   unsafe { libc::kill(-(leader as i32), signal) };
 }
 
-// The code the unit ended with, a signal that ended it read as the shell reads it.
-fn ended(child: &mut Child) -> i32 {
+// The code the unit ended with, and the signal that ended it, where one did.
+fn ended(child: &mut Child) -> (i32, Option<i32>) {
   match child.wait() {
-    Ok(status) => status
-      .code()
-      .unwrap_or_else(|| 128 + std::os::unix::process::ExitStatusExt::signal(&status).unwrap_or(0)),
-    Err(_) => 1,
+    Ok(status) => {
+      let signal = std::os::unix::process::ExitStatusExt::signal(&status);
+
+      (status.code().unwrap_or_else(|| 128 + signal.unwrap_or(0)), signal)
+    }
+    Err(_) => (1, None),
   }
 }
 
@@ -131,6 +146,7 @@ pub fn run_unit(unit: &UnitCommand) -> UnitRun {
     Err(why) => {
       return UnitRun {
         code: 127,
+        signal: None,
         seconds: 0.0,
         output: why.to_string(),
       };
@@ -139,7 +155,7 @@ pub fn run_unit(unit: &UnitCommand) -> UnitRun {
   let leader = child.id();
   let out = gather(child.stdout.take().expect("the output is piped"));
   let err = gather(child.stderr.take().expect("the errors are piped"));
-  let code = ended(&mut child);
+  let (code, signal) = ended(&mut child);
 
   // What the unit left standing in its group goes at once, and so does anything outside it still holding the
   // output, so the output closes.
@@ -154,6 +170,7 @@ pub fn run_unit(unit: &UnitCommand) -> UnitRun {
 
   UnitRun {
     code,
+    signal,
     seconds: started.elapsed().as_secs_f64(),
     output: format!("{said}{warned}"),
   }

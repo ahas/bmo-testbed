@@ -25,4 +25,5 @@ mod suite;
 mod superseded;
 mod template;
 mod test_targets;
+mod unit;
 mod workspace;

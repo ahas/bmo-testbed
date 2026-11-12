@@ -131,6 +131,10 @@ no_browser = "none declared"
 ok = "ok  "
 failed = "fail"
 heading = "{mark} {seconds}s  {file}"
+# How a unit's process ended, under its heading where its output cannot say: the number of the {signal}
+# that ended it, or the exit {code} of one that failed having said nothing.
+signalled = "its process was ended by signal {signal}"
+silent = "its process said nothing and ended with exit code {code}"
 # A project whose manifest names no {script} script or whose script no declared language runs, and a
 # tool whose {manifest} names no {key}.
 no_check = "its manifest names no {script} script, so nothing of it could be checked"

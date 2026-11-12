@@ -109,6 +109,8 @@ pub struct FileWords {
   pub ok: String,
   pub failed: String,
   pub heading: String,
+  pub signalled: String,
+  pub silent: String,
   pub no_check: String,
   pub no_runner: String,
   pub tests_step: String,

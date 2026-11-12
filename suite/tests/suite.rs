@@ -17,9 +17,11 @@ use bmo_testbed_suite::fence::{
   fenced_build_jobs,
 };
 use bmo_testbed_suite::run::{
-  SuiteWords, SweepCount, ask_of, file_groups, runner_of, script_runner, sweep_ending, verdict_line,
+  SuiteWords, SweepCount, ask_of, file_groups, runner_of, script_runner, sweep_ending, unit_account,
+  verdict_line,
 };
 use bmo_testbed_suite::sweep::{SweepPlan, largest_first, sweep};
+use bmo_testbed_suite::unit::UnitRun;
 
 fn words(given: &[&str]) -> Vec<String> {
   given.iter().map(|word| (*word).to_owned()).collect()
@@ -412,6 +414,30 @@ mod lines {
 
     assert_eq!(verdict_line(true, 66.4, "n"), verdict(&said.ok, "66", "n"));
     assert_eq!(verdict_line(false, 334.0, "m"), verdict(&said.failed, "334", "m"));
+  }
+
+  // "one ended by a signal names the signal under its heading, and one that failed having said nothing names
+  // the exit code it ended with"
+  #[test]
+  fn a_unit_says_how_its_process_ended_where_its_output_cannot() {
+    let said = &SUITE.file;
+    let ran = |code: i32, signal: Option<i32>, output: &str| UnitRun {
+      code,
+      signal,
+      seconds: 0.0,
+      output: output.to_owned(),
+    };
+    let ending =
+      |run: &UnitRun| unit_account("a.test.ts", run).lines().last().unwrap_or_default().to_owned();
+
+    assert_eq!(ending(&ran(137, Some(9), "")), fill_marks(&said.signalled, &[("signal", "9")]));
+    assert_eq!(ending(&ran(137, Some(9), "partial")), fill_marks(&said.signalled, &[("signal", "9")]));
+    assert_eq!(ending(&ran(1, None, "\n")), fill_marks(&said.silent, &[("code", "1")]));
+    assert_eq!(ending(&ran(1, None, "1 fail\n")), "1 fail");
+    assert_eq!(
+      ending(&ran(0, None, "")),
+      fill_marks(&said.heading, &[("mark", &said.ok), ("seconds", "0.0"), ("file", "a.test.ts")])
+    );
   }
 }
 

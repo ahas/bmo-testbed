@@ -29,6 +29,9 @@
 - **Streaming:** each file's result is written out whole as that file ends, its verdict ahead of it,
   so what the run found is already in the redirected file even if the run is killed from outside.
   Output is held per file because files running beside one another would otherwise interleave.
+- **A unit says how its process ended where its output cannot:** one ended by a signal names the signal
+  under its heading, and one that failed having said nothing names the exit code it ended with, so a
+  process gone before its runner printed a word still leaves an account in the log.
 
 ## Browser files run in a lane of one
 
@@ -104,7 +107,10 @@
   about it, and the unit's process group is the one to stop.
 - **A unit's output closes once it has ended:** whatever it left standing in its process group is killed
   at once, and so is any process outside the group still holding its output, so the run reads the output
-  whole and goes on.
+  whole and goes on. A process the run started itself is never taken for such a holder: one the run is
+  still starting holds every output the run has open until it becomes its own program, though it is no
+  leftover of the unit that ended. The run is no subreaper, so nothing a unit leaves behind is the run's
+  own child.
 - **Keys read and given no effect:** `--guard`, `--file-guard` and `--turn-wait`, and a declaration's
   `guard_seconds`, `file_guard_seconds` and `test_timeout_seconds`.
 

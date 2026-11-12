@@ -212,6 +212,7 @@
       "cli/src/suite.rs",
       "docs/suite.md",
       "suite/tests/suite.rs",
+      "suite/tests/unit.rs",
       "suite/tests/once_more.rs",
       "cli/tests/suite_verb.rs"
     ],
@@ -228,8 +229,8 @@
       "core/policy-loader",
       "core/run-verb-and-status"
     ],
-    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
-    "changed": 1793664723651
+    "base": "3d597a1c9c5d24652a849116272046ee9b92a110",
+    "changed": 1794469410422
   },
   {
     "id": "suite/test-count",
