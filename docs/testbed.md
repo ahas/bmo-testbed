@@ -220,6 +220,10 @@ flowchart TD
 - **A deployment's gate and its Cargo release build go to the placed machine** the settings name
   (`docs/deploy.md`, 「Where a deployment runs」), so the machine that serves is not the machine that
   checks and builds.
+- **A caller keeps its place in the line there:** one standing at the front (「The front of the line」) or
+  next (「Next after the front」) here stands the same on the placed machine, the line run there carrying
+  `BMO_TESTBED_FRONT` or `BMO_TESTBED_NEXT` as it stands here. A deployment's gate and release build
+  therefore take that machine's turn ahead of every run placed there that is no deployment's.
 - **A run started on a placed machine stays there.**
 - **A machine that drops it** ends the run as not run, exit code 75, and the same command run again
   goes where the placement sends it next.

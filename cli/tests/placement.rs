@@ -328,3 +328,42 @@ fn a_machine_out_of_reach_or_settings_that_do_not_read_leave_the_run_here() {
     unsettled.err
   );
 }
+
+// "a caller at the front or standing next here stands the same on the placed machine"
+#[test]
+fn a_caller_keeps_its_place_in_the_line_on_the_placed_machine() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let repo = dir.join("repo");
+  let ssh = dir.join("ssh");
+
+  // A stand-in that, as `ssh` does, hands the far side none of the caller's variables but those its line sets.
+  let unhanded = SSH.replace("exec sh -c", "unset BMO_TESTBED_FRONT BMO_TESTBED_NEXT; exec sh -c");
+
+  install(&unhanded, &ssh);
+  settle(&dir, &ssh, "stand");
+  checkout(&repo, "testbed = 0\n");
+
+  let probe =
+    r#"test "$BMO_TESTBED_FRONT" = 1 && exit 10; test "$BMO_TESTBED_NEXT" = 1 && exit 11; exit 12"#;
+  let args = ["run", "--adapter", "plain", "--", "sh", "-c", probe];
+  let in_place = |variable: Option<&str>| {
+    let mut command = testbed(&repo, &dir, &args);
+
+    command.env("HOME", &dir).env_remove("BMO_TESTBED_PLACEMENT");
+
+    if let Some(variable) = variable {
+      command.env(variable, "1");
+    }
+
+    ran(&mut command)
+  };
+
+  let front = in_place(Some("BMO_TESTBED_FRONT"));
+  let next = in_place(Some("BMO_TESTBED_NEXT"));
+  let neither = in_place(None);
+
+  assert_eq!(front.code, 10, "{}\n{}", front.out, front.err);
+  assert_eq!(next.code, 11, "{}\n{}", next.out, next.err);
+  assert_eq!(neither.code, 12, "{}\n{}", neither.out, neither.err);
+}

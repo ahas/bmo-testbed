@@ -11,7 +11,9 @@ use bmo_testbed_core::declaration::Repository;
 use bmo_testbed_core::placement::{PlaceAsk, Placement};
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
-use bmo_testbed_core::turn::{Env, Lane, NOT_RUN_EXIT_CODE, process_env, stands_at_front, stands_next};
+use bmo_testbed_core::turn::{
+  Env, FRONT_VARIABLE, Lane, NEXT_VARIABLE, NOT_RUN_EXIT_CODE, process_env, stands_at_front, stands_next,
+};
 use bmo_testbed_suite::crates::checkout_target_name;
 use bmo_testbed_suite::quick::shared_versions::shared_root;
 use futures_util::StreamExt as _;
@@ -514,7 +516,15 @@ impl MachinePlacement {
   /// code it ended with, 75 where the connection broke.
   pub fn run(&self, bench: &ReadyBench, words: &[String], setup: bool) -> u8 {
     let said = &LANES.placed;
-    let mut line = format!("cd {} && {} placed", far_path(&bench.path), far_path(&self.settings.testbed));
+    let env = process_env();
+    // The caller's place in the line goes with it, so a deployment stands at the front there as it does here.
+    let place = [(FRONT_VARIABLE, stands_at_front(&env)), (NEXT_VARIABLE, stands_next(&env))]
+      .into_iter()
+      .filter(|(_, stands)| *stands)
+      .map(|(name, _)| format!("{name}=1 "))
+      .collect::<String>();
+    let mut line =
+      format!("cd {} && {place}{} placed", far_path(&bench.path), far_path(&self.settings.testbed));
 
     if setup {
       line.push_str(" --setup");
