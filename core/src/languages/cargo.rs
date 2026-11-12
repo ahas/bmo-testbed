@@ -15,11 +15,32 @@ const COMPILING: [&str; 13] = [
   "build", "b", "check", "c", "clippy", "test", "t", "bench", "doc", "d", "nextest", "llvm-cov", "miri",
 ];
 
+// The subcommands whose whole product is what they print and their exit code: run on another machine, they
+// leave nothing here that a later command reads.
+const PLACEABLE: [&str; 6] = ["check", "c", "clippy", "test", "t", "nextest"];
+
+// A Cargo command's subcommand, read past a `+toolchain` and the options before it.
+fn subcommand(args: &[String]) -> Option<&str> {
+  args
+    .iter()
+    .find(|word| !word.starts_with('-') && !word.starts_with('+'))
+    .map(String::as_str)
+}
+
 /// Whether a Cargo command compiles, its subcommand read past a `+toolchain` and the options before it.
 pub fn compiles(args: &[String]) -> bool {
-  let sub = args.iter().find(|word| !word.starts_with('-') && !word.starts_with('+'));
+  subcommand(args).is_some_and(|sub| COMPILING.contains(&sub))
+}
 
-  sub.is_some_and(|sub| COMPILING.contains(&sub.as_str()))
+/// Whether a Cargo command may run on another machine (docs/testbed.md, 「A run on another machine」): it
+/// tests, checks or lints, builds no test binaries to run here afterwards, and names no absolute path, which
+/// would point elsewhere there.
+pub fn placeable(args: &[String]) -> bool {
+  subcommand(args).is_some_and(|sub| PLACEABLE.contains(&sub))
+    && !args.iter().any(|word| word == "--no-run")
+    && !args.iter().any(|word| {
+      word.starts_with('/') || word.split_once('=').is_some_and(|(_, value)| value.starts_with('/'))
+    })
 }
 
 static PASS: LazyLock<Regex> = LazyLock::new(|| pattern(r"^test result: \w+\. (\d+) passed;"));

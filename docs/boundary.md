@@ -258,6 +258,10 @@ bmo-testbed cargo <cargo arguments…>
   removes what the build superseded. Exits with Cargo's own code, 75 where its harness went away
   before the turn came, and 124 where, holding the turn with its standard output and error both files,
   it wrote nothing to them for the silence limit.
+- Placed first where the machine's placement sends it elsewhere (「Placement」) when its subcommand is
+  `test`, `check` or `clippy`, it holds no `--no-run` and no word names an absolute path, and it was
+  started outside a held turn, a deployment's or a whole run's unit and a placed machine: it then runs as
+  the `cargo` verb of the testbed there, and its output and exit code are that run's.
 
 ### `prune`
 

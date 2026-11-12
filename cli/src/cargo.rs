@@ -9,12 +9,14 @@ use std::path::Path;
 
 use bmo_testbed_core::declaration::{Repository, root_of};
 use bmo_testbed_core::events::{Event, Hook};
+use bmo_testbed_core::languages::cargo_placeable;
+use bmo_testbed_core::placement::{PlaceAsk, runs_here};
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::policy::prune::PRUNE;
 use bmo_testbed_core::policy::verbs::VERBS;
 use bmo_testbed_core::queue::now_ms;
-use bmo_testbed_core::turn::{Env, process_env};
+use bmo_testbed_core::turn::{Env, Lane, process_env};
 use bmo_testbed_core::verb::{REFUSED_EXIT_CODE, data_root};
 use bmo_testbed_deploy::deployment::DeployPlaces;
 use bmo_testbed_deploy::expansion::{idle_build_target, remove_build_target};
@@ -27,14 +29,37 @@ use bmo_testbed_suite::prune::{
 };
 use serde_json::json;
 
+use crate::placement_of;
 use crate::said::Said;
-use crate::words::PruneArgs;
+use crate::words::{BINARY, PruneArgs};
 
-/// `cargo`: Cargo's own code, 75 where the turn did not come.
+/// `cargo`: Cargo's own code, 75 where the turn did not come. A command that tests, checks or lints is placed
+/// first where the machine's placement sends it elsewhere (docs/testbed.md, 「A run on another machine」), and
+/// runs there as this same verb of that machine's testbed.
 pub fn cargo(words: &[String]) -> u8 {
   let here = std::env::current_dir().unwrap_or_default();
+  let root = root_of(&here).unwrap_or(here);
+  let env = process_env();
 
-  run_cargo(&root_of(&here).unwrap_or(here), words)
+  if cargo_placeable(words) && !runs_here(&env) {
+    let command: Vec<String> = [BINARY.to_owned(), "cargo".to_owned()]
+      .into_iter()
+      .chain(words.iter().cloned())
+      .collect();
+    let ask = PlaceAsk {
+      command: &command,
+      adapter: None,
+      lane: Lane::Wide,
+      cwd: root.clone(),
+      env: &env,
+    };
+
+    if let Some(code) = placement_of(&env, &root).place(&ask) {
+      return code;
+    }
+  }
+
+  run_cargo(&root, words)
 }
 
 fn gigabytes(bytes: u64) -> String {

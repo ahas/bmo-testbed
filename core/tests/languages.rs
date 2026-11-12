@@ -5,8 +5,8 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use bmo_testbed_core::languages::{
-  Browser, Bun, Cargo, LANGUAGES, Language, Node, PLAIN, Tally, failures_of_log, language_for,
-  program_words, run_folder, tally_of_log,
+  Browser, Bun, Cargo, LANGUAGES, Language, Node, PLAIN, Tally, cargo_placeable, failures_of_log,
+  language_for, program_words, run_folder, tally_of_log,
 };
 
 fn words(line: &[&str]) -> Vec<String> {
@@ -387,4 +387,31 @@ fn a_test_file_runs_from_the_nearest_folder_holding_its_configuration_else_the_r
   // The root's own configuration is the root.
   std::fs::write(root.join("bunfig.toml"), "").unwrap();
   assert_eq!(folder(&Bun, "tests/rs/e.test.ts"), Path::new(""));
+}
+
+#[test]
+fn a_cargo_command_that_tests_checks_or_lints_may_run_elsewhere() {
+  for line in [
+    &["test", "-p", "core"][..],
+    &["+stable", "check", "--workspace", "--all-targets"],
+    &["--locked", "clippy", "--", "-D", "warnings"],
+    &["nextest", "run"],
+  ] {
+    assert!(cargo_placeable(&words(line)), "{line:?}");
+  }
+}
+
+#[test]
+fn a_cargo_command_whose_product_is_read_here_stays() {
+  for line in [
+    &["build", "--release"][..],
+    &["run", "--bin", "tool"],
+    &["test", "--no-run"],
+    &["fmt", "--check"],
+    &["test", "--manifest-path", "/elsewhere/Cargo.toml"],
+    &["check", "--target-dir=/elsewhere/target"],
+    &[],
+  ] {
+    assert!(!cargo_placeable(&words(line)), "{line:?}");
+  }
 }
