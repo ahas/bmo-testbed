@@ -107,7 +107,11 @@
 - **Every step runs to its end,** a failing one stopping none after it, and each says its exit code,
   how long it waited for its turn and how long it ran. A step holding a lane's turn that writes nothing to
   its output files for the silence limit is ended as hung and fails with exit code 124 (`docs/testbed.md`,
-  「A holder whose command falls silent lets go」).
+  「A holder whose command falls silent lets go」), and so does the workspace's own lint step, which holds
+  no turn of its own but is watched the same way.
+- **A step a signal ended says the signal.** Its line, and the check's failing line where it is the
+  first to fail, name the signal in place of an exit code, so a command killed from outside is never
+  read as a lint or a test that failed; it counts as exit code 1 for a caller.
 - **A step ends when its command ends.** Its output is taken through files of the run's own, never a
   pipe, so a process the step left running, a server a test stood up or a stand-in it never stopped,
   holds nothing the check waits on.

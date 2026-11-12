@@ -32,6 +32,9 @@ pub struct CheckStep {
   pub env: Vec<(String, String)>,
   pub lane: Option<Lane>,
   pub retry_out_of_memory: bool,
+  /// Whether a step run where it stands, in no lane, is watched for silence and ended as hung where it
+  /// writes nothing for the limit; a step in a lane always is.
+  pub watched: bool,
   /// The Cargo workspace check's own step a declared step only repeats, where that check runs: the step is
   /// then left out, said in one line and counted as passed.
   pub covered_by: Option<DeployStep>,
@@ -47,6 +50,7 @@ impl CheckStep {
       env: Vec::new(),
       lane: None,
       retry_out_of_memory: false,
+      watched: false,
       covered_by: None,
     }
   }
@@ -60,6 +64,7 @@ impl CheckStep {
       env: Vec::new(),
       lane: step.lane,
       retry_out_of_memory: step.retry_out_of_memory,
+      watched: false,
       covered_by: None,
     }
   }
@@ -127,14 +132,18 @@ pub fn cargo_format(own: &OwnPackages) -> CheckStep {
 
 /// The lints of the repository's own packages, which check every crate as they lint it, through the Cargo
 /// verb, which runs them in the wide lane and again after an out-of-memory kill. A path dependency is
-/// compiled as a dependency, and its warnings are never denied.
+/// compiled as a dependency, and its warnings are never denied. The step itself is watched for silence, so
+/// a verb that stops writing, its turn's notices included, is ended as hung rather than left to a bare code.
 pub fn cargo_lint(own: &OwnPackages) -> CheckStep {
   let args: Vec<String> = std::iter::once("clippy".to_owned())
     .chain(own.args(&["--workspace"]))
     .chain(["--all-targets", "--locked", "--", "-D", "warnings"].into_iter().map(str::to_owned))
     .collect();
 
-  CheckStep::own(DeployStep::CargoLint, cargo_verb_line(&args))
+  CheckStep {
+    watched: true,
+    ..CheckStep::own(DeployStep::CargoLint, cargo_verb_line(&args))
+  }
 }
 
 // The words of a Cargo formatting check the workspace's formatting covers, `--check` among them and needed
@@ -261,28 +270,42 @@ pub fn check_steps(repo: &Repository, since: Option<&str>) -> Vec<CheckStep> {
 #[derive(Clone, Debug, PartialEq)]
 pub struct TimedRun {
   pub code: i32,
+  /// The signal that ended the command, where one did; its code is then the one a caller ends on, 1.
+  pub signal: Option<i32>,
   pub output: String,
   pub waited_seconds: f64,
   pub ran_seconds: f64,
 }
 
+impl TimedRun {
+  /// How it ended, as a line names it: the signal where one ended it, its exit code otherwise.
+  pub fn end_words(&self) -> String {
+    RunEnd {
+      code: Some(self.code),
+      signal: self.signal,
+    }
+    .words()
+  }
+}
+
 // A run of `run`, handed the file each heavy command under it writes its wait for the machine's turn into,
-// answering its exit code and output: the waits summed are the run's wait, the rest its run.
-fn timed(run: impl FnOnce(&Path) -> (i32, String)) -> TimedRun {
+// answering how it ended and its output: the waits summed are the run's wait, the rest its run.
+fn timed(run: impl FnOnce(&Path) -> (RunEnd, String)) -> TimedRun {
   let times = std::env::temp_dir().join(format!(
     "bmo-testbed-timed-run-{}-{}.jsonl",
     std::process::id(),
     run_number()
   ));
   let started = Instant::now();
-  let (code, output) = run(&times);
+  let (end, output) = run(&times);
   let seconds = started.elapsed().as_secs_f64();
   let waited = read_turn_times(&times).iter().map(|one| one.waited_seconds).sum::<f64>().min(seconds);
 
   let _ = std::fs::remove_file(&times);
 
   TimedRun {
-    code,
+    code: i32::from(end.exit_code()),
+    signal: end.signal,
     output,
     waited_seconds: waited,
     ran_seconds: seconds - waited,
@@ -353,11 +376,7 @@ pub fn run_timed(
   env: &[(String, String)],
   silence: Option<Silence>,
 ) -> TimedRun {
-  timed(|times| {
-    let (end, output) = output_of(command, cwd, env, times, None, silence);
-
-    (i32::from(end.exit_code()), output)
-  })
+  timed(|times| output_of(command, cwd, env, times, None, silence))
 }
 
 // A name no two runs of this process share.
@@ -435,6 +454,7 @@ pub fn run_static_check(
     });
 
     let newline = if result.output.is_empty() || result.output.ends_with('\n') { "" } else { "\n" };
+    let end = result.end_words();
 
     write(&format!(
       "{}\n{}{newline}",
@@ -442,7 +462,7 @@ pub fn run_static_check(
         &said.ended,
         &[
           ("step", &step_words(step)),
-          ("code", &result.code.to_string()),
+          ("end", &end),
           ("times", &times_words(waited, seconds - waited))
         ],
       ),
@@ -454,9 +474,7 @@ pub fn run_static_check(
         fill_marks(&said.not_had, &[("mark", &said.not_run), ("step", &step_words(step))])
       });
     } else if result.code != 0 {
-      failed.get_or_insert_with(|| {
-        fill_marks(&said.failed, &[("step", &step_words(step)), ("code", &result.code.to_string())])
-      });
+      failed.get_or_insert_with(|| fill_marks(&said.failed, &[("step", &step_words(step)), ("end", &end)]));
     }
   }
 
@@ -468,16 +486,18 @@ pub fn run_static_check(
 pub fn spawn_step(root: &Path, step: &CheckStep) -> TimedRun {
   let cwd = root.join(&step.dir);
   let Some(lane) = step.lane else {
-    return run_timed(&step.command, &cwd, &step.env, None);
+    return run_timed(&step.command, &cwd, &step.env, step.watched.then(Silence::default));
   };
 
   timed(|times| {
     let mut output = String::new();
+    let mut signal = None;
     let mut start = |turn: &TestbedTurn| {
       let held = turn.held_variable();
       let (end, said) = output_of(&step.command, &cwd, &step.env, times, held, Some(Silence::default()));
 
       output.push_str(&said);
+      signal = end.signal;
       end
     };
     let mut env = process_env();
@@ -493,7 +513,14 @@ pub fn spawn_step(root: &Path, step: &CheckStep) -> TimedRun {
     let code = run_in_turn(&mut hands, &limits, &mut || {});
 
     drop(hands);
-    (i32::from(code), output)
+
+    // The last run's signal is how the step ended where it failed; a passed step, or one not run, has none.
+    let end = RunEnd {
+      code: Some(i32::from(code)),
+      signal: signal.filter(|_| code != 0 && code != NOT_RUN_EXIT_CODE),
+    };
+
+    (end, output)
   })
 }
 

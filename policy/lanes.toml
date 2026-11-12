@@ -91,6 +91,11 @@ unfetched = "the binaries could not be read back from {machine}: {said}"
 broken = "the connection to it broke"
 setup_failed = "testbed: the setup step {command} failed with code {code}"
 no_registry = "testbed: the run's registry of checkouts could not be written at {file}: {why}"
+# The placed machine's testbed is not this one's release: {machine} the machine, {far} the commit its testbed
+# was built from and {own} the commit this testbed was built from; or no commit reads there, {file} the file
+# asked for and {said} what reading it came to.
+stale = "the testbed on {machine} is the release of {far}, not this testbed's {own}; bring that machine's testbed to {own} before anything runs there"
+unreleased = "the testbed on {machine} names no release ({file}: {said}); bring that machine's testbed to {own} before anything runs there"
 
 # A command's wait and run, as every step of a check says them.
 [times]
@@ -125,6 +130,9 @@ unstarted = "testbed: {program} could not be started: {why}"
 no_log = "testbed: the log could not be written in {dir}: {why}"
 # A run a placed machine dropped, {machine} the machine and {said} the last line it gave.
 dropped = "testbed: not run, {machine} dropped it: {said}; run the same command again"
+# A run a placed machine refused because its testbed is not this one's release, {said} the line saying so; the
+# same command fails the same way until that machine's testbed is brought to this release.
+refused = "testbed: not run, {machine} refused it: {said}"
 
 # The lanes and the close line, as `status` prints them.
 [status]
@@ -146,8 +154,8 @@ no_language = "testbed: no language is named {name}; there are {names}"
 # A heavy command run in its turn and run again where the kernel killed it for want of the machine's
 # memory rather than at the ceiling of a fence it stands in (docs/testbed.md, 「Memory」). Every line
 # opens with `mark`, so a caller can lift them out of the command's output; {what} is the command, {end}
-# the `exit` or `signal` words it ended on, {run} and {runs} the run and the runs it is given, and
-# {available} and {ceiling} amounts of memory in gigabytes.
+# the `exit` or `signal` words it ended on, {code} the exit code it ends on, {run} and {runs} the run and
+# the runs it is given, and {available} and {ceiling} amounts of memory in gigabytes.
 [memory]
 mark = "memory turn:"
 not_run = "{what} not run: the machine's turn was {turn}"
@@ -155,9 +163,10 @@ took = "{what} took the machine's turn after {seconds}s waiting on other heavy c
 unread = "the available memory cannot be read; running {what} again"
 freed = "{available} available; running {what} again"
 short = "only {available} available after {minutes} minutes; {what} waits for more before it runs again"
-fenced = "FAILED: {what} failed ({end}) while the kernel killed a process at the {ceiling} memory ceiling of the fence it stands in, {fence}; the same run meets the same ceiling again, so it does not run again"
+fenced = "FAILED: {what} failed ({end}) while the fence it stands in, {fence}, reached its {ceiling} memory ceiling; the same run meets the same ceiling again, so it does not run again"
 spent = "FAILED: {what} failed while the kernel killed a process for want of memory on all {runs} runs; the code was never judged, so run it again once the machine has memory to spare"
 again = "{what} failed ({end}) while the kernel killed a process for want of memory (run {run} of {runs}); this is not taken for the change failing, and it runs again once memory frees"
+killed = "FAILED: {what} was {end}, which nothing took for a kill for want of memory; it ends on exit {code}"
 times = "{what} {times}"
 exit = "exit {code}"
-signal = "signal {signal}"
+signal = "killed by signal {signal}"

@@ -59,7 +59,8 @@ impl RunEnd {
     self.code.and_then(|code| u8::try_from(code).ok()).unwrap_or(1)
   }
 
-  fn words(self) -> String {
+  /// How it ended, as a line names it: its exit code, or the signal that ended it.
+  pub fn words(self) -> String {
     let said = &LANES.memory;
 
     match (self.signal, self.code) {
@@ -255,7 +256,8 @@ fn wait_for_memory(hands: &mut dyn HeavyHands, limits: &MemoryLimits) {
 
 /// The command, run in its turn and run again after each out-of-memory kill until the runs are spent. Answers
 /// the exit code the caller ends on, `on_pass` run inside the turn once a run has passed; a turn not had runs
-/// nothing and answers the testbed's code for it.
+/// nothing and answers the testbed's code for it. A run a signal ended, which nothing took for a memory kill,
+/// says so on a line before the code it ends on.
 pub fn run_in_turn(hands: &mut dyn HeavyHands, limits: &MemoryLimits, on_pass: &mut dyn FnMut()) -> u8 {
   let said = &LANES.memory;
   let what = hands.what();
@@ -312,12 +314,11 @@ fn runs(
       return 0;
     }
 
-    if !killed_for_memory(done, before, hands.oom_kills()) {
-      return done.exit_code();
-    }
-
+    let after = hands.oom_kills();
     let fences_after = hands.fences();
 
+    // A fence's own ceiling is looked at first: its own count says the ceiling was met even where the machine's
+    // count of out-of-memory kills cannot be read or did not move, and such a run would meet it again.
     if let Some(fence) = fence_reached(&fences_before, &fences_after) {
       let line = fill_marks(
         &said.fenced,
@@ -330,6 +331,19 @@ fn runs(
       );
 
       say(hands, &line);
+
+      return done.exit_code();
+    }
+
+    if !killed_for_memory(done, before, after) {
+      if done.signal.is_some() {
+        let code = done.exit_code().to_string();
+
+        say(
+          hands,
+          &fill_marks(&said.killed, &[("what", &what), ("end", &done.words()), ("code", &code)]),
+        );
+      }
 
       return done.exit_code();
     }

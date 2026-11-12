@@ -9,6 +9,7 @@ use std::time::Duration;
 use bmo_testbed_core::memory::{
   HeavyHands, MemoryFence, MemoryLimits, RunEnd, killed_for_memory, proc_number, run_in_turn,
 };
+use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::silence::HUNG_EXIT_CODE;
 use bmo_testbed_core::turn::{NOT_RUN_EXIT_CODE, Seats, TestbedTurn};
@@ -146,7 +147,7 @@ fn a_kill_for_want_of_memory_runs_again_once_memory_frees() {
     bench
       .said
       .iter()
-      .any(|line| line.contains("failed (signal 9)") && line.contains("run 1 of 4"))
+      .any(|line| line.contains("failed (killed by signal 9)") && line.contains("run 1 of 4"))
   );
   assert!(
     bench
@@ -170,6 +171,38 @@ fn a_kill_at_a_fences_ceiling_is_not_run_again() {
       .iter()
       .any(|line| line.contains("16.0 GB memory ceiling") && line.contains("/user.slice/job"))
   );
+}
+
+// "a failed run during which a fence it stands in reached its own ceiling is not run again, whether or not
+// the machine's count of out-of-memory kills could be read or moved"
+#[test]
+fn a_fences_ceiling_reached_with_no_kill_counted_is_not_run_again() {
+  let mut bench = Bench::new(&[KILLED, PASSED], &[Some(3), Some(3)]);
+
+  bench.fences = RefCell::new([vec![fence(1)], vec![fence(2)]].into());
+
+  assert_eq!(run_in_turn(&mut bench, &MemoryLimits::default(), &mut || ()), 1);
+  assert_eq!(bench.ran, 1);
+  assert!(bench.said.iter().any(|line| line.contains("/user.slice/job")), "{:?}", bench.said);
+}
+
+// "a run a signal ended and nothing took for a memory kill says so on a line naming the signal and the exit
+// code it ends on, 1"
+#[test]
+fn a_run_a_signal_ended_with_no_kill_counted_says_the_signal_and_ends_on_one() {
+  let mut bench = Bench::new(&[KILLED], &[Some(3), Some(3)]);
+  let killed = fill_marks(
+    &LANES.memory.killed,
+    &[
+      ("what", "cargo test"),
+      ("end", &fill_marks(&LANES.memory.signal, &[("signal", "9")])),
+      ("code", "1"),
+    ],
+  );
+
+  assert_eq!(run_in_turn(&mut bench, &MemoryLimits::default(), &mut || ()), 1);
+  assert_eq!(bench.ran, 1);
+  assert!(bench.said.contains(&marked(&killed)), "{:?}", bench.said);
 }
 
 #[test]

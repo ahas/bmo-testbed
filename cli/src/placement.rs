@@ -14,6 +14,8 @@ use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::turn::{
   Env, FRONT_VARIABLE, Lane, NEXT_VARIABLE, NOT_RUN_EXIT_CODE, process_env, stands_at_front, stands_next,
 };
+use bmo_testbed_deploy::release::built_from;
+use bmo_testbed_deploy::tree::{BUILT_FROM, short};
 use bmo_testbed_suite::crates::checkout_target_name;
 use bmo_testbed_suite::quick::shared_versions::shared_root;
 use futures_util::StreamExt as _;
@@ -426,6 +428,18 @@ pub struct ReadyBench {
 pub struct MachinePlacement {
   pub settings: MachineSettings,
   pub home: PathBuf,
+  /// The commit the running testbed's release was built from, which the testbed there must be built from
+  /// too; none where this one runs from no release, such as a checkout's own build, and then nothing is
+  /// compared.
+  pub release: Option<String>,
+}
+
+/// The commit the running binary's release was built from: the `built-from` beside it in the release's
+/// `bin/`. None where the binary stands in no release.
+pub fn own_release() -> Option<String> {
+  let binary = std::env::current_exe().ok()?;
+
+  built_from(binary.parent()?.parent()?)
 }
 
 /// What a run on the placed machine came to: it ran there, with its code; or the machine could not be
@@ -443,6 +457,7 @@ impl MachinePlacement {
       Ok(settings) => Some(Self {
         settings,
         home: home.to_path_buf(),
+        release: own_release(),
       }),
       Err(why) => {
         eprintln!("{why}");
@@ -475,10 +490,47 @@ impl MachinePlacement {
     false
   }
 
+  /// Whether the testbed there is this one's release (docs/boundary.md, 「The placed machine」): the commit
+  /// the `built-from` beside its binary names, compared with this one's own; the line naming both where they
+  /// differ or none reads there. Nothing is compared where this one runs from no release.
+  pub fn same_release(&self) -> Result<(), String> {
+    let Some(own) = &self.release else { return Ok(()) };
+    let words = &LANES.placed;
+    let machine = self.settings.label();
+    let file = Path::new(&self.settings.testbed).with_file_name(BUILT_FROM);
+    let file = file.to_string_lossy();
+    let read = self.ssh().arg(format!("cat {}", far_path(&file))).output();
+    let far = read
+      .as_ref()
+      .ok()
+      .filter(|done| done.status.success())
+      .map(|done| String::from_utf8_lossy(&done.stdout).trim().to_owned())
+      .filter(|commit| !commit.is_empty());
+
+    match far {
+      Some(far) if far == *own => Ok(()),
+      Some(far) => Err(fill_marks(
+        &words.stale,
+        &[("machine", machine), ("far", &short(&far)), ("own", &short(own))],
+      )),
+      None => Err(fill_marks(
+        &words.unreleased,
+        &[("machine", machine), ("file", &file), ("said", &said(&read)), ("own", &short(own))],
+      )),
+    }
+  }
+
   /// The bench of a checkout made ready at a commit, its outside trees with it, and the checkout holding the
   /// shared versions the declaration names, found through this machine's registry; the bench's path there,
-  /// and the far places of every tree copied, which are that run's checkouts there.
+  /// and the far places of every tree copied, which are that run's checkouts there. Nothing is made ready
+  /// where the testbed there is not this one's release.
   pub fn ready(&self, checkout: &Path, commit: &str, open_files: bool) -> Result<ReadyBench, String> {
+    self.same_release()?;
+    self.made_ready(checkout, commit, open_files)
+  }
+
+  // The bench made ready, the release there taken as already compared.
+  fn made_ready(&self, checkout: &Path, commit: &str, open_files: bool) -> Result<ReadyBench, String> {
     let remote = git(checkout, &["remote", "get-url", "origin"]);
     let mut trees = bmo_testbed_deploy::expansion::outside_roots(checkout, checkout)?;
 
@@ -632,10 +684,19 @@ impl MachinePlacement {
       return Placed::Unreached;
     }
 
+    // A testbed there of another release is a refusal the same command meets again, never a dropped run.
+    if let Err(said) = self.same_release() {
+      let machine = self.settings.label();
+
+      println!("{}", fill_marks(&LANES.run.refused, &[("machine", machine), ("said", &said)]));
+
+      return Placed::Ran(NOT_RUN_EXIT_CODE);
+    }
+
     let found = git(&ask.cwd, &["rev-parse", "--show-toplevel"]);
     let checkout = if found.is_empty() { ask.cwd.clone() } else { PathBuf::from(found) };
     let commit = git(&checkout, &["rev-parse", "HEAD"]);
-    let bench = match self.ready(&checkout, &commit, true) {
+    let bench = match self.made_ready(&checkout, &commit, true) {
       Ok(bench) => bench,
       Err(said) => return Placed::Ran(dropped(self.settings.label(), &said)),
     };

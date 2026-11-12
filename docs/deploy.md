@@ -158,6 +158,13 @@
   cannot be reached leaves the gate and the build where the deployment runs, said on a line; a bench
   that cannot be made ready, or a run the machine drops once begun, fails the stage. The flaky tests a
   placed gate found stay in that machine's record, so the deployment reports none.
+- **The placed machine runs the deploying testbed's own release, or nothing runs there.** Before the
+  bench is made ready, the commit that machine's testbed was built from is read and compared with the
+  commit the running testbed was built from; where they differ, or that machine's testbed names none,
+  the stage fails with nothing changed, its reason naming both commits, since an older testbed there
+  would judge the gate by older rules without saying so (`docs/boundary.md`, 「The placed machine」).
+  Bringing that machine's testbed to the deploying release is the operator's step; the deployment
+  never copies it.
 - **A passed suite is looked for in each machine's own record,** since a record is per machine and a run
   placed elsewhere is written by the machine it ran on (`docs/boundary.md`, 「The record」). The
   deployment reads its own machine's record first, before the gate is asked or placed, which holds a
@@ -439,7 +446,9 @@ flowchart TD
 - **Each heavy step is written as it begins and as it ends,** with its exit code, how long it waited
   for its turn and how long it ran, under the stage it ended in. A heavy step that writes nothing for the
   silence limit while it holds its lane's turn is ended as hung and fails with exit code 124
-  (`docs/testbed.md`, 「A holder whose command falls silent lets go」). Steps are named by their declared
+  (`docs/testbed.md`, 「A holder whose command falls silent lets go」). A step whose command a signal
+  ended is written with exit code 1, and the gate's lines for it name the signal in place of an exit
+  code (`docs/checks.md`, 「The static check」). Steps are named by their declared
   English ids. A declared step the static check left out as repeating the Cargo workspace check is
   written as passed, exit 0 with no wait and no run (`docs/checks.md`, 「The static check」).
 - **It ends with an outcome:** `live`, `rolled-back`, `failed`, or `stopped` where nothing went live by

@@ -52,8 +52,8 @@
       "core/policy-loader",
       "calls/bmo-text"
     ],
-    "base": "95a986f9facd7b2c260f292ec454c9ced2ea2bdf",
-    "changed": 1794219181615
+    "base": "9d6ad2fe61bc35bad21d2332908605bbacecb561",
+    "changed": 1794496813424
   },
   {
     "id": "suite/change-selection",
@@ -190,7 +190,7 @@
   {
     "id": "suite/static-check",
     "title": "Static check",
-    "what": "The static check: the enabled quick checks, then the repository's declared steps a change reaches, each in its directory and lane, then cargo fmt and clippy where a crate is marked.",
+    "what": "The static check: the enabled quick checks, the repository's declared steps a change reaches, each in its directory and lane, then cargo fmt and a silence-watched clippy where a crate is marked; each step ends on its exit code or the signal that ended it.",
     "files": [
       "suite/src/static_check.rs",
       "docs/checks.md",
@@ -206,8 +206,8 @@
       "core/lanes-and-turn",
       "core/policy-loader"
     ],
-    "base": "95a986f9facd7b2c260f292ec454c9ced2ea2bdf",
-    "changed": 1794219181638
+    "base": "9d6ad2fe61bc35bad21d2332908605bbacecb561",
+    "changed": 1794496803310
   },
   {
     "id": "suite/suite-run",

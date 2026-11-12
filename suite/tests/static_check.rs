@@ -9,6 +9,7 @@ use std::time::Duration;
 use bmo_testbed_core::declaration::{Declaration, Repository};
 use bmo_testbed_core::policy::deploy_steps::DeployStep;
 use bmo_testbed_core::policy::fill_marks;
+use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::policy::static_check::STATIC_CHECK;
 use bmo_testbed_core::silence::{HUNG_EXIT_CODE, Silence};
 use bmo_testbed_core::turn::{Lane, NOT_RUN_EXIT_CODE, TURN_TIMES_VARIABLE, times_words};
@@ -215,6 +216,7 @@ mod running_the_check {
   fn done(code: i32, output: String) -> TimedRun {
     TimedRun {
       code,
+      signal: None,
       output,
       waited_seconds: 0.0,
       ran_seconds: 0.0,
@@ -260,7 +262,7 @@ mod running_the_check {
           &STATIC_CHECK.ended,
           &[
             ("step", &step_words(&steps[1])),
-            ("code", "0"),
+            ("end", "exit 0"),
             ("times", &times_words(told[0].waited_seconds, told[0].ran_seconds)),
           ],
         ),
@@ -287,7 +289,7 @@ mod running_the_check {
 
     assert_eq!(
       result,
-      Some(fill_marks(&STATIC_CHECK.failed, &[("step", &step_words(&steps[0])), ("code", "2")]))
+      Some(fill_marks(&STATIC_CHECK.failed, &[("step", &step_words(&steps[0])), ("end", "exit 2")]))
     );
     assert_eq!(ran.into_inner(), ids(&steps));
   }
@@ -325,8 +327,38 @@ mod running_the_check {
 
     assert_eq!(
       result,
-      Some(fill_marks(&STATIC_CHECK.failed, &[("step", &step_words(&steps[2])), ("code", "1")]))
+      Some(fill_marks(&STATIC_CHECK.failed, &[("step", &step_words(&steps[2])), ("end", "exit 1")]))
     );
+  }
+
+  // "a step a signal ended says the signal": its line and the check's failing line name the signal in place of
+  // an exit code, and it counts as exit code 1 for a caller
+  #[test]
+  fn a_step_a_signal_ended_says_the_signal_in_place_of_an_exit_code() {
+    let command = vec!["sh".to_owned(), "-c".to_owned(), "echo begun; kill -9 $$".to_owned()];
+    let run = run_timed(&command, &std::env::temp_dir(), &[], None);
+
+    assert_eq!((run.code, run.signal, run.output.as_str()), (1, Some(9), "begun\n"));
+
+    let steps = steps();
+    let killed = fill_marks(&LANES.memory.signal, &[("signal", "9")]);
+    let mut written: Vec<String> = Vec::new();
+    let mut told: Vec<i32> = Vec::new();
+    let result = run_static_check(
+      Path::new("/checkout"),
+      &steps[1..2],
+      &mut |text| written.push(text.to_owned()),
+      &|_, _| run.clone(),
+      &mut |one| told.push(one.code),
+    );
+
+    assert!(written[0].contains(&format!("{}, {killed}, ", step_words(&steps[1]))), "{}", written[0]);
+    assert!(!written[0].contains("exit 1"), "{}", written[0]);
+    assert_eq!(
+      result,
+      Some(fill_marks(&STATIC_CHECK.failed, &[("step", &step_words(&steps[1])), ("end", &killed)]))
+    );
+    assert_eq!(told, [1]);
   }
 }
 
@@ -565,6 +597,8 @@ mod the_gate_judges_the_repository_alone {
       cargo_lint(&OwnPackages::Workspace).command[1..],
       ["cargo", "clippy", "--workspace", "--all-targets", "--locked", "--", "-D", "warnings"]
     );
+    // The lint step runs in no lane of its own, so it is watched for silence itself; the formatting is not.
+    assert!(cargo_lint(&own).watched && !cargo_format(&own).watched);
     assert_eq!(cargo_format(&OwnPackages::Workspace).command[1..], ["cargo", "fmt", "--check"]);
     assert!(!OwnPackages::Named(Vec::new()).any());
   }
@@ -747,6 +781,7 @@ command = "cargo clippy --workspace --all-targets --features x -- -D warnings"
         ran.borrow_mut().push(step.id.clone());
         TimedRun {
           code: 0,
+          signal: None,
           output: String::new(),
           waited_seconds: 1.0,
           ran_seconds: 1.0,

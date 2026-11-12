@@ -75,6 +75,7 @@ fn plain(dir: &str, command: Vec<String>, env: Vec<(String, String)>) -> CheckSt
     env,
     lane: None,
     retry_out_of_memory: false,
+    watched: false,
     covered_by: None,
   }
 }
@@ -363,6 +364,7 @@ pub fn run_step(root: &Path, step: &Step) -> TimedRun {
   if !turn.had() {
     return TimedRun {
       code: i32::from(NOT_RUN_EXIT_CODE),
+      signal: None,
       output: fill_shown(&SUITE.check.no_turn, &[("words", &turn.words())]),
       waited_seconds: turn.waited_seconds(),
       ran_seconds: 0.0,

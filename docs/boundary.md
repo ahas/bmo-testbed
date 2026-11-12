@@ -669,6 +669,11 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
 
   A `~` opening a path there is that machine's home. A file that does not read is no placement, said
   on a line.
+- **The testbed there is this one's release.** A testbed running from a release reads, before it makes
+  a bench ready, the commit the `built-from` file beside that machine's `testbed` binary names, and
+  compares it with the commit of its own release. Where they differ, or no such file reads there, the
+  run is not run, exit code 75, and the deployment's stage fails, on a line naming the machine and both
+  commits. A testbed running from no release, such as a checkout's own build, compares nothing.
 - **The caller makes the bench ready** before it runs: where the checkout's place under the bench root
   holds no repository it clones the checkout's remote there, or makes an empty repository where the
   checkout has none, and where the place stands as a folder already — a tree an earlier run copied there

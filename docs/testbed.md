@@ -229,6 +229,12 @@ flowchart TD
   that takes, saying every ten minutes that it still waits. The Cargo
   verb and a declared check step that asks for it do so (`docs/declaration.md`); a plain `run` does
   not. A command ended as hung is not run again, since it would hang again.
+- **A failed run during which a fence it stands in reached its own ceiling is not run again,** whether
+  or not the machine's count of out-of-memory kills could be read or moved: the fence's own count says
+  the ceiling was met, and the same run would meet it again. The line names the fence, its ceiling and
+  how the run ended.
+- **A run a signal ended and nothing took for a memory kill says so** on a line naming the signal and
+  the exit code it ends on, 1, so a command killed from outside never reads as one that failed.
 
 ## The width
 

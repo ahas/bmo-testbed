@@ -2,8 +2,9 @@
 //! stand-in endpoint the test serves: an answer of local, or one that does not come or does not read, runs
 //! here; an answer of remote makes the bench ready over a stand-in `ssh` that runs its line on this machine,
 //! and the run's output and result come back off its stream. On the placed machine the settings name: the
-//! bench made ready over the same stand-in, the run the testbed's `placed` verb there, and a machine that
-//! cannot be reached, or settings that do not read, leaving the run here.
+//! bench made ready over the same stand-in, the run the testbed's `placed` verb there, a machine that
+//! cannot be reached, or settings that do not read, leaving the run here, and a testbed there that is not
+//! this one's release refused before any bench is made.
 
 use std::convert::Infallible;
 use std::path::Path;
@@ -12,6 +13,7 @@ use std::sync::{Arc, Mutex};
 use axum::Router;
 use axum::response::sse::{Event, Sse};
 use axum::routing::{get, post};
+use bmo_testbed_cli::placement::{MachinePlacement, MachineSettings};
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::turn::NOT_RUN_EXIT_CODE;
@@ -366,4 +368,76 @@ fn a_caller_keeps_its_place_in_the_line_on_the_placed_machine() {
   assert_eq!(front.code, 10, "{}\n{}", front.out, front.err);
   assert_eq!(next.code, 11, "{}\n{}", next.out, next.err);
   assert_eq!(neither.code, 12, "{}\n{}", neither.out, neither.err);
+}
+
+// The placed machine reached through the stand-in `ssh`, its testbed under the directory given with the commit
+// `far` beside it where one is named, and this testbed's own release `own`.
+fn released(dir: &Path, far: Option<&str>, own: Option<&str>) -> MachinePlacement {
+  let ssh = dir.join("ssh");
+  let bin = dir.join("far/bin");
+
+  install(SSH, &ssh);
+  std::fs::create_dir_all(&bin).unwrap();
+
+  if let Some(far) = far {
+    std::fs::write(bin.join("built-from"), format!("{far}\n")).unwrap();
+  }
+
+  MachinePlacement {
+    settings: MachineSettings {
+      destination: "stand".to_owned(),
+      machine: Some("machine-2".to_owned()),
+      bench: dir.join("bench").to_string_lossy().into_owned(),
+      ssh: vec![ssh.to_string_lossy().into_owned()],
+      testbed: bin.join("bmo-testbed").to_string_lossy().into_owned(),
+      cargo_target: dir.join("cargo-target").to_string_lossy().into_owned(),
+    },
+    home: dir.to_path_buf(),
+    release: own.map(str::to_owned),
+  }
+}
+
+const OWN: &str = "1111111111111111111111111111111111111111";
+const FAR: &str = "2222222222222222222222222222222222222222";
+
+// "where they differ, the run is not run and the deployment's stage fails, on a line naming the machine and
+// both commits"
+#[test]
+fn a_testbed_there_of_another_release_is_refused_naming_both_commits_and_no_bench_is_made() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let repo = dir.join("repo");
+
+  checkout(&repo, "testbed = 0\n");
+
+  let machine = released(&dir, Some(FAR), Some(OWN));
+  let commit = git(&repo, &["rev-parse", "HEAD"]);
+  let refused = machine.ready(&repo, &commit, false).map(|bench| bench.path);
+  let stale = fill_marks(
+    &LANES.placed.stale,
+    &[("machine", "machine-2"), ("far", &FAR[..12]), ("own", &OWN[..12])],
+  );
+
+  assert_eq!(refused, Err(stale));
+  assert!(!dir.join("bench").exists());
+}
+
+// "where no such file reads there, the run is not run"; "a testbed running from no release compares nothing"
+#[test]
+fn the_same_release_passes_one_naming_none_is_refused_and_none_here_compares_nothing() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+
+  assert_eq!(released(&dir, Some(OWN), Some(OWN)).same_release(), Ok(()));
+
+  std::fs::remove_file(dir.join("far/bin/built-from")).unwrap();
+
+  let unreleased = released(&dir, None, Some(OWN)).same_release().unwrap_err();
+  let file = dir.join("far/bin/built-from");
+  let opening =
+    fill_marks(&LANES.placed.unreleased, &[("machine", "machine-2"), ("file", &file.to_string_lossy())]);
+
+  assert!(unreleased.starts_with(opening.split("{said}").next().unwrap()), "{unreleased}");
+  assert!(unreleased.contains(&OWN[..12]), "{unreleased}");
+  assert_eq!(released(&dir, None, None).same_release(), Ok(()));
 }

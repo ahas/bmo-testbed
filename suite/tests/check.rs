@@ -221,6 +221,7 @@ fn a_change_named_by_its_files_selects_by_them_alone_whatever_the_branch_committ
 fn ran(code: i32, output: &str) -> TimedRun {
   TimedRun {
     code,
+    signal: None,
     output: output.to_owned(),
     waited_seconds: 0.0,
     ran_seconds: 1.0,

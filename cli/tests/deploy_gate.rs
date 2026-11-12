@@ -169,7 +169,7 @@ fn a_check_that_fails_still_blocks_the_deployment() {
 
   assert_eq!(done.code, 1, "{}\n{}", done.out, done.err);
   assert!(done.err.contains("needs-packages"), "{}", done.err);
-  assert!(done.err.contains("exited 1"), "{}", done.err);
+  assert!(done.err.contains(", exit 1"), "{}", done.err);
   assert!(!scene.deployed(), "{}", done.err);
 }
 
