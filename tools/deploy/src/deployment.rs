@@ -1,11 +1,12 @@
 //! One call of `testbed/deploy` (docs/deploy.md, 「The hosted deploy tool」): the arguments read, the
-//! checkout found, the deploy verb run outside the harness the session stands in, its unit waited out and
-//! the deployment record read for what came of it.
+//! checkout found, the deploy verb run outside the harness the session stands in, or a deployment already
+//! under way attached to, and the deployment followed through the testbed's record to what came of it.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
+use bmo_testbed_client::{Deployment, DeploymentState};
 use bmo_testbed_core::answer::{Cut, cap_items};
 use bmo_testbed_core::policy::deploy_tool::DEPLOY_TOOL;
 use bmo_testbed_core::policy::fill_marks;
@@ -14,12 +15,14 @@ use bmo_testbed_core::verb::{REFUSED_EXIT_CODE, data_root};
 use bmo_testbed_deploy::deployment::DeployPlaces;
 use bmo_testbed_deploy::tree::{DeployRecord, read_deploy_record};
 use bmo_testbed_deploy::unit::{DEPLOY_UNIT_MARKER, DEPLOY_UNIT_PREFIX};
+use bmo_testbed_record::{Record, record_path};
 use bmo_testbed_suite::dependents::registry_path;
 use serde::Deserialize;
 use serde_json::Value;
 
 use crate::call::Answer;
 use crate::checkout::find_checkout;
+use crate::following::{Course, newest, of_commit, of_repository};
 
 /// The testbed's binary, found on the path where the release's own does not stand.
 pub const TESTBED: &str = "bmo-testbed";
@@ -46,6 +49,8 @@ pub struct Arguments {
   pub why: String,
   #[serde(default)]
   pub dry_run: Option<bool>,
+  #[serde(default)]
+  pub attach: Option<bool>,
 }
 
 /// The arguments read off a call, or why they do not read.
@@ -109,6 +114,11 @@ impl Ground {
       .get(DATA_ROOT_VARIABLE)
       .filter(|root| !root.is_empty())
       .map_or_else(data_root, PathBuf::from)
+  }
+
+  // The testbed's record under the data root, which every deployment writes its course into.
+  fn record(&self) -> PathBuf {
+    record_path(&self.data_root())
   }
 
   // The verb's environment: the call's, less what would make the verb refuse it or run where it stands.
@@ -218,17 +228,10 @@ pub fn outcome(
 
   if let Some(record) = after.filter(|record| record.commit.to_ascii_lowercase().starts_with(&asked)) {
     if before != Some(record) {
-      let previous = before.map_or_else(
-        || said.no_previous.clone(),
-        |previous| {
-          fill_marks(&said.previous, &[("commit", &previous.commit), ("subject", &previous.subject)])
-        },
-      );
-
       return Answer::text(
         [
           fill_marks(&said.live, &[("commit", &record.commit), ("subject", &record.subject)]),
-          previous,
+          previous_line(before),
           fill_marks(&said.message, &[("message", &record.message)]),
           fill_marks(&said.unit, &[("unit", unit)]),
         ]
@@ -246,6 +249,162 @@ pub fn outcome(
     fill_marks(&said.not_live, &[("unit", unit), ("recorded", &recorded), ("commit", commit.trim())]),
     journal()
   ))
+}
+
+// The line naming the commit live before the call began, or that none was recorded.
+fn previous_line(before: Option<&DeployRecord>) -> String {
+  let said = &DEPLOY_TOOL.lines;
+
+  before.map_or_else(
+    || said.no_previous.clone(),
+    |previous| fill_marks(&said.previous, &[("commit", &previous.commit), ("subject", &previous.subject)]),
+  )
+}
+
+/// How a call came to follow a deployment: it started it, the deployment record as the call began beside
+/// it, or it attached to one the record already held.
+#[derive(Clone, Copy, Debug)]
+pub enum Begun<'a> {
+  Started(Option<&'a DeployRecord>),
+  Attached,
+}
+
+/// What came of a deployment the record followed to its end. Live where it went live: the commit's subject
+/// and reason from the deployment record where that names its commit, and the commit live before the call
+/// where the call started it. Otherwise an error naming its state, the stage it stopped in and why, with
+/// its journal.
+pub fn recorded(
+  deployment: &Deployment,
+  begun: Begun<'_>,
+  after: Option<&DeployRecord>,
+  journal: &dyn Fn() -> String,
+) -> Answer {
+  let said = &DEPLOY_TOOL.lines;
+  let id = deployment.id.to_string();
+  let unit = deployment.unit_name.clone().unwrap_or_else(|| said.no_unit_named.clone());
+  let commit = deployment.commit.clone().unwrap_or_default();
+
+  if deployment.state != DeploymentState::Live {
+    let word = |value: Option<Value>| value.and_then(|value| value.as_str().map(str::to_owned));
+    let state = word(serde_json::to_value(deployment.state).ok()).unwrap_or_default();
+    let stopped = word(deployment.stopped_for.and_then(|code| serde_json::to_value(code).ok()))
+      .unwrap_or_else(|| said.no_stage.clone());
+    let reason = deployment.reason.clone().unwrap_or_else(|| said.no_reason.clone());
+    let line = fill_marks(
+      &said.ended,
+      &[
+        ("id", &id),
+        ("unit", &unit),
+        ("state", &state),
+        ("stopped", &stopped),
+        ("reason", &reason),
+      ],
+    );
+
+    return Answer::error(format!("{line}\n{}\n{}", said.journal_heading, journal()));
+  }
+
+  let written = after.filter(|record| record.commit.eq_ignore_ascii_case(&commit));
+  let mut lines = vec![written.map_or_else(
+    || fill_marks(&said.live_bare, &[("commit", &commit)]),
+    |record| fill_marks(&said.live, &[("commit", &record.commit), ("subject", &record.subject)]),
+  )];
+
+  if let Begun::Started(before) = begun {
+    lines.push(previous_line(before));
+  }
+
+  if let Some(record) = written {
+    lines.push(fill_marks(&said.message, &[("message", &record.message)]));
+  }
+
+  lines.push(fill_marks(&said.unit, &[("unit", &unit)]));
+  lines.push(fill_marks(&said.deployment, &[("id", &id)]));
+  Answer::text(lines.join("\n"))
+}
+
+// The deployment followed through the record until it has ended, however long that takes, and answered.
+// The unit is asked each turn as well: where it has ended and the record, read once more, holds no ending of
+// it, the deployment record is judged instead.
+fn follow(
+  mut course: Course,
+  begun: Begun<'_>,
+  commit: &str,
+  places: &DeployPlaces,
+  ground: &Ground,
+) -> Answer {
+  let said = &DEPLOY_TOOL.lines;
+
+  loop {
+    course.read();
+
+    let journal = || course.unit().map_or_else(String::new, |unit| journal_tail(ground, unit));
+
+    if let Some(ended) = course.ended() {
+      return recorded(ended, begun, read_deploy_record(&places.record).as_ref(), &journal);
+    }
+
+    let Some(unit) = course.unit().map(str::to_owned) else {
+      std::thread::sleep(ground.poll);
+      continue;
+    };
+
+    match still_active(ground, &unit) {
+      Ok(true) => std::thread::sleep(ground.poll),
+      Ok(false) => {
+        course.read();
+
+        let journal = || journal_tail(ground, &unit);
+
+        if let Some(ended) = course.ended() {
+          return recorded(ended, begun, read_deploy_record(&places.record).as_ref(), &journal);
+        }
+
+        let before = match begun {
+          Begun::Started(before) => before,
+          Begun::Attached => None,
+        };
+
+        return outcome(commit, &unit, before, read_deploy_record(&places.record).as_ref(), &journal);
+      }
+      Err(why) => return Answer::error(fill_marks(&said.unasked, &[("unit", &unit), ("why", &why)])),
+    }
+  }
+}
+
+// The newest deployment of the repository and commit the record holds followed to its end, starting
+// nothing; or why there is none to follow.
+fn attach(repository: &str, commit: &str, places: &DeployPlaces, ground: &Ground) -> Answer {
+  let said = &DEPLOY_TOOL.lines;
+  let record = ground.record();
+  let found = Record::open_file(&record).and_then(|read| {
+    newest(&read, |deployment| {
+      of_repository(deployment, repository) && of_commit(deployment, commit)
+    })
+  });
+
+  match found {
+    Ok(Some(deployment)) => {
+      follow(Course::of(&record, deployment), Begun::Attached, commit, places, ground)
+    }
+    Ok(None) => {
+      Answer::error(fill_marks(&said.attach_none, &[("repository", repository), ("commit", commit)]))
+    }
+    Err(why) => {
+      Answer::error(fill_marks(&said.attach_unread, &[("path", &record.to_string_lossy()), ("why", &why)]))
+    }
+  }
+}
+
+// The repository's newest deployment in the record, where it is still running and is of the commit asked
+// for: the one a call follows instead of starting another.
+fn under_way(repository: &str, commit: &str, ground: &Ground) -> Option<Deployment> {
+  let newest = Record::open_file(&ground.record())
+    .and_then(|read| newest(&read, |deployment| of_repository(deployment, repository)))
+    .ok()
+    .flatten()?;
+
+  (newest.state == DeploymentState::Running && of_commit(&newest, commit)).then_some(newest)
 }
 
 /// One call: the commit put live from the checkout the registry names for the repository, and what came of
@@ -268,7 +427,19 @@ pub fn deploy(arguments: &Arguments, ground: &Ground) -> Answer {
   };
   let commit = arguments.commit.trim();
   let dry_run = arguments.dry_run.unwrap_or(false);
+
+  if arguments.attach.unwrap_or(false) {
+    return attach(&repo.name(), commit, &places, ground);
+  }
+
+  if !dry_run && let Some(running) = under_way(&repo.name(), commit, ground) {
+    return follow(Course::of(&ground.record(), running), Begun::Attached, commit, &places, ground);
+  }
+
   let before = read_deploy_record(&places.record);
+  // The record's last event is taken before the verb runs, so none of its deployment's is missed; a dry run
+  // starts no deployment, and leaves the record alone.
+  let course = (!dry_run).then(|| Course::before_start(&ground.record()));
   let mut verb = ground.command(&ground.testbed);
 
   verb
@@ -306,23 +477,12 @@ pub fn deploy(arguments: &Arguments, ground: &Ground) -> Answer {
     ));
   }
 
-  if dry_run {
+  let Some(mut course) = course else {
     return Answer::text(capped(&out));
-  }
-
+  };
   let Some(unit) = unit_of(&out) else {
     return Answer::error(fill_marks(&said.no_unit, &[("said", &what_it_said(&out, &err))]));
   };
-  // The deployment is waited for until its unit ends, however long that takes.
-  loop {
-    match still_active(ground, &unit) {
-      Ok(false) => break,
-      Ok(true) => std::thread::sleep(ground.poll),
-      Err(why) => return Answer::error(fill_marks(&said.unasked, &[("unit", &unit), ("why", &why)])),
-    }
-  }
-
-  let after = read_deploy_record(&places.record);
-
-  outcome(commit, &unit, before.as_ref(), after.as_ref(), &|| journal_tail(ground, &unit))
+  course.run_in(&unit);
+  follow(course, Begun::Started(before.as_ref()), commit, &places, ground)
 }

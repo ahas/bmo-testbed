@@ -21,6 +21,7 @@ fn event() -> Event<'static> {
 fn hook(command: &str) -> Hook {
   Hook {
     command: Some(command.to_owned()),
+    time: Duration::from_secs(60),
     repository: Some("sample".to_owned()),
     root: Some(PathBuf::from("/checkout")),
   }
@@ -55,17 +56,37 @@ fn a_hook_that_fails_changes_nothing() {
   hook("/no/such/hook-program").send(&event());
 }
 
-// "the hook is waited for until it ends": one that takes its time is never stopped
+// Whether the process is gone: no longer standing, or ended and left for its parent to reap.
+fn gone(pid: &str) -> bool {
+  std::fs::read_to_string(format!("/proc/{pid}/stat"))
+    .map_or(true, |stat| stat.rsplit(')').next().unwrap_or_default().trim_start().starts_with('Z'))
+}
+
+// "one still running at the policy's time has its process group ended, and the verb goes on"
 #[test]
-fn a_hook_that_takes_its_time_is_waited_for_until_it_ends() {
+fn a_hook_that_overruns_its_time_is_ended_with_its_group() {
   let dir = tempfile::tempdir().unwrap();
+  let child = dir.path().join("child");
   let ended = dir.path().join("ended");
+  let mut overrunning =
+    hook(&format!("sleep 300 & echo $! > {}; wait; touch {}", child.display(), ended.display()));
+
+  overrunning.time = Duration::from_millis(200);
+
   let started = Instant::now();
 
-  hook(&format!("sleep 1; touch {}", ended.display())).send(&event());
+  overrunning.send(&event());
 
-  assert!(ended.exists());
-  assert!(started.elapsed() >= Duration::from_secs(1));
+  let pid = std::fs::read_to_string(&child).unwrap();
+  let deadline = Instant::now() + Duration::from_secs(10);
+
+  while !gone(pid.trim()) && Instant::now() < deadline {
+    std::thread::sleep(Duration::from_millis(10));
+  }
+
+  assert!(started.elapsed() < Duration::from_secs(30));
+  assert!(gone(pid.trim()), "the hook's child {pid} still runs");
+  assert!(!ended.exists());
 }
 
 // "the environment's hook stands over the declaration's, and a verb outside a repository has it alone"

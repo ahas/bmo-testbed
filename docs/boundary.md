@@ -435,8 +435,13 @@ keep (`docs/deploy.md`, 「The unit links」).
   through `sh -c` with the event's name as its first argument and the payload as one JSON object on
   standard input. With no hook, the event is written on the verb's standard error as one line, its
   name and its payload, and nothing more.
-- **The hook never changes a verb's outcome.** It is waited for until it ends; one that fails is said on
-  a line and the verb goes on.
+- **The hook never changes a verb's outcome.** It is waited for up to the policy's time, sixty seconds;
+  one still running then has its process group ended, and one that fails or overruns is said on a line
+  and the verb goes on. A hook that reaches a peer which is down therefore holds a verb a minute at
+  most, and the event is not sent again.
+- **A deployment sends its outcome events after its outcome is written.** `deployed`, `deploy-failed`
+  and `deploy-rolled-back` are sent once the progress record and the record hold how the deployment
+  ended, so a reader of either learns the outcome before any hook runs.
 - **The payload:**
 
   | Field | Type | Meaning |
@@ -610,11 +615,15 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   「Placed tools」): the tool `deploy`, whose one entry `testbed/deploy` is shown to a session whose
   record holds the capability `deploy`, and which puts a commit live for a session `deploy` refuses
   (`docs/deploy.md`, 「The hosted deploy tool」). It serves no resources.
-- **Its arguments** are `repository`, `commit` and `why`, strings and required, and `dry_run`, a boolean;
-  its input schema, beside its manifest, takes no other.
+- **Its arguments** are `repository`, `commit` and `why`, strings and required, and `dry_run` and
+  `attach`, booleans; its input schema, beside its manifest, takes no other. `attach` starts nothing and
+  answers the outcome of the newest deployment of the commit the testbed's record holds.
 - **Its answer** is text. A deployment that went live answers a first line beginning `live:`, naming the
   commit and its subject. A deployment that did not, a refusal and arguments that do not read answer the
   same text marked as an error, `isError`. A dry run answers what the verb said.
+- **Its entry declares `ends_at_stop`,** so a call of it holds neither the tool host's stop nor its
+  `quiet`. A call the host's stop ends is answered by the host as failed; the deployment goes on, and a
+  call with `attach` answers its outcome.
 - **The testbed's own deployment places it** from the release's `tools/deploy/.placed/` into the tool
   host's registry, for the service `testbed`.
 

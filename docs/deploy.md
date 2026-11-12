@@ -193,6 +193,7 @@
   | `commit` | string, required | The commit to put live, by its hexadecimal name, whole or shortened; it must be on the remote |
   | `why` | string, required | Why the deploy is made, in English, handed to the verb as `--message` |
   | `dry_run` | boolean, optional | Say what the deployment would do, changing nothing and starting no unit |
+  | `attach` | boolean, optional | Start nothing: answer the outcome of the newest deployment of the commit the record holds, following it to its end where it still runs |
 
 - **The checkout comes from the machine's registry** (`docs/suite.md`, 「The dependents of a major
   change」): the file `BMO_TESTBED_CHECKOUTS` names, or `checkouts.toml` under the `testbed/` of the
@@ -203,15 +204,39 @@
   environment the call's with `CLAUDE_PID` and `BMO_DEPLOY_UNIT` taken out, so the verb starts its unit
   as it does for any caller outside a harness. The binary is the one of the release the tool is placed
   from, its `bin/bmo-testbed`, or `bmo-testbed` on the path where the tool runs from anywhere else.
-- **It waits the deployment out:** it reads the unit's name off the line the verb prints, asks the
-  service manager every few seconds whether the unit is still active, and once it is not, reads the
-  deployment record under the repository's deploy root, however long the unit runs.
+- **It waits the deployment out by the testbed's record,** however long it runs. Before the verb runs
+  it takes the number of the record's last event; it reads the unit's name off the line the verb
+  prints; then, every few seconds, it reads the record's `deployment.created` and `deployment.changed`
+  events after the last number it read, the same events and numbers `GET /events` streams and resumes
+  from by `Last-Event-ID` (`docs/boundary.md`, 「The event stream」), and takes the deployment whose
+  unit is that unit. It ends where that deployment has ended, by its own outcome or because its process
+  went without ending it.
+  - **A read that fails is no outcome.** A record that cannot be opened or read is read again at the
+    next turn, from the same number; a resume from before the record's window reads the deployment by
+    its id instead.
+  - **The unit is asked as well,** every turn, whether it is still active. Where it has ended and the
+    record holds no deployment of it, since a run that cannot write the record goes on without it, the
+    deployment record under the repository's deploy root is judged instead.
+- **It attaches to a deployment already under way.** Where the record's newest deployment of the
+  repository is still running and is of the commit asked for, the call runs no verb and follows that
+  deployment as it would its own. With `attach`, the call starts nothing whatever that deployment's
+  state: it answers the outcome of the newest deployment of the commit the record holds, following it
+  where it still runs, and refuses where the record holds none.
+- **When its host stops,** the call is ended with it. The entry declares `ends_at_stop` (bmo-pocket's
+  `docs/mcp-host.md`, 「The host's stop」), since a deployment of the tool host itself stops the host
+  while the call waits on that deployment: the call holds neither the host's stop nor its `quiet`, so
+  the deployment never waits on its own caller. At the stop the host ends the call's process and
+  answers the call as failed, saying the host stopped. The deployment runs on in its own unit,
+  untouched, and a call of the same repository and commit with `attach`, once the host is back,
+  answers what came of it.
 - **What it answers:**
-  - **live:** where the record names the commit asked for and was written after the call began, a first
-    line `live:` with the commit and its subject, then the commit live before it, the reason and the
-    unit;
-  - **not live:** otherwise, an error answer naming the unit and what the record names, with the last
-    thirty lines of the unit's journal;
+  - **live:** where the record's deployment went live, a first line `live:` with the commit and its
+    subject, then the commit live before the call began where the call started the deployment, the
+    reason and the unit; judged by the deployment record instead, where it names the commit asked for
+    and was written after the call began;
+  - **not live:** otherwise, an error answer naming the deployment, its unit, its state, the stage it
+    stopped in and its reason, or, judged by the deployment record, what that record names, with the
+    last thirty lines of the unit's journal;
   - **a refusal of the verb,** which ends 2, a verb that ends with any other failure, and a verb that
     names no unit: an error answer carrying what the verb said;
   - **a dry run:** what the verb said.
@@ -221,7 +246,9 @@
   - a repository no checkout of the registry declares, naming the names the registry's checkouts
     declare and the checkouts whose declaration does not read;
   - a repository two checkouts declare, naming both;
-  - a repository whose declaration deploys nothing.
+  - a repository whose declaration deploys nothing;
+  - with `attach`, a commit of which the record holds no deployment of the repository, or a record that
+    cannot be read.
 - **The testbed's own deployment places it,** before the flip: the tool's executable, its manifest and
   its input schema are copied into the release's `tools/deploy/.placed/`, which is put into the tool
   host's registry for the service `testbed` with the capability `deploy` allowed.
@@ -285,7 +312,13 @@
 7. **The steps before the flip,** declared under `[deploy]` with that phase: each runs in the release;
    one that fails stops the deployment with nothing flipped.
 8. **Wait for quiet,** where the declaration names a `quiet` command: run from the release, it answers 0
-   where no work stands under way that a restart would cut. Where it answers anything else, the line
+   where no work stands under way that a restart would cut. Quiet is each unit's own count of its work
+   that cannot be resumed: work the unit holds and would lose at its stop, such as a call answered over
+   a connection its caller cannot ask again. Work that outlives the restart is not counted: a turn or a
+   job kept in a store that a caller re-attaches to, a notice still owed and sent again once the unit is
+   back, a deployment running in its own unit. Nor is work that waits on the unit's own stop, such as a
+   call waiting on this very deployment, since counting it would leave the deployment waiting on itself;
+   such work is ended at the stop and says so to its caller. Where it answers anything else, the line
    says so with what the command named, and it is asked again every few seconds (the testbed's policy)
    until it answers 0, however long the work takes. A deployment asked with `--force-live` does not wait:
    it says the work it cuts and goes on at once. This is the last step before the record, so the moment it
@@ -299,6 +332,10 @@
    beside the deploy tree and rename it over the old one.
 11. **Restart:** relink the dangling unit links, link the marked units, reload, restart the `restart`
     units and the `binary` units whose binaries changed, then the `bot` service.
+    - **Every unit drains on its stop.** Asked to stop by `SIGTERM`, a unit takes no new work, ends or
+      hands over what it holds, keeping what a caller re-attaches to, and then exits; work begun between
+      quiet's 0 and the stop is drained like any other. A unit's drain is its own repository's; the
+      deployment sends the stop through the service manager and waits for the unit to end.
     - With `--before-start <command>`, stop the `bot` service, run the command, then start it.
     - Wait until the declared health answers, however long that takes, or until the `bot` service gives
       up starting: systemd holds it failed or inactive, or has restarted it since the wait began, which
@@ -316,8 +353,11 @@
 14. **Start the backup upload,** where the declaration names a remote, as a transient user unit of its
     own, `bmo-backup-upload-<stamp>`, running the `backups` verb, and end without waiting for it.
 
-- **The deployment ends** with a `deployed` event naming the commit, the flaky tests its gate found, and
-  the warnings.
+- **The deployment ends** with its outcome written into the progress record and the testbed's record,
+  and only then sends its `deployed` event naming the commit, the flaky tests its gate found, and the
+  warnings. A deployment that does not go live likewise writes its outcome before it sends
+  `deploy-rolled-back` and `deploy-failed`, so an event hook that is slow never holds a deployment
+  unended (`docs/boundary.md`, 「Events」).
 
 ## What a deployment says of itself as it runs
 

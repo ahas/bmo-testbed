@@ -1,5 +1,5 @@
 # What the hosted deploy tool does and says (docs/deploy.md, 「The hosted deploy tool」): the entry it
-# answers, how it waits a deployment out, and the lines it answers with. A session reads the lines, so they
+# answers, how it follows a deployment to its end, and the lines it answers with. A session reads the lines, so they
 # are English. Each `{name}` is filled in with what it names.
 
 # The one entry the tool answers, by its full name, as its manifest declares it.
@@ -8,7 +8,8 @@ entry = "testbed/deploy"
 protocol = 1
 
 [numbers]
-# How often the deployment's unit is asked whether it is still active, in seconds.
+# How often the testbed's record is read for the deployment's course and its unit asked whether it is still
+# active, in seconds.
 poll_seconds = 5
 # How many of the unit's journal lines a deployment that did not go live is answered with.
 journal_lines = 30
@@ -23,6 +24,17 @@ previous = "previous: {commit} ({subject})"
 no_previous = "previous: none recorded"
 message = "message: {message}"
 unit = "unit: {unit}"
+deployment = "deployment: {id}"
+# A deployment the record holds as live whose commit the deployment record no longer names, so its subject
+# is not known.
+live_bare = "live: {commit}"
+# A deployment the record holds as ended without going live: {state} its state, {stopped} the stage it
+# stopped in, {reason} the sentence beside its outcome.
+ended = "not live: deployment {id} in {unit} ended {state}, stopped in {stopped}: {reason}"
+journal_heading = "The last lines of its journal:"
+no_stage = "no stage named"
+no_reason = "its run gave no reason, or its process went without ending it"
+no_unit_named = "no unit"
 # A deployment that did not: {recorded} is the commit the record names, or `nothing`.
 not_live = "not live: {unit} ended and the deployment record names {recorded}, not {commit}. The last lines of its journal:"
 not_written = "not live: {unit} ended and the deployment record is still the one from before this call. The last lines of its journal:"
@@ -50,6 +62,9 @@ unread = "the checkouts whose declaration does not read: {checkouts}"
 no_names = "none"
 ambiguous = "{repository} is the name of more than one checkout in {path}: {roots}"
 no_deploy = "{repository} at {root}: {why}"
+# A call with `attach` that finds nothing to attach to.
+attach_none = "the testbed's record holds no deployment of {repository} at {commit} to attach to"
+attach_unread = "the testbed's record {path} could not be read to attach: {why}"
 # Requests the tool does not answer.
 request = "the request does not read: {why}"
 protocol = "the request speaks protocol {asked}, and this tool speaks {ours}"

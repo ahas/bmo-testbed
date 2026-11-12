@@ -237,6 +237,7 @@ fn the_unit_is_waited_on_while_it_is_active() {
     commit: "0123456".to_owned(),
     why: "Ship it".to_owned(),
     dry_run: None,
+    attach: None,
   };
   let count = dir.path().join("asked");
 

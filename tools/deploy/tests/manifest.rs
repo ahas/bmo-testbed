@@ -60,6 +60,8 @@ fn its_one_entry_is_the_one_the_executable_answers() {
   assert_eq!(words(&entry["capabilities"]), ["deploy"]);
   assert!(entry.get("grant").is_none());
   assert_eq!(entry["hints"]["read_only"].as_bool(), Some(false));
+  // A call waits on deployments that stop its own host, so it never holds the host's stop.
+  assert_eq!(entry["ends_at_stop"].as_bool(), Some(true));
   assert!(!text(entry, &["description"]).is_empty());
   assert!(manifest.get("resources").is_none());
 }
@@ -102,7 +104,7 @@ fn the_schema_states_the_arguments_the_executable_reads() {
 
   assert_eq!(schema["type"], "object");
   assert_eq!(schema["additionalProperties"], false);
-  assert_eq!(properties, ["commit", "dry_run", "repository", "why"]);
+  assert_eq!(properties, ["attach", "commit", "dry_run", "repository", "why"]);
   assert_eq!(schema["required"], json!(["repository", "commit", "why"]));
   assert_eq!(
     schema["properties"]["commit"]["pattern"],
@@ -112,10 +114,12 @@ fn the_schema_states_the_arguments_the_executable_reads() {
     )
   );
 
-  let whole =
-    json!({ "repository": "agency", "commit": "abc1234", "why": "Ship the fix", "dry_run": true });
+  let whole = json!({
+    "repository": "agency", "commit": "abc1234", "why": "Ship the fix", "dry_run": true, "attach": true
+  });
 
   assert_eq!(read_arguments(&whole).unwrap().dry_run, Some(true));
+  assert_eq!(read_arguments(&whole).unwrap().attach, Some(true));
 
   for required in ["repository", "commit", "why"] {
     let mut without = whole.clone();

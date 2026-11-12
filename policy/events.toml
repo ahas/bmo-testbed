@@ -1,11 +1,15 @@
-# What the testbed says of the events it sends (docs/boundary.md, 「Events」): the payload's shape, and the
-# lines a verb writes where the hook did not take an event, {event} its name. A harness reads the words, so
-# they are English.
+# What the testbed says of the events it sends (docs/boundary.md, 「Events」): the payload's shape, how long
+# a hook is given, and the lines a verb writes where the hook did not take an event, {event} its name. A
+# harness reads the words, so they are English.
 
 version = 1
+# How long a hook is waited for before its process group is ended, in seconds.
+hook_seconds = 60
 
 [lines]
 # No hook is named, so the event is written here, {payload} as one line of JSON.
 unhooked = "event: {event} {payload}"
 # The hook could not be started, or ended on its own code, {why} what it came to.
 failed = "event: the hook for {event} failed: {why}"
+# The hook ran past its time and was ended, {seconds} the time it was given.
+overran = "event: the hook for {event} ran past {seconds} seconds and was ended"

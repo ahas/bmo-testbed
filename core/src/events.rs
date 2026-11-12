@@ -6,7 +6,9 @@
 use std::io::Write as _;
 use std::os::unix::process::CommandExt as _;
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, ExitStatus, Stdio};
+use std::sync::mpsc;
+use std::time::Duration;
 
 use serde::Serialize;
 use serde_json::Value;
@@ -43,6 +45,8 @@ struct Payload<'a> {
 /// Where events go: the hook, its time, and the repository and tree they happen in.
 pub struct Hook {
   pub command: Option<String>,
+  /// How long the hook is waited for before its process group is ended.
+  pub time: Duration,
   pub repository: Option<String>,
   pub root: Option<PathBuf>,
 }
@@ -60,6 +64,7 @@ impl Hook {
 
     Self {
       command,
+      time: Duration::from_secs(EVENTS.hook_seconds),
       repository: repo.map(Repository::name),
       root: repo.map(|repo| repo.root.clone()),
     }
@@ -102,20 +107,49 @@ impl Hook {
       .stdout(Stdio::null())
       .process_group(0)
       .spawn();
-    let mut child = match started {
+    let child = match started {
       Ok(child) => child,
       Err(why) => return failed(&why.to_string()),
     };
+    let group = child.id();
+    let ended = handed(child, payload);
+    let came = match ended.recv_timeout(self.time) {
+      Ok(came) => came,
+      Err(_) => {
+        // The hook's own group, which `process_group(0)` made, ended with whatever it started, and the
+        // hook then reaped.
+        if let Ok(group) = libc::pid_t::try_from(group) {
+          // SAFETY: killpg sends a signal to a process group by its number and touches no memory.
+          unsafe { libc::killpg(group, libc::SIGKILL) };
+        }
 
+        let _ = ended.recv();
+        let seconds = self.time.as_secs().to_string();
+
+        return eprintln!("{}", fill_marks(&said.overran, &[("event", event.name), ("seconds", &seconds)]));
+      }
+    };
+
+    match came {
+      Ok(status) if status.success() => {}
+      Ok(status) => failed(&status.to_string()),
+      Err(why) => failed(&why),
+    }
+  }
+}
+
+// The hook handed its payload and waited for on a thread of its own, so the payload written into a pipe the
+// hook never reads holds nothing back: how it ended, sent once it has.
+fn handed(mut child: Child, payload: String) -> mpsc::Receiver<Result<ExitStatus, String>> {
+  let (sender, ended) = mpsc::channel();
+
+  std::thread::spawn(move || {
     if let Some(mut input) = child.stdin.take() {
       let _ = input.write_all(payload.as_bytes());
     }
 
-    // The hook is waited for until it ends, however long that takes.
-    match child.wait() {
-      Ok(status) if status.success() => {}
-      Ok(status) => failed(&status.to_string()),
-      Err(why) => failed(&why.to_string()),
-    }
-  }
+    let _ = sender.send(child.wait().map_err(|why| why.to_string()));
+  });
+
+  ended
 }

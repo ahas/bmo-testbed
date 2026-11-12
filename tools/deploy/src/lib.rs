@@ -6,6 +6,7 @@
 mod call;
 mod checkout;
 mod deployment;
+mod following;
 
 use bmo_testbed_core::policy::deploy_tool::DEPLOY_TOOL;
 use bmo_testbed_core::policy::fill_marks;
@@ -14,9 +15,10 @@ use serde_json::{Value, json};
 pub use call::{Answer, Asked, Content, Handed, read_handed};
 pub use checkout::{find_checkout, same_name};
 pub use deployment::{
-  Arguments, DATA_ROOT_VARIABLE, Ground, HARNESS_VARIABLE, PLACED, TESTBED, deploy, outcome,
-  read_arguments, release_testbed, unit_of,
+  Arguments, Begun, DATA_ROOT_VARIABLE, Ground, HARNESS_VARIABLE, PLACED, TESTBED, deploy, outcome,
+  read_arguments, recorded, release_testbed, unit_of,
 };
+pub use following::{Course, newest, of_commit, of_repository};
 
 /// What a request is answered with on standard output, or why it is answered with none: a kind the tool
 /// does not serve, which the host takes as a failed call.

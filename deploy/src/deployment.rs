@@ -634,9 +634,15 @@ impl<'a> Laying<'a> {
     REFUSED_EXIT_CODE
   }
 
-  // The deployment ended before anything went live: said, sent as `deploy-failed`, and written as its ending.
+  // The deployment ended before anything went live: said, written as its ending, then sent as
+  // `deploy-failed`, so no hook stands between the deployment and its end.
   fn failed(&self, stage: Stage, line: String, outcome: Outcome) -> u8 {
     self.say(&line);
+
+    if let Some(progress) = &self.progress {
+      progress.end(outcome, Some(&line));
+    }
+
     self.hook.send(&Event {
       name: "deploy-failed",
       commit: Some(self.commit.clone()),
@@ -649,10 +655,6 @@ impl<'a> Laying<'a> {
         "journal": "",
       }),
     });
-
-    if let Some(progress) = &self.progress {
-      progress.end(outcome, Some(&line));
-    }
 
     1
   }
@@ -971,12 +973,22 @@ impl<'a> Laying<'a> {
     self.say(&notice);
 
     let rolled_back = matches!(outcome, Rollback::RolledBack { .. });
+    let rolled_back_event = rolled_back_detail(&failed, &outcome);
 
-    if let Some(detail) = rolled_back_detail(&failed, &outcome) {
-      if let Some(progress) = &self.progress {
+    if let Some(progress) = &self.progress {
+      if rolled_back_event.is_some() {
         progress.rolled_back();
       }
 
+      progress.end(
+        if rolled_back { Outcome::RolledBack } else { Outcome::Failed },
+        Some(&failure_line(&failed)),
+      );
+    }
+
+    // The facts go to the hook once the deployment's ending is written, so no hook stands between the
+    // deployment and its end.
+    if let Some(detail) = rolled_back_event {
       self.hook.send(&Event {
         name: "deploy-rolled-back",
         commit: Some(self.commit.clone()),
@@ -1003,13 +1015,6 @@ impl<'a> Laying<'a> {
         "journal": journal_command(&failed),
       }),
     });
-
-    if let Some(progress) = &self.progress {
-      progress.end(
-        if rolled_back { Outcome::RolledBack } else { Outcome::Failed },
-        Some(&failure_line(&failed)),
-      );
-    }
 
     1
   }
@@ -1870,6 +1875,12 @@ pub async fn deploy(
   } else {
     fill_marks(&said.live, &[("commit", &shown), ("backup", &backup)])
   });
+  // The deployment's ending is written before the hook hears of it, so no hook stands between the
+  // deployment and its end.
+  if let Some(progress) = &run.progress {
+    progress.end(Outcome::Live, None);
+  }
+
   hook.send(&Event {
     name: "deployed",
     commit: Some(commit.clone()),
@@ -1882,10 +1893,6 @@ pub async fn deploy(
       "warnings": warnings,
     }),
   });
-
-  if let Some(progress) = &run.progress {
-    progress.end(Outcome::Live, None);
-  }
 
   0
 }

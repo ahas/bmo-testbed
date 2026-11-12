@@ -22,6 +22,7 @@ fn prune_words(given: &[&str]) -> Result<PruneArgs, clap::Error> {
 fn no_hook() -> Hook {
   Hook {
     command: None,
+    time: std::time::Duration::from_secs(60),
     repository: None,
     root: None,
   }

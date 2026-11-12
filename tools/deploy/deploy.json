@@ -21,6 +21,10 @@
     "dry_run": {
       "type": ["boolean", "null"],
       "description": "Say what the deployment would do, changing nothing and starting no unit."
+    },
+    "attach": {
+      "type": ["boolean", "null"],
+      "description": "Start nothing: answer the outcome of the newest deployment of this repository and commit the testbed's record holds, waiting for it to end where it still runs. Use it after a call the tool host's stop ended."
     }
   }
 }

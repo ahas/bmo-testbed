@@ -57,10 +57,13 @@
   {
     "id": "core/event-hook",
     "title": "Event hook",
-    "what": "Sends a verb's event (deployed, deploy-failed, full-suite-failed, suite-flaky and the like) to the hook the environment or the declaration names, through sh with a JSON body; it never changes the verb's outcome.",
+    "what": "Sends a verb's event (deployed, deploy-failed, full-suite-failed, suite-flaky and the like) to the hook the environment or the declaration names, through sh with a JSON body, ending its process group past the policy's time; it never changes the verb's outcome.",
     "files": [
       "core/src/events.rs",
-      "docs/boundary.md"
+      "core/src/policy/events.rs",
+      "policy/events.toml",
+      "docs/boundary.md",
+      "core/tests/events.rs"
     ],
     "symbols": [],
     "aliases": [],
@@ -68,8 +71,8 @@
       "core/declaration",
       "core/policy-loader"
     ],
-    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
-    "changed": 1793664723537
+    "base": "9b86febe98a51e2e757fbcefeb44c1db55fcb4c2",
+    "changed": 1794478113786
   },
   {
     "id": "core/lanes-and-turn",

@@ -27,7 +27,7 @@
   {
     "id": "deploy/deploy-run",
     "title": "Deploy run",
-    "what": "The deploy run in a unit of its own: gate, backup, release, flip, restarts watched and rolled back, its progress record mirrored into the testbed's record with its log lines and a restart for each unit it stops.",
+    "what": "The deploy run in a unit of its own: gate, backup, release, flip, restarts watched and rolled back, its progress record mirrored into the testbed's record with its log lines and a restart for each unit it stops, its outcome written before the event hook hears of it.",
     "files": [
       "deploy/src/deployment.rs",
       "deploy/src/progress.rs",
@@ -59,38 +59,46 @@
       "core/policy-loader",
       "record/record"
     ],
-    "base": "43bfb58f6d9669b5ce425ae9d87d24576d7698f4",
-    "changed": 1794125035891
+    "base": "9b86febe98a51e2e757fbcefeb44c1db55fcb4c2",
+    "changed": 1794478113792
   },
   {
     "id": "deploy/hosted-deploy-tool",
     "title": "Hosted deploy tool",
-    "what": "The testbed/deploy tool the tool host runs: one call read from standard input, the commit put live through the deploy verb from outside the caller's harness, the deployment waited out and what came of it answered. Lives in tools/deploy.",
+    "what": "The testbed/deploy tool the tool host runs: one call read from standard input, the commit put live through the deploy verb or a deployment under way attached to, and the deployment followed through the testbed record's events to the outcome it answers; it ends at its host's stop. In tools/deploy.",
     "files": [
       "tools/deploy/src/lib.rs",
       "tools/deploy/src/main.rs",
       "tools/deploy/src/call.rs",
       "tools/deploy/src/checkout.rs",
       "tools/deploy/src/deployment.rs",
+      "tools/deploy/src/following.rs",
       "tools/deploy/tool.toml",
       "tools/deploy/deploy.json",
       "core/src/policy/deploy_tool.rs",
       "policy/deploy-tool.toml",
-      "docs/deploy.md"
+      "docs/deploy.md",
+      "tools/deploy/tests/deployment.rs",
+      "tools/deploy/tests/following.rs"
     ],
     "symbols": [
       "answer",
       "read_handed",
       "Handed",
       "Ground",
-      "deploy"
+      "deploy",
+      "Course",
+      "recorded"
     ],
-    "aliases": [],
+    "aliases": [
+      "배포 도구"
+    ],
     "needs": [
-      "deploy/deploy-run"
+      "deploy/deploy-run",
+      "record/record"
     ],
-    "base": "43bfb58f6d9669b5ce425ae9d87d24576d7698f4",
-    "changed": 1793779891717
+    "base": "9b86febe98a51e2e757fbcefeb44c1db55fcb4c2",
+    "changed": 1794478118849
   },
   {
     "id": "deploy/releases-and-rollback",

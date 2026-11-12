@@ -12,9 +12,13 @@ run = ["deploy-tool"]
 namespace = "testbed"
 name = "deploy"
 title = "Deploy a commit"
-description = "Put a pushed commit of a repository live on this machine through the testbed's deploy verb, wait for the deployment to end, and answer whether it went live. The repository is named as its checkout's testbed.toml names it, and the reason is written in English."
+description = "Put a pushed commit of a repository live on this machine through the testbed's deploy verb, wait for the deployment to end, and answer whether it went live. The repository is named as its checkout's testbed.toml names it, and the reason is written in English. A deployment of the commit already under way is followed rather than started again. Where the call fails because the tool host stopped, as a deployment of the tool host stops it, the deployment goes on: call again with attach set to read what came of it."
 input = "deploy.json"
 capabilities = ["deploy"]
+# A deployment of the tool host itself stops the host while a call waits on that deployment, so a call never
+# holds the host's stop or its quiet: it is ended at the stop, and a call with `attach` reads the outcome
+# (bmo-pocket's docs/mcp-host.md, 「The host's stop」).
+ends_at_stop = true
 
 [entry.hints]
 read_only = false

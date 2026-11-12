@@ -15,13 +15,17 @@ path = "src/main.rs"
 test = false
 
 [dependencies]
+bmo-testbed-client = { path = "../../client", default-features = false }
 bmo-testbed-core = { path = "../../core" }
 bmo-testbed-deploy = { path = "../../deploy" }
+bmo-testbed-record = { path = "../../record" }
 bmo-testbed-suite = { path = "../../suite" }
 serde.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]
+# The record's events aged past its window by hand, which no verb does.
+rusqlite.workspace = true
 tempfile.workspace = true
 toml.workspace = true
 

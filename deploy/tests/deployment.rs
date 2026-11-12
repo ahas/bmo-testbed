@@ -320,14 +320,33 @@ health = "true"
     ])
   }
 
+  // The hook writes down each event it is handed, and whether the progress record held the deployment's
+  // ending as it ran.
   fn hook(&self) -> Hook {
     let events = self.at("events");
+    let endings = self.at("endings");
+    let progress = self.at("live/deploy-progress.json");
 
     Hook {
-      command: Some(format!("f() {{ cat >> {0}; echo >> {0}; }}; f", events.display())),
+      command: Some(format!(
+        "f() {{ cat >> {0}; echo >> {0}; if grep -q '\"outcome\"' {2}; then echo \"$1 ended\"; else echo \"$1 running\"; fi >> {1}; }}; f",
+        events.display(),
+        endings.display(),
+        progress.display()
+      )),
+      time: std::time::Duration::from_secs(60),
       repository: Some("sample".to_owned()),
       root: Some(self.source.clone()),
     }
+  }
+
+  // For each event the hook was handed, in order, its name and whether the deployment had ended by then.
+  fn endings(&self) -> Vec<String> {
+    std::fs::read_to_string(self.at("endings"))
+      .unwrap_or_default()
+      .lines()
+      .map(str::to_owned)
+      .collect()
   }
 
   // The events the hook was handed, in order.
@@ -437,6 +456,8 @@ fn a_commit_goes_live_with_its_bot_restarted_and_watched() {
     read_deploy_progress(std::fs::read_to_string(scene.at("live/deploy-progress.json")).ok().as_deref());
 
   assert_eq!(progress.unwrap().ending.unwrap().outcome, Outcome::Live);
+  // The hook heard of the deployment only once its ending was written.
+  assert_eq!(scene.endings(), ["deployed ended"]);
 
   // The testbed's record holds the deployment as it went live, the lines it said, and why it restarted its
   // bot service.
@@ -669,6 +690,7 @@ fn a_gate_that_fails_puts_nothing_live() {
   let events = scene.events();
 
   assert_eq!(scene.names(), ["deploy-failed"]);
+  assert_eq!(scene.endings(), ["deploy-failed ended"]);
   assert_eq!(events[0]["detail"]["stage"], "check");
   assert!(events[0]["detail"]["reason"].as_str().unwrap().contains("a.test.ts"));
 }
@@ -697,6 +719,7 @@ fn a_service_that_does_not_come_up_is_rolled_back() {
   );
   assert_eq!(read_deploy_record(&scene.at("live/deployed.json")).unwrap().commit, first);
   assert_eq!(scene.names()[1..], ["deploy-rolled-back", "deploy-failed"]);
+  assert_eq!(scene.endings()[1..], ["deploy-rolled-back ended", "deploy-failed ended"]);
 
   let failed = &scene.events()[2];
 

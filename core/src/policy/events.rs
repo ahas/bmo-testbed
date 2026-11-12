@@ -8,12 +8,14 @@ use serde::Deserialize;
 pub struct EventLines {
   pub unhooked: String,
   pub failed: String,
+  pub overran: String,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Events {
   pub version: u64,
+  pub hook_seconds: u64,
   pub lines: EventLines,
 }
 
