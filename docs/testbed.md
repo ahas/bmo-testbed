@@ -7,7 +7,7 @@
   tests, checks or builds, a browser run.
 - **Two lanes** (「The lanes」): the wide lane, a few seats sharing the machine's width, and the
   narrow lane beside it, one seat on a quarter of it. A command takes one seat and runs on its share
-  of the lane's width; a deployment takes every seat of the wide lane and runs on all of it. A further
+  of the lane's width; a deployment stands ahead of every other command and takes one seat as they do. A further
   seat is taken only while the machine has memory to spare (「Memory」), so commands side by side never
   run it out of memory and into swap, where a sound change fails its check for a run it never saw.
 - **A seat's holder runs on its share of the threads.** Each language's runner is handed the share
@@ -87,7 +87,7 @@ flowchart TD
 
 - **The wide lane** is the machine's whole width, shared by its seats: `seats` in the lane policy,
   three, and `BMO_TESTBED_SEATS` names another number for a machine or a test. A command takes one
-  seat; a deployment and a check held whole take every seat.
+  seat, a deployment among them; a check held whole takes every seat.
 - **The narrow lane** runs beside it on a quarter of the width, one seat, one command at a time.
 - **Why seats:** most heavy commands are a check or a build of one repository that keeps one or two
   threads busy for seconds, so holding the whole machine for each leaves most threads idle while a
@@ -108,7 +108,7 @@ flowchart TD
 - **The lane's one queue hands its seats out in the order asked.** Only the first ticket not yet
   seated may take a seat: a ticket that has taken its seat is marked seated and stands ahead of
   nobody. The first unseated ticket takes any free seat, where the memory gate lets it (「Memory」).
-- **A taker of every seat** (「The front of the line」, 「A check held whole」) standing first takes the
+- **A taker of every seat** (「A check held whole」) standing first takes the
   seats as they free and keeps them until it holds all, then runs. Everyone behind it waits, so it is
   never starved.
 - **Each waiter's ticket says who it is:** the caller's opaque scope where `BMO_TESTBED_SCOPE` names
@@ -126,7 +126,8 @@ flowchart TD
 - **A deployment stands at the front of every lane,** it and everything it starts. Its ticket stands
   ahead of every other ticket, so it takes the lane the moment its holders let go; deployments among
   themselves keep the order they asked in.
-- **It takes every seat of the lane,** so a deployment's step runs on the lane's whole width.
+- **It takes one seat, as any command does:** standing first it takes the next seat that frees, ahead of
+  everyone, and the commands in the other seats run on beside it, so no seat stands idle while it waits.
 - **The holders are never cut.** Standing at the front waits for each seat all the same.
 - **A deployment says so through `BMO_TESTBED_FRONT`,** set by the deployment's verbs for themselves;
   a caller inside a harness's call is never stood at the front, whatever it sets.

@@ -517,10 +517,10 @@ fn waiting_line(ask: &TurnAsk<'_>, queue: &TestbedQueue, waited: f64) -> String 
 }
 
 /// A lane's turn: at once inside a caller's, in line otherwise for as long as the line takes, and not had only
-/// where the harness the caller runs for is gone while it waits. A caller at the front takes every seat of
-/// the lane, any other one seat.
+/// where the harness the caller runs for is gone while it waits. Every caller takes one seat; one at the front
+/// takes the next seat that frees, ahead of everyone.
 pub fn take_turn(ask: &TurnAsk<'_>) -> TestbedTurn {
-  take_seated_turn(ask, stands_at_front(&ask.env))
+  take_seated_turn(ask, false)
 }
 
 // A lane's turn in one seat, or in every seat of the lane where `every` says so.

@@ -182,6 +182,8 @@ fn a_run_whose_turn_does_not_come_runs_nothing() {
     env: Env::from([
       ("BMO_TESTBED_SCOPE".to_owned(), "place-3".to_owned()),
       (FRONT_VARIABLE.to_owned(), "1".to_owned()),
+      // A lane of one seat, which the holder fills.
+      ("BMO_TESTBED_SEATS".to_owned(), "1".to_owned()),
     ]),
     checkout: "/checkout".to_owned(),
     poll: None,
@@ -190,7 +192,7 @@ fn a_run_whose_turn_does_not_come_runs_nothing() {
   let mut harness = std::process::Command::new("sleep").arg("300").spawn().unwrap();
   let mut command = testbed(&repo, dir.path(), &["suite", "no-such-test-file-791.ts"]);
 
-  command.env("CLAUDE_PID", harness.id().to_string());
+  command.env("CLAUDE_PID", harness.id().to_string()).env("BMO_TESTBED_SEATS", "1");
   std::os::unix::process::CommandExt::process_group(&mut command, 0);
 
   let run = command.spawn().unwrap();
