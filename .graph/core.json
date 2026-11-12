@@ -37,7 +37,7 @@
   {
     "id": "core/declaration",
     "title": "Declaration reader",
-    "what": "Reads a repository's root testbed.toml into typed tables (test, projects, tools, check, build, deploy, runner, events), refusing unknown keys and another major, and finds the repository's root and paths.",
+    "what": "Reads a repository's root testbed.toml into typed tables (test, projects, tools, check with its shared versions, build, deploy, runner, events), refusing unknown keys and another major, and finds the repository's root and paths.",
     "files": [
       "core/src/declaration.rs",
       "testbed.toml",
@@ -51,8 +51,8 @@
       "core/lanes-and-turn",
       "core/policy-loader"
     ],
-    "base": "6e2f9339a7995fd7f34b6e158178f39b2e935f25",
-    "changed": 1794489053885
+    "base": "f7a80c22cadfa5d4eeaaa20c08f42944183c1912",
+    "changed": 1794491113939
   },
   {
     "id": "core/event-hook",

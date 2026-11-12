@@ -3,8 +3,9 @@
 //! nothing but `optional`, and every registry package of its locks on a semver line the snapshot names
 //! stands at the snapshot's version; an exception the declaration names stands in for the shared line or
 //! version of its crate. Every entry of its package manifests naming a pinned package is the pinned release's
-//! (`shared_packages`). The shared versions are read from the root of the checkout the machine's registry
-//! lists under the repository name the declaration gives.
+//! (`shared_packages`). A file one of the declaration's `exclude` globs reaches is left unread. The shared
+//! versions are read from the root of the checkout the machine's registry lists under the repository name
+//! the declaration gives.
 //!
 //! A manifest is read by the format-keeping TOML reader, since the rule holds the line as written, not
 //! only what it means; a lock by the TOML reader; a version by the semver reader.
@@ -25,6 +26,7 @@ use super::Findings;
 use super::files::{checkout_files_where, read_text};
 use super::shared_packages::{PackagePin, hold_packages, read_pins};
 use crate::dependents::{read_registry, registry_path};
+use crate::selection::glob_matches;
 
 // The tables of a crate's manifest naming what it depends on, at its top and under each `[target.…]`.
 const CARGO_TABLES: [&str; 3] = ["dependencies", "dev-dependencies", "build-dependencies"];
@@ -408,10 +410,17 @@ fn hold_lock(
   held
 }
 
-/// The checkout at `root` held to the shared versions, with the exceptions its declaration names.
-pub fn hold(root: &Path, shared: &Shared, exceptions: &BTreeMap<String, SharedException>) -> Held {
+/// The checkout at `root` held to the shared versions, with the exceptions its declaration names, every
+/// file one of the `exclude` globs reaches left unread.
+pub fn hold(
+  root: &Path,
+  shared: &Shared,
+  exceptions: &BTreeMap<String, SharedException>,
+  exclude: &[String],
+) -> Held {
   let words = words();
   let mut held = Held::default();
+  let reads = |path: &str| !exclude.iter().any(|glob| glob_matches(glob, path));
   let mut held_to = shared.lines.clone();
 
   for (name, exception) in exceptions {
@@ -453,7 +462,7 @@ pub fn hold(root: &Path, shared: &Shared, exceptions: &BTreeMap<String, SharedEx
     held.divergences.extend(one.divergences);
   };
 
-  for manifest in checkout_files_where(root, |path| file_name(path) == "Cargo.toml") {
+  for manifest in checkout_files_where(root, |path| file_name(path) == "Cargo.toml" && reads(path)) {
     match read_text(root, &manifest).parse::<DocumentMut>() {
       Ok(document) => add(hold_manifest(&manifest, &document, &held_to), &mut held),
       Err(why) => held.divergences.push(unreadable(&words.not_manifest, &manifest, why.to_string())),
@@ -462,7 +471,7 @@ pub fn hold(root: &Path, shared: &Shared, exceptions: &BTreeMap<String, SharedEx
 
   let mut holds = BTreeMap::new();
 
-  for lock in checkout_files_where(root, |path| file_name(path) == words.lock) {
+  for lock in checkout_files_where(root, |path| file_name(path) == words.lock && reads(path)) {
     match toml::from_str::<Lock>(&read_text(root, &lock)) {
       Ok(read) => add(hold_lock(&lock, &read, &shared.snapshot, exceptions, &mut holds), &mut held),
       Err(why) => held.divergences.push(unreadable(&words.not_lock, &lock, why.to_string())),
@@ -480,7 +489,7 @@ pub fn hold(root: &Path, shared: &Shared, exceptions: &BTreeMap<String, SharedEx
     }
   }
 
-  let (entries, unread_manifests) = hold_packages(root, &shared.packages);
+  let (entries, unread_manifests) = hold_packages(root, &shared.packages, reads);
 
   for (manifest, why) in unread_manifests {
     held.divergences.push(unreadable(&words.not_package_manifest, &manifest, why));
@@ -513,7 +522,7 @@ pub fn checkout_shared_versions(repo: &Repository, env: &Env) -> Findings {
 
   match find_shared(&declared.repository, env) {
     Ok(shared) => {
-      let held = hold(&repo.root, &shared, &declared.exceptions);
+      let held = hold(&repo.root, &shared, &declared.exceptions, &declared.exclude);
 
       Findings {
         paths: held.entries,
@@ -618,8 +627,8 @@ fn report_row(name: &str, held: &Held, shared: &Shared) -> String {
 }
 
 /// Every checkout of the machine's registry held to the shared versions the repository's declaration
-/// names, each with the exceptions its own declaration names, whether or not it enables the check; or why
-/// the shared versions or the registry could not be read.
+/// names, each with the exceptions and the files left out its own declaration names, whether or not it
+/// enables the check; or why the shared versions or the registry could not be read.
 pub fn shared_versions_report(repo: &Repository, env: &Env) -> Result<Report, String> {
   let words = words();
   let Some(declared) = &repo.declaration.check.shared_versions else {
@@ -641,13 +650,10 @@ pub fn shared_versions_report(repo: &Repository, env: &Env) -> Result<Report, St
     match Repository::read(&checkout) {
       Ok(there) => {
         let none = BTreeMap::new();
-        let exceptions = there
-          .declaration
-          .check
-          .shared_versions
-          .as_ref()
-          .map_or(&none, |shared| &shared.exceptions);
-        let held = hold(&there.root, &shared, exceptions);
+        let own = there.declaration.check.shared_versions.as_ref();
+        let exceptions = own.map_or(&none, |own| &own.exceptions);
+        let exclude = own.map_or(&[][..], |own| own.exclude.as_slice());
+        let held = hold(&there.root, &shared, exceptions, exclude);
 
         report.differs += usize::from(!held.divergences.is_empty());
         report.rows.push(report_row(&there.name(), &held, &shared));

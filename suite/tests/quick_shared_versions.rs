@@ -1,7 +1,8 @@
 //! The shared versions check (docs/checks.md, 「The quick checks」): a listed crate's entries are the shared
 //! line byte for byte or take the workspace's adding nothing but `optional`, a lock's registry packages on a
-//! snapshot's line stand at its version, an exception stands in for its crate, a stale one is named, the
-//! shared versions are found through the machine's registry, and the report holds every checkout to them.
+//! snapshot's line stand at its version, an exception stands in for its crate, a stale one is named, a file
+//! an exclude glob reaches is left unread, the shared versions are found through the machine's registry, and
+//! the report holds every checkout to them.
 
 use std::collections::BTreeMap;
 
@@ -74,7 +75,7 @@ fn a_workspace_writing_the_shared_line_and_crates_taking_it_pass() {
       &lock(&[("rt", "1.4.0"), ("sys", "0.2.9"), ("rand", "0.8.5"), ("rand", "0.7.3")]),
     ),
   ]);
-  let held = hold(dir.path(), &shared(), &BTreeMap::new());
+  let held = hold(dir.path(), &shared(), &BTreeMap::new(), &[]);
 
   assert_eq!(said(&held), Vec::<String>::new());
   assert_eq!(held.entries, 6);
@@ -94,7 +95,7 @@ fn an_entry_other_than_the_line_or_adding_to_the_workspace_is_named_with_the_lin
       "[package]\nname = \"a\"\n\n[dependencies]\nrt = { workspace = true, features = [\"fs\"] }\nweb = { workspace = true, features = [\"ws\"], optional = true }\n\n[target.'cfg(unix)'.dev-dependencies]\nnet = { package = \"rt\", version = \"1.4.0\", features = [\"net\", \"time\"] }\n",
     ),
   ]);
-  let held = hold(dir.path(), &shared(), &BTreeMap::new());
+  let held = hold(dir.path(), &shared(), &BTreeMap::new(), &[]);
 
   assert_eq!(
     said(&held),
@@ -119,7 +120,7 @@ fn a_locked_package_at_another_version_of_the_line_is_named_with_the_update_that
       lock(&[("sys", "0.2.8"), ("sys", "0.3.0"), ("rand", "0.9.1")])
     ),
   )]);
-  let held = hold(dir.path(), &shared(), &BTreeMap::new());
+  let held = hold(dir.path(), &shared(), &BTreeMap::new(), &[]);
 
   assert_eq!(
     said(&held),
@@ -144,12 +145,12 @@ fn an_exception_stands_in_for_its_crates_line_and_lets_the_lock_hold_its_version
     ("sys".to_owned(), except("a dependency pins it", None, &["0.2.8"])),
   ]);
 
-  assert_eq!(said(&hold(dir.path(), &shared(), &exceptions)), Vec::<String>::new());
+  assert_eq!(said(&hold(dir.path(), &shared(), &exceptions, &[])), Vec::<String>::new());
 
   let dir = checkout(&[("Cargo.toml", &format!("[package]\nname = \"one\"\n\n[dependencies]\n{RT}\n"))]);
 
   assert_eq!(
-    said(&hold(dir.path(), &shared(), &exceptions)),
+    said(&hold(dir.path(), &shared(), &exceptions, &[])),
     [
       "Cargo.toml: [dependencies] rt = { version = \"1.4.0\", features = [\"net\", \"time\"] }; write: rt = { version = \"1.4.0\", features = [\"full\"] }",
       "the exception for sys names 0.2.8, which no lock holds",
@@ -168,7 +169,7 @@ fn an_exception_that_does_not_stand_is_named() {
   ]);
 
   assert_eq!(
-    said(&hold(dir.path(), &shared(), &exceptions)),
+    said(&hold(dir.path(), &shared(), &exceptions, &[])),
     [
       "the exception for rt writes the shared line itself",
       "the exception for unlisted is for a crate the shared versions list no line or version of",
@@ -176,6 +177,34 @@ fn an_exception_that_does_not_stand_is_named() {
       "the exception for unlisted names 1.0.0, which no lock holds",
     ]
   );
+}
+
+// "a fork's upstream manifests, locks and package manifests an exclude glob reaches are left unread, and
+// its own files stay held"
+#[test]
+fn the_files_an_exclude_glob_reaches_are_left_unread_and_the_rest_held() {
+  let dir = checkout(&[
+    (
+      "Cargo.toml",
+      &format!("[package]\nname = \"own\"\n\n[dependencies]\n{RT}\nweb = \"0.8\"\n"),
+    ),
+    (
+      "upstream/native/Cargo.toml",
+      "[package]\nname = \"native\"\n\n[dependencies]\nrt = { version = \"1\", features = [\"full\"] }\n",
+    ),
+    ("upstream/native/Cargo.lock", &lock(&[("sys", "0.2.8")])),
+    ("upstream/web/package.json", "{\"dependencies\": {\"pkg\": \"^1.0.0\"}}"),
+  ]);
+  let exclude = ["upstream/**".to_owned()];
+  let held = hold(dir.path(), &read_shared(&pinning()).unwrap(), &BTreeMap::new(), &exclude);
+
+  assert_eq!(
+    said(&held),
+    [
+      "Cargo.toml: [dependencies] web = \"0.8\"; write: web = { version = \"0.8.0\", features = [\"json\"] }"
+    ]
+  );
+  assert_eq!(held.entries, 2);
 }
 
 // A registry file under a scratch data root listing the checkouts given, and the environment naming it.
@@ -230,10 +259,10 @@ fn the_shared_versions_are_found_through_the_registry_under_the_declared_name() 
   assert!(two.findings[0].starts_with("more than one checkout"), "{:?}", two.findings);
 }
 
-// "the report holds every checkout of the registry, each with its own exceptions, and counts the ones that
-// differ"
+// "the report holds every checkout of the registry, each with its own exceptions and files left out, and
+// counts the ones that differ"
 #[test]
-fn the_report_holds_every_checkout_with_its_own_exceptions_and_counts_those_that_differ() {
+fn the_report_holds_every_checkout_with_its_own_exceptions_and_exclusions_and_counts_those_that_differ() {
   let data = tempfile::tempdir().unwrap();
   let base = checkout(&[
     ("testbed.toml", "testbed = 0\nname = \"shared-base\"\n"),
@@ -243,9 +272,10 @@ fn the_report_holds_every_checkout_with_its_own_exceptions_and_counts_those_that
   let excepted = checkout(&[
     (
       "testbed.toml",
-      "testbed = 0\nname = \"excepted\"\n\n[check.shared_versions]\nrepository = \"shared-base\"\n\n[check.shared_versions.exceptions.sys]\nreason = \"pinned below\"\nlocked = [\"0.2.8\"]\n",
+      "testbed = 0\nname = \"excepted\"\n\n[check.shared_versions]\nrepository = \"shared-base\"\nexclude = [\"upstream/**\"]\n\n[check.shared_versions.exceptions.sys]\nreason = \"pinned below\"\nlocked = [\"0.2.8\"]\n",
     ),
     ("Cargo.lock", &lock(&[("sys", "0.2.8")])),
+    ("upstream/Cargo.toml", "[package]\nname = \"upstream\"\n\n[dependencies]\nrt = \"1\"\n"),
   ]);
   let differing = checkout(&[
     ("testbed.toml", "testbed = 0\nname = \"differing\"\n"),
@@ -305,7 +335,7 @@ fn a_manifest_naming_the_pinned_release_passes_and_installed_packages_are_not_re
     ("client/vendor/pkg-1.0.0.tgz", RELEASE),
     ("client/node_modules/pkg/package.json", "{\"dependencies\": {\"pkg\": \"0.1.0\"}}"),
   ]);
-  let held = hold(dir.path(), &read_shared(&pinning()).unwrap(), &BTreeMap::new());
+  let held = hold(dir.path(), &read_shared(&pinning()).unwrap(), &BTreeMap::new(), &[]);
 
   assert_eq!(said(&held), Vec::<String>::new());
   assert_eq!(held.entries, 2);
@@ -323,7 +353,7 @@ fn each_way_an_entry_differs_from_the_pinned_release_is_named_with_what_to_write
     ("client/other/pkg-1.0.0.tgz", "a build packed elsewhere"),
     ("broken/package.json", "[]"),
   ]);
-  let held = hold(dir.path(), &read_shared(&pinning()).unwrap(), &BTreeMap::new());
+  let held = hold(dir.path(), &read_shared(&pinning()).unwrap(), &BTreeMap::new(), &[]);
   let lines = said(&held);
   let pin = sha256_of(RELEASE);
   let other = sha256_of("a build packed elsewhere");

@@ -504,12 +504,12 @@ fn the_language_check_and_its_ledger_are_read_under_their_earlier_names() {
   assert!(refusal.contains("ledger"), "{refusal}");
 }
 
-// "the shared versions name their repository and the exceptions, and the check without the table, an
+// "the shared versions name their repository, the files left out and the exceptions, and the check without the table, an
 // exception without a reason and one naming nothing are refused"
 #[test]
 fn the_shared_versions_and_their_exceptions_read_and_what_breaks_them_is_refused() {
   let declaration = parse(&declared(
-    "[check]\nquick = [\"shared-versions\"]\n\n[check.shared_versions]\nrepository = \"base\"\n\n[check.shared_versions.exceptions.rt]\nreason = \"a dependency asks for more\"\nline = \"rt = \\\"1\\\"\"\nlocked = [\"1.0.1\"]\n",
+    "[check]\nquick = [\"shared-versions\"]\n\n[check.shared_versions]\nrepository = \"base\"\nexclude = [\"upstream/**\"]\n\n[check.shared_versions.exceptions.rt]\nreason = \"a dependency asks for more\"\nline = \"rt = \\\"1\\\"\"\nlocked = [\"1.0.1\"]\n",
   ))
   .unwrap();
   let shared = declaration.check.shared_versions.unwrap();
@@ -517,6 +517,7 @@ fn the_shared_versions_and_their_exceptions_read_and_what_breaks_them_is_refused
 
   assert_eq!(declaration.check.quick, [QuickCheck::SharedVersions]);
   assert_eq!(shared.repository, "base");
+  assert_eq!(shared.exclude, ["upstream/**"]);
   assert_eq!(
     (exception.line.as_deref(), exception.locked.as_slice()),
     (Some("rt = \"1\""), &["1.0.1".to_owned()][..])

@@ -89,6 +89,7 @@ enables only with this table's `repository`.
 | Key | Type | Default | Meaning |
 |---|---|---|---|
 | `repository` | string | required | The repository whose root holds `shared-versions.toml`, by its declared name, found in the machine's registry of checkouts |
+| `exclude` | list of globs | `[]` | The Cargo manifests, locks and package manifests the check leaves unread, such as the upstream folders a fork carries unchanged |
 
 ### `[check.shared_versions.exceptions.<crate>]`: a crate this repository takes otherwise
 

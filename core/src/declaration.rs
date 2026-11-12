@@ -300,6 +300,9 @@ pub struct SharedVersions {
   /// `[check.shared_versions.exceptions.<crate>]`, by the crate's name.
   #[serde(default)]
   pub exceptions: BTreeMap<String, SharedException>,
+  /// The globs of the manifests, locks and package manifests the check leaves unread.
+  #[serde(default)]
+  pub exclude: Vec<String>,
 }
 
 /// One crate a repository takes otherwise than the shared versions, and why.

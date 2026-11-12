@@ -129,11 +129,12 @@ fn off(folder: &Path, folder_shown: &str, value: &Value, pin: &PackagePin) -> Op
   }
 }
 
-/// Every entry of the checkout's package manifests naming a pinned package, in each list naming packages; a
-/// manifest that does not read as a JSON object is named by its path and why.
+/// Every entry of the checkout's package manifests that `reads` takes naming a pinned package, in each list
+/// naming packages; a manifest that does not read as a JSON object is named by its path and why.
 pub fn hold_packages(
   root: &Path,
   pins: &BTreeMap<String, PackagePin>,
+  reads: impl Fn(&str) -> bool,
 ) -> (Vec<PackageEntry>, Vec<(String, String)>) {
   let words = words();
   let mut entries = Vec::new();
@@ -143,8 +144,9 @@ pub fn hold_packages(
     return (entries, unread);
   }
 
-  let manifests =
-    checkout_files_where(root, |path| path.rsplit('/').next() == Some(words.package_manifest.as_str()));
+  let manifests = checkout_files_where(root, |path| {
+    path.rsplit('/').next() == Some(words.package_manifest.as_str()) && reads(path)
+  });
 
   for manifest in manifests {
     let document: Value = match serde_json::from_str(&read_text(root, &manifest)) {

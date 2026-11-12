@@ -147,7 +147,7 @@
   {
     "id": "suite/quick-checks",
     "title": "Quick checks",
-    "what": "The quick checks a repository enables: wording and lines not English by bmo-text, dashes in people text, folder and manifest layout, dependencies, the Cargo profile, and shared versions with each vendored package held to its pinned release file, run by check quick and its parts.",
+    "what": "The quick checks a repository enables: wording and lines not English by bmo-text, dashes in people text, folder and manifest layout, dependencies, the Cargo profile, and shared versions outside excluded files, each vendored package held to its pinned release file, run by check quick and its parts.",
     "files": [
       "suite/src/quick/mod.rs",
       "suite/src/quick/wording.rs",
@@ -184,8 +184,8 @@
       "core/policy-loader",
       "calls/bmo-text"
     ],
-    "base": "6e2f9339a7995fd7f34b6e158178f39b2e935f25",
-    "changed": 1794489009814
+    "base": "f7a80c22cadfa5d4eeaaa20c08f42944183c1912",
+    "changed": 1794491118592
   },
   {
     "id": "suite/static-check",

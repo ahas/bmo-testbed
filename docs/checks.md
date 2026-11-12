@@ -176,6 +176,10 @@
     (`docs/suite.md`, 「The dependents of a major change」) as the checkout whose declaration gives that name,
     so a worker's copy and a scratch clone read the same file as the primary checkout. A registry that does
     not read, no checkout or two declaring the name, and a file that does not read are the check's one fault.
+  - **What it leaves out:** a manifest, a lock or a package manifest one of the globs of the declaration's
+    `[check.shared_versions] exclude` reaches is not read at all, so a fork's upstream folders, which the
+    repository neither builds nor may rewrite, stand outside the check while its own files stay under it.
+    The globs read paths from the root, a `**` reaching any depth.
   - **The manifests:** every `Cargo.toml` the checkout tracks or holds new, in its
     `[workspace.dependencies]` and in every dependency table, a target's included. An entry naming a listed
     crate, by its key or by the package it renames, is the file's line byte for byte after its key, its
@@ -202,11 +206,11 @@
     crate the file does not list, whose line is the file's or does not read as one line for the crate, or
     naming a version the lock does not hold, is named.
   - **`check shared-versions --report`** holds every checkout of the registry to the same file, each with
-    the exceptions its own declaration names, whether or not it enables the check, and changes nothing: a
-    line per checkout naming the crates whose entries differ, the lock's versions that differ, and for each
-    pinned package the checkout names, the entries it writes for it beside the pinned version; a line for
-    each checkout whose declaration does not read; and a last line counting the checkouts that differ. It
-    ends 1 where any checkout differs.
+    the exceptions and the files left out its own declaration names, whether or not it enables the check,
+    and changes nothing: a line per checkout naming the crates whose entries differ, the lock's versions
+    that differ, and for each pinned package the checkout names, the entries it writes for it beside the
+    pinned version; a line for each checkout whose declaration does not read; and a last line counting the
+    checkouts that differ. It ends 1 where any checkout differs.
 - **`quick` runs every enabled one** and prints a line for each, ending non-zero where any failed.
 
 ## The change check
