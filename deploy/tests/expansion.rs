@@ -358,10 +358,12 @@ fn runner() -> impl Fn(&[String], &Path) -> bmo_testbed_deploy::run::Ran {
     match out {
       Ok(ran) => bmo_testbed_deploy::run::Ran {
         ok: ran.status.success(),
+        code: ran.status.code(),
         out: String::from_utf8_lossy(&ran.stdout).into_owned() + &String::from_utf8_lossy(&ran.stderr),
       },
       Err(why) => bmo_testbed_deploy::run::Ran {
         ok: false,
+        code: None,
         out: why.to_string(),
       },
     }

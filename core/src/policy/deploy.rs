@@ -42,6 +42,7 @@ pub struct Numbers {
   pub unit_check_ms: u64,
   pub journal_lines: usize,
   pub quiet_poll_ms: u64,
+  pub quiet_unanswered_asks: u32,
   pub passed_suite_hours: i64,
 }
 
@@ -111,6 +112,11 @@ pub struct RunWords {
   pub quiet_asking: String,
   pub quiet_live: String,
   pub quiet_forced: String,
+  pub quiet_unanswered: String,
+  pub quiet_failed: String,
+  pub quiet_forced_unanswered: String,
+  pub quiet_exit: String,
+  pub quiet_no_exit: String,
   pub waiting: String,
   pub watching: String,
   pub stayed: String,

@@ -146,7 +146,7 @@ step that fails stops the deployment with every service untouched.
 | `health` | command | none | Answers 0 once the `bot` service is healthy; asked until it does or the unit gives up starting (`docs/deploy.md`, 「What the deploy run does, in order」), each ask waited for until it ends |
 | `health_wait_seconds` | integer | none | Read and given no effect |
 | `stay_up_seconds` | integer | none | Read and given no effect: the `bot` service is up once its health answers and it is read running |
-| `quiet` | command | none | Run from the release just before the record and the flip: answers 0 where no work stands under way that a restart would cut, and any other code where some does, its output naming it; asked again until it answers 0, however long that takes |
+| `quiet` | command | none | Run from the release just before the record and the flip: answers 0 where no work stands under way that a restart would cut and 1 where some does, its output naming it, asked again until it answers 0, however long that takes; any other answer is a quiet that could not tell, which fails the deployment with nothing changed once it repeats the policy's number of asks running (`docs/deploy.md`, 「What the deploy run does, in order」) |
 | `quiet_wait_seconds` | integer | none | Read and given no effect |
 | `gate` | boolean | `true` | Run the static check and the suite before deploying |
 

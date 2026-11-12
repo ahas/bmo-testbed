@@ -318,11 +318,21 @@
    job kept in a store that a caller re-attaches to, a notice still owed and sent again once the unit is
    back, a deployment running in its own unit. Nor is work that waits on the unit's own stop, such as a
    call waiting on this very deployment, since counting it would leave the deployment waiting on itself;
-   such work is ended at the stop and says so to its caller. Where it answers anything else, the line
-   says so with what the command named, and it is asked again every few seconds (the testbed's policy)
-   until it answers 0, however long the work takes. A deployment asked with `--force-live` does not wait:
-   it says the work it cuts and goes on at once. This is the last step before the record, so the moment it
-   answers 0 is seconds before the services stop.
+   such work is ended at the stop and says so to its caller. Its exit code says which answer it gives:
+   - **1 names work under way.** The line says so with what the command named, and it is asked again
+     every few seconds (the testbed's policy) until it answers 0, however long the work takes.
+   - **Any other answer is a quiet that could not tell:** another code, an end by a signal, or a command
+     that did not start. A quiet that cannot read its own state, such as a release's quiet reading a
+     table only that release's migration makes, would answer the same way for ever, so it is asked again
+     at the same pace and the line says what it said. Once it has answered so a number of asks running
+     (the testbed's policy), the deployment fails with nothing changed, its reason the quiet's last code
+     and its own words, and it is neither recorded nor flipped. An answer of 0 or 1 between them starts
+     the count again.
+   - A deployment asked with `--force-live` does not wait: it says what the quiet answered, the work it
+     cuts or the failure it could not tell past, and goes on at once.
+
+   This is the last step before the record, so the moment it answers 0 is seconds before the services
+   stop.
 9. **Record it** in `deployed.json` and `deployed.log` under the deploy root. The record names, beside
    the commit, its subject, when it was laid down and the backup, the reason the deploy was made and
    the release's version: the reason is `--message` where the caller gave one, else the commit's

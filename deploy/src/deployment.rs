@@ -282,6 +282,28 @@ pub struct StepRan {
   pub said: String,
 }
 
+/// What one ask of a declared `quiet` command answered, by its exit code (docs/deploy.md, 「What the deploy run
+/// does, in order」): 0 is no work under way, 1 is work under way, and anything else is a quiet that could not
+/// tell, carrying how it ended.
+enum QuietAnswer {
+  Quiet,
+  Busy,
+  Unanswered(String),
+}
+
+impl QuietAnswer {
+  fn of(asked: &Ran) -> Self {
+    let said = &DEPLOY.run;
+
+    match asked.code {
+      Some(0) => Self::Quiet,
+      Some(1) => Self::Busy,
+      Some(code) => Self::Unanswered(fill_marks(&said.quiet_exit, &[("code", &code.to_string())])),
+      None => Self::Unanswered(said.quiet_no_exit.clone()),
+    }
+  }
+}
+
 /// What the run does outside its own trees: commands run to their end, the service manager's among them;
 /// heavy steps; its lines; the moment; and the live processes a prune spares.
 pub trait DeployHands {
@@ -1527,27 +1549,59 @@ pub async fn deploy(
   }
 
   // 8. The wait for quiet, the last step before the record, so its answer stands seconds before the stop. It
-  // waits until no work stands under way, however long that takes; `--force-live` goes on at once.
+  // waits until no work stands under way, however long that takes, and fails once the quiet could not tell for
+  // the policy's asks running; `--force-live` goes on at once.
   if let Some(quiet) = &repo.declaration.deploy.quiet {
     let line = shell_words(quiet);
+    let asks = DEPLOY.numbers.quiet_unanswered_asks;
+    let mut unanswered = 0;
 
     run.say(&fill_marks(&said.quiet_asking, &[("quiet", quiet)]));
 
     loop {
       let asked = hands.run(&line, &release);
-
-      if asked.ok {
-        break;
-      }
-
       let named = first_chars(asked.out.trim(), DEPLOY.numbers.quoted_chars);
 
-      if run.ask.force_live {
-        run.warn(fill_marks(&said.quiet_forced, &[("said", &named)]));
-        break;
+      match QuietAnswer::of(&asked) {
+        QuietAnswer::Quiet => break,
+        QuietAnswer::Busy if run.ask.force_live => {
+          run.warn(fill_marks(&said.quiet_forced, &[("said", &named)]));
+          break;
+        }
+        QuietAnswer::Busy => {
+          unanswered = 0;
+          run.say(&fill_marks(&said.quiet_live, &[("said", &named)]));
+        }
+        QuietAnswer::Unanswered(ended) if run.ask.force_live => {
+          run.warn(fill_marks(&said.quiet_forced_unanswered, &[("ended", &ended), ("said", &named)]));
+          break;
+        }
+        QuietAnswer::Unanswered(ended) => {
+          unanswered += 1;
+
+          if unanswered >= asks {
+            return run.failed(
+              Stage::Before,
+              fill_marks(
+                &said.quiet_failed,
+                &[("asks", &asks.to_string()), ("ended", &ended), ("said", &named)],
+              ),
+              Outcome::Failed,
+            );
+          }
+
+          run.say(&fill_marks(
+            &said.quiet_unanswered,
+            &[
+              ("ended", &ended),
+              ("ask", &unanswered.to_string()),
+              ("asks", &asks.to_string()),
+              ("said", &named),
+            ],
+          ));
+        }
       }
 
-      run.say(&fill_marks(&said.quiet_live, &[("said", &named)]));
       tokio::time::sleep(Duration::from_millis(DEPLOY.numbers.quiet_poll_ms)).await;
     }
   }

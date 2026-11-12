@@ -27,7 +27,7 @@
   {
     "id": "deploy/deploy-run",
     "title": "Deploy run",
-    "what": "The deploy run in a unit of its own: gate, backup, release, flip, restarts watched and rolled back, its progress record mirrored into the testbed's record with its log lines and a restart for each unit it stops, its outcome written before the event hook hears of it.",
+    "what": "The deploy run in a unit of its own: gate, backup, release, the wait for quiet, flip, restarts watched and rolled back, its progress record mirrored into the testbed's record with its log lines and a restart for each unit it stops, its outcome written before the event hook hears of it.",
     "files": [
       "deploy/src/deployment.rs",
       "deploy/src/progress.rs",
@@ -46,7 +46,8 @@
     ],
     "symbols": [],
     "aliases": [
-      "빌드 트리"
+      "빌드 트리",
+      "Wait for quiet"
     ],
     "needs": [
       "core/declaration",
@@ -59,8 +60,8 @@
       "core/policy-loader",
       "record/record"
     ],
-    "base": "9b86febe98a51e2e757fbcefeb44c1db55fcb4c2",
-    "changed": 1794478113792
+    "base": "82825564fb226e1531bc0aea609bbb765794a621",
+    "changed": 1794486084319
   },
   {
     "id": "deploy/hosted-deploy-tool",

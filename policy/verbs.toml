@@ -200,7 +200,8 @@ deployment's unit it starts one, prints its name and how to read its journal, an
 --dry-run       say what would be done, here, and change nothing
 --no-check      leave the gate out, where the caller already ran it
 --before-start  a command run between the bot service's stop and its start
---force-live    go on at once past the declared quiet command where work stands under way, cutting it"""
+--force-live    go on at once past the declared quiet command where work stands under way, cutting it,
+                or where it could not tell"""
 backups = """
 usage: {verb} backups
 

@@ -52,6 +52,9 @@ unit_check_ms = 5000
 journal_lines = 40
 # How long the wait for quiet rests between asks of the declared `quiet` command, in milliseconds.
 quiet_poll_ms = 15000
+# How many asks running the declared `quiet` command may answer neither 0 nor 1 before the deployment
+# fails with nothing changed (docs/deploy.md, 「What the deploy run does, in order」).
+quiet_unanswered_asks = 3
 # How many hours back a passed run of the whole suite on the commit leaves the gate's own suite out
 # (docs/deploy.md, 「What the deploy run does, in order」); a run begun earlier is none.
 passed_suite_hours = 24
@@ -129,6 +132,13 @@ before_start_failed = "the command run before the start failed: {said}; {unit} i
 quiet_asking = "asking `{quiet}` whether work stands under way that the restart would cut, until none does"
 quiet_live = "work stands under way, waiting: {said}"
 quiet_forced = "work stands under way, and --force-live goes on at once, cutting it: {said}"
+# A quiet that answered neither 0 nor 1: {ended} is `quiet_exit` or `quiet_no_exit`, {ask} the asks running
+# that answered so, {asks} the policy's bound.
+quiet_unanswered = "the quiet could not tell whether work stands under way ({ended}, {ask} of {asks} asks), asking again: {said}"
+quiet_failed = "the quiet could not tell whether work stands under way {asks} asks running, so nothing was changed ({ended}): {said}"
+quiet_forced_unanswered = "the quiet could not tell whether work stands under way ({ended}), and --force-live goes on at once: {said}"
+quiet_exit = "exit {code}"
+quiet_no_exit = "no exit code: a signal ended it or it did not start"
 waiting = "waiting for `{health}` to answer, or for the unit to give up starting"
 watching = "reading whether {unit} is running"
 stayed = "{unit} came up"

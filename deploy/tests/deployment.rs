@@ -6,11 +6,11 @@
 
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
-use std::time::Duration;
 
 use bmo_testbed_client::{DeploymentState, PageQuery, RestartsQuery, TestRun, TestRunKind, TestRunState};
 use bmo_testbed_core::declaration::Repository;
 use bmo_testbed_core::events::Hook;
+use bmo_testbed_core::policy::deploy::DEPLOY;
 use bmo_testbed_core::turn::Env;
 use bmo_testbed_deploy::deployment::{
   BuildAsk, DeployAsk, DeployHands, DeployPlaces, Gate, GateAsk, GateOutcome, Machine, StepAsk, StepRan,
@@ -47,6 +47,7 @@ impl DeployHands for Hands {
 
         Ran {
           ok: !refused,
+          code: Some(i32::from(refused)),
           out: if asked.starts_with("show ") && self.gives_up {
             "ActiveState=failed\nSubState=failed\nMainPID=0\nNRestarts=0\nExecMainStatus=1".to_owned()
           } else if asked.starts_with("show ") {
@@ -60,6 +61,7 @@ impl DeployHands for Hands {
         self.systemctl.borrow_mut().push(line.join(" "));
         Ran {
           ok: true,
+          code: Some(0),
           out: String::new(),
         }
       }
@@ -377,6 +379,58 @@ health = "true"
 
   fn run(&self, hands: &Hands) -> u8 {
     self.run_with(&DeployAsk::default(), &Told(true), hands, &self.env())
+  }
+
+  // A deployment on a clock that moves only while it waits, so the wait for quiet costs no time.
+  fn run_paused(&self, ask: &DeployAsk, hands: &Hands) -> u8 {
+    let repo = Repository::read(&self.source).unwrap();
+    let places = DeployPlaces::of(&repo, &self.env()).unwrap();
+    let runtime = tokio::runtime::Builder::new_current_thread()
+      .enable_all()
+      .start_paused(true)
+      .build()
+      .unwrap();
+
+    runtime.block_on(deploy(&repo, &places, ask, &self.env(), &Told(true), hands, &self.hook()))
+  }
+
+  // The declaration's `quiet`, a script that answers each ask with the next of the codes given, one a line, and 0
+  // once they run out: 1 naming a turn under way, any other code saying it cannot read its store. The asks are
+  // counted under `quiet-asks`.
+  fn declare_quiet(&self, codes: &[i32]) {
+    let script = self.at("quiet.sh");
+    let codes_at = self.at("quiet-codes");
+    let asks = self.at("quiet-asks");
+    // A declaration that already names a quiet has it named afresh.
+    let declared = std::fs::read_to_string(self.source.join("testbed.toml"))
+      .unwrap()
+      .lines()
+      .filter(|line| !line.starts_with("quiet = "))
+      .map(|line| format!("{line}\n"))
+      .collect::<String>();
+
+    std::fs::write(&codes_at, codes.iter().map(|code| format!("{code}\n")).collect::<String>()).unwrap();
+    std::fs::write(
+      &script,
+      format!(
+        "n=$(( $(cat {asks} 2>/dev/null || echo 0) + 1 ))\necho $n > {asks}\ncode=$(sed -n \"${{n}}p\" {codes})\ncase \"$code\" in\n  1) echo 'a turn under way' ;;\n  ''|0) ;;\n  *) echo 'relation \"slots\" does not exist' >&2 ;;\nesac\nexit \"${{code:-0}}\"\n",
+        asks = asks.display(),
+        codes = codes_at.display(),
+      ),
+    )
+    .unwrap();
+    self.write(
+      "testbed.toml",
+      &declared.replace(
+        "\n[[deploy.step]]\nid = \"before\"",
+        &format!("quiet = \"sh {}\"\n\n[[deploy.step]]\nid = \"before\"", script.display()),
+      ),
+    );
+  }
+
+  // How many times the declared `quiet` was asked.
+  fn quiet_asks(&self) -> usize {
+    std::fs::read_to_string(self.at("quiet-asks")).map_or(0, |asks| asks.trim().parse().unwrap())
   }
 
   fn deploy_dir(&self) -> PathBuf {
@@ -805,21 +859,10 @@ fn a_first_deployment_whose_service_will_not_restart_fails_unrolled() {
 #[test]
 fn work_under_way_is_waited_out_before_the_flip_unless_asked_to_go_on_at_once() {
   let scene = Scene::new();
-  let busy = scene.at("busy");
-  let declared = std::fs::read_to_string(scene.source.join("testbed.toml")).unwrap();
+  let bound = usize::try_from(DEPLOY.numbers.quiet_unanswered_asks).unwrap();
 
-  scene.write(
-    "testbed.toml",
-    &declared.replace(
-      "\n[[deploy.step]]\nid = \"before\"",
-      &format!(
-        "quiet = \"sh -c 'if test -f {0}; then echo a turn under way; exit 1; fi'\"\n\n[[deploy.step]]\nid = \"before\"",
-        busy.display()
-      ),
-    ),
-  );
+  scene.declare_quiet(&[1, 9]);
   scene.push("a quiet check");
-  std::fs::write(&busy, "").unwrap();
 
   let forced = Hands::default();
   let asked = DeployAsk {
@@ -827,34 +870,90 @@ fn work_under_way_is_waited_out_before_the_flip_unless_asked_to_go_on_at_once() 
     ..DeployAsk::default()
   };
 
-  assert_eq!(scene.run_with(&asked, &Told(true), &forced, &scene.env()), 0, "{}", said(&forced));
+  assert_eq!(scene.run_paused(&asked, &forced), 0, "{}", said(&forced));
   assert!(said(&forced).contains("--force-live goes on"), "{}", said(&forced));
   assert!(scene.deploy_dir().exists(), "it went live past the work");
+  assert_eq!(scene.quiet_asks(), 1, "a forced deployment asks once");
 
+  // Work under way for more asks than a quiet that could not tell is given, with such answers short of the bound
+  // on either side of it: each answer of work starts the count again, and the deployment waits it all out.
+  let mut codes = vec![9; bound - 1];
+
+  codes.extend(vec![1; bound + 1]);
+  codes.extend(vec![9; bound - 1]);
+  std::fs::remove_file(scene.at("quiet-asks")).unwrap();
+  scene.declare_quiet(&codes);
   scene.write("note", "second");
-  scene.push("a second quiet check");
 
-  let ends = {
-    let busy = busy.clone();
-
-    std::thread::spawn(move || {
-      std::thread::sleep(Duration::from_millis(500));
-      std::fs::remove_file(&busy).unwrap();
-    })
-  };
+  let head = scene.push("a second quiet check");
   let waited = Hands::default();
 
-  assert_eq!(scene.run(&waited), 0, "{}", said(&waited));
-  assert!(said(&waited).contains("a turn under way"), "the line names the work: {}", said(&waited));
-  ends.join().unwrap();
+  assert_eq!(scene.run_paused(&DeployAsk::default(), &waited), 0, "{}", said(&waited));
+  assert_eq!(scene.quiet_asks(), codes.len() + 1, "asked until it answered 0");
+  assert_eq!(
+    said(&waited).matches("waiting: a turn under way").count(),
+    bound + 1,
+    "each line names the work: {}",
+    said(&waited)
+  );
+  assert!(said(&waited).contains("could not tell"), "{}", said(&waited));
+  assert_eq!(read_deploy_record(&scene.at("live/deployed.json")).unwrap().commit, head);
 
-  let quiet = Hands::default();
-
+  std::fs::remove_file(scene.at("quiet-asks")).unwrap();
+  scene.declare_quiet(&[]);
   scene.write("note", "third");
   scene.push("a third quiet check");
 
-  assert_eq!(scene.run(&quiet), 0, "{}", said(&quiet));
+  let quiet = Hands::default();
+
+  assert_eq!(scene.run_paused(&DeployAsk::default(), &quiet), 0, "{}", said(&quiet));
   assert!(!said(&quiet).contains("waiting:"), "a quiet answer waits for nothing: {}", said(&quiet));
+}
+
+// "any other answer is a quiet that could not tell ... Once it has answered so a number of asks running, the
+// deployment fails with nothing changed, its reason the quiet's last code and its own words"
+#[test]
+fn a_quiet_that_cannot_tell_fails_the_deployment_with_its_words_and_nothing_goes_live() {
+  let scene = Scene::new();
+
+  scene.write("note", "live");
+
+  let live = scene.push("live");
+
+  assert_eq!(scene.run(&Hands::default()), 0);
+
+  let release = std::fs::read_link(scene.deploy_dir()).unwrap();
+  let bound = usize::try_from(DEPLOY.numbers.quiet_unanswered_asks).unwrap();
+
+  scene.declare_quiet(&vec![2; bound + 5]);
+  scene.push("a quiet that cannot read its store");
+
+  let hands = Hands::default();
+
+  assert_eq!(scene.run_paused(&DeployAsk::default(), &hands), 1, "{}", said(&hands));
+  assert_eq!(scene.quiet_asks(), bound, "it stops asking at the bound");
+  assert_eq!(scene.names(), ["deployed", "deploy-failed"]);
+
+  let reason = scene.events()[1]["detail"]["reason"].as_str().unwrap().to_owned();
+
+  assert!(reason.contains("relation \"slots\" does not exist"), "the quiet's own words: {reason}");
+  assert!(reason.contains("exit 2"), "its code: {reason}");
+  assert_eq!(
+    std::fs::read_link(scene.deploy_dir()).unwrap(),
+    release,
+    "the deploy tree was not flipped"
+  );
+  assert_eq!(read_deploy_record(&scene.at("live/deployed.json")).unwrap().commit, live);
+  assert!(
+    !hands.systemctl.borrow().iter().any(|asked| asked.starts_with("restart ")),
+    "no service restarted: {:?}",
+    hands.systemctl.borrow()
+  );
+
+  let progress =
+    read_deploy_progress(std::fs::read_to_string(scene.at("live/deploy-progress.json")).ok().as_deref());
+
+  assert_eq!(progress.unwrap().ending.unwrap().outcome, Outcome::Failed);
 }
 
 // "a change is major where the version's major differs from the release before it"

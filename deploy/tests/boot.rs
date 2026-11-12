@@ -102,6 +102,7 @@ async fn the_wait_ends_where_the_unit_gave_up_starting() {
 fn systemd_is_read_one_property_to_a_line() {
   let shown = |_: &[String]| Ran {
     ok: true,
+    code: Some(0),
     out: "ActiveState=activating\nSubState=auto-restart\nMainPID=0\nNRestarts=4\nExecMainStatus=1"
       .to_owned(),
   };
@@ -121,6 +122,7 @@ fn systemd_is_read_one_property_to_a_line() {
 
   let refused = |_: &[String]| Ran {
     ok: false,
+    code: Some(1),
     out: "no bus".to_owned(),
   };
 
@@ -128,6 +130,7 @@ fn systemd_is_read_one_property_to_a_line() {
 
   let partial = |_: &[String]| Ran {
     ok: true,
+    code: Some(0),
     out: "ActiveState=failed".to_owned(),
   };
   let read = unit_status(&partial, "app.service").unwrap();
@@ -167,10 +170,12 @@ fn machine(words: &[String]) -> Ran {
   match words[0].as_str() {
     "systemctl" => Ran {
       ok: true,
+      code: Some(0),
       out: "ActiveState=failed\nSubState=failed\nMainPID=0\nNRestarts=5\nExecMainStatus=101".to_owned(),
     },
     _ => Ran {
       ok: true,
+      code: Some(0),
       out: "2026-10-14T05:15:00+0000 host app[41]: panicked at the start\n\n".to_owned(),
     },
   }

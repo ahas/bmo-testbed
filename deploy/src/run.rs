@@ -4,11 +4,12 @@
 use std::path::Path;
 use std::process::{Command, Stdio};
 
-/// What a command run to its end came to: whether it ended well, and its output, standard error after
-/// standard output, trimmed.
+/// What a command run to its end came to: whether it ended well; the code it exited with, none where it did not
+/// start or a signal ended it; and its output, standard error after standard output, trimmed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ran {
   pub ok: bool,
+  pub code: Option<i32>,
   pub out: String,
 }
 
@@ -40,12 +41,14 @@ pub fn run_quiet(words: &[String], cwd: Option<&Path>) -> Ran {
   match command(words, cwd).output() {
     Ok(done) => Ran {
       ok: done.status.success(),
+      code: done.status.code(),
       out: format!("{}{}", String::from_utf8_lossy(&done.stdout), String::from_utf8_lossy(&done.stderr))
         .trim()
         .to_owned(),
     },
     Err(why) => Ran {
       ok: false,
+      code: None,
       out: why.to_string(),
     },
   }

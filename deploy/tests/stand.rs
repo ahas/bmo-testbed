@@ -19,6 +19,7 @@ pub fn git(args: &[&str], cwd: &Path) -> Ran {
 
   Ran {
     ok: ran.status.success(),
+    code: ran.status.code(),
     out: format!("{}{}", String::from_utf8_lossy(&ran.stdout), String::from_utf8_lossy(&ran.stderr))
       .trim()
       .to_owned(),
