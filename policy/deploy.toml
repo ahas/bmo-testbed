@@ -8,6 +8,8 @@
 restart_refused = "deployment failed: the service could not be restarted on {commit}."
 not_answering = "deployment failed: the service on {commit} gave up starting before its health answered."
 died_after_start = "deployment failed: the service on {commit} answered and was not running when it was read."
+# {step} is the declared step's id.
+step_failed = "deployment failed: the step {step} after the health failed on {commit}."
 answers = "Rolled back to the earlier release {to}, and the service answers again."
 silent = "Rolled back to the earlier release {to}, but the service still does not answer; it is down."
 # Why nothing was rolled back, followed by the line after them.
@@ -19,6 +21,8 @@ bot_down = "The service is down."
 cause = "Cause: {cause}"
 # The reason the `deploy-rolled-back` event carries.
 reason = "rolled back after a failed deployment: the service on {commit} did not come up, so it is back on the earlier release {back}"
+# The same reason where a step after the health failed: {step} is the step's id.
+step_reason = "rolled back after a failed deployment: the step {step} after the health failed on {commit}, so it is back on the earlier release {back}"
 
 # A deployment that put nothing live, {main} the main branch with its short commit.
 [refusal]
@@ -123,7 +127,7 @@ stayed = "{unit} came up"
 retired = "{unit} retired: stopped, disabled and unlinked"
 retired_plain = "{unit} retired: stopped and disabled; it stands as a plain file, so it was left in place"
 unretired = "{unit} was stopped and disabled, and its link could not be taken out: {why}"
-after_failed = "the step {step} after the health failed (exit {code}): {said}; the next deployment runs it again"
+after_failed = "the step {step} after the health failed (exit {code}): {said}"
 pruned = "pruned the releases {names}"
 kept_pinned = "kept the release {release}, which the processes {pids} stand in"
 pinned_summary = "{count} releases stand after the prune, the ones past the policy's kept by processes standing in them"

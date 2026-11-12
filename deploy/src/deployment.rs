@@ -474,6 +474,8 @@ struct Laying<'a> {
   restarted_at: std::cell::Cell<i64>,
   /// Whether the run is rolling back, whose wait for the service is no stage of its own.
   rolling_back: std::cell::Cell<bool>,
+  // The step after the health that failed the deployment, where one did.
+  step_failed: std::cell::RefCell<Option<String>>,
   warnings: std::cell::RefCell<Vec<String>>,
 }
 
@@ -868,6 +870,7 @@ impl<'a> Laying<'a> {
       written: written.clone(),
       before_start: self.ask.before_start.is_some(),
       unit: bot.to_owned(),
+      step: self.step_failed.borrow().clone(),
     };
     let said = |line: &str| self.say(line);
     let git = |args: &[&str], cwd: &Path| self.git(args, cwd);
@@ -910,7 +913,11 @@ impl<'a> Laying<'a> {
       });
     }
 
-    let stage = if failure == BootFailure::DiedAfterStart { Stage::StayUp } else { Stage::Restart };
+    let stage = match failure {
+      BootFailure::DiedAfterStart => Stage::StayUp,
+      BootFailure::StepFailed => Stage::After,
+      _ => Stage::Restart,
+    };
 
     self.hook.send(&Event {
       name: "deploy-failed",
@@ -1033,6 +1040,7 @@ pub async fn deploy(
     previous: None,
     restarted_at: std::cell::Cell::new(0),
     rolling_back: std::cell::Cell::new(false),
+    step_failed: std::cell::RefCell::new(None),
     warnings: std::cell::RefCell::new(Vec::new()),
   };
 
@@ -1704,17 +1712,27 @@ pub async fn deploy(
     run.systemctl(&["daemon-reload"]);
   }
 
-  // 11. The steps after the health, each a warning where it fails.
+  // 11. The steps after the health: one that fails fails the deployment, which rolls back where a service stands
+  // to restart (docs/deploy.md, 「Rollback」).
   run.stage(Stage::After);
 
   for step in repo.declaration.deploy.steps.iter().filter(|step| step.phase == Phase::AfterHealth) {
     let ran = run.declared_step(step, &release);
 
     if ran.code != 0 {
-      run.warn(fill_marks(
+      let line = fill_marks(
         &said.after_failed,
         &[("step", &step.id), ("code", &ran.code.to_string()), ("said", &ran.said)],
-      ));
+      );
+
+      return match &bot {
+        Some(bot) => {
+          run.say(&line);
+          run.step_failed.replace(Some(step.id.clone()));
+          run.boot_failed(BootFailure::StepFailed, bot, &record, &release, &bound_units).await
+        }
+        None => run.failed(Stage::After, line, Outcome::Failed),
+      };
     }
   }
 

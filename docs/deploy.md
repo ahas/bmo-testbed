@@ -287,8 +287,10 @@
       read running once it came up is rolled back (「Rollback」).
     - Then the `retire` units go.
 12. **The steps after the health,** declared with that phase, in order, each run until it ends. One that
-    fails is a warning in the deploy output and never fails the deployment; the next deployment runs it
-    again, so a step is written to do only what is due.
+    fails fails the deployment: the deploy output says the step, its exit and what it said, the steps after
+    it are not run, and the deployment rolls back as a service that did not come up does (「Rollback」),
+    since what the release declares it needs once it is up did not happen. A step is written to do only
+    what is due, so the next deployment runs it again from where it stands.
 13. **Prune the releases.** A release that cannot be removed is a warning.
 14. **Start the backup upload,** where the declaration names a remote, as a transient user unit of its
     own, `bmo-backup-upload-<stamp>`, running the `backups` verb, and end without waiting for it.
@@ -329,7 +331,9 @@
 ## Rollback
 
 - **When:** a unit cannot be started or restarted, the `bot` service gives up starting before its health
-  answers, or it is not read running once it came up.
+  answers, it is not read running once it came up, or a step after the health fails. A repository with no
+  `bot` service has nothing to restart, so a step after the health that fails there fails the deployment
+  with the tree left on the new release, and the output says so.
 - **What the deploy output says first,** so the reason survives the rollback: what was waited for and
   what the last ask heard; the unit as systemd holds it, its state, its main process, its restarts and
   last exit status; the machine's load and its pressure stalls; the tail of the service's journal since

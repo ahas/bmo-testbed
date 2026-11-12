@@ -9,6 +9,7 @@ pub struct RollbackWords {
   pub restart_refused: String,
   pub not_answering: String,
   pub died_after_start: String,
+  pub step_failed: String,
   pub answers: String,
   pub silent: String,
   pub first: String,
@@ -17,6 +18,7 @@ pub struct RollbackWords {
   pub bot_down: String,
   pub cause: String,
   pub reason: String,
+  pub step_reason: String,
 }
 
 #[derive(Debug, Deserialize)]

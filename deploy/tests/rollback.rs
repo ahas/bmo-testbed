@@ -160,6 +160,7 @@ fn failure(live: &str, failed: &str) -> FailedDeploy {
     },
     before_start: false,
     unit: "app.service".to_owned(),
+    step: None,
   }
 }
 
@@ -417,5 +418,36 @@ fn the_rolled_back_event_names_both_commits_and_the_journal() {
     detail["reason"],
     "rolled back after a failed deployment: the service on bbbbbbbbbbbb did not come up, so it is back on the \
      earlier release aaaaaaaaaaaa"
+  );
+}
+
+// A step after the health that fails fails the deployment and rolls it back, its account naming the step.
+#[tokio::test]
+async fn a_step_after_the_health_that_fails_rolls_the_deployment_back_and_names_the_step() {
+  let at = stand();
+  let failed = FailedDeploy {
+    failure: BootFailure::StepFailed,
+    step: Some("register-tool".to_owned()),
+    ..failure(&at.live, &at.failed)
+  };
+  let outcome = roll_back(&failed, &mut at.tree(&quiet), &Services::new()).await;
+
+  assert!(matches!(outcome, Rollback::RolledBack { .. }), "{outcome:?}");
+  assert_eq!(
+    deploy_failure_notice(&failed, &outcome).lines().next().unwrap(),
+    format!(
+      "deployment failed: the step register-tool after the health failed on {}.",
+      short(&at.failed)
+    )
+  );
+
+  let detail = rolled_back_detail(&failed, &outcome).unwrap();
+
+  assert!(
+    detail["reason"]
+      .as_str()
+      .unwrap()
+      .contains("the step register-tool after the health failed"),
+    "{detail}"
   );
 }

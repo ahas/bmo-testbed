@@ -14,12 +14,13 @@ use crate::release::{GitRun, flip, release_dir, stands_built};
 use crate::tree::{DeployRecord, relink_units, short, unit_link_plan, unit_links, write_deploy_record};
 
 /// Why the deployment failed: a unit refused its restart, the unit gave up starting before the health
-/// answered, or the service answered and was not read running.
+/// answered, the service answered and was not read running, or a step after the health failed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BootFailure {
   RestartRefused,
   NotAnswering,
   DiedAfterStart,
+  StepFailed,
 }
 
 /// What the deployment knows when a service did not come up.
@@ -36,6 +37,8 @@ pub struct FailedDeploy {
   pub before_start: bool,
   /// The unit that did not come up, whose journal holds the cause.
   pub unit: String,
+  /// The step after the health that failed, where that is why.
+  pub step: Option<String>,
 }
 
 /// The deploy tree put back on a commit's release, as the deployment itself would have flipped it.
@@ -176,6 +179,10 @@ pub fn failure_line(failed: &FailedDeploy) -> String {
     BootFailure::RestartRefused => fill_marks(&words.restart_refused, &[("commit", &commit)]),
     BootFailure::NotAnswering => fill_marks(&words.not_answering, &[("commit", &commit)]),
     BootFailure::DiedAfterStart => fill_marks(&words.died_after_start, &[("commit", &commit)]),
+    BootFailure::StepFailed => fill_marks(
+      &words.step_failed,
+      &[("commit", &commit), ("step", failed.step.as_deref().unwrap_or_default())],
+    ),
   }
 }
 
@@ -216,7 +223,17 @@ pub fn rolled_back_detail(failed: &FailedDeploy, outcome: &Rollback) -> Option<V
   Some(json!({
     "failed_commit": failed.commit,
     "back_to": to,
-    "reason": fill_marks(&DEPLOY.rollback.reason, &[("commit", &short(&failed.commit)), ("back", &short(to))]),
+    "reason": match failed.failure {
+      BootFailure::StepFailed => fill_marks(
+        &DEPLOY.rollback.step_reason,
+        &[
+          ("commit", &short(&failed.commit)),
+          ("back", &short(to)),
+          ("step", failed.step.as_deref().unwrap_or_default()),
+        ],
+      ),
+      _ => fill_marks(&DEPLOY.rollback.reason, &[("commit", &short(&failed.commit)), ("back", &short(to))]),
+    },
     "answers": answers,
     "journal": journal_command(failed),
   }))
