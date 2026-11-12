@@ -230,8 +230,10 @@ bmo-testbed check dashes <file…> [--write]
   one line and counted as passed. It exits 1 where a step failed. A deployment whose gate stands on a placed
   machine runs it there before the suite (「The placed machine」).
 - With a part named, that quick check alone, or every enabled one for `quick`. `language --settle`
-  lowers the ledger, and `korean` names the same part; `shared-versions --report` holds every checkout of
-  the machine's registry to the shared versions and changes nothing; `dashes <file…>` rewrites the dashes
+  lowers the ledger, and `korean` names the same part; `shared-versions` holds the Cargo manifests, the
+  lock and the packages the package manifests vendor; `shared-versions --report` holds every checkout of
+  the machine's registry to the shared versions, naming beside each pinned package what the checkout writes
+  for it, and changes nothing; `dashes <file…>` rewrites the dashes
   between words in the markdown files named, only with `--write`, and otherwise prints each line it would
   change. Each exits 1 where it finds anything, and 2 where the declaration does not enable it or names
   none of its inputs.
@@ -421,8 +423,8 @@ verb's own name, and each noun takes what that verb takes.
 - `[projects]` and `[tools]`: units found by their own files;
 - `[check]` with `[[check.step]]`: the quick checks enabled and their inputs, and the static steps;
 - `[build]` with `[[build.step]]`: the release build;
-- `[deploy]` with `[[deploy.step]]` and `[deploy.backup]`: the deploy tree, data root, env links, units,
-  health, declared steps and backups;
+- `[deploy]` with `[[deploy.step]]`, `[deploy.console]` and `[deploy.backup]`: the deploy tree, data root,
+  env links, units, health, declared steps, the console screen the deployment probes and backups;
 - `[runner]`: the placement endpoint;
 - `[events]`: the event hook.
 

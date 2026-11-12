@@ -19,6 +19,8 @@ pub struct RollbackWords {
   pub cause: String,
   pub reason: String,
   pub step_reason: String,
+  pub console_refused: String,
+  pub console_reason: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -262,6 +264,61 @@ pub struct Deploy {
   pub unit: UnitWords,
   pub remove: RemoveWords,
   pub restarts: RestartWords,
+  pub console: ConsoleWords,
+}
+
+/// The console probe's words and the contract's routes, headers and statuses it asks by (docs/deploy.md,
+/// 「The console probe」).
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ConsoleWords {
+  pub layer_package: String,
+  pub address_key: String,
+  pub console_token_key: String,
+  pub token_key: String,
+  pub layer_field: String,
+  pub words_field: String,
+  pub bundle_field: String,
+  pub stylesheet_field: String,
+  pub role_field: String,
+  pub owner_key_field: String,
+  pub share_reads_field: String,
+  pub credential_header: String,
+  pub credential: String,
+  pub owner_key: String,
+  pub wait_seconds: u64,
+  pub answered: u16,
+  pub no_role: u16,
+  pub not_console: u16,
+  pub probing: String,
+  pub held: String,
+  pub no_pin: String,
+  pub no_shared: String,
+  pub no_layer: String,
+  pub refused: String,
+  pub point_reach: String,
+  pub point_release: String,
+  pub point_manifest: String,
+  pub point_reading: String,
+  pub point_layer: String,
+  pub point_words: String,
+  pub point_no_role: String,
+  pub point_role: String,
+  pub point_own_token: String,
+  pub manifest: String,
+  pub words: String,
+  pub module: String,
+  pub stylesheet: String,
+  pub signal: String,
+  pub reach_failed: String,
+  pub reach_unread: String,
+  pub status: String,
+  pub unanswered: String,
+  pub not_object: String,
+  pub no_release: String,
+  pub reading_failed: String,
+  pub no_field: String,
+  pub layer_differs: String,
 }
 
 #[derive(Debug, Deserialize)]

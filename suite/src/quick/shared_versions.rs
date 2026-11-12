@@ -2,7 +2,8 @@
 //! manifests that names a listed crate is the shared line byte for byte, or takes the workspace's adding
 //! nothing but `optional`, and every registry package of its locks on a semver line the snapshot names
 //! stands at the snapshot's version; an exception the declaration names stands in for the shared line or
-//! version of its crate. The shared versions are read from the root of the checkout the machine's registry
+//! version of its crate. Every entry of its package manifests naming a pinned package is the pinned release's
+//! (`shared_packages`). The shared versions are read from the root of the checkout the machine's registry
 //! lists under the repository name the declaration gives.
 //!
 //! A manifest is read by the format-keeping TOML reader, since the rule holds the line as written, not
@@ -22,6 +23,7 @@ use toml_edit::{DocumentMut, Item, TableLike};
 
 use super::Findings;
 use super::files::{checkout_files_where, read_text};
+use super::shared_packages::{PackagePin, hold_packages, read_pins};
 use crate::dependents::{read_registry, registry_path};
 
 // The tables of a crate's manifest naming what it depends on, at its top and under each `[target.…]`.
@@ -31,12 +33,13 @@ fn words() -> &'static SharedVersionsWords {
   &QUICK_CHECKS.shared_versions
 }
 
-/// The shared versions: the line each listed crate is written with, as the text after its key, and the
-/// versions the snapshot locks each crate below them at.
+/// The shared versions: the line each listed crate is written with, as the text after its key, the
+/// versions the snapshot locks each crate below them at, and the packages pinned to one release's file.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Shared {
   pub lines: BTreeMap<String, String>,
   pub snapshot: BTreeMap<String, Vec<Version>>,
+  pub packages: BTreeMap<String, PackagePin>,
 }
 
 // An entry's value as it is written, its whitespace and comments either side left out; an entry written
@@ -90,6 +93,8 @@ pub fn read_shared(text: &str) -> Result<Shared, String> {
       shared.snapshot.insert(name.to_owned(), versions);
     }
   }
+
+  shared.packages = read_pins(text)?;
 
   Ok(shared)
 }
@@ -146,6 +151,14 @@ pub enum Divergence {
     wanted: String,
     inherited: bool,
   },
+  /// A package manifest's entry for a pinned package that is not the pinned release's, and what to write.
+  Package {
+    manifest: String,
+    list: String,
+    name: String,
+    found: String,
+    why: String,
+  },
   /// A lock's package standing at another version of the snapshot's line.
   Locked {
     lock: String,
@@ -188,17 +201,28 @@ impl Divergence {
       } => {
         fill_marks(&words.locked, &[("lock", lock), ("name", name), ("found", found), ("wanted", wanted)])
       }
+      Self::Package {
+        manifest,
+        list,
+        name,
+        found,
+        why,
+      } => fill_marks(
+        &words.package,
+        &[("manifest", manifest), ("list", list), ("name", name), ("found", found), ("why", why)],
+      ),
       Self::Other(said) => said.clone(),
     }
   }
 }
 
-/// What holding a checkout to the shared versions came to: how many entries and packages it read and how
-/// each that differs differs.
+/// What holding a checkout to the shared versions came to: how many entries and packages it read, how each
+/// that differs differs, and what it writes for each pinned package it names, as the report shows it.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Held {
   pub entries: usize,
   pub divergences: Vec<Divergence>,
+  pub packages: BTreeMap<String, BTreeSet<String>>,
 }
 
 fn file_name(path: &str) -> &str {
@@ -456,6 +480,27 @@ pub fn hold(root: &Path, shared: &Shared, exceptions: &BTreeMap<String, SharedEx
     }
   }
 
+  let (entries, unread_manifests) = hold_packages(root, &shared.packages);
+
+  for (manifest, why) in unread_manifests {
+    held.divergences.push(unreadable(&words.not_package_manifest, &manifest, why));
+  }
+
+  for entry in entries {
+    held.entries += 1;
+    held.packages.entry(entry.name.clone()).or_default().insert(entry.shown());
+
+    if let Some(why) = shared.packages.get(&entry.name).and_then(|pin| entry.why(pin)) {
+      held.divergences.push(Divergence::Package {
+        manifest: entry.manifest,
+        list: entry.list,
+        name: entry.name,
+        found: entry.found,
+        why,
+      });
+    }
+  }
+
   held
 }
 
@@ -491,12 +536,38 @@ pub struct Report {
   pub all: usize,
 }
 
-// One checkout's line in the report.
-fn report_row(name: &str, held: &Held) -> String {
+// Each pinned package the checkout names, with what it writes for it beside the pinned version.
+fn report_packages(held: &Held, shared: &Shared) -> Vec<String> {
   let words = words();
 
+  held
+    .packages
+    .iter()
+    .filter_map(|(name, entries)| {
+      let pin = shared.packages.get(name)?;
+      let entries: Vec<String> = entries.iter().cloned().collect();
+
+      Some(fill_marks(
+        &words.report_package,
+        &[
+          ("name", name),
+          ("entries", &entries.join(&words.report_list_joiner)),
+          ("wanted", &pin.version),
+        ],
+      ))
+    })
+    .collect()
+}
+
+// One checkout's line in the report.
+fn report_row(name: &str, held: &Held, shared: &Shared) -> String {
+  let words = words();
+  let packages = report_packages(held, shared);
+
   if held.divergences.is_empty() {
-    return fill_marks(&words.report_clean, &[("name", name), ("count", &held.entries.to_string())]);
+    let clean = fill_marks(&words.report_clean, &[("name", name), ("count", &held.entries.to_string())]);
+
+    return std::iter::once(clean).chain(packages).collect::<Vec<_>>().join(&words.report_joiner);
   }
 
   let mut crates: Vec<&str> = Vec::new();
@@ -519,6 +590,7 @@ fn report_row(name: &str, held: &Held) -> String {
         &words.report_version,
         &[("name", name), ("found", found), ("wanted", wanted)],
       )),
+      Divergence::Package { .. } => {}
       Divergence::Other(_) => others += 1,
     }
   }
@@ -532,6 +604,7 @@ fn report_row(name: &str, held: &Held) -> String {
   ]
   .into_iter()
   .flatten()
+  .chain(packages)
   .collect();
 
   fill_marks(
@@ -577,7 +650,7 @@ pub fn shared_versions_report(repo: &Repository, env: &Env) -> Result<Report, St
         let held = hold(&there.root, &shared, exceptions);
 
         report.differs += usize::from(!held.divergences.is_empty());
-        report.rows.push(report_row(&there.name(), &held));
+        report.rows.push(report_row(&there.name(), &held, &shared));
       }
       Err(refusal) => {
         report.differs += 1;

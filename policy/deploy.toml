@@ -23,6 +23,9 @@ cause = "Cause: {cause}"
 reason = "rolled back after a failed deployment: the service on {commit} did not come up, so it is back on the earlier release {back}"
 # The same reason where a step after the health failed: {step} is the step's id.
 step_reason = "rolled back after a failed deployment: the step {step} after the health failed on {commit}, so it is back on the earlier release {back}"
+# The same two where the console probe refused the release: {point} is the point it refused at.
+console_refused = "deployment failed: the console probe refused {commit} at {point}."
+console_reason = "rolled back after a failed deployment: the console probe refused {commit} at {point}, so it is back on the earlier release {back}"
 
 # A deployment that put nothing live, {main} the main branch with its short commit.
 [refusal]
@@ -277,3 +280,72 @@ holds = "refusing to remove {path}: the runtime data root {data} is inside it"
 [restarts]
 putting = "deployment {deployment} {verb}s it to put {commit} of {repository} live"
 rolling_back = "deployment {deployment} {verb}s it to roll {repository} back from {commit}"
+
+# The console probe (docs/deploy.md, 「The console probe」): what it asks a service bringing a console screen
+# with, and what it says. The statuses are bmo-ui's console plugin contract's; its route and the headers a
+# console sets are bmo-chat's console face's constants.
+[console]
+# The package the shared versions pin as the console layer, whose release a manifest's `layer` names.
+layer_package = "bmo-ui"
+# The keys the declared `reach` command answers.
+address_key = "address"
+console_token_key = "consoleToken"
+token_key = "token"
+# The manifest's fields the probe reads.
+layer_field = "layer"
+words_field = "words"
+bundle_field = "bundle"
+stylesheet_field = "stylesheet"
+role_field = "role"
+owner_key_field = "ownerKey"
+share_reads_field = "shareReads"
+# The header a credential goes in, and how it is written there: {token} the credential.
+credential_header = "Authorization"
+credential = "Bearer {token}"
+# The owner key the probe sends where a manifest asks for one: a module carries no reader's data, so any key
+# opens it.
+owner_key = "1"
+# How long each ask waits for its answer, in seconds.
+wait_seconds = 30
+# What the contract answers: a read, a call with no role allowing the screen's, a call lacking the console's
+# credential.
+answered = 200
+no_role = 403
+not_console = 401
+# What the probe says: {address} the service's base address, {points} how many points held, {package} the
+# pinned package, {layer} the manifest's layer, {point} where it refused and {why} what came.
+probing = "probing the console face at {address}"
+held = "the console face holds to the contract ({points} points)"
+no_pin = "the shared versions pin no {package}, so the manifest is read by no release of it and its layer {layer} is held to none"
+no_shared = "the declaration names no shared versions, so the manifest is read by no release of the layer and its layer {layer} is held to none"
+# A manifest naming no layer, as those lines name it.
+no_layer = "none"
+refused = "the console probe refused the release at {point}: {why}"
+# The points: {what} is one of the four paths' names, {role} the manifest's role.
+point_reach = "the reach"
+point_release = "the layer's release"
+point_manifest = "the manifest"
+point_reading = "the manifest's reading"
+point_layer = "the layer"
+point_words = "the words"
+point_no_role = "the {what} with no role"
+point_role = "the {what} with the role {role}"
+point_own_token = "the {what} with the service's own token"
+manifest = "manifest"
+words = "words"
+module = "module"
+stylesheet = "stylesheet"
+# Why a point did not hold: {code} the reach command's exit, {said} what it said on its errors, {path} a path
+# of the service's API, {found} and {wanted} what came and what the contract asks, {file} and {sha256} the
+# pinned packed file, {why} the fault.
+reach_failed = "the reach command ended {code}: {said}"
+# How the reach command ended where a signal ended it.
+signal = "by a signal"
+reach_unread = "the reach command did not answer one JSON object naming address, consoleToken and token: {why}"
+status = "GET {path} answered {found} where the contract asks {wanted}"
+unanswered = "GET {path} was not answered: {why}"
+not_object = "GET {path} answered no JSON object: {why}"
+no_release = "the release tracks no file {file} holding the pinned bytes {sha256}, so the layer's reading cannot run; vendor the pinned release as it stands"
+reading_failed = "{why}"
+no_field = "the manifest's reading holds no {field}"
+layer_differs = "the manifest names the layer {found} where the shared versions pin {wanted}"

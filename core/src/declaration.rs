@@ -395,6 +395,9 @@ pub struct Deploy {
   /// `[[deploy.step]]`, in order.
   #[serde(rename = "step", default)]
   pub steps: Vec<DeployStep>,
+  /// `[deploy.console]`: the console screen the repository brings, whose face the deployment probes; none
+  /// brings none.
+  pub console: Option<DeployConsole>,
   pub backup: Option<Backup>,
 }
 
@@ -424,7 +427,8 @@ pub struct EnvLink {
 pub enum Phase {
   /// After the build, before the record and the flip; a failure stops the deployment.
   BeforeFlip,
-  /// Once the `bot` service stays up; a failure is a warning.
+  /// Once the `bot` service stays up and the console probe passed; a failure fails the deployment, which rolls
+  /// back.
   AfterHealth,
 }
 
@@ -438,6 +442,16 @@ pub struct DeployStep {
   /// Read and given no effect: nothing the testbed runs has a span it must end within.
   #[serde(default)]
   pub timeout_seconds: Option<u64>,
+}
+
+/// `[deploy.console]`: the console screen a repository's service brings (docs/deploy.md, 「The console
+/// probe」).
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DeployConsole {
+  /// Run from the release once the service is up: answers on its standard output how a console reaches the
+  /// service, its base address, the console's credential and the service's own token, as one JSON object.
+  pub reach: String,
 }
 
 /// `[deploy.backup]`: the backup a deployment takes.

@@ -35,6 +35,7 @@ use crate::boot::{
   HealthWatch, StayUp, boot_report, boot_scene, stands_up, stay_report, unit_gave_up, unit_status,
   wait_for_health,
 };
+use crate::console::{ConsoleHands, MachineConsole, PinnedLayer, probe};
 use crate::expansion::{
   BuildTree, bring_submodules, build_target, expansion_tree, lay_outside_trees, put_build_tree,
 };
@@ -143,6 +144,9 @@ pub struct DeployAsk {
   pub upload: Option<Vec<String>>,
   /// The testbed's data root whose record the deployment is written into; none writes into none.
   pub record: Option<PathBuf>,
+  /// The release of the console layer the shared versions pin, which the console probe reads a manifest by
+  /// and holds its layer to (docs/deploy.md, 「The console probe」).
+  pub pinned_layer: PinnedLayer,
 }
 
 /// What the gate is asked: the commit, in the checkout it is taken from, over the range from what was live,
@@ -315,6 +319,10 @@ pub trait DeployHands {
   fn now_ms(&self) -> i64;
   /// The live processes of this account; none where they could not be read.
   fn live_processes(&self) -> Option<Vec<LiveProcess>>;
+  /// What the console probe asks through: the machine's own unless a test stands one in.
+  fn console(&self) -> &dyn ConsoleHands {
+    &MachineConsole
+  }
 }
 
 /// The hands of the machine the run stands on.
@@ -1021,7 +1029,7 @@ impl<'a> Laying<'a> {
 
     let stage = match failure {
       BootFailure::DiedAfterStart => Stage::StayUp,
-      BootFailure::StepFailed => Stage::After,
+      BootFailure::StepFailed | BootFailure::ConsoleRefused => Stage::After,
       _ => Stage::Restart,
     };
 
@@ -1863,9 +1871,26 @@ pub async fn deploy(
     run.systemctl(&["daemon-reload"]);
   }
 
-  // 11. The steps after the health: one that fails fails the deployment, which rolls back where a service stands
-  // to restart (docs/deploy.md, 「Rollback」).
+  // 11. The console face probed, then the steps after the health: either failing fails the deployment, which
+  // rolls back where a service stands to restart (docs/deploy.md, 「The console probe」, 「Rollback」).
   run.stage(Stage::After);
+
+  if let Some(console) = &repo.declaration.deploy.console {
+    let say = |line: &str| run.say(line);
+
+    if let Err(refusal) = probe(&console.reach, &release, &ask.pinned_layer, hands.console(), &say).await {
+      let line = refusal.said();
+
+      return match &bot {
+        Some(bot) => {
+          run.say(&line);
+          run.step_failed.replace(Some(refusal.point.clone()));
+          run.boot_failed(BootFailure::ConsoleRefused, bot, &record, &release, &bound_units).await
+        }
+        None => run.failed(Stage::After, line, Outcome::Failed),
+      };
+    }
+  }
 
   for step in repo.declaration.deploy.steps.iter().filter(|step| step.phase == Phase::AfterHealth) {
     let ran = run.declared_step(step, &release);

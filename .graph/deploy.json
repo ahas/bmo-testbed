@@ -25,9 +25,41 @@
     "changed": 1793779891705
   },
   {
+    "id": "deploy/console-probe",
+    "title": "Console probe",
+    "what": "Once a unit declaring [deploy.console] is up, the deploy run asks its console face as a console would: manifest read by the pinned bmo-ui release, layer, words, module and stylesheet guard, own token refused; the first point refused rolls back (deploy/src/console.rs).",
+    "files": [
+      "deploy/src/console.rs",
+      "deploy/tests/console.rs",
+      "core/src/policy/deploy.rs",
+      "policy/deploy.toml",
+      "docs/deploy.md",
+      "docs/declaration.md"
+    ],
+    "symbols": [
+      "probe",
+      "ConsoleHands",
+      "MachineConsole",
+      "PinnedLayer",
+      "LayerPin",
+      "pinned_layer_file",
+      "read_reach"
+    ],
+    "aliases": [
+      "배포 시 콘솔 계약 검사"
+    ],
+    "needs": [
+      "calls/bmo-console-face",
+      "core/declaration",
+      "core/policy-loader"
+    ],
+    "base": "6e2f9339a7995fd7f34b6e158178f39b2e935f25",
+    "changed": 1794489009800
+  },
+  {
     "id": "deploy/deploy-run",
     "title": "Deploy run",
-    "what": "The deploy run in a unit of its own: gate, backup, release, the wait for quiet, flip, restarts watched and rolled back, its progress record mirrored into the testbed's record with its log lines and a restart for each unit it stops, its outcome written before the event hook hears of it.",
+    "what": "The deploy run in a unit of its own: gate, backup, release, the wait for quiet, flip, restarts watched, a console face probed, rolled back where either fails, its progress record mirrored into the testbed record with log lines and restarts, its outcome written before the event hook hears.",
     "files": [
       "deploy/src/deployment.rs",
       "deploy/src/progress.rs",
@@ -58,10 +90,12 @@
       "suite/static-check",
       "suite/suite-run",
       "core/policy-loader",
-      "record/record"
+      "record/record",
+      "deploy/console-probe",
+      "suite/quick-checks"
     ],
-    "base": "82825564fb226e1531bc0aea609bbb765794a621",
-    "changed": 1794486084319
+    "base": "6e2f9339a7995fd7f34b6e158178f39b2e935f25",
+    "changed": 1794489009807
   },
   {
     "id": "deploy/hosted-deploy-tool",
@@ -125,7 +159,7 @@
     "needs": [
       "core/policy-loader"
     ],
-    "base": "43bfb58f6d9669b5ce425ae9d87d24576d7698f4",
-    "changed": 1793779891711
+    "base": "6e2f9339a7995fd7f34b6e158178f39b2e935f25",
+    "changed": 1794489053966
   }
 ]

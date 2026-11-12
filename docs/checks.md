@@ -168,8 +168,9 @@
   `[profile.release]` with `debug = false` and `strip = "debuginfo"`. A setting left out or set otherwise
   is named with what it should be; a repository with no root `Cargo.toml` has nothing to hold. Setting
   them is each repository's own change.
-- **`shared-versions`:** the repository's Cargo manifests and lock hold to the shared versions, as bmo-chat's
-  `docs/conventions.md`, 「Shared versions」, states the rule. It reads files alone and runs no Cargo.
+- **`shared-versions`:** the repository's Cargo manifests and lock, and the packages its package manifests
+  vendor, hold to the shared versions, as bmo-chat's `docs/conventions.md`, 「Shared versions」, states the
+  rule. It reads files alone and runs no Cargo and no package manager.
   - **Where the shared versions stand:** `shared-versions.toml` at the root of the repository the
     declaration's `[check.shared_versions] repository` names, found in the machine's registry of checkouts
     (`docs/suite.md`, 「The dependents of a major change」) as the checkout whose declaration gives that name,
@@ -184,14 +185,27 @@
     snapshot lists, on a semver line the snapshot names, stands at the snapshot's version; one on another
     line passes. A fault names the lock, the crate, both versions and the Cargo verb's `update --precise`
     line that moves it.
+  - **The packages:** every `package.json` the checkout tracks or holds new, outside a `node_modules/` or a
+    `fixtures/` folder, in each of its lists naming packages: `dependencies`, `devDependencies`,
+    `peerDependencies`, `optionalDependencies`, `overrides` and `resolutions`. An entry naming a package the
+    file pins under `[packages]`, by its version, its file and the file's sha256, is the pinned release's:
+    - an entry naming a file, `file:` and a path from the manifest's folder, names the pinned file, and the
+      bytes standing at that path hash to the pinned sha256. A path naming another file, a file not
+      standing there, and bytes that hash otherwise each fail, the last naming both hashes;
+    - any other entry is the pinned version as it is written, so a range, a tag or another version fails.
+
+    A fault names the manifest, the list, the package, the entry as it reads and what to write instead. The
+    file names no unit, so a package pinned there holds every checkout alike; a file pinning no package
+    holds no package manifest.
   - **An exception** the declaration names for a crate (`docs/declaration.md`) holds the crate's entries to
     the exception's line instead of the file's, and lets the lock hold the versions it names. One for a
     crate the file does not list, whose line is the file's or does not read as one line for the crate, or
     naming a version the lock does not hold, is named.
   - **`check shared-versions --report`** holds every checkout of the registry to the same file, each with
     the exceptions its own declaration names, whether or not it enables the check, and changes nothing: a
-    line per checkout naming the crates whose entries differ and the lock's versions that differ, a line for
-    each checkout whose declaration does not read, and a last line counting the checkouts that differ. It
+    line per checkout naming the crates whose entries differ, the lock's versions that differ, and for each
+    pinned package the checkout names, the entries it writes for it beside the pinned version; a line for
+    each checkout whose declaration does not read; and a last line counting the checkouts that differ. It
     ends 1 where any checkout differs.
 - **`quick` runs every enabled one** and prints a line for each, ending non-zero where any failed.
 

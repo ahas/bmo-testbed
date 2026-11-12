@@ -354,13 +354,17 @@
     - A unit that will not restart, one that gives up starting before its health answers, or one not
       read running once it came up is rolled back (「Rollback」).
     - Then the `retire` units go.
-12. **The steps after the health,** declared with that phase, in order, each run until it ends. One that
+12. **Probe the console face,** where the declaration brings a console screen (`docs/declaration.md`,
+    `[deploy.console]`): the probe asks the service as a console would, point by point, and the first
+    point it refuses fails the deployment, which says the point and rolls back as a service that did not
+    come up does (「The console probe」, 「Rollback」).
+13. **The steps after the health,** declared with that phase, in order, each run until it ends. One that
     fails fails the deployment: the deploy output says the step, its exit and what it said, the steps after
     it are not run, and the deployment rolls back as a service that did not come up does (「Rollback」),
     since what the release declares it needs once it is up did not happen. A step is written to do only
     what is due, so the next deployment runs it again from where it stands.
-13. **Prune the releases.** A release that cannot be removed is a warning.
-14. **Start the backup upload,** where the declaration names a remote, as a transient user unit of its
+14. **Prune the releases.** A release that cannot be removed is a warning.
+15. **Start the backup upload,** where the declaration names a remote, as a transient user unit of its
     own, `bmo-backup-upload-<stamp>`, running the `backups` verb, and end without waiting for it.
 
 - **The deployment ends** with its outcome written into the progress record and the testbed's record,
@@ -368,6 +372,61 @@
   warnings. A deployment that does not go live likewise writes its outcome before it sends
   `deploy-rolled-back` and `deploy-failed`, so an event hook that is slow never holds a deployment
   unended (`docs/boundary.md`, 「Events」).
+
+## The console probe
+
+A service bringing a screen to a console is held to bmo-ui's console plugin contract (bmo-ui's
+`docs/console-bundles.md`) once it has started, so a release whose console face breaks the contract never
+stays live. The contract is the one statement of what is asked; the probe asks the parts of it a console
+meets first, as a console asks them.
+
+- **What it asks with.** The declared `reach` command runs from the release and answers the service's base
+  address, the console's credential and the service's own token. The two credentials go as bearer tokens;
+  neither is written into the deployment's output, its record or its events.
+- **The release the manifest is held to.** The shared versions the declaration names
+  (`[check.shared_versions]`) pin the release of the console layer every console and bundle builds on, by
+  its version, its packed file and the file's sha256 (`docs/checks.md`, 「The quick checks」,
+  `shared-versions`). Shared versions that do not read fail the probe. Where they pin none, or the
+  declaration names no shared versions, the manifest is taken as it was answered, its reading and its
+  layer's point are passed over, and the deployment says so on one line.
+- **The manifest's reading is the layer's own.** The manifest is read by the layer's shared reading of it,
+  the module `console-manifest` of the pinned release, through bmo-chat's console face, which runs it by
+  Bun on the packed file (bmo-chat's `docs/console-face.md`). The packed file is the release's own copy: a
+  file the release being deployed tracks under the pinned file's name whose bytes hash to the pinned
+  sha256, as every client vendors it. A release tracking none fails the probe. The testbed carries no
+  reading of its own, and takes the contract's route and the headers a console sets from the same console
+  face, so a manifest the contract refuses is refused here as the layer words it.
+- **The points, in order.** The first that does not hold fails the probe:
+
+```mermaid
+flowchart TD
+  A[reach answers] --> B[manifest with the console's credential, no role: 200]
+  B --> C[read by the pinned release's reading]
+  C --> D[layer is the pinned release]
+  D --> E[words, no role: 200 and a JSON object]
+  E --> F[module and stylesheet, no role: 403]
+  F --> G[module and stylesheet with the manifest's role: 200]
+  G --> H[the four paths with the service's own token: 401]
+```
+
+  - the manifest at `/console-manifest`, asked with the console's credential and no owner key or role,
+    answers 200;
+  - the release tracks the pinned packed file, and the manifest reads by the reading in it;
+  - its `layer` is the pinned release's version;
+  - its words, asked the same way, answer 200 with a JSON object;
+  - its module, and its stylesheet where it names one, asked with the console's credential and no role,
+    answer 403; where the manifest names share reads they answer 200, since a reader with no sign-in
+    loads them;
+  - the same, asked with the manifest's role as `Owner-Role`, and an owner key as `Owner-Key` where the
+    manifest asks for one, answer 200;
+  - the manifest, the words, the module and the stylesheet, asked with the service's own token and the
+    manifest's role, answer 401. Only these four paths are asked so: a service whose API prefix is its
+    root still answers its own token on every other route.
+- **A wait that runs out is a refusal.** Each ask waits the policy's seconds, thirty, for an answer, as a
+  console leaves out a service that does not answer.
+- **How a refusal reads.** The deployment fails at the stage after the health, naming the point, what it
+  asked and what came, and rolls back where a `bot` service stands to restart (「Rollback」). A repository
+  with no `bot` service fails the same way with nothing rolled back.
 
 ## What a deployment says of itself as it runs
 
@@ -405,9 +464,9 @@
 ## Rollback
 
 - **When:** a unit cannot be started or restarted, the `bot` service gives up starting before its health
-  answers, it is not read running once it came up, or a step after the health fails. A repository with no
-  `bot` service has nothing to restart, so a step after the health that fails there fails the deployment
-  with the tree left on the new release, and the output says so.
+  answers, it is not read running once it came up, the console probe refuses it, or a step after the health
+  fails. A repository with no `bot` service has nothing to restart, so a probe or a step after the health
+  that fails there fails the deployment with the tree left on the new release, and the output says so.
 - **What the deploy output says first,** so the reason survives the rollback: what was waited for and
   what the last ask heard; the unit as systemd holds it, its state, its main process, its restarts and
   last exit status; the machine's load and its pressure stalls; the tail of the service's journal since

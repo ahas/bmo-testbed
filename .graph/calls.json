@@ -1,5 +1,24 @@
 [
   {
+    "id": "calls/bmo-console-face",
+    "title": "Console face library",
+    "what": "The bmo-console-face crate of bmo-chat the console probe calls: a manifest read by the pinned bmo-ui release through Bun, and the contract route and headers as constants, at the workspace pinned version.",
+    "files": [
+      "deploy/src/console.rs"
+    ],
+    "symbols": [],
+    "aliases": [],
+    "needs": [],
+    "base": "6e2f9339a7995fd7f34b6e158178f39b2e935f25",
+    "changed": 1794489009790,
+    "boundary": {
+      "side": "calls",
+      "repository": "bmo-chat",
+      "api": "api/console-face",
+      "build": true
+    }
+  },
+  {
     "id": "calls/bmo-text",
     "title": "Text readings library",
     "what": "The bmo-text crate's readings the quick checks call: dashes rewritten as a person types them, wording checked against a glossary, and text judged English or not, at the workspace's pinned version.",

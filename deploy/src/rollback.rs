@@ -14,12 +14,14 @@ use crate::release::{GitRun, flip, release_dir, stands_built};
 use crate::tree::{DeployRecord, relink_units, short, unit_link_plan, unit_links, write_deploy_record};
 
 /// Why the deployment failed: a unit refused its restart, the unit gave up starting before the health
-/// answered, the service answered and was not read running, or a step after the health failed.
+/// answered, the service answered and was not read running, the console probe refused it, or a step after the
+/// health failed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BootFailure {
   RestartRefused,
   NotAnswering,
   DiedAfterStart,
+  ConsoleRefused,
   StepFailed,
 }
 
@@ -37,7 +39,7 @@ pub struct FailedDeploy {
   pub before_start: bool,
   /// The unit that did not come up, whose journal holds the cause.
   pub unit: String,
-  /// The step after the health that failed, where that is why.
+  /// The step after the health that failed, or the point the console probe refused, where that is why.
   pub step: Option<String>,
 }
 
@@ -183,6 +185,10 @@ pub fn failure_line(failed: &FailedDeploy) -> String {
       &words.step_failed,
       &[("commit", &commit), ("step", failed.step.as_deref().unwrap_or_default())],
     ),
+    BootFailure::ConsoleRefused => fill_marks(
+      &words.console_refused,
+      &[("commit", &commit), ("point", failed.step.as_deref().unwrap_or_default())],
+    ),
   }
 }
 
@@ -230,6 +236,14 @@ pub fn rolled_back_detail(failed: &FailedDeploy, outcome: &Rollback) -> Option<V
           ("commit", &short(&failed.commit)),
           ("back", &short(to)),
           ("step", failed.step.as_deref().unwrap_or_default()),
+        ],
+      ),
+      BootFailure::ConsoleRefused => fill_marks(
+        &DEPLOY.rollback.console_reason,
+        &[
+          ("commit", &short(&failed.commit)),
+          ("back", &short(to)),
+          ("point", failed.step.as_deref().unwrap_or_default()),
         ],
       ),
       _ => fill_marks(&DEPLOY.rollback.reason, &[("commit", &short(&failed.commit)), ("back", &short(to))]),

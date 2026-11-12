@@ -4,6 +4,7 @@
 mod adopt;
 mod backup;
 mod boot;
+mod console;
 mod deployment;
 mod expansion;
 mod own_units;

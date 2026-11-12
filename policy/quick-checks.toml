@@ -78,6 +78,13 @@ strip = "debuginfo"
 file = "shared-versions.toml"
 lines = "dependencies"
 snapshot = "snapshot"
+# The table pinning the packages vendored as one release's file, each by its version, its file and the
+# file's sha256.
+packages = "packages"
+# A package manifest, the lists in it naming packages, and the start of an entry naming a file.
+package_manifest = "package.json"
+package_lists = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies", "overrides", "resolutions"]
+file_prefix = "file:"
 # The lock a checkout's Cargo build resolves into, and the beginnings of a registry package's source.
 lock = "Cargo.lock"
 registry_sources = ["registry+", "sparse+"]
@@ -90,6 +97,16 @@ two_checkouts = "more than one checkout in the registry {registry} declares {rep
 not_shared = "{path} does not read as the shared versions: {why}"
 not_manifest = "{path} does not read as a Cargo manifest: {why}"
 not_lock = "{path} does not read as a Cargo lock: {why}"
+not_package_manifest = "{path} does not read as a package manifest: {why}"
+not_object = "it is no JSON object"
+# A package manifest's entry for a pinned package: {manifest}, the {list} it stands in, the package {name},
+# the entry {found} as it reads, and {why}: what to write, with the pinned {version} and {file}, the {path}
+# an entry's file stands at, the sha256 {found} it hashes to and the {wanted} one.
+package = "{manifest}: {list} {name} = {found}; {why}"
+package_version = "write {version}, or file: naming the release {file}"
+package_other_file = "vendor the release {file} as it stands and name it, the version {version}"
+package_missing = "{path} does not stand; vendor the release {file} there as it stands"
+package_other_bytes = "{path} hashes to {found} where the release {file} hashes to {wanted}; vendor the release as it stands"
 # A manifest's entry for a listed crate: {manifest}, the [{table}] it stands in, the crate {name}, the
 # entry {found} as it reads and the line {wanted} to write instead.
 line = "{manifest}: [{table}] {name} = {found}; write: {wanted}"
@@ -119,6 +136,11 @@ report_others = "{count} other"
 report_joiner = "; "
 report_list_joiner = ", "
 report_unread = "{path}: {why}"
+# A pinned package the checkout names: the package {name}, the {entries} it writes for it, each as written
+# and marked where its file is missing or holds other bytes, beside the pinned version {wanted}.
+report_package = "{name} {entries} beside the pin {wanted}"
+report_missing_file = "{entry} (missing)"
+report_other_bytes = "{entry} (other bytes)"
 report_total = "{differs} of {all} checkouts differ from {file}"
 report_unit = "checkouts"
 report_how = "run bmo-testbed check shared-versions in a checkout left out"

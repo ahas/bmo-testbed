@@ -31,8 +31,8 @@ These rules hold every change to this repository.
 - **No lookup table standing in for polymorphism.** A language is a member of the language type and
   answers for itself; a deploy step is a declared step; a unit says its own deploy mark.
 - **Dependencies:** crates from the registry pinned in the workspace manifest, and among other
-  repositories only the base libraries `bmo-chat`, `bmo-chat-client`, `bmo-text` and `bmo-ui`. The quick
-  checks' dependency check holds this.
+  repositories only the base libraries `bmo-chat`, `bmo-chat-client`, `bmo-console-face`, `bmo-text` and
+  `bmo-ui`. The quick checks' dependency check holds this.
 - **No hand-written parser for a general format.** TOML, JSON, YAML, markdown, shell lines and command
   lines are read by a maintained library; where none fits, the reason is written beside the code.
 

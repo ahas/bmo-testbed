@@ -20,7 +20,7 @@ members = [
 
 # One version for the whole repository, over the boundary docs/boundary.md states.
 [workspace.package]
-version = "0.1.0-rev.15"
+version = "0.1.0-rev.16"
 edition = "2024"
 publish = false
 license = "MIT"
@@ -31,6 +31,9 @@ license = "MIT"
 bmo-text = { path = "../../base/text", version = "=0.1.0-rev.5", default-features = false }
 # The HTTP service's routes, and a stand-in placement endpoint served by the binary's tests.
 axum = { version = "0.8.9", features = ["macros", "multipart", "ws"] }
+# The base library's console face, whose reading of a console manifest through the layer's own release the
+# console probe runs, and whose constants name the contract's route and headers.
+bmo-console-face = { path = "../../base/chat/console-face", version = "=0.1.0-rev.8" }
 # The shell line a heavy-command classification reads, split the way the shell splits it.
 brush-parser = "0.4.0"
 chrono = { version = "0.4.41", default-features = false, features = ["std"] }

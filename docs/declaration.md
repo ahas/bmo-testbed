@@ -156,8 +156,19 @@ step that fails stops the deployment with every service untouched.
 |---|---|---|---|
 | `id` | string | required | The step's English id |
 | `command` | command | required | What it runs, from the release |
-| `phase` | string | required | `before-flip`: after the build, before the record and the flip, a failure stops the deployment; `after-health`: once the `bot` service is up, a failure is a warning |
+| `phase` | string | required | `before-flip`: after the build, before the record and the flip, a failure stops the deployment; `after-health`: once the `bot` service is up and the console probe passed, a failure fails the deployment, which rolls back as a service that did not come up does |
 | `timeout_seconds` | integer | none | Read and given no effect: a step runs until it ends |
+
+### `[deploy.console]`: the console screen the repository brings
+
+The table's presence says the repository's service brings a screen to a console, a bundle under bmo-ui's
+console plugin contract (bmo-ui's `docs/console-bundles.md`). Once the service is up, the deployment probes
+its console face against the contract (`docs/deploy.md`, 「The console probe」); a repository bringing no
+screen declares no such table.
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `reach` | command | required | Run from the release once the service is up: answers on its standard output one JSON object naming how a console reaches the service, `address`, the base address of the service's API as a console calls it, `consoleToken`, the credential the console calls it with, and `token`, the service's own token, which the console's routes refuse. Where each stands is the repository's own |
 
 ### `[deploy.backup]`: the backup a deployment takes
 

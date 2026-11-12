@@ -147,7 +147,7 @@
   {
     "id": "suite/quick-checks",
     "title": "Quick checks",
-    "what": "The quick checks a repository enables: wording and lines that are not English by bmo-text's verdicts, dashes in people's text, the layout of folders and manifests, dependencies, the Cargo profile and the shared versions, run by check quick and its parts.",
+    "what": "The quick checks a repository enables: wording and lines not English by bmo-text, dashes in people text, folder and manifest layout, dependencies, the Cargo profile, and shared versions with each vendored package held to its pinned release file, run by check quick and its parts.",
     "files": [
       "suite/src/quick/mod.rs",
       "suite/src/quick/wording.rs",
@@ -157,16 +157,26 @@
       "suite/src/quick/layout.rs",
       "suite/src/quick/dependencies.rs",
       "suite/src/quick/shared_versions.rs",
+      "suite/src/quick/shared_packages.rs",
       "suite/src/quick/source.rs",
       "suite/src/quick/files.rs",
       "cli/src/check.rs",
       "docs/checks.md",
       "suite/tests/quick.rs",
       "suite/tests/quick_language.rs",
-      "suite/tests/quick_cargo_profile.rs"
+      "suite/tests/quick_cargo_profile.rs",
+      "suite/tests/quick_shared_versions.rs"
     ],
-    "symbols": [],
-    "aliases": [],
+    "symbols": [
+      "read_shared",
+      "find_shared",
+      "hold",
+      "PackagePin",
+      "hold_packages"
+    ],
+    "aliases": [
+      "bmo-ui 버전 검사"
+    ],
     "needs": [
       "core/declaration",
       "suite/change-selection",
@@ -174,8 +184,8 @@
       "core/policy-loader",
       "calls/bmo-text"
     ],
-    "base": "95a986f9facd7b2c260f292ec454c9ced2ea2bdf",
-    "changed": 1794219181632
+    "base": "6e2f9339a7995fd7f34b6e158178f39b2e935f25",
+    "changed": 1794489009814
   },
   {
     "id": "suite/static-check",

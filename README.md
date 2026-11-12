@@ -16,7 +16,7 @@ and a release-based deployment of a repository onto the machine it runs on.
 - **It is an upstream:** a harness takes it as its first entry point through its MCP server and the
   `bmo-testbed` skill, with nothing else running.
 - **It depends on no other repository** but the base libraries `bmo-chat`, `bmo-chat-client`,
-  `bmo-text` and `bmo-ui`, and a consumer may take its test kit as a dev-dependency.
+  `bmo-console-face`, `bmo-text` and `bmo-ui`, and a consumer may take its test kit as a dev-dependency.
 
 ## Documents
 

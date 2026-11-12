@@ -265,3 +265,119 @@ fn the_report_holds_every_checkout_with_its_own_exceptions_and_counts_those_that
     ]
   );
 }
+
+// The bytes of a pinned package's release, and the shared versions pinning it beside the crates.
+const RELEASE: &str = "the packed release";
+
+fn sha256_of(text: &str) -> String {
+  use sha2::{Digest, Sha256};
+
+  Sha256::digest(text.as_bytes()).iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn pinning() -> String {
+  format!(
+    "{SHARED}\n[packages.pkg]\nversion = \"1.0.0\"\nfile = \"pkg-1.0.0.tgz\"\nsha256 = \"{}\"\n",
+    sha256_of(RELEASE)
+  )
+}
+
+// "the shared versions read each pinned package's version, file and sha256, and refuse a pin missing one"
+#[test]
+fn the_shared_versions_read_each_pinned_package_and_refuse_a_pin_missing_a_key() {
+  let shared = read_shared(&pinning()).unwrap();
+
+  assert_eq!(shared.packages["pkg"].version, "1.0.0");
+  assert_eq!(shared.packages["pkg"].file, "pkg-1.0.0.tgz");
+  assert_eq!(shared.packages["pkg"].sha256, sha256_of(RELEASE));
+  assert!(read_shared("[packages.pkg]\nversion = \"1.0.0\"\nfile = \"pkg-1.0.0.tgz\"\n").is_err());
+}
+
+// "a package manifest naming the pinned file with the release's bytes and the pinned version passes, and an
+// installed package's manifest is not read"
+#[test]
+fn a_manifest_naming_the_pinned_release_passes_and_installed_packages_are_not_read() {
+  let dir = checkout(&[
+    (
+      "client/package.json",
+      "{\"devDependencies\": {\"pkg\": \"file:vendor/pkg-1.0.0.tgz\"}, \"peerDependencies\": {\"pkg\": \"1.0.0\"}, \"dependencies\": {\"other\": \"2.0.0\"}}",
+    ),
+    ("client/vendor/pkg-1.0.0.tgz", RELEASE),
+    ("client/node_modules/pkg/package.json", "{\"dependencies\": {\"pkg\": \"0.1.0\"}}"),
+  ]);
+  let held = hold(dir.path(), &read_shared(&pinning()).unwrap(), &BTreeMap::new());
+
+  assert_eq!(said(&held), Vec::<String>::new());
+  assert_eq!(held.entries, 2);
+}
+
+// "each way an entry differs from the pinned release is named with the manifest, the list and what to write"
+#[test]
+fn each_way_an_entry_differs_from_the_pinned_release_is_named_with_what_to_write() {
+  let dir = checkout(&[
+    (
+      "client/package.json",
+      "{\"dependencies\": {\"pkg\": \"^1.0.0\"}, \"devDependencies\": {\"pkg\": \"file:vendor/pkg-0.9.0.tgz\"}, \"optionalDependencies\": {\"pkg\": \"file:gone/pkg-1.0.0.tgz\"}, \"overrides\": {\"pkg\": \"file:other/pkg-1.0.0.tgz\"}, \"resolutions\": {\"pkg\": {\".\": \"1.0.0\"}}}",
+    ),
+    ("client/vendor/pkg-0.9.0.tgz", RELEASE),
+    ("client/other/pkg-1.0.0.tgz", "a build packed elsewhere"),
+    ("broken/package.json", "[]"),
+  ]);
+  let held = hold(dir.path(), &read_shared(&pinning()).unwrap(), &BTreeMap::new());
+  let lines = said(&held);
+  let pin = sha256_of(RELEASE);
+  let other = sha256_of("a build packed elsewhere");
+
+  assert_eq!(held.entries, 5);
+  assert_eq!(
+    lines,
+    [
+      "broken/package.json does not read as a package manifest: it is no JSON object".to_owned(),
+      "client/package.json: dependencies pkg = ^1.0.0; write 1.0.0, or file: naming the release pkg-1.0.0.tgz"
+        .to_owned(),
+      "client/package.json: devDependencies pkg = file:vendor/pkg-0.9.0.tgz; vendor the release pkg-1.0.0.tgz as it stands and name it, the version 1.0.0".to_owned(),
+      "client/package.json: optionalDependencies pkg = file:gone/pkg-1.0.0.tgz; client/gone/pkg-1.0.0.tgz does not stand; vendor the release pkg-1.0.0.tgz there as it stands".to_owned(),
+      format!(
+        "client/package.json: overrides pkg = file:other/pkg-1.0.0.tgz; client/other/pkg-1.0.0.tgz hashes to {other} where the release pkg-1.0.0.tgz hashes to {pin}; vendor the release as it stands"
+      ),
+      "client/package.json: resolutions pkg = {\".\":\"1.0.0\"}; write 1.0.0, or file: naming the release pkg-1.0.0.tgz"
+        .to_owned(),
+    ]
+  );
+}
+
+// "the report names, beside the pin, what each checkout writes for a pinned package, clean or not"
+#[test]
+fn the_report_names_what_each_checkout_writes_for_a_pinned_package_beside_the_pin() {
+  let data = tempfile::tempdir().unwrap();
+  let base = checkout(&[
+    ("testbed.toml", "testbed = 0\nname = \"shared-base\"\n"),
+    ("shared-versions.toml", &pinning()),
+  ]);
+  let asking = checkout(&[("testbed.toml", DECLARING)]);
+  let kept = checkout(&[
+    ("testbed.toml", "testbed = 0\nname = \"kept\"\n"),
+    ("package.json", "{\"devDependencies\": {\"pkg\": \"file:vendor/pkg-1.0.0.tgz\"}}"),
+    ("vendor/pkg-1.0.0.tgz", RELEASE),
+  ]);
+  let behind = checkout(&[
+    ("testbed.toml", "testbed = 0\nname = \"behind\"\n"),
+    (
+      "package.json",
+      "{\"devDependencies\": {\"pkg\": \"file:vendor/pkg-1.0.0.tgz\"}, \"peerDependencies\": {\"pkg\": \"0.9.0\"}}",
+    ),
+    ("vendor/pkg-1.0.0.tgz", "a build packed elsewhere"),
+  ]);
+  let env = registry_env(data.path(), &[base.path(), kept.path(), behind.path()]);
+  let report = shared_versions_report(&repository(&asking), &env).unwrap();
+
+  assert_eq!((report.differs, report.all), (1, 3));
+  assert_eq!(
+    report.rows,
+    [
+      "shared-base: holds to the shared versions (0 entries)",
+      "kept: holds to the shared versions (1 entries); pkg file:vendor/pkg-1.0.0.tgz beside the pin 1.0.0",
+      "behind: 2 to fix: pkg 0.9.0, file:vendor/pkg-1.0.0.tgz (other bytes) beside the pin 1.0.0",
+    ]
+  );
+}

@@ -51,8 +51,8 @@
       "core/lanes-and-turn",
       "core/policy-loader"
     ],
-    "base": "82825564fb226e1531bc0aea609bbb765794a621",
-    "changed": 1794486084337
+    "base": "6e2f9339a7995fd7f34b6e158178f39b2e935f25",
+    "changed": 1794489053885
   },
   {
     "id": "core/event-hook",
@@ -180,8 +180,8 @@
     "symbols": [],
     "aliases": [],
     "needs": [],
-    "base": "82825564fb226e1531bc0aea609bbb765794a621",
-    "changed": 1794486084325
+    "base": "6e2f9339a7995fd7f34b6e158178f39b2e935f25",
+    "changed": 1794489053924
   },
   {
     "id": "core/run-verb-and-status",

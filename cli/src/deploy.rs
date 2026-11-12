@@ -16,6 +16,7 @@ use bmo_testbed_core::policy::verbs::VERBS;
 use bmo_testbed_core::queue::{LockWait, now_ms, take_lock};
 use bmo_testbed_core::turn::{Env, FRONT_VARIABLE, NOT_RUN_EXIT_CODE, harness_pid, process_env};
 use bmo_testbed_core::verb::{REFUSED_EXIT_CODE, data_root};
+use bmo_testbed_deploy::console::{LayerPin, PinnedLayer};
 use bmo_testbed_deploy::deployment::{
   BuildAsk, DeployAsk, DeployPlaces, Gate, GateAsk, GateOutcome, GateStep, Machine, Passed, SuitePassed,
   deploy as deploy_run,
@@ -28,6 +29,7 @@ use bmo_testbed_deploy::upload::{
   AwsHands, BackupNames, Remote, send_backups, upload_failed_detail, upload_failed_summary,
 };
 use bmo_testbed_suite::once_more::run_judged;
+use bmo_testbed_suite::quick::shared_versions::find_shared;
 use bmo_testbed_suite::run::{SuiteAsk, SuiteWords, ask_of};
 use bmo_testbed_suite::static_check::{check_steps, run_static_check, spawn_step};
 
@@ -317,6 +319,33 @@ fn refused(line: &str) -> u8 {
   REFUSED_EXIT_CODE
 }
 
+// The release of the console layer the shared versions the declaration names pin, which the console probe
+// reads a manifest by and holds its layer to (docs/deploy.md, 「The console probe」); asked only where the
+// repository brings a console screen.
+fn pinned_layer(repo: &Repository, env: &Env) -> PinnedLayer {
+  let declaration = &repo.declaration;
+  let Some(shared) = declaration
+    .check
+    .shared_versions
+    .as_ref()
+    .filter(|_| declaration.deploy.console.is_some())
+  else {
+    return PinnedLayer::Unnamed;
+  };
+
+  match find_shared(&shared.repository, env) {
+    Ok(found) => match found.packages.get(&DEPLOY.console.layer_package) {
+      Some(pin) => PinnedLayer::Pinned(LayerPin {
+        version: pin.version.clone(),
+        file: pin.file.clone(),
+        sha256: pin.sha256.clone(),
+      }),
+      None => PinnedLayer::Unpinned,
+    },
+    Err(why) => PinnedLayer::Unread(why),
+  }
+}
+
 /// `deploy`: outside a deployment's unit it starts one and ends; inside it, the run. A refusal and a dry
 /// run stay in the caller's process.
 pub fn deploy(args: &DeployFlags) -> u8 {
@@ -367,6 +396,7 @@ pub fn deploy(args: &DeployFlags) -> u8 {
     unit,
     upload: Some(upload),
     record: Some(data_root()),
+    pinned_layer: pinned_layer(&repo, &env),
   };
   let suite = SuiteGate {
     repo: &repo,

@@ -17,6 +17,7 @@ pub mod dependencies;
 pub mod files;
 pub mod language;
 pub mod layout;
+pub mod shared_packages;
 pub mod shared_versions;
 pub mod source;
 pub mod wording;

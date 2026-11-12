@@ -12,6 +12,7 @@ use bmo_testbed_core::declaration::Repository;
 use bmo_testbed_core::events::Hook;
 use bmo_testbed_core::policy::deploy::DEPLOY;
 use bmo_testbed_core::turn::Env;
+use bmo_testbed_deploy::console::{ConsoleHands, MachineConsole};
 use bmo_testbed_deploy::deployment::{
   BuildAsk, DeployAsk, DeployHands, DeployPlaces, Gate, GateAsk, GateOutcome, Machine, StepAsk, StepRan,
   SuitePassed, deploy, major_change, release_build, version_major, workspace_binaries,
@@ -23,6 +24,7 @@ use bmo_testbed_deploy::tree::read_deploy_record;
 use bmo_testbed_record::{Record, TestRunEnd};
 use serde_json::Value;
 
+use crate::console::Face;
 use crate::stand::must;
 
 // The service manager's stand-in, which says every unit runs, and the machine's own hands for the rest.
@@ -34,6 +36,8 @@ struct Hands {
   refuse_restart: bool,
   /// Whether systemd holds the `bot` service as one that gave up starting.
   gives_up: bool,
+  /// The service's console face the probe asks, where the declaration brings a console screen.
+  console: Option<Face>,
 }
 
 impl DeployHands for Hands {
@@ -83,6 +87,13 @@ impl DeployHands for Hands {
 
   fn live_processes(&self) -> Option<Vec<LiveProcess>> {
     Some(Vec::new())
+  }
+
+  fn console(&self) -> &dyn ConsoleHands {
+    self
+      .console
+      .as_ref()
+      .map_or(&MachineConsole as &dyn ConsoleHands, |face| face as &dyn ConsoleHands)
   }
 }
 
@@ -790,6 +801,50 @@ fn a_service_that_does_not_come_up_is_rolled_back() {
     progress.stages.last().map(|at| at.stage),
     Some(bmo_testbed_deploy::progress::Stage::Rollback)
   );
+}
+
+// "a release whose console face the probe refuses is rolled back, the point named in its events"
+#[test]
+fn a_release_whose_console_face_is_refused_is_rolled_back_naming_the_point() {
+  let scene = Scene::new();
+  let first = must(&["rev-parse", "HEAD"], &scene.source);
+
+  assert_eq!(scene.run(&Hands::default()), 0);
+
+  let declared = std::fs::read_to_string(scene.source.join("testbed.toml")).unwrap();
+
+  scene.write("testbed.toml", &format!("{declared}\n[deploy.console]\nreach = \"true\"\n"));
+  scene.push("second");
+
+  // The face answers its module to a call with no role.
+  let hands = Hands {
+    console: Some(Face {
+      open_without_role: true,
+      ..Face::default()
+    }),
+    ..Hands::default()
+  };
+
+  assert_eq!(scene.run(&hands), 1, "{}", said(&hands));
+  assert_eq!(read_deploy_record(&scene.at("live/deployed.json")).unwrap().commit, first);
+  assert!(
+    said(&hands).contains("the console probe refused the release at the module with no role: GET /console-bundle/sample-1a2b.js answered 200 where the contract asks 403"),
+    "{}",
+    said(&hands)
+  );
+  assert_eq!(scene.names()[1..], ["deploy-rolled-back", "deploy-failed"]);
+
+  let events = scene.events();
+
+  assert!(
+    events[1]["detail"]["reason"]
+      .as_str()
+      .unwrap()
+      .starts_with("rolled back after a failed deployment: the console probe refused"),
+    "{}",
+    events[1]
+  );
+  assert_eq!(events[2]["detail"]["stage"], "after");
 }
 
 // "a build that fails stops the deployment with every service untouched"

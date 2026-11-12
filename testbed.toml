@@ -21,8 +21,9 @@ quick = ["dashes", "language", "layout", "dependencies", "cargo-profile", "share
 # and the kit.
 people_text = ["policy/*.toml", "*/src/**/*.rs", "tools/*/src/**/*.rs", "testkit/*.ts"]
 language_ledger = "docs/language-ledger.json"
-# The base library whose verdicts the quick checks take.
-base_libraries = ["bmo-text"]
+# The base libraries: the one whose verdicts the quick checks take, and bmo-chat's console face, whose
+# reading of a console manifest through the layer's own release the console probe runs.
+base_libraries = ["bmo-text", "bmo-console-face"]
 
 # The repository whose root holds the shared versions the manifests and the lock hold to.
 [check.shared_versions]
