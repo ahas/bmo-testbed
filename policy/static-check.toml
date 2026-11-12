@@ -1,9 +1,11 @@
 # What the static check says of its steps (docs/checks.md, 「The static check」): a line for each step as
 # it ends, and the line a check that failed or did not run ends on. A harness reads them, so they are
-# English. Each `{name}` is filled in with what it names; {step} is a step as `step` names it.
+# English. Each `{name}` is filled in with what it names; {step} is a step as `step` names it, and {by}
+# the Cargo workspace check's own step that covers a declared step left out.
 
 step = "{name} ({command} in {dir})"
 ended = "static check: {step}, exit {code}, {times}"
+left_out = "static check: {step} left out, the Cargo workspace check's {by} covers it"
 not_run = "static check: not run"
 not_had = "{mark} {step} did not get its turn within its wait; run this again at once"
 failed = "static check: FAILED, {step} exited {code}"

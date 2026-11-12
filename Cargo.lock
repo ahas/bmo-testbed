@@ -487,6 +487,7 @@ dependencies = [
  "serde-saphyr",
  "serde_json",
  "sha2",
+ "shlex",
  "sqlx",
  "tempfile",
  "tokio",

@@ -2,7 +2,7 @@
 //! (docs/checks.md, 「The static check」 and 「Which tests a change runs」). The change check and a
 //! deployment's static check each ask here, so the two cannot check differently.
 
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Instant;
 
@@ -31,6 +31,9 @@ pub struct CheckStep {
   pub env: Vec<(String, String)>,
   pub lane: Option<Lane>,
   pub retry_out_of_memory: bool,
+  /// The Cargo workspace check's own step a declared step only repeats, where that check runs: the step is
+  /// then left out, said in one line and counted as passed.
+  pub covered_by: Option<DeployStep>,
 }
 
 impl CheckStep {
@@ -43,6 +46,7 @@ impl CheckStep {
       env: Vec::new(),
       lane: None,
       retry_out_of_memory: false,
+      covered_by: None,
     }
   }
 
@@ -55,6 +59,7 @@ impl CheckStep {
       env: Vec::new(),
       lane: step.lane,
       retry_out_of_memory: step.retry_out_of_memory,
+      covered_by: None,
     }
   }
 }
@@ -131,6 +136,59 @@ pub fn cargo_lint(own: &OwnPackages) -> CheckStep {
   CheckStep::own(DeployStep::CargoLint, cargo_verb_line(&args))
 }
 
+// The words of a Cargo formatting check the workspace's formatting covers, `--check` among them and needed
+// before `--` or alone after it. They mirror what `cargo_format` judges, so the two change together.
+const FORMAT_COVERS: [&str; 4] = ["--check", "--all", "-q", "--quiet"];
+
+// The words of a Cargo lint or type check the workspace's lints cover. They mirror what `cargo_lint` judges.
+const LINT_COVERS: [&str; 8] = [
+  "--all",
+  "--workspace",
+  "--all-targets",
+  "--locked",
+  "--offline",
+  "--frozen",
+  "-q",
+  "--quiet",
+];
+
+// The lint words after `--` the workspace's lints cover: every warning denied.
+const DENIED_WARNINGS: [&[&str]; 2] = [&["-D", "warnings"], &["-Dwarnings"]];
+
+/// The Cargo workspace check's own step a declared step only repeats: a Cargo command at the root, split the
+/// way the shell splits it, checking the formatting, the lints or the types with no word the workspace check
+/// does not already judge (docs/checks.md, 「The static check」). None where the step judges anything more,
+/// and then it runs as declared.
+pub fn covered_by(step: &declaration::CheckStep) -> Option<DeployStep> {
+  let at_root = step
+    .dir
+    .as_deref()
+    .is_none_or(|dir| dir.components().all(|part| part == Component::CurDir));
+  let words = shlex::split(&step.command).filter(|_| at_root)?;
+  let words: Vec<&str> = words.iter().map(String::as_str).collect();
+  let (subcommand, rest) = match words.as_slice() {
+    ["cargo", subcommand, rest @ ..] | ["bmo-testbed", "cargo", subcommand, rest @ ..] => {
+      (*subcommand, rest)
+    }
+    _ => return None,
+  };
+  let (args, after) = match rest.iter().position(|&word| word == "--") {
+    Some(at) => (&rest[..at], Some(&rest[at + 1..])),
+    None => (rest, None),
+  };
+  let only = |allowed: &[&str]| args.iter().all(|word| allowed.contains(word));
+
+  match (subcommand, after) {
+    ("fmt", None) if args.contains(&"--check") && only(&FORMAT_COVERS) => Some(DeployStep::CargoFormat),
+    ("fmt", Some(["--check"])) if only(&FORMAT_COVERS) => Some(DeployStep::CargoFormat),
+    ("clippy", Some(lints)) if DENIED_WARNINGS.contains(&lints) && only(&LINT_COVERS) => {
+      Some(DeployStep::CargoLint)
+    }
+    ("clippy" | "check", None) if only(&LINT_COVERS) => Some(DeployStep::CargoLint),
+    _ => None,
+  }
+}
+
 // What a change from `since` changed; none where every path is reached: a run with no range, or a range the
 // checkout cannot read.
 fn changed_since(root: &Path, since: Option<&str>) -> Option<Vec<String>> {
@@ -161,30 +219,38 @@ pub fn step_reached(step: &declaration::CheckStep, changed: Option<&[String]>) -
 }
 
 /// The steps of the repository's own a change of `changed` owes, every path where none is named: the quick
-/// checks where it enables any, then its declared steps the change reaches, in their order.
+/// checks where it enables any, then its declared steps the change reaches, in their order, each run as
+/// declared.
 pub fn declared_steps(repo: &Repository, changed: Option<&[String]>) -> Vec<CheckStep> {
+  own_steps(repo, changed, false)
+}
+
+// The repository's own steps, each declared one that only repeats the Cargo workspace check marked as covered
+// where `workspace_checked`.
+fn own_steps(repo: &Repository, changed: Option<&[String]>, workspace_checked: bool) -> Vec<CheckStep> {
   let check = &repo.declaration.check;
   let quick = (!check.quick.is_empty()).then(quick_check);
+  let declared = check.steps.iter().filter(|step| step_reached(step, changed)).map(|step| CheckStep {
+    covered_by: covered_by(step).filter(|_| workspace_checked),
+    ..CheckStep::declared(step)
+  });
 
-  quick
-    .into_iter()
-    .chain(check.steps.iter().filter(|step| step_reached(step, changed)).map(CheckStep::declared))
-    .collect()
+  quick.into_iter().chain(declared).collect()
 }
 
 /// The steps a change from `since` owes: the repository's own, then the formatting and lints of the Cargo
-/// workspace's own packages where a crate is marked (docs/checks.md, 「The static check」).
+/// workspace's own packages where a crate is marked, a declared step that only repeats them left out
+/// (docs/checks.md, 「The static check」).
 pub fn check_steps(repo: &Repository, since: Option<&str>) -> Vec<CheckStep> {
   let changed = changed_since(&repo.root, since);
   let changed = changed.as_deref();
-  let mut steps = declared_steps(repo, changed);
+  let own = cargo_selected(repo, changed)
+    .then(|| OwnPackages::of(&repo.root))
+    .filter(OwnPackages::any);
+  let mut steps = own_steps(repo, changed, own.is_some());
 
-  if cargo_selected(repo, changed) {
-    let own = OwnPackages::of(&repo.root);
-
-    if own.any() {
-      steps.extend([cargo_format(&own), cargo_lint(&own)]);
-    }
+  if let Some(own) = own {
+    steps.extend([cargo_format(&own), cargo_lint(&own)]);
   }
 
   steps
@@ -307,10 +373,11 @@ pub fn step_words(step: &CheckStep) -> String {
 }
 
 /// The steps in order, each one's output handed to `write` as it ends with how long it waited for the
-/// machine's turn and how long it ran, each told to `told`. Every step runs to its end, a failing one
-/// stopping none after it; the answer is the line naming the first that failed or did not get its turn, a
-/// step not run named before a failed one since running again is all it needs, and none where every step
-/// passed.
+/// machine's turn and how long it ran, each told to `told`; a step the Cargo workspace check covers is not
+/// run, its one line handed to `write` and told as passed with no wait and no run. Every step runs to its
+/// end, a failing one stopping none after it; the answer is the line naming the first that failed or did
+/// not get its turn, a step not run named before a failed one since running again is all it needs, and none
+/// where every step passed.
 pub fn run_static_check(
   root: &Path,
   steps: &[CheckStep],
@@ -323,6 +390,20 @@ pub fn run_static_check(
   let mut failed: Option<String> = None;
 
   for step in steps {
+    if let Some(by) = step.covered_by {
+      told(&StepDone {
+        id: step.id.clone(),
+        code: 0,
+        waited_seconds: 0.0,
+        ran_seconds: 0.0,
+      });
+      write(&format!(
+        "{}\n",
+        fill_marks(&said.left_out, &[("step", &step_words(step)), ("by", by.name())])
+      ));
+      continue;
+    }
+
     let started = Instant::now();
     let result = run(root, step);
     let seconds = started.elapsed().as_secs_f64();

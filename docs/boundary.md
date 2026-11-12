@@ -207,8 +207,9 @@ bmo-testbed check dashes <file…> [--write]
   waits of its steps added up, and its whole time.
 - **`static`** is the static check a deployment's gate passes, alone (`docs/checks.md`, 「The static check」):
   the quick checks, the declared steps the change since the commit reaches, then the workspace's formatting
-  and lints, and no test; it exits 1 where a step failed. A deployment whose gate stands on a placed machine
-  runs it there before the suite (「The placed machine」).
+  and lints, and no test; a declared step that only repeats those formatting and lints is left out, said in
+  one line and counted as passed. It exits 1 where a step failed. A deployment whose gate stands on a placed
+  machine runs it there before the suite (「The placed machine」).
 - With a part named, that quick check alone, or every enabled one for `quick`. `language --settle`
   lowers the ledger, and `korean` names the same part; `shared-versions --report` holds every checkout of
   the machine's registry to the shared versions and changes nothing; `dashes <file…>` rewrites the dashes

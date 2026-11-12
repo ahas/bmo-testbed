@@ -113,6 +113,12 @@ with an empty reason, is refused.
 | `when` | list of globs | every change | The paths that reach this step; a change touching none of them leaves it out |
 | `retry_out_of_memory` | boolean | `false` | Run again where the kernel killed it for want of memory (`docs/testbed.md`, 「Memory」) |
 
+Where the static check runs the Cargo workspace's own formatting and lints, a declared step whose
+command only repeats them, such as `cargo fmt --all --check` or
+`cargo clippy --workspace --all-targets -- -D warnings` at the root, is left out and counts as passed
+(`docs/checks.md`, 「The static check」). The change check, which runs no such formatting or lints, runs
+it as declared.
+
 ## `[build]`: building a release
 
 | Key | Type | Default | Meaning |

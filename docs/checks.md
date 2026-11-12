@@ -81,6 +81,24 @@
     that crate belongs to, are never formatted; the lints reach the workspace's members alone, and a
     path dependency is compiled as a dependency, its warnings shown and never denied. A workspace Cargo
     cannot read is judged whole, and one with no member inside the root owes neither step.
+  - **A declared step that only repeats it is left out,** so a check formats and lints once, and a
+    declared format step never follows a path dependency into a sibling repository's checkout. A step
+    only repeats it where it runs at the root and its command, split the way the shell splits it, is
+    Cargo's, `cargo` or the Cargo verb `bmo-testbed cargo`, with one of these subcommands and no other
+    word:
+    - `fmt` with `--check`, given before `--` or alone after it, besides `--all`, `-q` or `--quiet`,
+      which the workspace's formatting covers;
+    - `clippy` or `check`, besides `--all`, `--workspace`, `--all-targets`, `--locked`, `--offline`,
+      `--frozen`, `-q` or `--quiet`, and for `clippy` nothing after `--` but every warning denied, as
+      `-D warnings` or `-Dwarnings`, which the workspace's lints cover, since they check every crate as
+      they lint it and deny every warning.
+  - **Any other word runs the step as declared:** a feature, a package, a target selection, a lint, a
+    manifest path, a toolchain, a variable set before the command, a shell operator, and a `fmt` that
+    rewrites rather than checks; so does a step declaring another directory. Where no crate is marked,
+    or the workspace has no member inside the root, every declared step runs.
+  - **A step left out says so in one line,** naming the step and the workspace check's step that covers
+    it, and counts as passed: exit 0, no wait and no run, in the steps a caller is told, a deployment's
+    progress record and its times.
 - **Cargo runs only through `bmo-testbed cargo`,** never plain `cargo`. The verb sets the shared build
   directory (`docs/deploy.md`, 「The Cargo build directory」) so dependencies compile once; a plain
   `cargo` lands in the checkout's own `target/`, which shares nothing and which the prune takes away.

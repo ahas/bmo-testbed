@@ -8,6 +8,7 @@ use serde::Deserialize;
 pub struct StaticCheck {
   pub step: String,
   pub ended: String,
+  pub left_out: String,
   pub not_run: String,
   pub not_had: String,
   pub failed: String,

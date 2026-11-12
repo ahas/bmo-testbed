@@ -534,3 +534,226 @@ mod the_gate_judges_the_repository_alone {
     assert!(!OwnPackages::Named(Vec::new()).any());
   }
 }
+
+mod declared_steps_the_workspace_check_covers {
+  use super::*;
+
+  use bmo_testbed_core::declaration::CheckStep as Declared;
+  use bmo_testbed_suite::static_check::covered_by;
+
+  // A Cargo workspace of one crate, declaring Cargo steps the workspace check covers and one it does not.
+  const CARGO_DECLARED: &str = r#"
+testbed = 0
+
+[[check.step]]
+id = "rust-format"
+command = "cargo fmt --all --check"
+
+[[check.step]]
+id = "rust-lint"
+command = "bmo-testbed cargo clippy --workspace --all-targets -- -D warnings"
+
+[[check.step]]
+id = "rust-types"
+command = "cargo check --workspace --all-targets"
+
+[[check.step]]
+id = "rust-features"
+command = "cargo clippy --workspace --all-targets --features x -- -D warnings"
+"#;
+
+  fn cargo_space() -> (Space, String) {
+    let space = Space::with(&[
+      ("testbed.toml", CARGO_DECLARED),
+      ("Cargo.toml", "[workspace]\nresolver = \"3\"\nmembers = [\"crates/*\"]\n"),
+      (
+        "crates/alpha/Cargo.toml",
+        "[package]\nname = \"alpha\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+      ),
+      ("crates/alpha/src/lib.rs", "pub fn one() -> u8 { 1 }\n"),
+      ("notes/readme.txt", "notes\n"),
+    ]);
+    let start = space.head();
+
+    (space, start)
+  }
+
+  fn covering(steps: &[CheckStep]) -> Vec<(&str, Option<DeployStep>)> {
+    steps.iter().map(|step| (step.id.as_str(), step.covered_by)).collect()
+  }
+
+  fn declared(command: &str) -> Declared {
+    Declared {
+      id: "declared".to_owned(),
+      command: command.to_owned(),
+      dir: None,
+      lane: None,
+      when: None,
+      retry_out_of_memory: false,
+    }
+  }
+
+  // "a declared step with only covered words is left out where a crate is marked, one with another runs"
+  #[test]
+  fn a_declared_step_with_only_covered_words_is_left_out_and_one_with_another_runs() {
+    let (space, start) = cargo_space();
+
+    space.commit("crates/alpha/src/lib.rs", "pub fn one() -> u8 { 2 }\n");
+
+    let steps = check_steps(&space.repo(), Some(&start));
+
+    assert_eq!(
+      covering(&steps),
+      [
+        ("rust-format", Some(DeployStep::CargoFormat)),
+        ("rust-lint", Some(DeployStep::CargoLint)),
+        ("rust-types", Some(DeployStep::CargoLint)),
+        ("rust-features", None),
+        (DeployStep::CargoFormat.name(), None),
+        (DeployStep::CargoLint.name(), None),
+      ]
+    );
+  }
+
+  // "with no crate marked, every declared step runs as before"
+  #[test]
+  fn with_no_crate_marked_every_declared_step_runs_as_before() {
+    let (space, start) = cargo_space();
+
+    space.commit("notes/readme.txt", "more notes\n");
+
+    let steps = check_steps(&space.repo(), Some(&start));
+
+    assert_eq!(
+      covering(&steps),
+      [
+        ("rust-format", None),
+        ("rust-lint", None),
+        ("rust-types", None),
+        ("rust-features", None)
+      ]
+    );
+  }
+
+  // "the change check runs every declared step as declared"
+  #[test]
+  fn the_change_check_runs_every_declared_step_as_declared() {
+    let (space, _) = cargo_space();
+    let changed = vec!["crates/alpha/src/lib.rs".to_owned()];
+    let steps = bmo_testbed_suite::static_check::declared_steps(&space.repo(), Some(&changed));
+
+    assert!(steps.iter().all(|step| step.covered_by.is_none()));
+    assert_eq!(steps.len(), 4);
+  }
+
+  // "a Cargo command repeating the workspace check is read by its words"
+  #[test]
+  fn a_cargo_command_repeating_the_workspace_check_is_read_by_its_words() {
+    let format = Some(DeployStep::CargoFormat);
+    let lint = Some(DeployStep::CargoLint);
+
+    for (command, covered) in [
+      ("cargo fmt --check", format),
+      ("cargo fmt --all --check", format),
+      ("cargo fmt --all -- --check", format),
+      ("bmo-testbed cargo fmt -q --check", format),
+      ("cargo clippy --workspace --all-targets -- -D warnings", lint),
+      ("cargo clippy --all --all-targets --locked -- -Dwarnings", lint),
+      ("cargo clippy --workspace --offline", lint),
+      ("cargo check", lint),
+      ("bmo-testbed cargo check --workspace --all-targets --locked --quiet", lint),
+      ("cargo fmt --all", None),
+      ("cargo fmt -- --check --edition 2024", None),
+      ("cargo fmt --check -p alpha", None),
+      ("cargo clippy --workspace --features x -- -D warnings", None),
+      ("cargo clippy --workspace -- -D warnings -D clippy::pedantic", None),
+      ("cargo clippy --workspace -- -W warnings", None),
+      ("cargo check --manifest-path other/Cargo.toml", None),
+      ("cargo check --target wasm32-unknown-unknown", None),
+      ("cargo +nightly check", None),
+      ("cargo test --workspace", None),
+      ("cargo build", None),
+      ("RUSTFLAGS=-Dwarnings cargo check", None),
+      ("cargo check && cargo test", None),
+      ("cargo check; cargo test", None),
+      ("other-tool cargo check", None),
+      ("cargo 'check", None),
+    ] {
+      assert_eq!(covered_by(&declared(command)), covered, "{command}");
+    }
+  }
+
+  // "a Cargo step declaring a directory other than the root runs as declared"
+  #[test]
+  fn a_cargo_step_declaring_a_directory_other_than_the_root_runs_as_declared() {
+    let at = |dir: &str| Declared {
+      dir: Some(PathBuf::from(dir)),
+      ..declared("cargo fmt --all --check")
+    };
+
+    assert_eq!(covered_by(&at(".")), Some(DeployStep::CargoFormat));
+    assert_eq!(covered_by(&at("./")), Some(DeployStep::CargoFormat));
+    assert_eq!(covered_by(&at("crates/alpha")), None);
+  }
+
+  // "a step left out is not run, says so in one line, and counts as passed with no wait and no run"
+  #[test]
+  fn a_step_left_out_is_not_run_says_so_in_one_line_and_counts_as_passed_with_no_wait_and_no_run() {
+    let (space, _) = cargo_space();
+    let steps = check_steps(&space.repo(), None);
+    let mut written: Vec<String> = Vec::new();
+    let mut told: Vec<StepDone> = Vec::new();
+    let ran: RefCell<Vec<String>> = RefCell::new(Vec::new());
+    let result = run_static_check(
+      space.root(),
+      &steps,
+      &mut |text| written.push(text.to_owned()),
+      &|_, step| {
+        ran.borrow_mut().push(step.id.clone());
+        TimedRun {
+          code: 0,
+          output: String::new(),
+          waited_seconds: 1.0,
+          ran_seconds: 1.0,
+        }
+      },
+      &mut |one| told.push(one.clone()),
+    );
+
+    assert_eq!(result, None);
+    assert_eq!(
+      ran.into_inner(),
+      ["rust-features", DeployStep::CargoFormat.name(), DeployStep::CargoLint.name()]
+    );
+    assert_eq!(
+      told[0],
+      StepDone {
+        id: "rust-format".to_owned(),
+        code: 0,
+        waited_seconds: 0.0,
+        ran_seconds: 0.0,
+      }
+    );
+    assert_eq!(told.len(), steps.len());
+    assert_eq!(
+      written[0],
+      format!(
+        "{}\n",
+        fill_marks(
+          &STATIC_CHECK.left_out,
+          &[("step", &step_words(&steps[0])), ("by", DeployStep::CargoFormat.name())]
+        )
+      )
+    );
+    assert_eq!(
+      written[2],
+      format!(
+        "{}\n",
+        fill_marks(
+          &STATIC_CHECK.left_out,
+          &[("step", &step_words(&steps[2])), ("by", DeployStep::CargoLint.name())]
+        )
+      )
+    );
+  }
+}

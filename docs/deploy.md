@@ -245,7 +245,9 @@
      where its manifest names it and the testbed has no committed copy of it to put there; its warnings
      are shown and never denied. A sibling's uncommitted formatting or lints therefore never fail a
      deployment, while every file of the repository's own is judged in full (`docs/checks.md`,
-     「The static check」). A sibling whose tree as it stands does not compile still fails the gate,
+     「The static check」). A declared step that only repeats these formatting and lints, such as a
+     `cargo fmt --all --check` that would follow a path dependency into a sibling's checkout, is left
+     out for them. A sibling whose tree as it stands does not compile still fails the gate,
      since the repository's crates that depend on it cannot be checked, and the release build, which
      reads the same tree (「The releases」), would fail on it as well.
    - **A major change runs its consumer's suites as well.** The major of the commit's `VERSION` is
@@ -308,7 +310,8 @@
   with when it began.
 - **Each heavy step is written as it begins and as it ends,** with its exit code, how long it waited
   for its turn and how long it ran, under the stage it ended in. Steps are named by their declared
-  English ids.
+  English ids. A declared step the static check left out as repeating the Cargo workspace check is
+  written as passed, exit 0 with no wait and no run (`docs/checks.md`, 「The static check」).
 - **It ends with an outcome:** `live`, `rolled-back`, `failed`, or `stopped` where nothing went live by
   the run's own judgement, with the reason beside it.
 - **A run that dies leaves the record unended.** Its process gone, a reader takes it as cut off; the

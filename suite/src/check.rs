@@ -74,6 +74,7 @@ fn plain(dir: &str, command: Vec<String>, env: Vec<(String, String)>) -> CheckSt
     env,
     lane: None,
     retry_out_of_memory: false,
+    covered_by: None,
   }
 }
 
