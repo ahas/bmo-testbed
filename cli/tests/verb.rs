@@ -6,7 +6,10 @@ use std::path::Path;
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::queue::{LockWait, take_lock};
-use bmo_testbed_core::turn::{Lane, NOT_RUN_EXIT_CODE, lane_width, machine_threads, process_env};
+use bmo_testbed_core::turn::{
+  Env, Lane, NOT_RUN_EXIT_CODE, SEAT_FREE_VARIABLE, SEATS_VARIABLE, TurnAsk, lane_width, machine_threads,
+  process_env, take_turn,
+};
 
 use crate::stand::{Ran, checkout, ran, testbed};
 
@@ -96,6 +99,55 @@ fn the_status_says_who_holds_the_turn_and_nothing_runs_where_the_turn_does_not_c
   assert_eq!(lines(&run_in(dir.path(), &["status"]).out), lanes(&[waiting]));
 
   drop(holder);
+}
+
+// "a holding it: line for each seat held, naming its holder", and in JSON `holders`, one for each seat held,
+// with `holder` the first of them
+#[test]
+fn the_status_names_the_holder_of_each_seat_held() {
+  let dir = tempfile::tempdir().unwrap();
+  let seat = |command: &str| {
+    take_turn(&TurnAsk {
+      command: command.to_owned(),
+      lane: Lane::Wide,
+      say: &|_| {},
+      path: Some(dir.path().join("testbed.lock")),
+      env: Env::from([
+        (SEATS_VARIABLE.to_owned(), "2".to_owned()),
+        (SEAT_FREE_VARIABLE.to_owned(), "0".to_owned()),
+      ]),
+      checkout: "/repo".to_owned(),
+      poll: None,
+      notice_seconds: None,
+    })
+  };
+  let (first, second) = (seat("a check"), seat("a build"));
+
+  assert!(first.had() && second.had());
+
+  let out = run_in(dir.path(), &["status"]).out;
+  let holding = |command: &str| {
+    let who = ["/repo", command].join(&LANES.entry.joiner);
+
+    fill_marks(&LANES.status.holding, &[("who", &who)])
+  };
+  let wide: Vec<&str> = out.lines().skip(1).take(2).collect();
+
+  assert!(wide[0].starts_with(&holding("a check")), "{out}");
+  assert!(wide[1].starts_with(&holding("a build")), "{out}");
+
+  let json: serde_json::Value =
+    serde_json::from_str(&run_in(dir.path(), &["status", "--json"]).out).expect("the status reads as JSON");
+  let lane = &json["queues"]["items"][0];
+  let commands: Vec<&str> = lane["holders"]
+    .as_array()
+    .unwrap()
+    .iter()
+    .map(|one| one["command"].as_str().unwrap())
+    .collect();
+
+  assert_eq!(commands, ["a check", "a build"]);
+  assert_eq!(lane["holder"], lane["holders"][0]);
 }
 
 // "prints the close line of the repository it is run in, and none outside one"

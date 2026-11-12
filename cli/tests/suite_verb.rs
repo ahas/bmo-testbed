@@ -12,7 +12,9 @@ use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::policy::suite::SUITE;
 use bmo_testbed_core::queue::{LockWait, take_lock};
-use bmo_testbed_core::turn::{Env, Lane, NOT_RUN_EXIT_CODE, TurnAsk, take_turn};
+use bmo_testbed_core::turn::{
+  Env, FRONT_VARIABLE, Lane, NOT_RUN_EXIT_CODE, SEATS_VARIABLE, TurnAsk, take_turn,
+};
 use bmo_testbed_record::Record;
 
 use crate::stand::{Ran, checkout, finished, testbed, until};
@@ -41,12 +43,13 @@ fn repository(dir: &Path) -> PathBuf {
 }
 
 // A run of the suite in a process group of its own, on the test's own turn file, standing where no service
-// manager can be reached; with a probe directory where the probe file is to report to.
+// manager can be reached; with a probe directory where the probe file is to report to, in a wide lane of one
+// seat, so probed runs take the lane one at a time.
 fn suite_run(repo: &Path, data: &Path, args: &[&str], probe: Option<&Path>) -> Child {
   let mut command = testbed(repo, data, &[&["suite"][..], args].concat());
 
   if let Some(probe) = probe {
-    command.env("SUITE_TURN_PROBE", probe);
+    command.env("SUITE_TURN_PROBE", probe).env(SEATS_VARIABLE, "1");
   }
 
   std::os::unix::process::CommandExt::process_group(&mut command, 0);
@@ -165,7 +168,7 @@ fn a_run_of_the_suite_waits_for_the_turn_another_run_holds() {
 }
 
 // "a run whose harness goes away before its turn comes runs nothing and says it was not run": one command
-// holds the machine, and the run waits behind it until its harness is gone.
+// holds every seat of the machine, and the run waits behind it until its harness is gone.
 #[test]
 fn a_run_whose_turn_does_not_come_runs_nothing() {
   let dir = tempfile::tempdir().unwrap();
@@ -176,7 +179,10 @@ fn a_run_whose_turn_does_not_come_runs_nothing() {
     lane: Lane::Wide,
     say: &|_| {},
     path: Some(lock.clone()),
-    env: Env::from([("BMO_TESTBED_SCOPE".to_owned(), "place-3".to_owned())]),
+    env: Env::from([
+      ("BMO_TESTBED_SCOPE".to_owned(), "place-3".to_owned()),
+      (FRONT_VARIABLE.to_owned(), "1".to_owned()),
+    ]),
     checkout: "/checkout".to_owned(),
     poll: None,
     notice_seconds: None,
@@ -208,10 +214,11 @@ fn a_run_whose_turn_does_not_come_runs_nothing() {
   );
 }
 
-// "two runs started at once run one after the other": the second starts its tests only once the first has
-// ended. The probe file holds each run open until the test lets it go.
+// "the first unseated ticket takes any free seat": in a wide lane of one seat, two runs started at once run
+// one after the other, the second starting its tests only once the first has ended. The probe file holds each
+// run open until the test lets it go.
 #[test]
-fn two_runs_started_at_once_run_one_after_the_other() {
+fn two_runs_started_at_once_in_one_seat_run_one_after_the_other() {
   let dir = tempfile::tempdir().unwrap();
   let repo = repository(dir.path());
   let lock = dir.path().join("testbed.lock");

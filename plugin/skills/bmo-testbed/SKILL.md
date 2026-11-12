@@ -5,10 +5,11 @@ description: Run heavy test and build commands through a machine's one queue wit
 
 # bmo-testbed
 
-A testbed holds one machine's heavy commands in line: two lanes, the wide one running one command on the
-machine's whole width and the narrow one beside it on a quarter of it, so two suites never run each other
-out of memory. Every heavy command started through it waits its turn, runs alone in its lane, and leaves
-a test run in the testbed's record: its counts, its log and its state. The `bmo-testbed` MCP server runs
+A testbed holds one machine's heavy commands in line: two lanes, the wide one of a few seats sharing the
+machine's width and the narrow one beside it, one seat on a quarter of it, a further seat taken only while
+the machine has memory to spare. Every heavy command started through it waits its turn, runs in its seat
+on its share of the threads, a deployment holding every seat, and leaves a test run in the testbed's
+record: its counts, its log and its state. The `bmo-testbed` MCP server runs
 commands through that queue and reads the record back.
 
 ## Starting the server
@@ -58,8 +59,9 @@ Both answer a command run as `testbed_run` does; the suite's `testRunId` reads b
 
 ## Seeing the machine
 
-- `testbed_queues` shows each lane: its `width`, its `holder` and who is `waiting`, in the order they will
-  be served, with `front` and `next` marking those who stand ahead of the ordinary line.
+- `testbed_queues` shows each lane: its `width`, its `holders`, one for each seat held, and who is
+  `waiting`, in the order they will be served, with `front` and `next` marking those who stand ahead of
+  the ordinary line.
 - `testbed_test_runs` pages the test runs, newest first; `checkout` narrows them to one checkout, and the
   `id` of the last one is the `after` of the next page while `more` is true.
 - `testbed_deployments` and `testbed_deployment` read the deployments the testbed ran: their `state`, each

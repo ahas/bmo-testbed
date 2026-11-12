@@ -455,7 +455,7 @@
         "type": "object"
       },
       "Queue": {
-        "description": "One lane's line: who holds its turn and who waits behind, in the order they will be served.",
+        "description": "One lane's line: who holds its seats and who waits behind, in the order they will be served.",
         "properties": {
           "holder": {
             "anyOf": [
@@ -465,7 +465,16 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "The first of `holders`, or null where no seat is held."
+          },
+          "holders": {
+            "default": [],
+            "description": "Each seat's holder, one for each seat held, in the seats' order.",
+            "items": {
+              "$ref": "#/components/schemas/QueueEntry"
+            },
+            "type": "array"
           },
           "name": {
             "$ref": "#/components/schemas/LaneName"
@@ -477,7 +486,7 @@
             "type": "array"
           },
           "width": {
-            "description": "How many threads its holder runs on.",
+            "description": "The lane's whole width in threads, which a holder of every seat runs on; a holder of one seat runs on\nits share.",
             "format": "int64",
             "type": "integer"
           }
@@ -485,6 +494,7 @@
         "required": [
           "name",
           "width",
+          "holders",
           "holder",
           "waiting"
         ],
@@ -862,7 +872,7 @@
   "info": {
     "description": "One machine's testbed shared by every checkout on it: the queue heavy commands wait in, whole-suite runs with change selection, quick static checks, and release-based deployments. The HTTP service only reads, from the record every verb writes and the lanes as they stand; running anything is the command line's, and the MCP server wraps those commands where the harness runs. Times are integers of epoch milliseconds, and every failure is answered in the error shape with its status.",
     "title": "bmo-testbed",
-    "version": "0.1.0-rev.12"
+    "version": "0.1.0-rev.13"
   },
   "openapi": "3.1.0",
   "paths": {

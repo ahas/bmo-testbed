@@ -13,7 +13,7 @@ use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::static_check::STATIC_CHECK;
 use bmo_testbed_core::silence::{Output, Silence, Watch};
 use bmo_testbed_core::turn::{
-  Lane, NOT_RUN_EXIT_CODE, TURN_TIMES_VARIABLE, process_env, read_turn_times, times_words,
+  Lane, NOT_RUN_EXIT_CODE, TURN_TIMES_VARIABLE, TestbedTurn, process_env, read_turn_times, times_words,
 };
 
 use crate::cargo::cargo_verb_line;
@@ -473,7 +473,8 @@ pub fn spawn_step(root: &Path, step: &CheckStep) -> TimedRun {
 
   timed(|times| {
     let mut output = String::new();
-    let mut start = |held: Option<(&'static str, String)>| {
+    let mut start = |turn: &TestbedTurn| {
+      let held = turn.held_variable();
       let (end, said) = output_of(&step.command, &cwd, &step.env, times, held, Some(Silence::default()));
 
       output.push_str(&said);

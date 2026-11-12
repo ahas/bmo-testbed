@@ -89,13 +89,18 @@ pub enum LaneName {
   Narrow,
 }
 
-/// One lane's line: who holds its turn and who waits behind, in the order they will be served.
+/// One lane's line: who holds its seats and who waits behind, in the order they will be served.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Queue {
   pub name: LaneName,
-  /// How many threads its holder runs on.
+  /// The lane's whole width in threads, which a holder of every seat runs on; a holder of one seat runs on
+  /// its share.
   pub width: i64,
+  /// Each seat's holder, one for each seat held, in the seats' order.
+  #[serde(default)]
+  pub holders: Vec<QueueEntry>,
+  /// The first of `holders`, or null where no seat is held.
   pub holder: Option<QueueEntry>,
   pub waiting: Vec<QueueEntry>,
 }

@@ -1,5 +1,5 @@
 //! The two lanes as they stand, as the queue page answers them, and the watch that writes a
-//! `queue.changed` event where a lane's holder or line differs from its last reading.
+//! `queue.changed` event where a lane's holders or line differs from its last reading.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -30,6 +30,7 @@ fn entry(entry: &TurnEntry) -> QueueEntry {
 /// One lane as it stands now.
 pub fn queue_of(lane: Lane, env: &Env) -> Queue {
   let line = read_queue(&lock_path(env, lane));
+  let holders: Vec<QueueEntry> = line.holders.iter().map(entry).collect();
 
   Queue {
     name: match lane {
@@ -37,7 +38,8 @@ pub fn queue_of(lane: Lane, env: &Env) -> Queue {
       Lane::Narrow => LaneName::Narrow,
     },
     width: lane_width(lane, env, machine_threads()) as i64,
-    holder: line.holder.as_ref().map(entry),
+    holder: holders.first().cloned(),
+    holders,
     waiting: line.waiting.iter().map(entry).collect(),
   }
 }

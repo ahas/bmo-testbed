@@ -20,6 +20,10 @@ failure_lines = 60
 log_keep_days = 7
 # The narrow lane's width: the machine's width divided by this, never less than one.
 narrow_divisor = 4
+# The wide lane's seats, and the gigabytes of memory that have to be available before a seat is taken
+# beside one already held (docs/testbed.md, 「The lanes」 and 「Memory」).
+seats = 3
+seat_free_gigabytes = 4
 # How long a command holding a turn may write nothing before it is ended as hung, how long it is given to end
 # once sent a TERM before whatever still stands is sent a KILL, and how often its output is looked at
 # (docs/testbed.md, 「A holder whose command falls silent lets go」).
@@ -43,8 +47,10 @@ runs = 4
 # it, and {holder} one of `nobody` or `held_by`.
 line = "testbed: {command} waiting for {lane} ({seconds}s so far): {ahead} ahead, {holder}"
 nobody = "nobody holding it yet"
-# Who holds the turn, {who} as `entry` names it.
+# Who holds the lane's seats, {who} each holder as `entry` names it, once however many seats it holds,
+# joined by `between`.
 held_by = "held by {who}"
+between = "; "
 
 # Where an entry stands: its harness's place, its checkout and its command joined by `joiner`, or `pid` where
 # it names none of them.

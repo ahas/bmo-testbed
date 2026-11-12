@@ -9,6 +9,10 @@
 //! by when it was stood and ends with the process standing it; a front ticket's name opens with a mark
 //! sorting ahead of every time, and a next ticket's with one sorting behind the front's and ahead of every
 //! time. A ticket's file holds the name its taker stands under.
+//!
+//! A lane of several seats is several such locks sharing the first one's queue (docs/testbed.md, 「The
+//! turn」). A taker that has its seat marks its ticket seated, a line of its own under the name, and a seated
+//! ticket stands ahead of nobody taking a seat: only the first unseated ticket goes for one.
 
 use std::fs::{File, OpenOptions};
 use std::os::fd::AsRawFd;
@@ -20,6 +24,7 @@ use crate::policy::lanes::LANES;
 
 const FRONT_MARK: &str = "0-";
 const NEXT_MARK: &str = "0.";
+const SEATED_MARK: &str = "seated";
 
 static TICKETS: AtomicU64 = AtomicU64::new(0);
 
@@ -85,6 +90,8 @@ pub struct QueueTicket {
   pub holder: String,
   pub front: bool,
   pub next: bool,
+  /// It has taken its seat of a lane.
+  pub seated: bool,
 }
 
 fn sorted_names(queue: &Path) -> Option<Vec<String>> {
@@ -101,6 +108,10 @@ fn ticket_lines(queue: &Path, name: &str) -> Option<Vec<String>> {
   std::fs::read_to_string(queue.join(name))
     .ok()
     .map(|text| text.split('\n').map(str::to_owned).collect())
+}
+
+fn seated(lines: &[String]) -> bool {
+  lines.get(1).is_some_and(|line| line == SEATED_MARK)
 }
 
 /// The living tickets of a lock's queue, in the order they stand: the holder's among them while the lock
@@ -125,14 +136,16 @@ pub fn queue_tickets(path: &Path) -> Vec<QueueTicket> {
         holder: lines.first().cloned().unwrap_or_default(),
         front: name.starts_with(FRONT_MARK),
         next: name.starts_with(NEXT_MARK),
+        seated: seated(&lines),
       })
     })
     .collect()
 }
 
 // The living ticket standing ahead of this one, as the name it was stood under (empty where its taker
-// gave none), or none where none stands ahead. A ticket whose process is gone is taken away.
-fn ticket_ahead(queue: &Path, ticket: &str) -> Option<String> {
+// gave none), or none where none stands ahead; a seated ticket is passed over where `pass_seated` says so.
+// A ticket whose process is gone is taken away.
+fn ticket_ahead(queue: &Path, ticket: &str, pass_seated: bool) -> Option<String> {
   for name in sorted_names(queue)? {
     if name.as_str() >= ticket {
       return None;
@@ -145,6 +158,10 @@ fn ticket_ahead(queue: &Path, ticket: &str) -> Option<String> {
 
     // Let go between the listing and the read: the next look finds the queue as it now is.
     let Some(lines) = ticket_lines(queue, &name) else { return Some(String::new()) };
+
+    if pass_seated && seated(&lines) {
+      continue;
+    }
 
     return Some(lines.first().cloned().unwrap_or_default());
   }
@@ -209,7 +226,7 @@ pub fn take_lock(path: &Path, wait_seconds: f64, mut wait: LockWait<'_>) -> Opti
   // waiting on it: a taker blocked inside flock would be handed the lock by the kernel over a ticket stood
   // ahead of it meanwhile.
   loop {
-    let ahead = ticket_ahead(&queue, &ticket);
+    let ahead = ticket_ahead(&queue, &ticket, false);
 
     if ahead.is_none()
       && let Some(file) = try_flock(path)
@@ -223,6 +240,127 @@ pub fn take_lock(path: &Path, wait_seconds: f64, mut wait: LockWait<'_>) -> Opti
     if now_ms() >= deadline {
       let named = ahead.as_deref().filter(|name| !name.is_empty());
       let later = wait.wait_on.as_mut().and_then(|wait_on| wait_on(named));
+
+      match later {
+        Some(later) if later > now_ms() => deadline = later,
+        _ => {
+          let _ = std::fs::remove_file(&ticket_path);
+
+          return None;
+        }
+      }
+    }
+
+    let left = Duration::from_millis((deadline - now_ms()).max(0) as u64);
+
+    std::thread::sleep(poll.min(left).max(Duration::from_millis(1)));
+  }
+}
+
+/// How a taker waits for a lane's seats.
+pub struct SeatWait<'a> {
+  /// The name it stands under, how it waits, its rank and how often it looks, as for one lock.
+  pub lock: LockWait<'a>,
+  /// Every seat of the lane rather than one.
+  pub every: bool,
+  /// Asked before one seat is taken while another may be held: whether the machine can take one more.
+  pub spare: &'a dyn Fn() -> bool,
+}
+
+/// A lane's seats as their taker holds them, let go when this is dropped: the ticket taken away and each
+/// seat's descriptor closed.
+pub struct HeldSeats {
+  files: Vec<(usize, File)>,
+  ticket: PathBuf,
+}
+
+impl HeldSeats {
+  /// The seats held, by their place among the lane's, in order.
+  pub fn seats(&self) -> Vec<usize> {
+    let mut seats: Vec<usize> = self.files.iter().map(|(at, _)| *at).collect();
+
+    seats.sort_unstable();
+    seats
+  }
+}
+
+impl Drop for HeldSeats {
+  fn drop(&mut self) {
+    let _ = std::fs::remove_file(&self.ticket);
+  }
+}
+
+// One free seat for the first unseated taker: any where the machine can take one more, and otherwise one only
+// where no seat of the lane is held at all, which every seat taken at once shows.
+fn take_one_seat(seats: &[PathBuf], spare: &dyn Fn() -> bool) -> Option<(usize, File)> {
+  if spare() {
+    return seats.iter().enumerate().find_map(|(at, seat)| try_flock(seat).map(|file| (at, file)));
+  }
+
+  let mut every: Vec<File> = seats.iter().map_while(|seat| try_flock(seat)).collect();
+
+  (every.len() == seats.len()).then(|| (0, every.swap_remove(0)))
+}
+
+// The ticket marked seated, a line under its name, so the takers behind it no longer wait on it.
+fn mark_seated(ticket: &Path) {
+  let file = OpenOptions::new().append(true).open(ticket);
+  let _ =
+    file.and_then(|mut file| std::io::Write::write_all(&mut file, format!("\n{SEATED_MARK}").as_bytes()));
+}
+
+/// A lane's seats, the first of them the lane's queue's lock: one, or every one, or none where they could not
+/// be had within the wait. Only the first unseated ticket takes a seat; a taker of every seat keeps each seat
+/// it takes until it holds them all, and stays unseated until then, so nobody behind it takes one meanwhile.
+pub fn take_seats(seats: &[PathBuf], wait_seconds: f64, mut wait: SeatWait<'_>) -> Option<HeldSeats> {
+  for seat in seats {
+    let _ = OpenOptions::new().append(true).create(true).open(seat);
+  }
+
+  let queue = queue_dir_of(seats.first()?);
+  let _ = std::fs::create_dir_all(&queue);
+  let ticket = ticket_name(wait.lock.rank);
+  let ticket_path = queue.join(&ticket);
+  let poll = wait.lock.poll.unwrap_or(Duration::from_millis(LANES.numbers.poll_milliseconds));
+  let mut deadline = now_ms() + (wait_seconds.max(0.0) * 1000.0) as i64;
+  let mut held: Vec<(usize, File)> = Vec::new();
+
+  let _ = std::fs::write(&ticket_path, &wait.lock.holder);
+
+  // As for one lock, a seat is only ever tried without waiting on it, so the kernel never hands one to a
+  // taker over a ticket stood ahead of it meanwhile.
+  loop {
+    let ahead = ticket_ahead(&queue, &ticket, true);
+
+    if ahead.is_none() {
+      if wait.every {
+        for (at, seat) in seats.iter().enumerate() {
+          if !held.iter().any(|(one, _)| *one == at)
+            && let Some(file) = try_flock(seat)
+          {
+            held.push((at, file));
+          }
+        }
+      } else if let Some(one) = take_one_seat(seats, wait.spare) {
+        held.push(one);
+      }
+
+      if held.len() == if wait.every { seats.len() } else { 1 } {
+        mark_seated(&ticket_path);
+
+        return Some(HeldSeats {
+          files: held,
+          ticket: ticket_path,
+        });
+      }
+    } else {
+      // A ticket stood ahead meanwhile, at the front, waits for the seats this one has gathered so far.
+      held.clear();
+    }
+
+    if now_ms() >= deadline {
+      let named = ahead.as_deref().filter(|name| !name.is_empty());
+      let later = wait.lock.wait_on.as_mut().and_then(|wait_on| wait_on(named));
 
       match later {
         Some(later) if later > now_ms() => deadline = later,

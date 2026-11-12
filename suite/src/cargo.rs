@@ -4,18 +4,19 @@
 //! wrapper, on the account's own toolchain, and — where it compiles — in the machine's turn behind the other
 //! heavy commands on this machine, run again where the kernel killed it for want of memory, and ended as hung
 //! where its standard output and error are both files and nothing is written to them for the silence limit.
-//! Formatting and the other reading verbs compile nothing and run at once. A build that passed removes, inside
-//! the same turn, what the checkout's earlier build of its shape left.
+//! Formatting and the other reading verbs compile nothing and run at once. A compiling command is handed its
+//! turn's share of the lane's width as its jobs, unless its words or its environment name them. A build that
+//! passed removes, inside the same turn, what the checkout's earlier build of its shape left.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-use bmo_testbed_core::languages::cargo_compiles as compiles;
+use bmo_testbed_core::languages::{Cargo, Language as _, cargo_compiles as compiles};
 use bmo_testbed_core::memory::{MachineHands, MemoryLimits, RunEnd, run_in_turn};
 use bmo_testbed_core::policy::fill_shown;
 use bmo_testbed_core::policy::suite::SUITE;
 use bmo_testbed_core::silence::{Output, Silence, Watch};
-use bmo_testbed_core::turn::{Env, Lane, process_env};
+use bmo_testbed_core::turn::{Env, Lane, TestbedTurn, lane_width, machine_threads, process_env};
 
 use crate::crates::{
   cargo_environment, cargo_program, checkout_target_dir, on_path, put_in_place, set_by_cargo,
@@ -167,12 +168,25 @@ pub fn run_cargo(root: &Path, args: &[String]) -> u8 {
     .chain(args.iter().map(String::as_str))
     .collect::<Vec<_>>()
     .join(" ");
-  let mut start = |held: Option<(&'static str, String)>| {
+  let env: Env = process_env();
+  let start = |turn: Option<&TestbedTurn>| {
     let output = if compiling { Output::own() } else { Output::Files(Vec::new()) };
     let watch = Watch::new(output, Silence::default());
     let mut command = invocation.command(root);
+    // The turn's share of the lane, as Cargo's jobs, where neither the words nor a caller already name them.
+    let widened = turn
+      .filter(|_| !env.contains_key("CARGO_BUILD_JOBS") && invocation.named("CARGO_BUILD_JOBS").is_none())
+      .map(|turn| {
+        let width = turn.width(lane_width(Lane::Wide, &env, machine_threads()));
 
-    command.envs(held).envs(watch.variable());
+        Cargo.widen(&invocation.command, width).env
+      })
+      .unwrap_or_default();
+
+    command
+      .envs(turn.and_then(TestbedTurn::held_variable))
+      .envs(widened)
+      .envs(watch.variable());
 
     match command.spawn() {
       Ok(mut child) => {
@@ -202,13 +216,13 @@ pub fn run_cargo(root: &Path, args: &[String]) -> u8 {
     return start(None).exit_code();
   }
 
-  let env: Env = process_env();
+  let mut start_in = |turn: &TestbedTurn| start(Some(turn));
   let mut hands = MachineHands::new(
     format!("cargo {}", args[0]),
     Lane::Wide,
     root.to_string_lossy().into_owned(),
-    env,
-    &mut start,
+    env.clone(),
+    &mut start_in,
   );
 
   run_in_turn(&mut hands, &MemoryLimits::default(), &mut || {

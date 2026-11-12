@@ -1,16 +1,22 @@
 //! The machine's turn (docs/testbed.md, 「The turn」): the queue hands a lock out in the order its takers
 //! asked, the front ahead of everyone and the next behind the front, a waiter waiting until the lock is let
-//! go, and a command inside a turn its caller holds running at once.
+//! go, and a command inside a turn its caller holds running at once; a lane's seats handed out from its one
+//! queue, a taker of every seat holding them all, and a seat beside a held one only while memory is spare.
 
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::process::{Child, Command, Stdio};
+use std::sync::mpsc;
+use std::thread::JoinHandle;
+use std::time::{Duration, Instant};
 
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
-use bmo_testbed_core::queue::{LockWait, Rank, now_ms, queue_tickets, take_lock};
+use bmo_testbed_core::queue::{
+  LockWait, Rank, SeatWait, WaitOn, now_ms, queue_tickets, take_lock, take_seats,
+};
 use bmo_testbed_core::turn::{
-  Env, HELD_VARIABLE, Lane, TestbedTurn, TurnAsk, TurnEntry, inside_held_turn, lane_width, lock_path,
-  read_queue, take_turn,
+  Env, FRONT_VARIABLE, HELD_VARIABLE, Lane, SEAT_FREE_VARIABLE, SEATS_VARIABLE, Seats, TestbedTurn,
+  TurnAsk, TurnEntry, inside_held_turn, lane_width, lock_path, read_queue, seat_paths, take_turn,
 };
 
 fn lock_in(dir: &Path) -> PathBuf {
@@ -128,7 +134,7 @@ fn a_turn_held_writes_its_record_and_a_command_under_it_runs_inside() {
   let env = Env::from([("BMO_TESTBED_SCOPE".to_owned(), "/scopes/scope-3/".to_owned())]);
   let turn = take_turn(&ask(&lock, env));
   let (name, pid) = turn.held_variable().expect("an own turn hands its children its mark");
-  let holder = read_queue(&lock).holder.expect("the holder writes its record");
+  let holder = read_queue(&lock).holder().cloned().expect("the holder writes its record");
 
   assert_eq!(name, HELD_VARIABLE);
   assert_eq!(
@@ -138,12 +144,12 @@ fn a_turn_held_writes_its_record_and_a_command_under_it_runs_inside() {
   assert!(inside_held_turn(&lock, &Env::from([(HELD_VARIABLE.to_owned(), pid.clone())])));
   assert!(matches!(
     take_turn(&ask(&lock, Env::from([(HELD_VARIABLE.to_owned(), pid)]))),
-    TestbedTurn::Inside
+    TestbedTurn::Inside { .. }
   ));
 
   drop(turn);
 
-  assert!(read_queue(&lock).holder.is_none());
+  assert!(read_queue(&lock).holder().is_none());
 }
 
 // A harness's process that has ended, so a waiter running for it leaves the line.
@@ -159,8 +165,12 @@ fn gone_harness() -> String {
 fn a_turn_not_had_because_its_harness_went_away_says_who_holds_it() {
   let dir = tempfile::tempdir().unwrap();
   let lock = lock_in(dir.path());
-  let first = take_turn(&ask(&lock, Env::from([("BMO_TESTBED_SCOPE".to_owned(), "place-3".to_owned())])));
-  let second = take_turn(&ask(&lock, Env::from([("CLAUDE_PID".to_owned(), gone_harness())])));
+  let one_seat = (SEATS_VARIABLE.to_owned(), "1".to_owned());
+  let first = take_turn(&ask(
+    &lock,
+    Env::from([("BMO_TESTBED_SCOPE".to_owned(), "place-3".to_owned()), one_seat.clone()]),
+  ));
+  let second = take_turn(&ask(&lock, Env::from([("CLAUDE_PID".to_owned(), gone_harness()), one_seat])));
   let holder = TurnEntry {
     scope: Some("place-3".to_owned()),
     checkout: "/checkout".to_owned(),
@@ -187,4 +197,256 @@ fn the_narrow_lane_s_width_is_the_machine_s_over_the_policy_s_divisor_and_never_
   assert_eq!(lane_width(Lane::Wide, &env, 32), 32);
   assert_eq!(lane_width(Lane::Narrow, &env, 32), 32 / divisor);
   assert_eq!(lane_width(Lane::Narrow, &env, 1), 1);
+}
+
+// The variables of a wide lane of `seats` seats whose memory gate asks for `free` gigabytes.
+fn seated(seats: usize, free: u64) -> Env {
+  Env::from([
+    (SEATS_VARIABLE.to_owned(), seats.to_string()),
+    (SEAT_FREE_VARIABLE.to_owned(), free.to_string()),
+  ])
+}
+
+// A turn asked for on a thread of its own, answered once it is had.
+fn aside(lock: &Path, env: Env) -> JoinHandle<TestbedTurn> {
+  let lock = lock.to_path_buf();
+
+  std::thread::spawn(move || take_turn(&ask(&lock, env)))
+}
+
+fn until(what: &str, holds: impl Fn() -> bool) {
+  let began = Instant::now();
+
+  while !holds() {
+    assert!(began.elapsed() < Duration::from_secs(10), "waited too long for {what}");
+    std::thread::sleep(Duration::from_millis(5));
+  }
+}
+
+// Long enough for a waiter that could take a seat to have taken it.
+fn a_while() {
+  std::thread::sleep(Duration::from_millis(200));
+}
+
+// "a command takes one seat": with two seats, two takers hold one each at once, each on half the width, and a
+// third waits until one lets go
+#[test]
+fn two_takers_hold_a_seat_each_at_once_and_a_third_waits_until_one_lets_go() {
+  let dir = tempfile::tempdir().unwrap();
+  let lock = lock_in(dir.path());
+  let first = take_turn(&ask(&lock, seated(2, 0)));
+  let second = take_turn(&ask(&lock, seated(2, 0)));
+
+  assert!(first.had() && second.had());
+  assert_eq!(read_queue(&lock).holders.len(), 2);
+  assert_eq!((first.width(24), second.width(24)), (12, 12));
+
+  let third = aside(&lock, seated(2, 0));
+
+  a_while();
+  assert!(!third.is_finished());
+
+  drop(first);
+
+  assert!(third.join().unwrap().had());
+  drop(second);
+}
+
+fn spare() -> bool {
+  true
+}
+
+fn seat_wait<'a>(holder: &str, wait_on: Option<WaitOn<'a>>) -> SeatWait<'a> {
+  SeatWait {
+    lock: LockWait {
+      holder: holder.to_owned(),
+      wait_on,
+      poll: Some(Duration::from_millis(5)),
+      ..LockWait::default()
+    },
+    every: false,
+    spare: &spare,
+  }
+}
+
+// "only the first ticket not yet seated may take a seat": a seated ticket stands ahead of nobody, and the
+// unseated ones behind it take the seats as they free in the order they asked
+#[test]
+fn a_seated_ticket_stands_ahead_of_nobody_and_the_unseated_ones_keep_their_order() {
+  let dir = tempfile::tempdir().unwrap();
+  let lock = lock_in(dir.path());
+  let seats = seat_paths(&lock, 2);
+  let first = take_seats(&seats, 1.0, seat_wait("first", None)).expect("a free seat is had");
+  let second = take_seats(&seats, 0.05, seat_wait("second", None)).expect("a seated ticket blocks nobody");
+  let (told, taken) = mpsc::channel::<String>();
+  let waiter = |name: &'static str| {
+    let (seats, told) = (seats.clone(), told.clone());
+
+    std::thread::spawn(move || {
+      let mut wait_on = |_: Option<&str>| -> Option<i64> { Some(now_ms() + 10) };
+      let held = take_seats(&seats, 0.01, seat_wait(name, Some(&mut wait_on)));
+
+      told.send(name.to_owned()).unwrap();
+      held
+    })
+  };
+  let third = waiter("third");
+
+  until("the third ticket", || queue_tickets(&lock).len() == 3);
+
+  let fourth = waiter("fourth");
+
+  until("the fourth ticket", || queue_tickets(&lock).len() == 4);
+  assert_eq!(
+    queue_tickets(&lock).iter().map(|one| one.seated).collect::<Vec<_>>(),
+    [true, true, false, false]
+  );
+
+  drop(first);
+
+  assert_eq!(taken.recv_timeout(Duration::from_secs(10)).unwrap(), "third");
+  a_while();
+  assert!(taken.try_recv().is_err(), "the fourth waits while both seats are held");
+
+  drop(second);
+
+  assert_eq!(taken.recv_timeout(Duration::from_secs(10)).unwrap(), "fourth");
+  assert!(third.join().unwrap().is_some() && fourth.join().unwrap().is_some());
+}
+
+// "a deployment takes every seat of the lane": standing first it waits for every seat, holds them all on the
+// whole width, and nobody behind it takes one until it lets go
+#[test]
+fn a_taker_at_the_front_waits_for_every_seat_and_holds_them_all_until_it_lets_go() {
+  let dir = tempfile::tempdir().unwrap();
+  let lock = lock_in(dir.path());
+  let held = take_turn(&ask(&lock, seated(2, 0)));
+  let mut at_front = seated(2, 0);
+
+  at_front.insert(FRONT_VARIABLE.to_owned(), "1".to_owned());
+
+  let front = aside(&lock, at_front);
+
+  until("the front ticket", || queue_tickets(&lock).iter().any(|one| one.front));
+
+  let behind = aside(&lock, seated(2, 0));
+
+  until("the ticket behind it", || queue_tickets(&lock).len() == 3);
+  a_while();
+  assert!(!front.is_finished() && !behind.is_finished());
+
+  drop(held);
+
+  let front = front.join().unwrap();
+
+  assert!(front.had());
+  assert_eq!(read_queue(&lock).holders.len(), 2);
+  assert_eq!(front.width(24), 24);
+  a_while();
+  assert!(!behind.is_finished());
+
+  drop(front);
+
+  assert!(behind.join().unwrap().had());
+}
+
+// "a seat beside a held one is taken only while the machine has memory to spare ... or where no seat of the
+// lane is held at all"
+#[test]
+fn short_of_memory_a_seat_is_taken_only_where_no_seat_is_held() {
+  let dir = tempfile::tempdir().unwrap();
+  let lock = lock_in(dir.path());
+  let short = seated(2, 1_000_000);
+  let lone = take_turn(&ask(&lock, short.clone()));
+
+  assert!(lone.had(), "a lone command always runs");
+
+  let next = aside(&lock, short);
+
+  a_while();
+  assert!(!next.is_finished(), "the free seat waits for memory");
+
+  drop(lone);
+
+  assert!(next.join().unwrap().had());
+}
+
+// "a command that finds that number holding any seat of its lane takes the turn as its own, in the holder's
+// seats", however full the line is: here a taker at the front waits for the seat it holds
+#[test]
+fn a_command_inside_a_held_seat_runs_at_once_on_its_holder_s_share() {
+  let dir = tempfile::tempdir().unwrap();
+  let lock = lock_in(dir.path());
+  let holder = take_turn(&ask(&lock, seated(2, 0)));
+  let mut at_front = seated(2, 0);
+
+  at_front.insert(FRONT_VARIABLE.to_owned(), "1".to_owned());
+
+  let waiter = aside(&lock, at_front);
+
+  until("the waiter's ticket", || queue_tickets(&lock).len() == 2);
+
+  let (_, pid) = holder.held_variable().unwrap();
+  let mut under = seated(2, 0);
+
+  under.insert(HELD_VARIABLE.to_owned(), pid);
+
+  let inside = take_turn(&ask(&lock, under));
+
+  assert!(matches!(
+    inside,
+    TestbedTurn::Inside {
+      seats: Seats { held: 1, of: 2 }
+    }
+  ));
+  assert_eq!(inside.width(24), 12);
+
+  drop(holder);
+  assert!(waiter.join().unwrap().had());
+}
+
+const HOLD: &str = "BMO_TESTBED_TURN_TEST_HOLD";
+
+// The stand-in a run of this binary plays where the test that started it names a lock: it holds the lane's
+// one seat until it is killed. Every other run passes over it.
+#[test]
+fn seat_holder_stand_in() {
+  let Ok(lock) = std::env::var(HOLD) else { return };
+
+  let held = take_turn(&ask(Path::new(&lock), seated(1, 0)));
+
+  assert!(held.had());
+  std::thread::sleep(Duration::from_secs(60));
+  drop(held);
+}
+
+fn holding_process(lock: &Path) -> Child {
+  Command::new(std::env::current_exe().unwrap())
+    .args(["--exact", "turn::seat_holder_stand_in", "--nocapture", "--test-threads", "1"])
+    .env(HOLD, lock)
+    .stdout(Stdio::null())
+    .stderr(Stdio::null())
+    .spawn()
+    .unwrap()
+}
+
+// "a holder process that dies lets its seats go with it ... and the next in line takes it"
+#[test]
+fn a_seat_whose_holder_dies_is_taken_by_the_next() {
+  let dir = tempfile::tempdir().unwrap();
+  let lock = lock_in(dir.path());
+  let mut holding = holding_process(&lock);
+  let pid = i64::from(holding.id());
+
+  until("the stand-in's seat", || read_queue(&lock).holder().is_some_and(|one| one.pid == pid));
+
+  let next = aside(&lock, seated(1, 0));
+
+  a_while();
+  assert!(!next.is_finished());
+
+  holding.kill().unwrap();
+  holding.wait().unwrap();
+
+  assert!(next.join().unwrap().had());
 }

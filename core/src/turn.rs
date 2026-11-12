@@ -1,8 +1,9 @@
 //! The machine's turns for heavy test and build commands (docs/testbed.md, 「The turn」): two lanes, each
-//! with one holder at a time on the whole machine, whatever checkout or repository it runs in, the rest in
-//! line behind it in the order they asked, a caller at the front ahead of them and a caller standing next
-//! between the two. The wide lane is the machine's whole width; the narrow lane runs beside it on a quarter
-//! of it.
+//! with its seats on the whole machine, whatever checkout or repository a holder runs in, the rest in line
+//! behind them in the order they asked, a caller at the front ahead of them and a caller standing next
+//! between the two. The wide lane is the machine's whole width shared by a few seats, a seat beside a held
+//! one taken only while the machine has memory to spare; the narrow lane runs beside it, one seat on a
+//! quarter of it.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -12,9 +13,10 @@ use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 
+use crate::memory::machine_available_bytes;
 use crate::policy::fill_marks;
 use crate::policy::lanes::LANES;
-use crate::queue::{HeldLock, LockWait, Rank, now_ms, process_alive, queue_tickets, take_lock};
+use crate::queue::{HeldSeats, LockWait, Rank, SeatWait, now_ms, process_alive, queue_tickets, take_seats};
 
 /// The exit code of a command that did not run because its turn did not come.
 pub const NOT_RUN_EXIT_CODE: u8 = 75;
@@ -27,6 +29,10 @@ pub const FRONT_VARIABLE: &str = "BMO_TESTBED_FRONT";
 pub const NEXT_VARIABLE: &str = "BMO_TESTBED_NEXT";
 /// The variable naming a file every turn taken under it writes its wait and its run into.
 pub const TURN_TIMES_VARIABLE: &str = "BMO_TESTBED_TIMES";
+/// The variable naming the wide lane's seats over the policy's.
+pub const SEATS_VARIABLE: &str = "BMO_TESTBED_SEATS";
+/// The variable naming the gigabytes a seat beside a held one needs available, over the policy's.
+pub const SEAT_FREE_VARIABLE: &str = "BMO_TESTBED_SEAT_FREE_GB";
 
 /// The variables a turn reads, as the process holds them or a test hands them.
 pub type Env = HashMap<String, String>;
@@ -57,6 +63,18 @@ impl Lane {
       Self::Narrow => &LANES.lanes.narrow,
     }
   }
+
+  /// How many seats the lane has: the policy's for the wide lane, `BMO_TESTBED_SEATS` naming another, and
+  /// one for the narrow lane.
+  pub fn seats(self, env: &Env) -> usize {
+    match self {
+      Self::Wide => match env.get(SEATS_VARIABLE).and_then(|given| leading_number(given)) {
+        Some(given) if given > 0 => given as usize,
+        _ => LANES.numbers.seats.max(1),
+      },
+      Self::Narrow => 1,
+    }
+  }
 }
 
 fn named<'a>(env: &'a Env, name: &str) -> Option<&'a str> {
@@ -85,6 +103,40 @@ pub fn lock_path(env: &Env, lane: Lane) -> PathBuf {
   }
 }
 
+/// A lane's seats from its first one's lock: that lock, then each further seat's beside it, `-seat2.lock`
+/// and on in place of `.lock`.
+pub fn seat_paths(path: &Path, seats: usize) -> Vec<PathBuf> {
+  let text = path.to_string_lossy();
+  let stem = text.strip_suffix(".lock").unwrap_or(&text);
+
+  std::iter::once(path.to_path_buf())
+    .chain((2..=seats).map(|seat| PathBuf::from(format!("{stem}-seat{seat}.lock"))))
+    .collect()
+}
+
+// The seats of a lane as they stand on the disk, whatever number its takers were given: the first one's lock
+// and each further one whose lock stands, in order.
+fn standing_seats(path: &Path) -> Vec<PathBuf> {
+  let mut seats = vec![path.to_path_buf()];
+
+  while let Some(next) = seat_paths(path, seats.len() + 1).pop().filter(|next| next.exists()) {
+    seats.push(next);
+  }
+
+  seats
+}
+
+/// The bytes of available memory a seat beside a held one needs: the policy's gigabytes, or the ones
+/// `BMO_TESTBED_SEAT_FREE_GB` names.
+pub fn seat_free_bytes(env: &Env) -> u64 {
+  let gigabytes = match env.get(SEAT_FREE_VARIABLE).and_then(|given| leading_number(given)) {
+    Some(given) if given >= 0 => given as u64,
+    _ => LANES.numbers.seat_free_gigabytes,
+  };
+
+  gigabytes.saturating_mul(1 << 30)
+}
+
 /// A whole number at the head of a word, as JavaScript's `parseInt` reads one: `12x` is 12, `x` none.
 pub fn leading_number(word: &str) -> Option<i64> {
   let word = word.trim_start();
@@ -111,7 +163,8 @@ pub fn machine_threads() -> usize {
   std::thread::available_parallelism().map_or(1, usize::from)
 }
 
-/// A lane's width: the machine's for the wide lane, a quarter of it for the narrow one.
+/// A lane's whole width, which a holder of every seat runs on: the machine's for the wide lane, a quarter of
+/// it for the narrow one.
 pub fn lane_width(lane: Lane, env: &Env, threads: usize) -> usize {
   let width = machine_width(env, threads);
 
@@ -157,11 +210,56 @@ impl TurnEntry {
   }
 }
 
-/// A lane's line as it stands: who holds the turn, and who waits behind it in order.
+/// How many of a lane's seats a turn runs in, and how many the lane has.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Seats {
+  pub held: usize,
+  pub of: usize,
+}
+
+impl Seats {
+  /// The share of the lane's whole width a command in these seats runs on: the width divided by the seats
+  /// for each one held, never less than one, and the whole width for every seat.
+  pub fn width(self, lane_width: usize) -> usize {
+    if self.held >= self.of {
+      return lane_width;
+    }
+
+    (lane_width * self.held / self.of.max(1)).max(1)
+  }
+}
+
+/// A lane's line as it stands: who holds each seat held, in the seats' order, and who waits behind them in
+/// order.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
 pub struct TestbedQueue {
-  pub holder: Option<TurnEntry>,
+  pub holders: Vec<TurnEntry>,
   pub waiting: Vec<TurnEntry>,
+}
+
+impl TestbedQueue {
+  /// The first seat's holder held, or none where no seat is.
+  pub fn holder(&self) -> Option<&TurnEntry> {
+    self.holders.first()
+  }
+}
+
+// Who holds a lane's seats, as a waiter says it: each holder as an entry names it, once however many seats it
+// holds, or nobody.
+fn holders_words(holders: &[TurnEntry], nobody: &str) -> String {
+  if holders.is_empty() {
+    return nobody.to_owned();
+  }
+
+  let mut who: Vec<String> = Vec::new();
+
+  for (at, holder) in holders.iter().enumerate() {
+    if holders[..at].iter().all(|earlier| earlier.pid != holder.pid) {
+      who.push(holder.words());
+    }
+  }
+
+  fill_marks(&LANES.waiting.held_by, &[("who", &who.join(&LANES.waiting.between))])
 }
 
 fn holder_record_path(path: &Path) -> PathBuf {
@@ -178,9 +276,11 @@ fn read_holder_record(path: &Path) -> Option<TurnEntry> {
   process_alive(record.pid).then_some(record)
 }
 
-/// One lane's line read now. A holder record whose process is gone is nobody's.
+/// One lane's line read now, from its first seat's lock: every seat that stands. A holder record whose
+/// process is gone is nobody's.
 pub fn read_queue(path: &Path) -> TestbedQueue {
-  let holder = read_holder_record(path);
+  let holders: Vec<TurnEntry> =
+    standing_seats(path).iter().filter_map(|seat| read_holder_record(seat)).collect();
   let waiting = queue_tickets(path)
     .into_iter()
     .map(|ticket| {
@@ -195,17 +295,28 @@ pub fn read_queue(path: &Path) -> TestbedQueue {
       entry.next = ticket.next;
       entry
     })
-    .filter(|entry| holder.as_ref().is_none_or(|holder| holder.pid != entry.pid))
+    .filter(|entry| holders.iter().all(|holder| holder.pid != entry.pid))
     .collect();
 
-  TestbedQueue { holder, waiting }
+  TestbedQueue { holders, waiting }
 }
 
-/// Whether this process runs inside a lane's turn a caller of its own holds.
-pub fn inside_held_turn(path: &Path, env: &Env) -> bool {
-  let held = env.get(HELD_VARIABLE).and_then(|pid| leading_number(pid));
+// How many of these seats the caller named in `BMO_TESTBED_HELD` holds.
+fn seats_held_by_caller(seats: &[PathBuf], env: &Env) -> usize {
+  let Some(held) = env.get(HELD_VARIABLE).and_then(|pid| leading_number(pid)) else {
+    return 0;
+  };
 
-  held.is_some() && read_holder_record(path).map(|record| record.pid) == held
+  seats
+    .iter()
+    .filter(|seat| read_holder_record(seat).is_some_and(|record| record.pid == held))
+    .count()
+}
+
+/// Whether this process runs inside a lane's turn a caller of its own holds: in any seat of the lane whose
+/// first seat's lock this is.
+pub fn inside_held_turn(path: &Path, env: &Env) -> bool {
+  seats_held_by_caller(&standing_seats(path), env) > 0
 }
 
 /// The variable naming the caller's opaque scope.
@@ -247,9 +358,11 @@ pub struct TurnAsk<'a> {
   pub notice_seconds: Option<f64>,
 }
 
-/// A turn asked for: had, had already by a caller, or not had within the wait.
+/// A turn asked for: had, had already by a caller in its seats, or not had within the wait.
 pub enum TestbedTurn {
-  Inside,
+  Inside {
+    seats: Seats,
+  },
   Own {
     waited_seconds: f64,
     held: Holding,
@@ -257,15 +370,16 @@ pub enum TestbedTurn {
   Queued {
     waited_seconds: f64,
     ahead: usize,
-    holder: Option<TurnEntry>,
+    holders: Vec<TurnEntry>,
   },
 }
 
-/// A lane's turn held by this process, let go when dropped: its record taken away, the watch on its harness
-/// stopped, and the lock let go.
+/// A lane's seats held by this process, let go when dropped: their records taken away, the watch on its
+/// harness stopped, and the seats let go.
 pub struct Holding {
-  path: PathBuf,
-  _lock: HeldLock,
+  paths: Vec<PathBuf>,
+  seats: Seats,
+  _seats: HeldSeats,
   watching: Option<Arc<AtomicBool>>,
 }
 
@@ -275,8 +389,10 @@ impl Drop for Holding {
       watching.store(false, Ordering::Relaxed);
     }
 
-    if read_holder_record(&self.path).is_some_and(|record| record.pid == i64::from(std::process::id())) {
-      let _ = std::fs::remove_file(holder_record_path(&self.path));
+    for path in &self.paths {
+      if read_holder_record(path).is_some_and(|record| record.pid == i64::from(std::process::id())) {
+        let _ = std::fs::remove_file(holder_record_path(path));
+      }
     }
   }
 }
@@ -289,8 +405,18 @@ impl TestbedTurn {
 
   pub fn waited_seconds(&self) -> f64 {
     match self {
-      Self::Inside => 0.0,
+      Self::Inside { .. } => 0.0,
       Self::Own { waited_seconds, .. } | Self::Queued { waited_seconds, .. } => *waited_seconds,
+    }
+  }
+
+  /// The share of the lane's whole width a command run under this turn is handed: its seats' share, inside a
+  /// caller's turn its caller's, and the whole width for a turn not had.
+  pub fn width(&self, lane_width: usize) -> usize {
+    match self {
+      Self::Inside { seats } => seats.width(lane_width),
+      Self::Own { held, .. } => held.seats.width(lane_width),
+      Self::Queued { .. } => lane_width,
     }
   }
 
@@ -305,13 +431,10 @@ impl TestbedTurn {
     let waited = self.waited_seconds().round().to_string();
 
     match self {
-      Self::Inside => said.inside.clone(),
+      Self::Inside { .. } => said.inside.clone(),
       Self::Own { .. } => fill_marks(&said.own, &[("seconds", &waited)]),
-      Self::Queued { ahead, holder, .. } => {
-        let holder = holder.as_ref().map_or_else(
-          || said.nobody.clone(),
-          |holder| fill_marks(&LANES.waiting.held_by, &[("who", &holder.words())]),
-        );
+      Self::Queued { ahead, holders, .. } => {
+        let holder = holders_words(holders, &said.nobody);
 
         fill_marks(
           &said.queued,
@@ -379,10 +502,7 @@ pub fn watch_harness(job: i64) -> Arc<AtomicBool> {
 fn waiting_line(ask: &TurnAsk<'_>, queue: &TestbedQueue, waited: f64) -> String {
   let me = i64::from(std::process::id());
   let ahead = queue.waiting.iter().position(|entry| entry.pid == me).unwrap_or(queue.waiting.len());
-  let holder = queue.holder.as_ref().map_or_else(
-    || LANES.waiting.nobody.clone(),
-    |holder| fill_marks(&LANES.waiting.held_by, &[("who", &holder.words())]),
-  );
+  let holder = holders_words(&queue.holders, &LANES.waiting.nobody);
 
   fill_marks(
     &LANES.waiting.line,
@@ -397,13 +517,26 @@ fn waiting_line(ask: &TurnAsk<'_>, queue: &TestbedQueue, waited: f64) -> String 
 }
 
 /// A lane's turn: at once inside a caller's, in line otherwise for as long as the line takes, and not had only
-/// where the harness the caller runs for is gone while it waits.
+/// where the harness the caller runs for is gone while it waits. A caller at the front takes every seat of
+/// the lane, any other one seat.
 pub fn take_turn(ask: &TurnAsk<'_>) -> TestbedTurn {
+  take_seated_turn(ask, stands_at_front(&ask.env))
+}
+
+// A lane's turn in one seat, or in every seat of the lane where `every` says so.
+fn take_seated_turn(ask: &TurnAsk<'_>, every: bool) -> TestbedTurn {
   let env = &ask.env;
   let path = ask.path.clone().unwrap_or_else(|| lock_path(env, ask.lane));
+  let seats = seat_paths(&path, ask.lane.seats(env));
+  let inside = seats_held_by_caller(&seats, env);
 
-  if inside_held_turn(&path, env) {
-    return TestbedTurn::Inside;
+  if inside > 0 {
+    return TestbedTurn::Inside {
+      seats: Seats {
+        held: inside,
+        of: seats.len(),
+      },
+    };
   }
 
   let job = harness_pid(env);
@@ -435,31 +568,39 @@ pub fn take_turn(ask: &TurnAsk<'_>) -> TestbedTurn {
 
     Some(now + (notice * 1000.0) as i64)
   };
-  let held = take_lock(
-    &path,
+  // A seat beside a held one only while the machine has the memory a further command needs; memory that
+  // cannot be read keeps nobody out.
+  let needed = seat_free_bytes(env);
+  let spare = || machine_available_bytes().is_none_or(|available| available >= needed);
+  let held = take_seats(
+    &seats,
     notice,
-    LockWait {
-      holder: serde_json::to_string(&entry).unwrap_or_default(),
-      wait_on: Some(&mut wait_on),
-      rank: if front {
-        Rank::Front
-      } else if next {
-        Rank::Next
-      } else {
-        Rank::Ordinary
+    SeatWait {
+      lock: LockWait {
+        holder: serde_json::to_string(&entry).unwrap_or_default(),
+        wait_on: Some(&mut wait_on),
+        rank: if front {
+          Rank::Front
+        } else if next {
+          Rank::Next
+        } else {
+          Rank::Ordinary
+        },
+        poll: ask.poll,
       },
-      poll: ask.poll,
+      every,
+      spare: &spare,
     },
   );
   let waited_seconds = (now_ms() - asked) as f64 / 1000.0;
 
-  let Some(lock) = held else {
+  let Some(taken) = held else {
     let queue = read_queue(&path);
 
     return TestbedTurn::Queued {
       waited_seconds,
       ahead: queue.waiting.len(),
-      holder: queue.holder,
+      holders: queue.holders,
     };
   };
 
@@ -467,13 +608,22 @@ pub fn take_turn(ask: &TurnAsk<'_>) -> TestbedTurn {
     since: Some(now_ms()),
     ..entry
   };
-  let _ = std::fs::write(holder_record_path(&path), serde_json::to_string(&record).unwrap_or_default());
+  let record = serde_json::to_string(&record).unwrap_or_default();
+  let paths: Vec<PathBuf> = taken.seats().into_iter().map(|at| seats[at].clone()).collect();
+
+  for seat in &paths {
+    let _ = std::fs::write(holder_record_path(seat), &record);
+  }
 
   TestbedTurn::Own {
     waited_seconds,
     held: Holding {
-      path,
-      _lock: lock,
+      seats: Seats {
+        held: paths.len(),
+        of: seats.len(),
+      },
+      paths,
+      _seats: taken,
       watching: job.map(watch_harness),
     },
   }
@@ -530,7 +680,7 @@ impl TestbedTurns {
   /// What a caller says once its turns are settled.
   pub fn words(&self) -> String {
     match self {
-      Self::Had { inside: true, .. } => TestbedTurn::Inside.words(),
+      Self::Had { inside: true, .. } => LANES.settled.inside.clone(),
       Self::Had { waited_seconds, .. } => {
         fill_marks(&LANES.settled.own, &[("seconds", &waited_seconds.round().to_string())])
       }
@@ -539,32 +689,35 @@ impl TestbedTurns {
   }
 }
 
-/// Several lanes' turns, taken one after another in the order given: had once every one is, and not had
-/// where any one is not, those already taken let go again. The wait is the whole time taken, and what the
-/// holder starts with its variable runs inside each of them.
+/// Several lanes' turns, taken one after another in the order given, every seat of each: had once every one
+/// is, and not had where any one is not, those already taken let go again. The wait is the whole time taken,
+/// and what the holder starts with its variable runs inside each of them.
 pub fn take_turns(lanes: &[Lane], ask: &TurnAsk<'_>) -> TestbedTurns {
   let asked = Instant::now();
   let mut taken = TurnsHeld(Vec::new());
 
   for lane in lanes {
-    let turn = take_turn(&TurnAsk {
-      command: ask.command.clone(),
-      lane: *lane,
-      say: ask.say,
-      path: None,
-      env: ask.env.clone(),
-      checkout: ask.checkout.clone(),
-      poll: ask.poll,
-      notice_seconds: ask.notice_seconds,
-    });
+    let turn = take_seated_turn(
+      &TurnAsk {
+        command: ask.command.clone(),
+        lane: *lane,
+        say: ask.say,
+        path: None,
+        env: ask.env.clone(),
+        checkout: ask.checkout.clone(),
+        poll: ask.poll,
+        notice_seconds: ask.notice_seconds,
+      },
+      true,
+    );
 
-    if let TestbedTurn::Queued { ahead, holder, .. } = turn {
+    if let TestbedTurn::Queued { ahead, holders, .. } = turn {
       taken.release();
 
       return TestbedTurns::Queued(TestbedTurn::Queued {
         waited_seconds: asked.elapsed().as_secs_f64(),
         ahead,
-        holder,
+        holders,
       });
     }
 
@@ -573,7 +726,7 @@ pub fn take_turns(lanes: &[Lane], ask: &TurnAsk<'_>) -> TestbedTurns {
 
   TestbedTurns::Had {
     waited_seconds: asked.elapsed().as_secs_f64(),
-    inside: taken.0.iter().all(|turn| matches!(turn, TestbedTurn::Inside)),
+    inside: taken.0.iter().all(|turn| matches!(turn, TestbedTurn::Inside { .. })),
     held: taken,
   }
 }

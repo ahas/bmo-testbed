@@ -11,7 +11,7 @@ use bmo_testbed_core::memory::{
 };
 use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::silence::HUNG_EXIT_CODE;
-use bmo_testbed_core::turn::{NOT_RUN_EXIT_CODE, TestbedTurn};
+use bmo_testbed_core::turn::{NOT_RUN_EXIT_CODE, Seats, TestbedTurn};
 
 // A machine in a test: the runs it ends with, the kill count each reading gives, and what it said.
 struct Bench {
@@ -29,7 +29,9 @@ struct Bench {
 impl Bench {
   fn new(ends: &[RunEnd], kills: &[Option<u64>]) -> Self {
     Self {
-      turn: Some(TestbedTurn::Inside),
+      turn: Some(TestbedTurn::Inside {
+        seats: Seats { held: 1, of: 1 },
+      }),
       ends: ends.iter().copied().collect(),
       kills: RefCell::new(kills.iter().copied().collect()),
       available: RefCell::new(VecDeque::new()),
@@ -212,7 +214,7 @@ fn a_turn_not_had_runs_nothing_and_ends_on_the_testbeds_code() {
   bench.turn = Some(TestbedTurn::Queued {
     waited_seconds: 180.0,
     ahead: 2,
-    holder: None,
+    holders: Vec::new(),
   });
 
   assert_eq!(run_in_turn(&mut bench, &MemoryLimits::default(), &mut || ()), NOT_RUN_EXIT_CODE);

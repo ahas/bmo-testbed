@@ -19,6 +19,8 @@ pub struct Numbers {
   pub failure_lines: usize,
   pub log_keep_days: u64,
   pub narrow_divisor: usize,
+  pub seats: usize,
+  pub seat_free_gigabytes: u64,
   pub silence_seconds: u64,
   pub silence_grace_seconds: u64,
   pub silence_look_seconds: u64,
@@ -40,6 +42,7 @@ pub struct WaitingWords {
   pub line: String,
   pub nobody: String,
   pub held_by: String,
+  pub between: String,
 }
 
 #[derive(Debug, Deserialize)]

@@ -97,8 +97,9 @@ bmo-testbed placed [--setup] [--checkout <path>…] -- <command…>
 bmo-testbed status [--json]
 ```
 
-- Prints each lane, its width, its holder or nobody, and its waiters in order with their age and their
-  front and next marks; then the close line of the repository it is run in. Exits 0.
+- Prints each lane, its width, a `holding it:` line for each seat held, naming its holder, or one
+  saying nobody, and its waiters in order with their age and their front and next marks; then the
+  close line of the repository it is run in. Exits 0.
 - **`--json`** prints one object:
   - `queues`: the page of both lanes exactly as `GET /queues` answers it (「Members」);
   - `closeLine`: the repository's close line, with `holder` (a close entry or null) and `waiting` (a
@@ -376,13 +377,15 @@ verb's own name, and each noun takes what that verb takes.
 |---|---|---|
 | `BMO_DATA_DIR` | every verb, the hosted deploy tool | The testbed's data root: logs and the record under `testbed/`, locks under `locks/`, the data backup's and the placement's settings under `env/`. Default `$HOME/.local/share/bmo/data` |
 | `TMPDIR` | the turn | Where the lane locks stand. Default `/tmp` |
-| `BMO_TESTBED_LOCK` | the turn | Another wide lane lock, the narrow one beside it |
-| `BMO_TESTBED_HELD` | the turn | Set by a holder for its children: its process number. A command finding it holding its lane runs at once |
+| `BMO_TESTBED_LOCK` | the turn | Another first wide seat's lock, the further seats and the narrow lane's beside it |
+| `BMO_TESTBED_SEATS` | the turn | The wide lane's seats, over the lane policy's; anything that is not a positive whole number means the policy's |
+| `BMO_TESTBED_SEAT_FREE_GB` | the turn | The gigabytes of available memory a seat beside a held one needs, over the lane policy's; anything that is not a whole number means the policy's |
+| `BMO_TESTBED_HELD` | the turn | Set by a holder for its children: its process number. A command finding it holding any seat of its lane runs at once, in the holder's seats |
 | `BMO_TESTBED_FRONT` | the turn | `1` stands the caller at the front, unless it is inside a harness's call |
 | `BMO_TESTBED_NEXT` | the turn | `1` stands the caller next after the front |
 | `BMO_TESTBED_HEARD` | the turn | Set by a holder watching its command for silence: a file of its own. A watch under it touches the file while its own command writes, which the holder counts as its command writing |
 | `BMO_TESTBED_TIMES` | the turn | A file each turn taken adds a line to: the command, its lane, its wait and its run |
-| `BMO_TEST_PARALLEL` | the turn, the suite | The wide lane's width; set by the turn for a language's runner |
+| `BMO_TEST_PARALLEL` | the turn, the suite | The wide lane's width; set by the turn for a language's runner, to the holder's share |
 | `CLAUDE_PID` | the turn, `deploy` | The process of the harness whose call the caller runs in: a caller with one is inside a harness's call, its holder is watched, and `deploy` refuses it |
 | `BMO_TESTBED_SCOPE` | the turn, the record | The caller's opaque scope, which a ticket, a holder and a test run carry and the testbed never reads |
 | `BMO_TESTBED_TOKEN` | `serve`, `mcp` | The HTTP service's bearer token |
@@ -528,8 +531,11 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
 
 - **Health:** `ready` (boolean), `reason` (string or null, null when ready), `version` (the
   workspace's). It is not ready while the record cannot be opened.
-- **Queue:** `name` (`wide` or `narrow`), `width` (integer), `holder` (a queue entry or null),
-  `waiting` (a list of queue entries, in the order they will be served).
+- **Queue:** `name` (`wide` or `narrow`), `width` (integer, the lane's whole width, which a holder of
+  every seat runs on), `holders` (a list of queue entries, one for each seat held, in the seats'
+  order, so a holder of several seats stands in it once for each), `holder` (the first of `holders`,
+  or null where no seat is held), `waiting` (a list of queue entries, in the order they will be
+  served).
 - **Queue entry:** `scope` (string or null, the caller's opaque scope from `BMO_TESTBED_SCOPE`),
   `checkout`, `command` (one line), `pid`, `askedAt`, `heldAt` (null while waiting), and the booleans
   `front` and `next`, and `kept`, always false, since no place is kept for a waiter that left.

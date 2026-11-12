@@ -253,7 +253,7 @@ fn holds_the_wide_lane_and_lets_a_deployment_at_the_front_in_before_the_next() {
 
   assert!(stretch.ready());
 
-  let holder = read_queue(&lock).holder.unwrap();
+  let holder = read_queue(&lock).holder().cloned().unwrap();
 
   assert_eq!((holder.command.as_str(), holder.next), (CLOSE_LINE.stretch.command.as_str(), true));
 
@@ -291,7 +291,7 @@ fn holds_the_wide_lane_and_lets_a_deployment_at_the_front_in_before_the_next() {
   assert!(said.lock().unwrap().contains(&CLOSE_LINE.stretch.front_first));
 
   stretch.release();
-  assert_eq!(read_queue(&lock).holder, None);
+  assert_eq!(read_queue(&lock).holder(), None);
   assert!(queue_tickets(&lock).is_empty());
 }
 

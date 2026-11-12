@@ -466,7 +466,7 @@ fn run_held(
   say(&fence_suite(limits, &mut LiveFence));
 
   let threads = turn::machine_threads();
-  let pool = turn::machine_width(env, threads);
+  let pool = turn.width(turn::machine_width(env, threads));
   // Every Cargo command of the run builds at as many jobs as the fence holds, so the linkers of one crate's
   // many test binaries never pass its ceiling together.
   let jobs = fenced_build_jobs(limits, pool, env.get("CARGO_BUILD_JOBS").map(String::as_str));

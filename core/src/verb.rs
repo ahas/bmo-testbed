@@ -62,8 +62,8 @@ fn close_entry_line(entry: &CloseEntry, at: i64, now: i64) -> String {
   format!("{}{}", entry.words(), age(at, now))
 }
 
-/// Each lane's line, and the close line where the caller names one: who holds it, since when, and who
-/// waits behind it in order.
+/// Each lane's line, and the close line where the caller names one: who holds it, a line for each seat held,
+/// since when, and who waits behind it in order.
 pub fn status_lines(close_line: Option<&Path>) -> Vec<String> {
   let said = &LANES.status;
   let env = process_env();
@@ -83,12 +83,11 @@ pub fn status_lines(close_line: Option<&Path>) -> Vec<String> {
         ("width", &lane_width(lane, &env, machine_threads()).to_string()),
       ],
     ));
-    lines.push(holding(
-      queue
-        .holder
-        .as_ref()
-        .map_or_else(|| said.nobody.clone(), |holder| entry_line(holder, now)),
-    ));
+    if queue.holders.is_empty() {
+      lines.push(holding(said.nobody.clone()));
+    }
+
+    lines.extend(queue.holders.iter().map(|holder| holding(entry_line(holder, now))));
     lines.extend(queue.waiting.iter().enumerate().map(|(at, entry)| waiting(at, entry_line(entry, now))));
   }
 

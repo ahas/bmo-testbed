@@ -153,7 +153,7 @@ fn a_run_that_writes_nothing_for_the_limit_is_ended_as_hung_and_lets_the_turn_go
   assert!(hung.contains("sh -c echo once; sleep 30"), "{hung}");
   assert!(hung.contains(&*result.log.as_ref().unwrap().to_string_lossy()), "{hung}");
   assert_eq!(log.lines().last(), Some(hung.as_str()));
-  assert_eq!(read_queue(&dir.path().join("testbed.lock")).holder, None);
+  assert_eq!(read_queue(&dir.path().join("testbed.lock")).holder(), None);
 }
 
 // "its length alone never cuts it": a run that keeps writing past the limit passes.

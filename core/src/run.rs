@@ -206,7 +206,8 @@ pub fn run_in_testbed(ask: &RunAsk<'_>) -> Result<TestbedResult, String> {
   };
   let errors = out.try_clone().map_err(no_log)?;
   let env = &ask.turn.env;
-  let widened = ask.language.widen(&ask.command, lane_width(ask.turn.lane, env, machine_threads()));
+  let width = turn.width(lane_width(ask.turn.lane, env, machine_threads()));
+  let widened = ask.language.widen(&ask.command, width);
   let Some((program, args)) = widened.command.split_first() else {
     tell_ended(RunVerdict::NotRun, None);
     return Ok(not_run());

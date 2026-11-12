@@ -230,9 +230,9 @@ pub fn take_close_line(ask: &CloseLineAsk<'_>) -> Option<CloseTurn> {
   })
 }
 
-/// The testbed's wide lane held through a close's check, from its static check to the end of its suite, so
-/// no other harness's heavy command comes between its steps. It is taken standing next, and before each part a
-/// deployment waiting at the front goes first.
+/// A seat of the testbed's wide lane held through a close's check, from its static check to the end of its
+/// suite, so its steps never wait behind the line between them. It is taken standing next, and before each part
+/// a deployment waiting at the front goes first.
 pub struct WideStretch<'a> {
   env: Env,
   checkout: String,

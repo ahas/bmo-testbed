@@ -353,14 +353,14 @@ fn runs(
 }
 
 /// The machine's own hands for a command of `lane`: its turn taken with the waiting said on standard error
-/// under the mark, the machine's memory and fences read, and each run started by `start`, handed the variable
-/// a command started under the turn carries.
+/// under the mark, the machine's memory and fences read, and each run started by `start`, handed the turn it
+/// runs under, whose variable a command started under it carries and whose share of the width it runs on.
 pub struct MachineHands<'a> {
   pub what: String,
   pub lane: Lane,
   pub checkout: String,
   pub env: Env,
-  pub start: &'a mut dyn FnMut(Option<(&'static str, String)>) -> RunEnd,
+  pub start: &'a mut dyn FnMut(&TestbedTurn) -> RunEnd,
   started: Instant,
 }
 
@@ -370,7 +370,7 @@ impl<'a> MachineHands<'a> {
     lane: Lane,
     checkout: String,
     env: Env,
-    start: &'a mut dyn FnMut(Option<(&'static str, String)>) -> RunEnd,
+    start: &'a mut dyn FnMut(&TestbedTurn) -> RunEnd,
   ) -> Self {
     Self {
       what,
@@ -404,7 +404,7 @@ impl HeavyHands for MachineHands<'_> {
   }
 
   fn run(&mut self, turn: &TestbedTurn) -> RunEnd {
-    (self.start)(turn.held_variable())
+    (self.start)(turn)
   }
 
   fn oom_kills(&self) -> Option<u64> {
