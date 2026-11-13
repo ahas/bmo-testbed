@@ -75,6 +75,7 @@ fn placed_change(
     lane: Lane::Wide,
     cwd: called_from(),
     env,
+    to_free_seat: true,
   })
 }
 

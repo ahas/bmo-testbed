@@ -94,7 +94,7 @@ bmo-testbed placed [--setup] [--checkout <path>…] -- <command…>
 ### `status`
 
 ```
-bmo-testbed status [--json]
+bmo-testbed status [--json | --free]
 ```
 
 - Prints each lane, its width, a `holding it:` line for each seat held, naming its holder, or one
@@ -105,6 +105,9 @@ bmo-testbed status [--json]
   - `closeLine`: the repository's close line, with `holder` (a close entry or null) and `waiting` (a
     list of close entries, in the order they will be served), or null outside a repository.
 - **A close entry** carries `scope`, `checkout`, `askedAt`, `heldAt` and `pid` as a queue entry does.
+- **`--free`** prints nothing and exits 0 where a seat of this machine's wide lane is free now with nobody
+  waiting for one, else 1. A machine that places a run because it is full asks the placed machine this
+  before the run goes (「The placed machine」).
 
 ### `classify`
 
@@ -658,8 +661,13 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   work — its gate and its Cargo release build — goes to the placed machine the settings name
   (`docs/deploy.md`, 「Where a deployment runs」) and nowhere else; anything else a deployment's unit
   runs stays where it is.
+- **A run placed because this machine is full goes only to a free seat there.** The ask says so; the placed
+  machine is asked its `status --free` before the bench is made ready, and where every seat there is held
+  or waited for, or no answer says otherwise, the run waits for a seat here, said on a line. A run that is
+  placed whatever this machine holds, a `run` or a suite, goes and waits in that machine's line. The
+  placement endpoint chooses for itself and is told nothing of it.
 - **In the crates the placement is a trait** in `core` with one method, asked with the run's words and
-  answering here or elsewhere with an exit code; the local placement, always here, is the default, and
+  whether it goes only to a free seat, and answering here or elsewhere with an exit code; the local placement, always here, is the default, and
   the placed machine and the HTTP placement in `cli` are members of it.
 
 ### The placed machine

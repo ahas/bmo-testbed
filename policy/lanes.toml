@@ -86,6 +86,9 @@ running = "testbed: running on {machine} in {bench}"
 # connection that broke once the run had begun.
 unsettled = "testbed: the placement settings {file} do not read ({why}); running here"
 unreached = "testbed: the placed machine {machine} cannot be reached ({said}); running here"
+# A run placed because this machine is full finds every seat on the placed machine held or waited for, or no
+# answer saying otherwise; it waits for a seat here instead.
+full = "testbed: every seat on {machine} is held or waited for; waiting here"
 tree_uncopied = "the tree {tree} could not be copied: {said}"
 unfetched = "the binaries could not be read back from {machine}: {said}"
 broken = "the connection to it broke"

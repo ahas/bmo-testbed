@@ -150,6 +150,38 @@ fn the_status_names_the_holder_of_each_seat_held() {
   assert_eq!(lane["holder"], lane["holders"][0]);
 }
 
+// "says with its code alone whether a seat of the wide lane is free now with nobody waiting for one"
+#[test]
+fn the_status_says_by_its_code_whether_a_wide_seat_is_free() {
+  let dir = tempfile::tempdir().unwrap();
+  let free = |seats: &str| {
+    let mut command = testbed(dir.path(), dir.path(), &["status", "--free"]);
+
+    ran(command.env(SEATS_VARIABLE, seats).env(SEAT_FREE_VARIABLE, "0"))
+  };
+  let idle = free("2");
+
+  assert_eq!((idle.code, idle.out.as_str()), (0, ""), "{}", idle.err);
+
+  let held = take_turn(&TurnAsk {
+    command: "a check".to_owned(),
+    lane: Lane::Wide,
+    say: &|_| {},
+    path: Some(dir.path().join("testbed.lock")),
+    env: Env::from([
+      (SEATS_VARIABLE.to_owned(), "2".to_owned()),
+      (SEAT_FREE_VARIABLE.to_owned(), "0".to_owned()),
+    ]),
+    checkout: "/repo".to_owned(),
+    poll: None,
+    notice_seconds: None,
+  });
+
+  assert!(held.had());
+  assert_eq!(free("2").code, 0, "one of two seats is still free");
+  assert_eq!(free("1").code, 1, "the one seat is held");
+}
+
 // "prints the close line of the repository it is run in, and none outside one"
 #[test]
 fn the_status_prints_the_close_line_of_the_repository_it_is_run_in() {

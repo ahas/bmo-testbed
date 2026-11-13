@@ -20,6 +20,9 @@ pub struct PlaceAsk<'a> {
   /// The directory the run was started in.
   pub cwd: PathBuf,
   pub env: &'a Env,
+  /// Whether it goes only to a seat free there now: a run placed because this machine is full, which would
+  /// otherwise wait in that machine's line while this one's frees, waits in this one's instead.
+  pub to_free_seat: bool,
 }
 
 /// Where a run goes.

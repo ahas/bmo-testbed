@@ -168,6 +168,9 @@ pub struct RunArgs {
 pub struct StatusArgs {
   #[arg(long)]
   pub json: bool,
+  /// Print nothing and exit 0 where a seat of the wide lane is free now with nobody waiting for one, else 1.
+  #[arg(long, conflicts_with = "json")]
+  pub free: bool,
 }
 
 #[derive(Debug, Args)]

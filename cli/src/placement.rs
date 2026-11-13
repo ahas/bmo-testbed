@@ -442,11 +442,13 @@ pub fn own_release() -> Option<String> {
   built_from(binary.parent()?.parent()?)
 }
 
-/// What a run on the placed machine came to: it ran there, with its code; or the machine could not be
-/// reached, said on a line, and the run is the caller's.
+/// What a run on the placed machine came to: it ran there, with its code; or it did not go, the machine
+/// unreached or, for a run that goes only to a free seat, every seat there held or waited for, said on a
+/// line, and the run is the caller's.
 pub enum Placed {
   Ran(u8),
   Unreached,
+  Full,
 }
 
 impl MachinePlacement {
@@ -472,6 +474,20 @@ impl MachinePlacement {
 
     command.args(options).arg(&self.settings.destination).stdin(Stdio::null());
     command
+  }
+
+  /// Whether a seat of the wide lane there is free now with nobody waiting for one, as that machine's
+  /// `status --free` answers; the `full` line where it is not, or where the answer does not come.
+  pub fn seat_free(&self) -> bool {
+    let asked = self.ssh().arg(format!("{} status --free", self.settings.testbed)).output();
+
+    if succeeded(&asked) {
+      return true;
+    }
+
+    eprintln!("{}", fill_marks(&LANES.placed.full, &[("machine", self.settings.label())]));
+
+    false
   }
 
   /// Whether the machine answers; what `ssh` said where it does not, on the `unreached` line.
@@ -693,6 +709,10 @@ impl MachinePlacement {
       return Placed::Ran(NOT_RUN_EXIT_CODE);
     }
 
+    if ask.to_free_seat && !self.seat_free() {
+      return Placed::Full;
+    }
+
     let found = git(&ask.cwd, &["rev-parse", "--show-toplevel"]);
     let checkout = if found.is_empty() { ask.cwd.clone() } else { PathBuf::from(found) };
     let commit = git(&checkout, &["rev-parse", "HEAD"]);
@@ -729,7 +749,7 @@ impl Placement for MachinePlacement {
   fn place(&self, ask: &PlaceAsk<'_>) -> Option<u8> {
     match self.placed(ask) {
       Placed::Ran(code) => Some(code),
-      Placed::Unreached => None,
+      Placed::Unreached | Placed::Full => None,
     }
   }
 }

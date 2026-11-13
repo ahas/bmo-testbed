@@ -276,7 +276,9 @@ flowchart TD
   and `clippy` through `bmo-testbed cargo`, started while every seat of this machine's wide lane is held
   or someone already waits for one, are placed the same way and run there as the same verb of that
   machine's testbed; with a seat free here they run here, so this machine's seats are used first and the
-  placed machine takes what would otherwise wait.
+  placed machine takes what would otherwise wait. They go only to a seat free there now: where every seat
+  of that machine is held or waited for, they wait in this machine's line instead, never in that machine's
+  line while seats here free.
   One that must stand here stays: a build, a run or any other subcommand whose output this machine
   reads afterwards, a `--no-run`, and words naming an absolute path, which would point elsewhere there.
 - **So is the change check, on the same condition:** `bmo-testbed check` with no part named is placed

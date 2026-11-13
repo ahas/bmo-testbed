@@ -53,6 +53,7 @@ pub fn cargo(words: &[String]) -> u8 {
       lane: Lane::Wide,
       cwd: root.clone(),
       env: &env,
+      to_free_seat: true,
     };
 
     if let Some(code) = placement_of(&env, &root).place(&ask) {

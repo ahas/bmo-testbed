@@ -95,6 +95,7 @@ fn placed(env: &Env) -> PlaceAsk<'_> {
     lane: Lane::Wide,
     cwd: std::env::temp_dir(),
     env,
+    to_free_seat: false,
   }
 }
 

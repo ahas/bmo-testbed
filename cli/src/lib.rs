@@ -28,7 +28,7 @@ use std::process::{Command, Stdio};
 use bmo_testbed_core::close_line::close_line_path;
 use bmo_testbed_core::declaration::Repository;
 use bmo_testbed_core::languages::LANGUAGES;
-use bmo_testbed_core::placement::{Local, PLACED_VARIABLE, Placement};
+use bmo_testbed_core::placement::{Local, PLACED_VARIABLE, Placement, wide_lane_full};
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::policy::verbs::VERBS;
@@ -308,6 +308,7 @@ pub fn main(args: impl IntoIterator<Item = OsString>) -> u8 {
   match words.verb {
     Verb::Run(args) => run(args),
     Verb::Placed(args) => placed(args),
+    Verb::Status(args) if args.free => u8::from(wide_lane_full(&process_env())),
     Verb::Status(args) => status(args.json),
     Verb::Classify(args) => classify(args),
     Verb::Suite(args) => suite::suite(args),
