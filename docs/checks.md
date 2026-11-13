@@ -180,6 +180,15 @@
     (`docs/suite.md`, 「The dependents of a major change」) as the checkout whose declaration gives that name,
     so a worker's copy and a scratch clone read the same file as the primary checkout. A registry that does
     not read, no checkout or two declaring the name, and a file that does not read are the check's one fault.
+  - **The file as that repository's main branch holds it:** the check reads the file from the commit the
+    branch that checkout's own declaration names as `[check] main` points at, through git, never from the
+    checkout's working tree. A shared version is one every consumer is held to only once it is on the
+    shared repository's main; a checkout of that repository standing on a release branch or a job's branch,
+    or holding the file changed and not committed, is work under way, so whatever it holds there leaves the
+    answer where main has it. A checkout that is no git repository, or whose main branch does not hold the
+    file, is the check's one fault. The one exception is a placed run handed its checkouts (`docs/boundary.md`,
+    「The placed machine」): there the copies are the caller's, which lays the file over its copy as the
+    caller's main holds it, so the run reads the file as it stands in the copy.
   - **What it leaves out:** a manifest, a lock or a package manifest one of the globs of the declaration's
     `[check.shared_versions] exclude` reaches is not read at all, so a fork's upstream folders, which the
     repository neither builds nor may rewrite, stand outside the check while its own files stay under it.

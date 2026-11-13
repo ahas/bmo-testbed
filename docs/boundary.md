@@ -237,9 +237,10 @@ bmo-testbed check dashes <file…> [--write]
   machine runs it there before the suite (「The placed machine」).
 - With a part named, that quick check alone, or every enabled one for `quick`. `language --settle`
   lowers the ledger, and `korean` names the same part; `shared-versions` holds the Cargo manifests, the
-  lock and the packages the package manifests vendor; `shared-versions --report` holds every checkout of
-  the machine's registry to the shared versions, naming beside each pinned package what the checkout writes
-  for it, and changes nothing; `dashes <file…>` rewrites the dashes
+  lock and the packages the package manifests vendor, both against the shared versions as the main branch
+  of the repository holding them has them, whatever branch its checkout stands on;
+  `shared-versions --report` holds every checkout of the machine's registry to the shared versions, naming
+  beside each pinned package what the checkout writes for it, and changes nothing; `dashes <file…>` rewrites the dashes
   between words in the markdown files named, only with `--write`, and otherwise prints each line it would
   change. Each exits 1 where it finds anything, and 2 where the declaration does not enable it or names
   none of its inputs.
@@ -700,7 +701,9 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   every tree the checkout's workspace names outside the repository, the base libraries and the
   sibling crates among them, and the checkout holding the shared versions the declaration names, found
   through this machine's registry, each to its own place under the bench root the same way, so a path a
-  manifest names resolves there as it does here and the quick checks find what they read. The bench and
+  manifest names resolves there as it does here and the quick checks find what they read; over that
+  checkout's copy it then lays the shared versions' file as that checkout's main branch holds it, which a
+  placed run reads as it stands (`docs/checks.md`, 「The quick checks」, `shared-versions`). The bench and
   every tree copied are the checkouts the run there knows (「`placed`」). A step that fails ends the run as
   not run, exit code 75, with a line naming the step and what it said.
 - **The run is then one `ssh` command:** the testbed binary there, in the bench, asked the `placed`

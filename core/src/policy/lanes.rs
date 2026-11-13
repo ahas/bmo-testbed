@@ -75,6 +75,7 @@ pub struct PlacedWords {
   pub unreached: String,
   pub full: String,
   pub tree_uncopied: String,
+  pub file_unlaid: String,
   pub unfetched: String,
   pub broken: String,
   pub setup_failed: String,

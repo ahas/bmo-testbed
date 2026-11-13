@@ -100,6 +100,7 @@ pub struct SharedVersionsWords {
   pub no_checkout: String,
   pub two_checkouts: String,
   pub not_shared: String,
+  pub not_on_main: String,
   pub not_manifest: String,
   pub not_lock: String,
   pub not_package_manifest: String,

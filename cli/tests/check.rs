@@ -6,7 +6,7 @@ use bmo_testbed_cli::words::CheckPart;
 use bmo_testbed_core::declaration::Repository;
 use bmo_testbed_core::turn::Env;
 
-use crate::stand::{checkout, ran, testbed};
+use crate::stand::{checkout, git, ran, testbed};
 
 fn words(given: &[&str]) -> Vec<String> {
   given.iter().map(|one| (*one).to_owned()).collect()
@@ -85,6 +85,8 @@ fn shared_versions_report_says_a_line_for_each_checkout_and_how_many_differ() {
 
   checkout(&base, "testbed = 0\nname = \"shared-base\"\n");
   std::fs::write(base.join("shared-versions.toml"), "[dependencies]\nrt = \"1.4.0\"\n").unwrap();
+  git(&base, &["add", "."]);
+  git(&base, &["commit", "-q", "-m", "shared versions"]);
   checkout(
     &unit,
     "testbed = 0\nname = \"unit\"\n\n[check]\nquick = [\"shared-versions\"]\n\n[check.shared_versions]\nrepository = \"shared-base\"\n",

@@ -82,7 +82,8 @@ no_result = "its run ended with no result"
 running = "testbed: running on {machine} in {bench}"
 # The placed machine the settings name (docs/boundary.md, 「The placed machine」): its settings file that does
 # not read, {file} the file and {why} what it came to; the machine that cannot be reached, {said} what `ssh`
-# said; an outside tree that could not be copied; the binaries that could not be read back; and the
+# said; an outside tree that could not be copied; a file that could not be laid over a copied tree, {file} its
+# place there; the binaries that could not be read back; and the
 # connection that broke once the run had begun.
 unsettled = "testbed: the placement settings {file} do not read ({why}); running here"
 unreached = "testbed: the placed machine {machine} cannot be reached ({said}); running here"
@@ -90,6 +91,7 @@ unreached = "testbed: the placed machine {machine} cannot be reached ({said}); r
 # answer saying otherwise; it waits for a seat here instead.
 full = "testbed: every seat on {machine} is held or waited for; waiting here"
 tree_uncopied = "the tree {tree} could not be copied: {said}"
+file_unlaid = "the file {file} could not be laid there: {said}"
 unfetched = "the binaries could not be read back from {machine}: {said}"
 broken = "the connection to it broke"
 setup_failed = "testbed: the setup step {command} failed with code {code}"

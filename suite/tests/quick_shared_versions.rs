@@ -1,18 +1,20 @@
 //! The shared versions check (docs/checks.md, 「The quick checks」): a listed crate's entries are the shared
 //! line byte for byte or take the workspace's adding nothing but `optional`, a lock's registry packages on a
 //! snapshot's line stand at its version, an exception stands in for its crate, a stale one is named, a file
-//! an exclude glob reaches is left unread, the shared versions are found through the machine's registry, and
-//! the report holds every checkout to them.
+//! an exclude glob reaches is left unread, the shared versions are found through the machine's registry as
+//! the shared repository's main branch holds them, and the report holds every checkout to them.
 
 use std::collections::BTreeMap;
+use std::path::Path;
+use std::process::{Command, Stdio};
 
 use bmo_testbed_core::declaration::SharedException;
 use bmo_testbed_core::turn::Env;
 use bmo_testbed_suite::quick::shared_versions::{
-  Shared, checkout_shared_versions, hold, read_shared, shared_versions_report,
+  Shared, checkout_shared_versions, find_shared, hold, read_shared, shared_versions_report,
 };
 
-use crate::quick::{checkout, repository};
+use crate::quick::{checkout, repository, write};
 
 const SHARED: &str = "[dependencies]\nrt = { version = \"1.4.0\", features = [\"net\", \"time\"] }\nweb = { version = \"0.8.0\", features = [\"json\"] }\n\n[snapshot]\nrt = \"1.4.0\"\nsys = \"0.2.9\"\nrand = [\"0.8.5\", \"0.9.2\"]\n";
 
@@ -207,6 +209,36 @@ fn the_files_an_exclude_glob_reaches_are_left_unread_and_the_rest_held() {
   assert_eq!(held.entries, 2);
 }
 
+// A git command run in a scratch checkout, git's own settings kept out and a neutral author named.
+fn git(root: &Path, args: &[&str]) {
+  let done = Command::new("git")
+    .args(["-c", "user.name=tester", "-c", "user.email=tester@example.com"])
+    .args(args)
+    .current_dir(root)
+    .env("GIT_CONFIG_GLOBAL", "/dev/null")
+    .env("GIT_CONFIG_SYSTEM", "/dev/null")
+    .stdin(Stdio::null())
+    .output()
+    .unwrap();
+
+  assert!(done.status.success(), "{}", String::from_utf8_lossy(&done.stderr));
+}
+
+// Every file of a scratch checkout committed on the branch it stands on.
+fn commit(root: &Path) {
+  git(root, &["add", "-A"]);
+  git(root, &["commit", "-q", "-m", "shared versions"]);
+}
+
+// A scratch checkout of the shared repository whose main branch holds the files given.
+fn shared_base(files: &[(&str, &str)]) -> tempfile::TempDir {
+  let dir = checkout(files);
+
+  git(dir.path(), &["symbolic-ref", "HEAD", "refs/heads/main"]);
+  commit(dir.path());
+  dir
+}
+
 // A registry file under a scratch data root listing the checkouts given, and the environment naming it.
 fn registry_env(data: &std::path::Path, checkouts: &[&std::path::Path]) -> Env {
   let listed: Vec<String> = checkouts.iter().map(|path| format!("{:?}", path.to_string_lossy())).collect();
@@ -228,7 +260,7 @@ const DECLARING: &str = "testbed = 0\n\n[check]\nquick = [\"shared-versions\"]\n
 #[test]
 fn the_shared_versions_are_found_through_the_registry_under_the_declared_name() {
   let data = tempfile::tempdir().unwrap();
-  let base = checkout(&[
+  let base = shared_base(&[
     ("testbed.toml", "testbed = 0\nname = \"shared-base\"\n"),
     ("shared-versions.toml", SHARED),
   ]);
@@ -264,7 +296,7 @@ fn the_shared_versions_are_found_through_the_registry_under_the_declared_name() 
 #[test]
 fn the_report_holds_every_checkout_with_its_own_exceptions_and_exclusions_and_counts_those_that_differ() {
   let data = tempfile::tempdir().unwrap();
-  let base = checkout(&[
+  let base = shared_base(&[
     ("testbed.toml", "testbed = 0\nname = \"shared-base\"\n"),
     ("shared-versions.toml", SHARED),
   ]);
@@ -380,7 +412,7 @@ fn each_way_an_entry_differs_from_the_pinned_release_is_named_with_what_to_write
 #[test]
 fn the_report_names_what_each_checkout_writes_for_a_pinned_package_beside_the_pin() {
   let data = tempfile::tempdir().unwrap();
-  let base = checkout(&[
+  let base = shared_base(&[
     ("testbed.toml", "testbed = 0\nname = \"shared-base\"\n"),
     ("shared-versions.toml", &pinning()),
   ]);
@@ -410,4 +442,56 @@ fn the_report_names_what_each_checkout_writes_for_a_pinned_package_beside_the_pi
       "behind: 2 to fix: pkg 0.9.0, file:vendor/pkg-1.0.0.tgz (other bytes) beside the pin 1.0.0",
     ]
   );
+}
+
+// The shared versions pinning the package at another version than `pinning`'s, as a release under way would.
+fn pinning_next(version: &str) -> String {
+  format!(
+    "{SHARED}\n[packages.pkg]\nversion = \"{version}\"\nfile = \"pkg-{version}.tgz\"\nsha256 = \"{}\"\n",
+    sha256_of("a release under way")
+  )
+}
+
+// "a checkout of the shared repository on another branch, or holding the file changed and not committed,
+// leaves the shared versions where its main branch has them; a placed run handed its checkouts reads the
+// copy as it stands, and a checkout whose main branch holds no file is the one fault"
+#[test]
+fn no_branch_the_shared_checkout_stands_on_moves_the_shared_versions_from_its_main() {
+  let data = tempfile::tempdir().unwrap();
+  let base = shared_base(&[
+    ("testbed.toml", "testbed = 0\nname = \"shared-base\"\n"),
+    ("shared-versions.toml", &pinning()),
+  ]);
+  let unit = checkout(&[
+    ("testbed.toml", DECLARING),
+    ("package.json", "{\"devDependencies\": {\"pkg\": \"file:vendor/pkg-1.0.0.tgz\"}}"),
+    ("vendor/pkg-1.0.0.tgz", RELEASE),
+  ]);
+
+  git(base.path(), &["checkout", "-q", "-b", "release-next"]);
+  write(base.path(), "shared-versions.toml", &pinning_next("1.1.0"));
+  commit(base.path());
+  write(base.path(), "shared-versions.toml", &pinning_next("1.2.0"));
+
+  let env = registry_env(data.path(), &[base.path(), unit.path()]);
+  let held = checkout_shared_versions(&repository(&unit), &env);
+
+  assert_eq!((held.paths, held.findings), (1, Vec::<String>::new()));
+
+  let mut placed = env.clone();
+
+  placed.insert("BMO_TESTBED_PLACED".to_owned(), "1".to_owned());
+  placed.insert(
+    "BMO_TESTBED_CHECKOUTS".to_owned(),
+    data.path().join("testbed/checkouts.toml").to_string_lossy().into_owned(),
+  );
+  assert_eq!(find_shared("shared-base", &placed).unwrap().packages["pkg"].version, "1.2.0");
+
+  let unborn = checkout(&[
+    ("testbed.toml", "testbed = 0\nname = \"shared-base\"\n"),
+    ("shared-versions.toml", &pinning()),
+  ]);
+  let none = checkout_shared_versions(&repository(&unit), &registry_env(data.path(), &[unborn.path()]));
+
+  assert!(none.findings[0].contains("does not read on the branch main"), "{:?}", none.findings);
 }

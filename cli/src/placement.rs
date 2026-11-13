@@ -4,6 +4,7 @@
 //! bench and the run's event stream. Either way the caller makes the bench ready over `ssh`: the commit
 //! pushed into it, the open files and the outside trees copied over, and the output and the result come back.
 
+use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
@@ -11,13 +12,14 @@ use bmo_testbed_core::declaration::Repository;
 use bmo_testbed_core::placement::{PlaceAsk, Placement};
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
+use bmo_testbed_core::policy::quick_checks::QUICK_CHECKS;
 use bmo_testbed_core::turn::{
   Env, FRONT_VARIABLE, Lane, NEXT_VARIABLE, NOT_RUN_EXIT_CODE, process_env, stands_at_front, stands_next,
 };
 use bmo_testbed_deploy::release::built_from;
 use bmo_testbed_deploy::tree::{BUILT_FROM, short};
 use bmo_testbed_suite::crates::checkout_target_name;
-use bmo_testbed_suite::quick::shared_versions::shared_root;
+use bmo_testbed_suite::quick::shared_versions::{main_shared_text, shared_checkout};
 use futures_util::StreamExt as _;
 use serde::{Deserialize, Serialize};
 use sse_stream::SseStream;
@@ -127,7 +129,8 @@ fn succeeded(output: &std::io::Result<Output>) -> bool {
 }
 
 /// A checkout the bench is made from: its root, its remote, the commit the bench is put at, whether its open
-/// files go over, and the outside trees copied to their own places under the bench root.
+/// files go over, the outside trees copied to their own places under the bench root, and the files laid over
+/// those copies.
 pub struct BenchSource<'a> {
   pub checkout: &'a Path,
   pub remote: &'a str,
@@ -135,6 +138,8 @@ pub struct BenchSource<'a> {
   pub open_files: bool,
   /// Each outside tree, and where it stands under the bench root.
   pub trees: Vec<(PathBuf, String)>,
+  /// Each file written over a copied tree once every tree is copied: its place there, and its text.
+  pub laid: Vec<(String, String)>,
 }
 
 // A path on the placed machine as its shell reads it: `~` opening it is that machine's home, left for the
@@ -144,6 +149,31 @@ fn far_path(path: &str) -> String {
     Some(rest) => format!("~/{}", quoted(rest)),
     None => quoted(path),
   }
+}
+
+// The text written to a file on the far machine through one `ssh` command reading it from its input.
+fn laid_over(
+  program: &str,
+  options: &[String],
+  destination: &str,
+  file: &str,
+  text: &str,
+) -> std::io::Result<Output> {
+  let mut child = Command::new(program)
+    .args(options)
+    .arg(destination)
+    .arg(format!("cat > {}", far_path(file)))
+    .stdin(Stdio::piped())
+    .stdout(Stdio::piped())
+    .stderr(Stdio::piped())
+    .spawn()?;
+
+  // The input is closed before the wait, which ends `cat`, and the command is waited on whether or not the
+  // writing went through.
+  let written = child.stdin.take().map_or(Ok(()), |mut input| input.write_all(text.as_bytes()));
+  let done = child.wait_with_output();
+
+  written.and(done)
 }
 
 fn rsync_over(ssh_command: &str, from: &Path, to: &str) -> std::io::Result<Output> {
@@ -235,6 +265,14 @@ pub fn ready_bench(bench: &Bench, source: &BenchSource<'_>) -> Result<(), String
     }
   }
 
+  for (file, text) in &source.laid {
+    let laid = laid_over(program, options, &bench.destination, file, text);
+
+    if !succeeded(&laid) {
+      return Err(fill_marks(&said_of.file_unlaid, &[("file", file), ("said", &said(&laid))]));
+    }
+  }
+
   Ok(())
 }
 
@@ -320,6 +358,7 @@ impl HttpPlacement {
           commit: &asked.commit,
           open_files: true,
           trees: Vec::new(),
+          laid: Vec::new(),
         };
 
         if let Err(said) = ready_bench(&bench, &source) {
@@ -549,11 +588,21 @@ impl MachinePlacement {
   fn made_ready(&self, checkout: &Path, commit: &str, open_files: bool) -> Result<ReadyBench, String> {
     let remote = git(checkout, &["remote", "get-url", "origin"]);
     let mut trees = bmo_testbed_deploy::expansion::outside_roots(checkout, checkout)?;
+    // The shared versions' file as the shared checkout's main holds it, laid over that checkout's copy, since
+    // the copy is its working tree and the run there reads the copy as it stands.
+    let mut laid = Vec::new();
 
     if let Some(shared) =
       Repository::read(checkout).ok().and_then(|repo| repo.declaration.check.shared_versions)
     {
-      trees.push(shared_root(&shared.repository, &process_env())?);
+      let there = shared_checkout(&shared.repository, &process_env())?;
+      let file = &QUICK_CHECKS.shared_versions.file;
+
+      laid.push((
+        format!("{}/{file}", self.settings.place_of(&there.root, &self.home)),
+        main_shared_text(&there)?,
+      ));
+      trees.push(there.root);
     }
 
     trees.sort();
@@ -574,6 +623,7 @@ impl MachinePlacement {
       commit,
       open_files,
       trees,
+      laid,
     };
 
     ready_bench(&self.settings.as_bench(path.clone()), &source)?;

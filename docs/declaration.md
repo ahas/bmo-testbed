@@ -80,7 +80,7 @@ make their own databases names neither, and its tests are handed the server alon
 | `language_ledger` | path | none | The ledger of lines holding letters that are not English allowed per code file; required by `language`. `korean_ledger` names the same key, and a declaration naming both is refused |
 | `base_libraries` | list of strings | `[]` | The dependencies from other repositories the `dependencies` check allows beside registry ones |
 | `upstreams` | list of strings | `[]` | The same upstream repositories as the top level, for a declaration that keeps its dependency words here; both lists are read |
-| `main` | string | `main` | The main branch, the default base of a change |
+| `main` | string | `main` | The main branch, the default base of a change, and in the repository holding the shared versions the branch the `shared-versions` check reads them from |
 
 ### `[check.shared_versions]`: the shared versions the manifests hold to
 
@@ -89,7 +89,7 @@ enables only with this table's `repository`.
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `repository` | string | required | The repository whose root holds `shared-versions.toml`, by its declared name, found in the machine's registry of checkouts |
+| `repository` | string | required | The repository whose root holds `shared-versions.toml`, by its declared name, found in the machine's registry of checkouts; the file is read as that repository's main branch holds it |
 | `exclude` | list of globs | `[]` | The Cargo manifests, locks and package manifests the check leaves unread, such as the upstream folders a fork carries unchanged |
 
 ### `[check.shared_versions.exceptions.<crate>]`: a crate this repository takes otherwise

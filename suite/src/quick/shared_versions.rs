@@ -4,16 +4,19 @@
 //! stands at the snapshot's version; an exception the declaration names stands in for the shared line or
 //! version of its crate. Every entry of its package manifests naming a pinned package is the pinned release's
 //! (`shared_packages`). A file one of the declaration's `exclude` globs reaches is left unread. The shared
-//! versions are read from the root of the checkout the machine's registry lists under the repository name
-//! the declaration gives.
+//! versions are read from the checkout the machine's registry lists under the repository name the
+//! declaration gives, as the main branch its own declaration names holds them, so no branch that checkout
+//! stands on moves them; a placed run handed its checkouts reads the copy its caller laid as it stands.
 //!
 //! A manifest is read by the format-keeping TOML reader, since the rule holds the line as written, not
 //! only what it means; a lock by the TOML reader; a version by the semver reader.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::{Path, PathBuf};
+use std::path::Path;
+use std::process::{Command, Stdio};
 
 use bmo_testbed_core::declaration::{Repository, SharedException};
+use bmo_testbed_core::placement::PLACED_VARIABLE;
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::quick_checks::{QUICK_CHECKS, SharedVersionsWords};
 use bmo_testbed_core::turn::Env;
@@ -25,11 +28,15 @@ use toml_edit::{DocumentMut, Item, TableLike};
 use super::Findings;
 use super::files::{checkout_files_where, read_text};
 use super::shared_packages::{PackagePin, hold_packages, read_pins};
-use crate::dependents::{read_registry, registry_path};
+use crate::dependents::{CHECKOUTS_VARIABLE, read_registry, registry_path};
 use crate::selection::glob_matches;
 
 // The tables of a crate's manifest naming what it depends on, at its top and under each `[target.…]`.
 const CARGO_TABLES: [&str; 3] = ["dependencies", "dev-dependencies", "build-dependencies"];
+
+// The variables naming a repository to git, which a hook of the checkout under check sets; the shared
+// checkout's own repository is read with them taken away.
+const GIT_PLACE_VARIABLES: [&str; 3] = ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"];
 
 fn words() -> &'static SharedVersionsWords {
   &QUICK_CHECKS.shared_versions
@@ -101,27 +108,32 @@ pub fn read_shared(text: &str) -> Result<Shared, String> {
   Ok(shared)
 }
 
-/// The root of the checkout the registry lists under `repository`'s declared name, or why none is found.
-pub fn shared_root(repository: &str, env: &Env) -> Result<PathBuf, String> {
+/// The checkout the registry lists under `repository`'s declared name, its root made canonical, or why none
+/// is found.
+pub fn shared_checkout(repository: &str, env: &Env) -> Result<Repository, String> {
   let registry = registry_path(&data_root_of(env), env);
   let shown = registry.to_string_lossy();
   let checkouts = read_registry(&registry, env)
     .map_err(|fault| fill_marks(&words().unread_registry, &[("registry", &shown), ("why", &fault.why)]))?;
-  let mut roots: Vec<PathBuf> = checkouts
+  let mut found: Vec<Repository> = checkouts
     .iter()
     .filter_map(|checkout| Repository::read(checkout).ok())
     .filter(|checkout| checkout.name() == repository)
-    .map(|checkout| std::fs::canonicalize(&checkout.root).unwrap_or(checkout.root))
+    .map(|mut checkout| {
+      checkout.root = std::fs::canonicalize(&checkout.root).unwrap_or(checkout.root);
+      checkout
+    })
     .collect();
 
-  roots.sort();
-  roots.dedup();
+  found.sort_by(|left, right| left.root.cmp(&right.root));
+  found.dedup_by(|left, right| left.root == right.root);
 
-  match roots.as_slice() {
-    [] => Err(fill_marks(&words().no_checkout, &[("registry", &shown), ("repository", repository)])),
-    [root] => Ok(root.clone()),
-    many => {
-      let named: Vec<String> = many.iter().map(|root| root.to_string_lossy().into_owned()).collect();
+  match found.len() {
+    0 => Err(fill_marks(&words().no_checkout, &[("registry", &shown), ("repository", repository)])),
+    1 => Ok(found.remove(0)),
+    _ => {
+      let named: Vec<String> =
+        found.iter().map(|checkout| checkout.root.to_string_lossy().into_owned()).collect();
 
       Err(fill_marks(
         &words().two_checkouts,
@@ -131,12 +143,53 @@ pub fn shared_root(repository: &str, env: &Env) -> Result<PathBuf, String> {
   }
 }
 
-/// The shared versions standing at the root of the checkout the registry lists under `repository`.
+/// The shared versions' file as the main branch the checkout's own declaration names holds it, read through
+/// git and never from the working tree, or why it does not read there.
+pub fn main_shared_text(checkout: &Repository) -> Result<String, String> {
+  let file = &words().file;
+  let main = &checkout.declaration.check.main;
+  let path = checkout.root.join(file);
+  let unread = |why: &str| {
+    fill_marks(&words().not_on_main, &[("path", &path.to_string_lossy()), ("main", main), ("why", why)])
+  };
+  let mut command = Command::new("git");
+
+  for variable in GIT_PLACE_VARIABLES {
+    command.env_remove(variable);
+  }
+
+  let done = command
+    .args(["show", &format!("refs/heads/{main}:./{file}")])
+    .current_dir(&checkout.root)
+    .stdin(Stdio::null())
+    .output()
+    .map_err(|why| unread(&why.to_string()))?;
+
+  if !done.status.success() {
+    return Err(unread(String::from_utf8_lossy(&done.stderr).trim()));
+  }
+
+  String::from_utf8(done.stdout).map_err(|why| unread(&why.to_string()))
+}
+
+// Whether the run is a placed one handed its checkouts: those are copies its caller laid, the shared versions'
+// file among them as the caller's main holds it (docs/boundary.md, 「The placed machine」), so the copy is read
+// as it stands.
+fn reads_laid_copies(env: &Env) -> bool {
+  env.contains_key(PLACED_VARIABLE) && env.get(CHECKOUTS_VARIABLE).is_some_and(|file| !file.is_empty())
+}
+
+/// The shared versions of the checkout the registry lists under `repository`, as its main branch holds them.
 pub fn find_shared(repository: &str, env: &Env) -> Result<Shared, String> {
-  let path = shared_root(repository, env)?.join(&words().file);
+  let checkout = shared_checkout(repository, env)?;
+  let path = checkout.root.join(&words().file);
   let shown = path.to_string_lossy();
-  let text = std::fs::read_to_string(&path)
-    .map_err(|why| fill_marks(&words().not_shared, &[("path", &shown), ("why", &why.to_string())]))?;
+  let text = if reads_laid_copies(env) {
+    std::fs::read_to_string(&path)
+      .map_err(|why| fill_marks(&words().not_shared, &[("path", &shown), ("why", &why.to_string())]))?
+  } else {
+    main_shared_text(&checkout)?
+  };
 
   read_shared(&text).map_err(|why| fill_marks(&words().not_shared, &[("path", &shown), ("why", &why)]))
 }
