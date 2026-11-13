@@ -704,7 +704,8 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   |---|---|---|---|
   | `machine` | string | the destination | The label the lines name the machine by |
   | `destination` | string | required | The machine as this machine's `ssh` reaches it |
-  | `bench` | string | `~/.local/share/bmo/bench` | The bench root there: every tree copied over stands under it at the path it has under this machine's home |
+  | `bench` | string | `~/.local/share/bmo/bench` | The runs' bench root there: every tree a run copies over stands under it at the path it has under this machine's home |
+  | `deploy_bench` | string | `~/.local/share/bmo/deploy-bench` | The deployments' bench root there: every tree a deployment copies over stands under the folder of its repository's name in it, at the path it has under this machine's home (「A deployment's bench stands apart」) |
   | `ssh` | list of strings | `["ssh"]` | The `ssh` program and its options |
   | `testbed` | string | `~/.local/share/bmo-testbed/deploy/bin/bmo-testbed` | The testbed binary there |
   | `cargo_target` | string | `~/.local/share/bmo/cargo-target` | That machine's shared Cargo build directory; a deployment's build is read back from the bench's own directory under it, the one that machine's Cargo verb builds in (`docs/deploy.md`, 「The Cargo build directory」) |
@@ -741,6 +742,15 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   (`docs/checks.md`, 「The quick checks」, `shared-versions`). The bench and
   every tree copied are the checkouts the run there knows (「`placed`」). A step that fails ends the run as
   not run, exit code 75, with a line naming the step and what it said.
+- **A deployment's bench stands apart** from every run's and from every other repository's deployment:
+  its checkout and each tree copied beside it stand under the folder of the deployed repository's name
+  in `deploy_bench`, at the paths they have under this machine's home, made ready the same way. A run
+  copies a sibling repository's tree as it stands into its own place under `bench`, and a deployment of
+  another repository into its own folder, so nothing another run copies is written into a tree a
+  deployment's gate or Cargo release build reads while it reads it, and the commit a deployment checks
+  out in its bench, with the untracked files it takes away, never reaches a tree a run reads. Each
+  repository's deployments keep one bench there, at one path, so the Cargo build directory that
+  machine's testbed names after it stays warm from one deployment to the next.
 - **The run is then one `ssh` command:** the testbed binary there, in the bench, asked the `placed`
   verb with the words. Its standard error is this run's standard error, its standard output its one
   result line, and its exit code this run's exit code. The caller passes both on as they come, but for

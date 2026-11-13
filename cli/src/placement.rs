@@ -477,6 +477,10 @@ pub struct MachineSettings {
   pub machine: Option<String>,
   #[serde(default = "MachineSettings::bench")]
   pub bench: String,
+  /// The deployments' bench root there, apart from the runs' (docs/boundary.md, 「A deployment's bench stands
+  /// apart」).
+  #[serde(default = "MachineSettings::deploy_bench")]
+  pub deploy_bench: String,
   #[serde(default = "Bench::ssh")]
   pub ssh: Vec<String>,
   #[serde(default = "MachineSettings::testbed")]
@@ -501,6 +505,10 @@ pub const PLACEMENT_SETTINGS: &str = "placement.toml";
 impl MachineSettings {
   fn bench() -> String {
     "~/.local/share/bmo/bench".to_owned()
+  }
+
+  fn deploy_bench() -> String {
+    "~/.local/share/bmo/deploy-bench".to_owned()
   }
 
   fn testbed() -> String {
@@ -555,16 +563,12 @@ impl MachineSettings {
     self.machine.as_deref().unwrap_or(&self.destination)
   }
 
-  /// Where a tree of this machine stands under the bench root: at its path under this machine's home, or at
-  /// its whole path where it stands outside it.
-  pub fn place_of(&self, tree: &Path, home: &Path) -> String {
+  /// Where a tree of this machine stands under the root of a bench made ready for `purpose`: at its path
+  /// under this machine's home, or at its whole path where it stands outside it.
+  pub fn place_of(&self, purpose: BenchFor<'_>, tree: &Path, home: &Path) -> String {
     let relative = tree.strip_prefix(home).unwrap_or(tree);
 
-    format!(
-      "{}/{}",
-      self.bench.trim_end_matches('/'),
-      relative.to_string_lossy().trim_start_matches('/')
-    )
+    format!("{}/{}", purpose.root(self), relative.to_string_lossy().trim_start_matches('/'))
   }
 
   fn as_bench(&self, path: String) -> Bench {
@@ -573,6 +577,35 @@ impl MachineSettings {
       path,
       ssh: self.ssh.clone(),
     }
+  }
+}
+
+/// What a bench on the placed machine is made ready for, which says where its trees stand there and whether
+/// the checkout's open files go over (docs/boundary.md, 「The placed machine」).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BenchFor<'a> {
+  /// A run: the commit with the open files over it, its trees under the runs' bench root, where a run of
+  /// another checkout copies the same trees as they stand.
+  Run,
+  /// A deployment of the named repository: the commit alone, its trees under that repository's folder of the
+  /// deployments' bench root, which no run and no other repository's deployment copies into.
+  Deployment(&'a str),
+}
+
+impl BenchFor<'_> {
+  /// The root the bench and its trees stand under there.
+  pub fn root(self, settings: &MachineSettings) -> String {
+    match self {
+      Self::Run => settings.bench.trim_end_matches('/').to_owned(),
+      Self::Deployment(repository) => {
+        format!("{}/{repository}", settings.deploy_bench.trim_end_matches('/'))
+      }
+    }
+  }
+
+  /// Whether the checkout's open files go over the commit.
+  pub fn open_files(self) -> bool {
+    matches!(self, Self::Run)
   }
 }
 
@@ -767,17 +800,17 @@ impl MachinePlacement {
     }
   }
 
-  /// The bench of a checkout made ready at a commit, its outside trees with it, and the checkout holding the
-  /// shared versions the declaration names, found through this machine's registry; the bench's path there,
-  /// and the far places of every tree copied, which are that run's checkouts there. Nothing is made ready
-  /// where the testbed there is not this one's release.
-  pub fn ready(&self, checkout: &Path, commit: &str, open_files: bool) -> Result<ReadyBench, String> {
+  /// The bench of a checkout made ready at a commit for `purpose`, its outside trees with it, and the
+  /// checkout holding the shared versions the declaration names, found through this machine's registry; the
+  /// bench's path there, and the far places of every tree copied, which are that run's checkouts there.
+  /// Nothing is made ready where the testbed there is not this one's release.
+  pub fn ready(&self, checkout: &Path, commit: &str, purpose: BenchFor<'_>) -> Result<ReadyBench, String> {
     self.same_release()?;
-    self.made_ready(checkout, commit, open_files)
+    self.made_ready(checkout, commit, purpose)
   }
 
   // The bench made ready, the release there taken as already compared.
-  fn made_ready(&self, checkout: &Path, commit: &str, open_files: bool) -> Result<ReadyBench, String> {
+  fn made_ready(&self, checkout: &Path, commit: &str, purpose: BenchFor<'_>) -> Result<ReadyBench, String> {
     let remote = reachable_remote(checkout);
     let mut trees = bmo_testbed_deploy::expansion::outside_roots(checkout, checkout)?;
     // The shared versions' file as the shared checkout's main holds it, laid over that checkout's copy, since
@@ -791,7 +824,7 @@ impl MachinePlacement {
       let file = &QUICK_CHECKS.shared_versions.file;
 
       laid.push((
-        format!("{}/{file}", self.settings.place_of(&there.root, &self.home)),
+        format!("{}/{file}", self.settings.place_of(purpose, &there.root, &self.home)),
         main_shared_text(&there)?,
       ));
       trees.push(there.root);
@@ -802,10 +835,13 @@ impl MachinePlacement {
 
     let trees: Vec<(PathBuf, String)> = trees
       .into_iter()
-      .map(|tree| (self.settings.place_of(&tree, &self.home).clone(), tree))
-      .map(|(place, tree)| (tree, place))
+      .map(|tree| {
+        let place = self.settings.place_of(purpose, &tree, &self.home);
+
+        (tree, place)
+      })
       .collect();
-    let path = self.settings.place_of(checkout, &self.home);
+    let path = self.settings.place_of(purpose, checkout, &self.home);
     let checkouts = std::iter::once(path.clone())
       .chain(trees.iter().map(|(_, place)| place.clone()))
       .collect();
@@ -813,7 +849,7 @@ impl MachinePlacement {
       checkout,
       remote: &remote,
       commit,
-      open_files,
+      open_files: purpose.open_files(),
       trees,
       laid,
     };
@@ -990,7 +1026,7 @@ impl MachinePlacement {
     let checkout = if found.is_empty() { ask.cwd.clone() } else { PathBuf::from(found) };
     let placed = PlacedRun::stand(ask, &checkout, self.settings.label());
     let commit = git(&checkout, &["rev-parse", "HEAD"]);
-    let bench = match self.made_ready(&checkout, &commit, true) {
+    let bench = match self.made_ready(&checkout, &commit, BenchFor::Run) {
       Ok(bench) => bench,
       Err(said) => return Placed::Ran(dropped(self.settings.label(), &said)),
     };

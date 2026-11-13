@@ -5,7 +5,7 @@
 //! bench made ready over the same stand-in, from the remote that machine can reach or empty where it can reach
 //! none, the run the testbed's `placed` verb there, a machine that cannot be reached, or settings that do not
 //! read, leaving the run here, the shared versions laid over their copy as their main branch holds them, a
-//! testbed there that is not this one's release refused before any bench is made and a run meeting it kept
+//! deployment's bench standing apart from a run's copy of the same tree, a testbed there that is not this one's release refused before any bench is made and a run meeting it kept
 //! here, a run whose environment sets a variable its declaration names as this machine's kept here, the
 //! run standing in its lane here while it lasts, running once the far side says its turn came, that line read
 //! and not passed on, and the `placed` verb there passing its command's output on, telling its own holder
@@ -21,7 +21,9 @@ use axum::Router;
 use axum::response::sse::{Event, Sse};
 use axum::routing::{get, post};
 use bmo_testbed_cli::cargo::placed_disk;
-use bmo_testbed_cli::placement::{MachinePlacement, MachineSettings, ReadyBench, reachable_remote};
+use bmo_testbed_cli::placement::{
+  BenchFor, MachinePlacement, MachineSettings, ReadyBench, reachable_remote,
+};
 use bmo_testbed_core::events::Hook;
 use bmo_testbed_core::placement::{PlaceAsk, PlacedRun, Placement, read_placed};
 use bmo_testbed_core::policy::fill_marks;
@@ -490,6 +492,7 @@ fn released(dir: &Path, far: Option<&str>, own: Option<&str>) -> MachinePlacemen
       destination: "stand".to_owned(),
       machine: Some("machine-2".to_owned()),
       bench: dir.join("bench").to_string_lossy().into_owned(),
+      deploy_bench: dir.join("deploy-bench").to_string_lossy().into_owned(),
       ssh: vec![ssh.to_string_lossy().into_owned()],
       testbed: bin.join("bmo-testbed").to_string_lossy().into_owned(),
       cargo_target: dir.join("cargo-target").to_string_lossy().into_owned(),
@@ -516,7 +519,7 @@ fn a_testbed_there_of_another_release_is_refused_naming_both_commits_and_no_benc
 
   let machine = released(&dir, Some(FAR), Some(OWN));
   let commit = git(&repo, &["rev-parse", "HEAD"]);
-  let refused = machine.ready(&repo, &commit, false).map(|bench| bench.path);
+  let refused = machine.ready(&repo, &commit, BenchFor::Deployment("repo")).map(|bench| bench.path);
   let stale = fill_marks(
     &LANES.placed.stale,
     &[("machine", "machine-2"), ("far", &FAR[..12]), ("own", &OWN[..12])],
@@ -524,6 +527,7 @@ fn a_testbed_there_of_another_release_is_refused_naming_both_commits_and_no_benc
 
   assert_eq!(refused, Err(stale));
   assert!(!dir.join("bench").exists());
+  assert!(!dir.join("deploy-bench").exists());
 }
 
 // "where no such file reads there, the run is not run"; "a testbed running from no release compares nothing"
@@ -544,6 +548,64 @@ fn the_same_release_passes_one_naming_none_is_refused_and_none_here_compares_not
   assert!(unreleased.starts_with(opening.split("{said}").next().unwrap()), "{unreleased}");
   assert!(unreleased.contains(&OWN[..12]), "{unreleased}");
   assert_eq!(released(&dir, None, None).same_release(), Ok(()));
+}
+
+// A checkout holding one package, its manifest naming the dependency given by a path, committed.
+fn package_checkout(dir: &Path, name: &str, dependency: Option<&str>) {
+  checkout(dir, &format!("testbed = 0\nname = \"{name}\"\n"));
+  std::fs::create_dir_all(dir.join("src")).unwrap();
+
+  let depends = dependency
+    .map_or_else(String::new, |path| format!("\n[dependencies]\nbase = {{ path = \"{path}\" }}\n"));
+
+  std::fs::write(
+    dir.join("Cargo.toml"),
+    format!("[package]\nname = \"{name}\"\nversion = \"0.1.0\"\nedition = \"2021\"\n{depends}"),
+  )
+  .unwrap();
+  std::fs::write(dir.join("src/lib.rs"), "").unwrap();
+  git(dir, &["add", "."]);
+  git(dir, &["commit", "-q", "-m", "package"]);
+}
+
+// "A deployment's bench stands apart from every run's": a run copying the deployed repository's working
+// tree beside its own checkout writes nothing into the deployment's tree, and the deployment's bench made
+// ready again leaves the run's copy as it stood.
+#[test]
+fn a_deployments_bench_stands_apart_from_a_run_copying_the_same_tree() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let base = dir.join("base");
+  let consumer = dir.join("consumer");
+
+  package_checkout(&base, "base", None);
+  package_checkout(&consumer, "consumer", Some("../base"));
+
+  let machine = released(&dir, None, None);
+  let deployed = git(&base, &["rev-parse", "HEAD"]);
+  let bench = machine.ready(&base, &deployed, BenchFor::Deployment("base")).unwrap();
+  let deployed_tree = dir.join("deploy-bench/base/base");
+
+  assert_eq!(Path::new(&bench.path), deployed_tree);
+  assert_eq!(git(&deployed_tree, &["rev-parse", "HEAD"]), deployed);
+
+  // The deployed repository's working tree moves on, and a run of the checkout naming it copies it as it
+  // stands.
+  std::fs::write(base.join("src/lib.rs"), "pub fn moved() {}\n").unwrap();
+
+  let run = git(&consumer, &["rev-parse", "HEAD"]);
+  let ran = machine.ready(&consumer, &run, BenchFor::Run).unwrap();
+  let copied = dir.join("bench/base");
+
+  assert_eq!(Path::new(&ran.path), dir.join("bench/consumer"));
+  assert!(ran.checkouts.contains(&copied.to_string_lossy().into_owned()), "{:?}", ran.checkouts);
+  assert_eq!(std::fs::read_to_string(copied.join("src/lib.rs")).unwrap(), "pub fn moved() {}\n");
+  assert_eq!(std::fs::read_to_string(deployed_tree.join("src/lib.rs")).unwrap(), "");
+  assert_eq!(git(&deployed_tree, &["status", "--porcelain"]), "");
+
+  machine.ready(&base, &deployed, BenchFor::Deployment("base")).unwrap();
+
+  assert_eq!(std::fs::read_to_string(copied.join("src/lib.rs")).unwrap(), "pub fn moved() {}\n");
 }
 
 // "where they differ, a run, a suite, a change check or a Cargo verb runs here instead"

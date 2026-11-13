@@ -21,8 +21,8 @@
       "deploy/releases-and-rollback",
       "core/policy-loader"
     ],
-    "base": "9aa0db29574b9e50c97edc189f30b6ad31c01d32",
-    "changed": 1794544134636
+    "base": "771bcb816730bdf711aca49591c909a812ebbc69",
+    "changed": 1794562781988
   },
   {
     "id": "deploy/console-probe",
@@ -59,7 +59,7 @@
   {
     "id": "deploy/deploy-run",
     "title": "Deploy run",
-    "what": "The deploy run in a unit of its own, by its commit's declaration: gate, backup, release, the wait for quiet, flip, restarts watched, a console face probed, rolled back where either fails, the placed machine's units laid, progress mirrored into the record, outcome written before the hook hears.",
+    "what": "A deploy run in a unit of its own, by its commit's declaration: gate, backup, release, the wait for quiet, flip, restarts watched, a console face probed, rolled back where either fails, the placed machine's units laid, progress mirrored into the record, outcome written before the hook hears.",
     "files": [
       "deploy/src/deployment.rs",
       "deploy/src/progress.rs",
@@ -101,7 +101,7 @@
       "core/silence-watch"
     ],
     "base": "2a697e7005d23d4201403e8c2b1af370614661c3",
-    "changed": 1794560966773
+    "changed": 1794562786015
   },
   {
     "id": "deploy/hosted-deploy-tool",

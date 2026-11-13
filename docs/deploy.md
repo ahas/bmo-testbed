@@ -195,7 +195,9 @@
   variable.
 - **The gate and the Cargo release build go to the placed machine** where the machine's settings name
   one (`docs/boundary.md`, 「Placement」, 「The placed machine」). The deployment benches the commit
-  there, the checkout's outside trees as they stand with it, and sets the bench up with the declared
+  there, the checkout's outside trees as they stand with it, in a bench of the repository's own that no
+  run and no other repository's deployment copies into, as the build tree stands apart here
+  (`docs/boundary.md`, 「A deployment's bench stands apart」), and sets the bench up with the declared
   setup steps; the static check (`check static`, no test among it) and the suite then run there, each as
   that machine's own testbed verb in its own turn, and the Cargo release build runs there in that machine's Cargo build root,
   from which the deployment reads the built binaries back over `rsync` into its own build directory

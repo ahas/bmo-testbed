@@ -34,7 +34,7 @@ use bmo_testbed_suite::run::{SuiteAsk, SuiteWords, ask_of};
 use bmo_testbed_suite::static_check::{check_steps, run_static_check, spawn_step};
 
 use crate::home_of;
-use crate::placement::{MachinePlacement, ReadyBench};
+use crate::placement::{BenchFor, MachinePlacement, ReadyBench};
 use crate::recorded::suite_record;
 use crate::suite::repository;
 use crate::words::{BINARY, DeployFlags};
@@ -135,12 +135,14 @@ impl Gate for SuiteGate<'_> {
 }
 
 /// The gate passed on the placed machine the settings name (docs/deploy.md, 「Where a deployment runs」): the
-/// commit benched there with the checkout's outside trees, the static check and the suite run there as that
-/// machine's own verbs, the suite left out where that machine's record holds a passed run of the whole suite
-/// on the commit, and the Cargo release build run there and read back. The gate here stands in where the
-/// machine cannot be reached.
+/// commit benched there with the checkout's outside trees, in the repository's own deployment bench, the
+/// static check and the suite run there as that machine's own verbs, the suite left out where that machine's
+/// record holds a passed run of the whole suite on the commit, and the Cargo release build run there and
+/// read back. The gate here stands in where the machine cannot be reached.
 pub struct PlacedGate<'a> {
   pub machine: MachinePlacement,
+  /// The deployed repository's name, which its bench there stands under.
+  pub repository: String,
   pub here: &'a dyn Gate,
   /// Whether the gate is passed at all; the build goes to the machine either way.
   pub checked: bool,
@@ -198,7 +200,7 @@ impl Gate for PlacedGate<'_> {
       return self.here.pass(ask);
     }
 
-    let bench = match self.machine.ready(ask.root, ask.commit, false) {
+    let bench = match self.machine.ready(ask.root, ask.commit, BenchFor::Deployment(&self.repository)) {
       Ok(bench) => bench,
       Err(why) => {
         return GateOutcome {
@@ -263,7 +265,7 @@ impl Gate for PlacedGate<'_> {
       return None;
     }
 
-    let bench = match self.machine.ready(ask.root, ask.commit, false) {
+    let bench = match self.machine.ready(ask.root, ask.commit, BenchFor::Deployment(&self.repository)) {
       Ok(bench) => bench,
       Err(why) => return Some(Err(why)),
     };
@@ -400,6 +402,7 @@ pub fn deploy(args: &DeployFlags) -> u8 {
   let here: &dyn Gate = if args.no_check { &Passed } else { &suite };
   let placed = MachinePlacement::named(&data_root(), &home_of(&env)).map(|machine| PlacedGate {
     machine,
+    repository: repo.name(),
     here,
     checked: !args.no_check,
   });
