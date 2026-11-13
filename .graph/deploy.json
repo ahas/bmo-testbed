@@ -99,10 +99,11 @@
       "record/record",
       "deploy/console-probe",
       "suite/quick-checks",
-      "core/silence-watch"
+      "core/silence-watch",
+      "suite/cargo-verb-and-prune"
     ],
-    "base": "69c743b39984c32b984d190a832d5459c05b783c",
-    "changed": 1794566608521
+    "base": "4d220b85b600ca845c1ef8e47581851a34f625a7",
+    "changed": 1794569480490
   },
   {
     "id": "deploy/hosted-deploy-tool",

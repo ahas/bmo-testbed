@@ -2,18 +2,20 @@
   {
     "id": "suite/cargo-verb-and-prune",
     "title": "Cargo verb and prune",
-    "what": "The cargo verb over the shared build directory, removing what a build superseded; the prune verb with its timer, laid on the placed machine too, removing what no build reads and telling the event hook when the directory stays over its ceiling or a placed machine's disk falls below its floor.",
+    "what": "The cargo verb over the shared build directory, running a command that holds its lock on a lock whose path packages follow their manifests, and removing what a build superseded; the prune verb with its timer, also on the placed machine, removing what no build reads and warning of a full disk.",
     "files": [
       "suite/src/cargo.rs",
       "suite/src/superseded.rs",
       "suite/src/prune.rs",
       "cli/src/cargo.rs",
+      "core/src/cargo_lock.rs",
       "units/bmo-cargo-prune.service",
       "units/bmo-cargo-prune.timer",
       "units/bmo-upkeep.slice",
       "docs/deploy.md",
       "suite/tests/prune.rs",
-      "suite/tests/superseded.rs"
+      "suite/tests/superseded.rs",
+      "core/tests/cargo_lock.rs"
     ],
     "symbols": [],
     "aliases": [
@@ -29,8 +31,8 @@
       "core/silence-watch",
       "core/placement"
     ],
-    "base": "2a697e7005d23d4201403e8c2b1af370614661c3",
-    "changed": 1794550656181
+    "base": "4d220b85b600ca845c1ef8e47581851a34f625a7",
+    "changed": 1794569480485
   },
   {
     "id": "suite/change-check",

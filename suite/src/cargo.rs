@@ -4,13 +4,15 @@
 //! wrapper, on the account's own toolchain, and — where it compiles — in the machine's turn behind the other
 //! heavy commands on this machine, run again where the kernel killed it for want of memory, and ended as hung
 //! where its standard output and error are both files and nothing is written to them for the silence limit.
-//! Formatting and the other reading verbs compile nothing and run at once. A compiling command is handed its
-//! turn's share of the lane's width as its jobs, unless its words or its environment name them. A build that
+//! Formatting and the other reading verbs compile nothing and run at once. A command holding its lock runs
+//! with the lock's path packages brought to their manifests, the lock put back once it ends. A compiling
+//! command is handed its turn's share of the lane's width as its jobs, unless its words or its environment name them. A build that
 //! passed removes, inside the same turn, what the checkout's earlier build of its shape left.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
+use bmo_testbed_core::cargo_lock::align_path_packages;
 use bmo_testbed_core::languages::{Cargo, Language as _, cargo_compiles as compiles};
 use bmo_testbed_core::memory::{MachineHands, MemoryLimits, RunEnd, run_in_turn};
 use bmo_testbed_core::policy::fill_shown;
@@ -39,9 +41,15 @@ pub struct CargoInvocation {
 impl CargoInvocation {
   /// The command ready to start in `root`, its standard input closed.
   pub fn command(&self, root: &Path) -> Command {
-    let mut command = Command::new(&self.command[0]);
+    let mut command = self.program();
 
     command.args(&self.command[1..]).current_dir(root).stdin(Stdio::null());
+    command
+  }
+
+  /// Its program with its variables and no arguments, for another Cargo command asked in the same checkout.
+  pub fn program(&self) -> Command {
+    let mut command = Command::new(&self.command[0]);
 
     for (name, _) in std::env::vars_os() {
       if set_by_cargo(&name.to_string_lossy()) {
@@ -158,11 +166,13 @@ pub fn remove_superseded_after(root: &Path, args: &[String], say: &mut dyn FnMut
 
 /// Cargo with `args` in the checkout at `root`, answering the exit code the caller ends on: a command that
 /// compiles nothing at once, one that compiles in the machine's turn, watched for silence and run again after
-/// an out-of-memory kill, with what it superseded removed once it has passed. Cargo stays in this process's
+/// an out-of-memory kill, each start of one holding its lock run on the lock's path packages brought to their
+/// manifests, with what it superseded removed once it has passed. Cargo stays in this process's
 /// own process group, so a terminal's interrupt still reaches it; a hung one is ended with every process
 /// under it.
 pub fn run_cargo(root: &Path, args: &[String]) -> u8 {
   let invocation = cargo_invocation(root, args);
+
   let compiling = compiles(args);
   let what = std::iter::once("cargo")
     .chain(args.iter().map(String::as_str))
@@ -189,7 +199,13 @@ pub fn run_cargo(root: &Path, args: &[String]) -> u8 {
       .envs(widened)
       .envs(watch.variable());
 
-    match command.spawn() {
+    let aligned = align_path_packages(root, args, &|| invocation.program());
+
+    if let Some(aligned) = &aligned {
+      eprintln!("{}", aligned.said());
+    }
+
+    let ended = match command.spawn() {
       Ok(mut child) => {
         let waited = watch.wait(&mut child, &what);
 
@@ -210,7 +226,13 @@ pub fn run_cargo(root: &Path, args: &[String]) -> u8 {
           signal: None,
         }
       }
+    };
+
+    if let Some(aligned) = &aligned {
+      aligned.put_back();
     }
+
+    ended
   };
 
   if !compiling {

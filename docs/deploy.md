@@ -369,7 +369,9 @@
      deployment, while every file of the repository's own is judged in full (`docs/checks.md`,
      「The static check」). A declared step that only repeats these formatting and lints, such as a
      `cargo fmt --all --check` that would follow a path dependency into a sibling's checkout, is left
-     out for them. A sibling whose tree as it stands does not compile still fails the gate,
+     out for them. A sibling whose version has moved past the one the repository's lock names fails
+     nothing, since the lock's path packages are brought to their manifests before the lints and the
+     build (「The Cargo build directory」). A sibling whose tree as it stands does not compile still fails the gate,
      since the repository's crates that depend on it cannot be checked, and the release build, which
      reads the same tree (「The releases」), would fail on it as well.
    - **A major change runs its consumer's suites as well.** The major of the commit's `VERSION` is
@@ -646,6 +648,21 @@ flowchart TD
   runs in, a scratch clone as much as a repository of the umbrella. A build typed outside the verb,
   plain `cargo`, lands in the checkout's own `target/` and shares nothing; such a `target/` is a
   stray the prune takes away.
+- **A lock's path packages follow their manifests.** A package Cargo reads from a path, a sibling
+  repository's crate or a base library, stands in the lock at the version its manifest names, and the
+  sibling moves that version with commits of its own. So before a command that holds the lock, one
+  naming `--locked` or `--frozen`, the Cargo verb lets Cargo resolve the workspace offline and write the
+  lock just before the command starts, and keeps what it wrote only where the path packages alone moved:
+  every package from a registry or a git source stands in it as it stood, and so does the lock's own
+  format. It then says on one line which path packages moved, from which version to which. Where
+  anything else moved, or Cargo could not resolve offline, the lock is put back byte for byte and the
+  command judges it as it stood, so a registry package's lock is held exactly as `--locked` holds it.
+  Once the command ends, the lock is put back as it was found, unless something else has written it
+  since, so the checkout's tracked files never change under a check and a deployment never finds its
+  checkout holding uncommitted changes a check left (「What it refuses」). A lock that already matches
+  its manifests is left untouched, and so is the lock of a command naming its manifest by
+  `--manifest-path`. The release build does the same in the build tree around its run (「The
+  releases」), so a sibling's new version fails no gate, no check and no release build.
 - **Removing what a build superseded.** After a build, check, lint, test, bench or run the Cargo verb
   carried has passed, the units of the checkout's own crates that its earlier builds left and this one
   replaced go. What a build stands on is Cargo's own word, its JSON messages. A record in the

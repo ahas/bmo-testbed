@@ -80,7 +80,9 @@
 - **A Cargo workspace's check comes last,** where a crate is marked: `cargo fmt --check`, then
   `cargo clippy --all-targets --locked` with every warning an error, both through the Cargo verb, in
   the wide lane, run again where the kernel killed it for want of memory; formatting compiles nothing
-  and runs at once.
+  and runs at once. `--locked` holds the lock's registry and git packages as they stand; its path
+  packages, a sibling repository's crates among them, are first brought to the versions their manifests
+  name (`docs/deploy.md`, 「The Cargo build directory」), so a sibling's new version never fails it.
   - **Both judge the repository's own packages and no other:** the whole workspace where every member
     stands inside the repository's root, and otherwise each member inside it, named. Formatting never
     follows a path dependency, so a sibling repository's crate the workspace names, and the workspace
@@ -206,7 +208,8 @@
     manifest, the table and the crate, the entry as it reads and the line to write instead.
   - **The lock:** every `Cargo.lock` the checkout tracks or holds new. A registry package whose name the
     snapshot lists, on a semver line the snapshot names, stands at the snapshot's version; one on another
-    line passes. A fault names the lock, the crate, both versions and the Cargo verb's `update --precise`
+    line passes. A package read from a path is no registry package and is not read, whatever version the
+    lock gives it. A fault names the lock, the crate, both versions and the Cargo verb's `update --precise`
     line that moves it.
   - **The packages:** every `package.json` the checkout tracks or holds new, outside a `node_modules/` or a
     `fixtures/` folder, in each of its lists naming packages: `dependencies`, `devDependencies`,

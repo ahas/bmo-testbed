@@ -1,4 +1,5 @@
 mod answer;
+mod cargo_lock;
 mod close_line;
 mod declaration;
 mod events;

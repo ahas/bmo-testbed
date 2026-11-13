@@ -191,4 +191,9 @@ no_code = "none"
 locked = "cargo: another build holds the build lock; {count} superseded units of {target} are left to the prune"
 removed = "cargo: removed {count} superseded units of {target}, {megabytes} MB"
 unstarted = "cargo: {command} could not be started: {why}"
+# A lock whose path packages were brought to their manifests: {lock} the lock, {moves} the moves joined.
+path_aligned = "cargo: {lock}: path packages brought to their manifests: {moves}"
+path_moved = "{name} {from} -> {to}"
+# The version of a path package not in the lock on that side.
+path_absent = "none"
 # The test server's stand lock not had: {dir} the server's folder, {seconds} how long it was waited for.

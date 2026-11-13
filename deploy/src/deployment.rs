@@ -16,6 +16,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use bmo_testbed_client::TestRun;
+use bmo_testbed_core::cargo_lock::align_path_packages;
 use bmo_testbed_core::declaration::{Declaration, DeployStep, Phase, Repository};
 use bmo_testbed_core::events::{Event, Hook};
 use bmo_testbed_core::policy::declaration::DECLARATION;
@@ -921,7 +922,18 @@ impl<'a> Laying<'a> {
             cwd: tree.clone(),
             lane: Some(Lane::Wide),
           };
+          let cargo = || crate::run::command(&ask.command[..1], None);
+          let aligned = align_path_packages(&tree, &ask.command[1..], &cargo);
+
+          if let Some(aligned) = &aligned {
+            self.say(&aligned.said());
+          }
+
           let ran = self.step(&ask);
+
+          if let Some(aligned) = &aligned {
+            aligned.put_back();
+          }
 
           if ran.code != 0 {
             return Err(failed_at(&ask.id, &ran));
