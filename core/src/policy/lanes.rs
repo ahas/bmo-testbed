@@ -84,6 +84,10 @@ pub struct PlacedWords {
   pub stale: String,
   pub unreleased: String,
   pub other_release: String,
+  pub testbed_unreached: String,
+  pub testbed_unwritten: String,
+  pub testbed_unread: String,
+  pub testbed_other: String,
   pub kept: String,
   pub turn_came: String,
 }

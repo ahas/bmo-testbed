@@ -2,7 +2,8 @@
 //! repository with a remote of its own in temporary directories: the gate and the service manager stand-ins,
 //! every other command real. A commit goes live with its `bot` service restarted and watched; what may not
 //! be deployed is refused with nothing changed; a gate that fails puts nothing live; and a service that does
-//! not come up is rolled back onto the release before.
+//! not come up is rolled back onto the release before. Once live, the testbed the placed machine runs is
+//! brought to the release, and a machine that does not take it leaves the deployment live with a warning.
 
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
@@ -199,6 +200,27 @@ impl Gate for LaysElsewhere {
   fn lay_units(&self, ask: &LaidUnits<'_>) -> Option<(String, Result<(), String>)> {
     self.asked.borrow_mut().push((ask.units.to_vec(), ask.timers.to_vec()));
     Some(("machine-2".to_owned(), self.fails.clone().map_or(Ok(()), Err)))
+  }
+}
+
+// A gate whose machine is another, which passes, keeps each live release and commit it is asked to bring that
+// machine's testbed to, and answers that machine's label with the answer given.
+struct BringsElsewhere {
+  asked: RefCell<Vec<(PathBuf, String)>>,
+  answer: Result<Vec<String>, String>,
+}
+
+impl Gate for BringsElsewhere {
+  fn pass(&self, _: &GateAsk<'_>) -> GateOutcome {
+    GateOutcome {
+      passed: true,
+      ..GateOutcome::default()
+    }
+  }
+
+  fn bring_testbed(&self, release: &Path, commit: &str) -> Option<(String, Result<Vec<String>, String>)> {
+    self.asked.borrow_mut().push((release.to_path_buf(), commit.to_owned()));
+    Some(("machine-2".to_owned(), self.answer.clone()))
   }
 }
 
@@ -695,6 +717,56 @@ fn a_live_release_lays_the_units_it_marks_for_the_placed_machine_and_a_failure_t
     )]
   );
   assert!(said(&hands).contains(&unlaid), "{}", said(&hands));
+}
+
+// "once it is live ... copies ... then reads that built-from back ... The deployment's line names the machine,
+// the files written there and the commit read back"; "a machine that cannot be reached ... is a warning on a
+// line naming the machine and what it answered: the deployment here stays live"
+#[test]
+fn a_live_release_brings_the_placed_testbed_to_it_and_a_machine_out_of_reach_leaves_it_live_with_a_warning()
+{
+  let far = vec!["~/bin/bmo-testbed".to_owned(), "~/bin/built-from".to_owned()];
+  let unreached = "it cannot be reached (ssh: connect to host stand port 22: No route to host)".to_owned();
+
+  for answer in [Ok(far.clone()), Err(unreached.clone())] {
+    let scene = Scene::new();
+    let hands = Hands::default();
+    let gate = BringsElsewhere {
+      asked: RefCell::default(),
+      answer: answer.clone(),
+    };
+    let code = scene.run_with(&DeployAsk::default(), &gate, &hands, &scene.env());
+    let head = must(&["rev-parse", "HEAD"], &scene.source);
+    let shown = &head[..12];
+    let line = match &answer {
+      Ok(files) => fill_marks(
+        &DEPLOY.run.testbed_brought,
+        &[("machine", "machine-2"), ("files", &files.join(", ")), ("commit", shown)],
+      ),
+      Err(why) => fill_marks(
+        &DEPLOY.run.testbed_unbrought,
+        &[("machine", "machine-2"), ("commit", shown), ("said", why)],
+      ),
+    };
+    let progress =
+      read_deploy_progress(std::fs::read_to_string(scene.at("live/deploy-progress.json")).ok().as_deref());
+
+    assert_eq!(code, 0, "{}", said(&hands));
+    assert_eq!(progress.unwrap().ending.unwrap().outcome, Outcome::Live, "{}", said(&hands));
+    let asked: Vec<(PathBuf, String)> = gate
+      .asked
+      .borrow()
+      .iter()
+      .map(|(release, commit)| (std::fs::canonicalize(release).unwrap(), commit.clone()))
+      .collect();
+
+    assert_eq!(
+      asked,
+      [(std::fs::canonicalize(scene.at("live/deploy")).unwrap(), head.clone())],
+      "the machine's testbed is brought to the live release, at the commit put live"
+    );
+    assert!(said(&hands).contains(&line), "{}", said(&hands));
+  }
 }
 
 // "the records stand under the deploy root, and a data root another deployment records into is left alone"

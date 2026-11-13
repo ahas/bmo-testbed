@@ -181,20 +181,24 @@ fn far_path(path: &str) -> String {
   }
 }
 
-// The text written to a file on the far machine through one `ssh` command reading it from its input: into a
-// file beside it named by the far shell's process, then renamed over it, so a run there reading the file reads
-// the whole of one text or the other.
+// The bytes written to a file on the far machine through one `ssh` command reading them from its input: into a
+// file beside it named by the far shell's process, given the octal `mode` where one is named, then renamed over
+// it, so a run there reading the file reads the whole of one content or the other, and a process running the
+// file there goes on with the one it started.
 fn laid_over(
   program: &str,
   options: &[String],
   destination: &str,
   file: &str,
-  text: &str,
+  bytes: &[u8],
+  mode: Option<&str>,
 ) -> std::io::Result<Output> {
+  let far = far_path(file);
+  let moded = mode.map_or_else(String::new, |mode| format!("chmod {mode} {far}.$$ && "));
   let mut child = Command::new(program)
     .args(options)
     .arg(destination)
-    .arg(format!("cat > {far}.$$ && mv -f {far}.$$ {far}", far = far_path(file)))
+    .arg(format!("cat > {far}.$$ && {moded}mv -f {far}.$$ {far}"))
     .stdin(Stdio::piped())
     .stdout(Stdio::piped())
     .stderr(Stdio::piped())
@@ -202,7 +206,7 @@ fn laid_over(
 
   // The input is closed before the wait, which ends `cat`, and the command is waited on whether or not the
   // writing went through.
-  let written = child.stdin.take().map_or(Ok(()), |mut input| input.write_all(text.as_bytes()));
+  let written = child.stdin.take().map_or(Ok(()), |mut input| input.write_all(bytes));
   let done = child.wait_with_output();
 
   written.and(done)
@@ -319,7 +323,7 @@ pub fn ready_bench(bench: &Bench, source: &BenchSource<'_>) -> Result<(), String
   }
 
   for (file, text) in &source.laid {
-    let laid = laid_over(program, options, &bench.destination, file, text);
+    let laid = laid_over(program, options, &bench.destination, file, text.as_bytes(), None);
 
     if !succeeded(&laid) {
       return Err(fill_marks(&said_of.file_unlaid, &[("file", file), ("said", &said(&laid))]));
@@ -661,8 +665,17 @@ impl MachinePlacement {
     }
   }
 
+  // The `ssh` program the settings name, and its options.
+  fn ssh_program(&self) -> (&str, &[String]) {
+    self
+      .settings
+      .ssh
+      .split_first()
+      .map_or(("ssh", &[][..]), |(program, options)| (program, options))
+  }
+
   fn ssh(&self) -> Command {
-    let (program, options) = self.settings.ssh.split_first().map_or(("ssh", &[][..]), |(p, o)| (p, o));
+    let (program, options) = self.ssh_program();
     let mut command = Command::new(program);
 
     command.args(options).arg(&self.settings.destination).stdin(Stdio::null());
@@ -673,7 +686,7 @@ impl MachinePlacement {
   /// whole under that machine's user units and renamed over whatever stood at its name, then its service
   /// manager reloaded and each timer enabled and started; what that machine or `ssh` said where a step failed.
   pub fn lay_units(&self, units: &[(String, String)], timers: &[String]) -> Result<(), String> {
-    let (program, options) = self.settings.ssh.split_first().map_or(("ssh", &[][..]), |(p, o)| (p, o));
+    let (program, options) = self.ssh_program();
     let made = self.ssh().arg(format!("mkdir -p {}", far_path(FAR_UNIT_DIR))).output();
 
     if !succeeded(&made) {
@@ -682,7 +695,7 @@ impl MachinePlacement {
 
     for (name, text) in units {
       let file = format!("{FAR_UNIT_DIR}/{name}");
-      let laid = laid_over(program, options, &self.settings.destination, &file, text);
+      let laid = laid_over(program, options, &self.settings.destination, &file, text.as_bytes(), None);
 
       if !succeeded(&laid) {
         return Err(said(&laid));
@@ -777,26 +790,102 @@ impl MachinePlacement {
     let Some(own) = &self.release else { return Ok(()) };
     let words = &LANES.placed;
     let machine = self.settings.label();
-    let file = Path::new(&self.settings.testbed).with_file_name(BUILT_FROM);
-    let file = file.to_string_lossy();
-    let read = self.ssh().arg(format!("cat {}", far_path(&file))).output();
-    let far = read
+
+    match self.far_built_from() {
+      Ok(far) if far == *own => Ok(()),
+      Ok(far) => Err(fill_marks(
+        &words.stale,
+        &[("machine", machine), ("far", &short(&far)), ("own", &short(own))],
+      )),
+      Err(said) => Err(fill_marks(
+        &words.unreleased,
+        &[
+          ("machine", machine),
+          ("file", &self.far_built_from_file()),
+          ("said", &said),
+          ("own", &short(own)),
+        ],
+      )),
+    }
+  }
+
+  // The `built-from` beside the testbed binary there.
+  fn far_built_from_file(&self) -> String {
+    Path::new(&self.settings.testbed)
+      .with_file_name(BUILT_FROM)
+      .to_string_lossy()
+      .into_owned()
+  }
+
+  // The commit the `built-from` there names; what reading it said where it names none.
+  fn far_built_from(&self) -> Result<String, String> {
+    let read = self.ssh().arg(format!("cat {}", far_path(&self.far_built_from_file()))).output();
+
+    read
       .as_ref()
       .ok()
       .filter(|done| done.status.success())
       .map(|done| String::from_utf8_lossy(&done.stdout).trim().to_owned())
-      .filter(|commit| !commit.is_empty());
+      .filter(|commit| !commit.is_empty())
+      .ok_or_else(|| said(&read))
+  }
 
-    match far {
-      Some(far) if far == *own => Ok(()),
-      Some(far) => Err(fill_marks(
-        &words.stale,
-        &[("machine", machine), ("far", &short(&far)), ("own", &short(own))],
-      )),
-      None => Err(fill_marks(
-        &words.unreleased,
-        &[("machine", machine), ("file", &file), ("said", &said(&read)), ("own", &short(own))],
-      )),
+  /// The binary of a release the testbed there would run: the file in the release's `bin/` of the name the
+  /// settings' `testbed` ends in; none where the release holds no such file, so it carries no testbed.
+  pub fn testbed_in(&self, release: &Path) -> Option<PathBuf> {
+    let name = Path::new(&self.settings.testbed).file_name()?;
+
+    Some(release.join("bin").join(name)).filter(|binary| binary.is_file())
+  }
+
+  /// The testbed there brought to a release's (docs/boundary.md, 「The placed machine」): the release's
+  /// `binary` written onto the settings' `testbed`, the `built-from` beside it onto the one beside that, last,
+  /// and that `built-from` read back, which must name `commit`. The files written there; the reason where the
+  /// machine is not reached, a file is not written, or what is read back names another commit or none.
+  pub fn bring_testbed(&self, binary: &Path, commit: &str) -> Result<Vec<String>, String> {
+    let words = &LANES.placed;
+    let probed = self.ssh().arg("true").output();
+
+    if !succeeded(&probed) {
+      return Err(fill_marks(&words.testbed_unreached, &[("said", &said(&probed))]));
+    }
+
+    let unwritten =
+      |file: &str, why: &str| fill_marks(&words.testbed_unwritten, &[("file", file), ("said", why)]);
+    let far_testbed = self.settings.testbed.clone();
+    let far_built_from = self.far_built_from_file();
+    let far_bin = Path::new(&far_testbed)
+      .parent()
+      .map(|bin| bin.to_string_lossy().into_owned())
+      .unwrap_or_default();
+
+    if !far_bin.is_empty() {
+      let made = self.ssh().arg(format!("mkdir -p {}", far_path(&far_bin))).output();
+
+      if !succeeded(&made) {
+        return Err(unwritten(&far_bin, &said(&made)));
+      }
+    }
+
+    let (program, options) = self.ssh_program();
+    let written = [
+      (binary.to_path_buf(), &far_testbed, Some("755")),
+      (binary.with_file_name(BUILT_FROM), &far_built_from, None),
+    ];
+
+    for (from, to, mode) in written {
+      let bytes = std::fs::read(&from).map_err(|why| unwritten(to, &why.to_string()))?;
+      let laid = laid_over(program, options, &self.settings.destination, to, &bytes, mode);
+
+      if !succeeded(&laid) {
+        return Err(unwritten(to, &said(&laid)));
+      }
+    }
+
+    match self.far_built_from() {
+      Ok(far) if far == commit => Ok(vec![far_testbed, far_built_from]),
+      Ok(far) => Err(fill_marks(&words.testbed_other, &[("far", &short(&far)), ("own", &short(commit))])),
+      Err(why) => Err(fill_marks(&words.testbed_unread, &[("file", &far_built_from), ("said", &why)])),
     }
   }
 

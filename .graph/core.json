@@ -116,7 +116,7 @@
   {
     "id": "core/placement",
     "title": "Placement",
-    "what": "Where a run goes: here by default or where its environment sets a variable its declaration names as this machine's, else on another machine over ssh in a bench where that testbed is this release, a deployment's bench apart from every run's; that machine is also laid units and read for free disk.",
+    "what": "Where a run goes: here by default or where its environment names a variable as this machine's, else over ssh to another machine whose testbed must be this release, a deployment's bench apart; that machine is also laid units, read for free disk and handed the testbed's release.",
     "files": [
       "core/src/placement.rs",
       "cli/src/placement.rs",
@@ -142,8 +142,8 @@
       "deploy/releases-and-rollback",
       "core/silence-watch"
     ],
-    "base": "771bcb816730bdf711aca49591c909a812ebbc69",
-    "changed": 1794562774207
+    "base": "69c743b39984c32b984d190a832d5459c05b783c",
+    "changed": 1794566608495
   },
   {
     "id": "core/policy-loader",

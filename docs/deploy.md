@@ -211,8 +211,19 @@
   commit the running testbed was built from; where they differ, or that machine's testbed names none,
   the stage fails with nothing changed, its reason naming both commits, since an older testbed there
   would judge the gate by older rules without saying so (`docs/boundary.md`, 「The placed machine」).
-  Bringing that machine's testbed to the deploying release is the operator's step; the deployment
-  never copies it.
+- **A deployment of the testbed brings the placed machine's testbed to its release** once it is live
+  (「What the deploy run does, in order」, step 16). A deployment is the testbed's where its release's
+  `bin/` holds a file of the name the settings' `testbed` binary ends in. It reads the settings'
+  `destination`, `ssh`, `machine` and `testbed`: over that `ssh` it copies the live release's binary
+  of that name onto the settings' `testbed` and the release's `bin/built-from` beside it, the
+  `built-from` last, each written whole beside its place there and renamed over it, so a testbed
+  running there goes on undisturbed and no half-copied file is read as a match. It then reads that
+  `built-from` back as the gate does and checks that it names the commit just put live. The
+  deployment's line names the machine, the files written there and the commit read back. A machine
+  that cannot be reached, a copy or a read that fails, or a `built-from` that names another commit or
+  none is a warning on a line naming the machine and what it answered: the deployment here stays
+  live, and the next deployment of the testbed copies again. Nothing is copied where the settings name
+  no machine, or where the deployment's caller sets `BMO_TESTBED_PLACEMENT` empty.
 - **A passed suite is looked for in each machine's own record,** since a record is per machine and a run
   placed elsewhere is written by the machine it ran on (`docs/boundary.md`, 「The record」). The
   deployment reads its own machine's record first, before the gate is asked or placed, which holds a
@@ -424,7 +435,11 @@
 14. **Prune the releases.** A release that cannot be removed is a warning.
 15. **Lay the placed machine's units,** where the settings name a placed machine and the release marks
     units for it (「The unit links」). What fails there is a warning.
-16. **Start the backup upload,** where the declaration names a remote, as a transient user unit of its
+16. **Bring the placed machine's testbed to the release,** where the deployment is the testbed's and
+    the settings name a placed machine (「Where a deployment runs」). This stands after every step that
+    could still roll the deployment back, so that machine never runs a release this one has left. What
+    fails there is a warning.
+17. **Start the backup upload,** where the declaration names a remote, as a transient user unit of its
     own, `bmo-backup-upload-<stamp>`, in `bmo-backup.slice`, running the `backups` verb, and end without
     waiting for it.
 

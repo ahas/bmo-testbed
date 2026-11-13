@@ -34,7 +34,7 @@ use bmo_testbed_suite::run::{SuiteAsk, SuiteWords, ask_of};
 use bmo_testbed_suite::static_check::{check_steps, run_static_check, spawn_step};
 
 use crate::home_of;
-use crate::placement::{BenchFor, MachinePlacement, ReadyBench};
+use crate::placement::{BenchFor, MachinePlacement, PLACEMENT_VARIABLE, ReadyBench};
 use crate::recorded::suite_record;
 use crate::suite::repository;
 use crate::words::{BINARY, DeployFlags};
@@ -146,6 +146,9 @@ pub struct PlacedGate<'a> {
   pub here: &'a dyn Gate,
   /// Whether the gate is passed at all; the build goes to the machine either way.
   pub checked: bool,
+  /// Whether the testbed there is brought to a live release that carries one; not where the caller set the
+  /// placement empty (docs/boundary.md, 「The environment」).
+  pub brings_testbed: bool,
 }
 
 impl PlacedGate<'_> {
@@ -285,6 +288,18 @@ impl Gate for PlacedGate<'_> {
   fn lay_units(&self, ask: &LaidUnits<'_>) -> Option<(String, Result<(), String>)> {
     Some((self.machine.settings.label().to_owned(), self.machine.lay_units(ask.units, ask.timers)))
   }
+
+  fn bring_testbed(&self, release: &Path, commit: &str) -> Option<(String, Result<Vec<String>, String>)> {
+    let binary = self.machine.testbed_in(release).filter(|_| self.brings_testbed)?;
+
+    Some((self.machine.settings.label().to_owned(), self.machine.bring_testbed(&binary, commit)))
+  }
+}
+
+/// Whether a deployment brings the placed machine's testbed to its release: not where the caller set the
+/// placement empty, which keeps that testbed as it stands.
+pub fn brings_testbed(env: &Env) -> bool {
+  env.get(PLACEMENT_VARIABLE).is_none_or(|placement| !placement.is_empty())
 }
 
 // The variables a unit of the run is handed so it aims at what this caller aimed at: the places resolved,
@@ -303,6 +318,11 @@ fn handed(places: &DeployPlaces, env: &Env) -> Vec<(String, String)> {
 
   if let Some(backups) = &places.backup_dir {
     handed.push(("BMO_BACKUP_DIR".to_owned(), shown(backups)));
+  }
+
+  // A placement set empty is handed on as it is, since it keeps the placed machine's testbed as it stands.
+  if !brings_testbed(env) {
+    handed.push((PLACEMENT_VARIABLE.to_owned(), String::new()));
   }
 
   for name in [
@@ -405,6 +425,7 @@ pub fn deploy(args: &DeployFlags) -> u8 {
     repository: repo.name(),
     here,
     checked: !args.no_check,
+    brings_testbed: brings_testbed(&env),
   });
   let gate: &dyn Gate = placed.as_ref().map_or(here, |placed| placed);
   let runtime = match tokio::runtime::Builder::new_current_thread().enable_all().build() {

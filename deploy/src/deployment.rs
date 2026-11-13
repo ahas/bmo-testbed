@@ -259,6 +259,15 @@ pub trait Gate {
     None
   }
 
+  /// The testbed the gate's machine runs brought to a live release that carries one, which must then name
+  /// `commit` as the release it was built from (docs/deploy.md, 「Where a deployment runs」): that machine's
+  /// label, with the files written there, or what it answered where the testbed there was not brought to it;
+  /// none where the gate's machine is this one, the caller keeps it as it stands, or the release carries no
+  /// testbed.
+  fn bring_testbed(&self, _release: &Path, _commit: &str) -> Option<(String, Result<Vec<String>, String>)> {
+    None
+  }
+
   /// The suites of the repositories that build on this one, run where the change is major. A gate that keeps
   /// none passes.
   fn dependents(&self, _: &GateAsk<'_>) -> GateOutcome {
@@ -2060,6 +2069,20 @@ pub async fn deploy(
         &[("names", &names), ("machine", &machine), ("said", &why)],
       )),
     }
+  }
+
+  // The testbed the placed machine runs brought to this release, where it carries one; what fails there is a
+  // warning, since the release here stays live whatever that machine answers.
+  match gate.bring_testbed(&release, &commit) {
+    None => {}
+    Some((machine, Ok(files))) => run.say(&fill_marks(
+      &said.testbed_brought,
+      &[("machine", &machine), ("files", &files.join(", ")), ("commit", &shown)],
+    )),
+    Some((machine, Err(why))) => run.warn(fill_marks(
+      &said.testbed_unbrought,
+      &[("machine", &machine), ("commit", &shown), ("said", &why)],
+    )),
   }
 
   // 13. The backup upload, in a unit of its own, not waited on.

@@ -11,7 +11,8 @@
 //! and not passed on, and the `placed` verb there passing its command's output on, telling its own holder
 //! while it comes and ending it whole once it falls silent for the declared limit. The units a release marks
 //! for the machine laid in its user units and their timers started there, and the prune's reading of its free
-//! disk against the settings' floor, sending `placed-disk-low` for each disk below it.
+//! disk against the settings' floor, sending `placed-disk-low` for each disk below it. The testbed there brought to
+//! a live release carrying one and read back at its commit, unless the caller keeps it as it stands.
 
 use std::convert::Infallible;
 use std::path::Path;
@@ -21,6 +22,7 @@ use axum::Router;
 use axum::response::sse::{Event, Sse};
 use axum::routing::{get, post};
 use bmo_testbed_cli::cargo::placed_disk;
+use bmo_testbed_cli::deploy::{PlacedGate, brings_testbed};
 use bmo_testbed_cli::placement::{
   BenchFor, MachinePlacement, MachineSettings, ReadyBench, reachable_remote,
 };
@@ -32,6 +34,7 @@ use bmo_testbed_core::policy::prune::PRUNE;
 use bmo_testbed_core::policy::verbs::VERBS;
 use bmo_testbed_core::queue::process_alive;
 use bmo_testbed_core::turn::{Env, Lane, NOT_RUN_EXIT_CODE, lock_path};
+use bmo_testbed_deploy::deployment::{Gate, Passed};
 use serde_json::{Value, json};
 
 use crate::stand::{Ran, checkout, git, install, ran, testbed};
@@ -548,6 +551,95 @@ fn the_same_release_passes_one_naming_none_is_refused_and_none_here_compares_not
   assert!(unreleased.starts_with(opening.split("{said}").next().unwrap()), "{unreleased}");
   assert!(unreleased.contains(&OWN[..12]), "{unreleased}");
   assert_eq!(released(&dir, None, None).same_release(), Ok(()));
+}
+
+// The deployment's gate on the placed machine, bringing the testbed there to a release where `brings` says so.
+fn bringing(machine: MachinePlacement, brings: bool) -> PlacedGate<'static> {
+  PlacedGate {
+    machine,
+    repository: "repo".to_owned(),
+    here: &Passed,
+    checked: true,
+    brings_testbed: brings,
+  }
+}
+
+// "copies that binary onto `testbed` there and the release's `bin/built-from` beside it, then reads that
+// `built-from` back and checks it names the commit put live"; "Nothing is copied where ... the caller sets
+// `BMO_TESTBED_PLACEMENT` empty"; "a machine that cannot be reached ... is said on a line naming the machine and
+// what it answered"
+#[test]
+fn the_testbed_there_is_brought_to_a_release_carrying_one_and_read_back_at_its_commit() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let release = dir.join("release");
+  let settings = released(&dir, None, None).settings;
+  let machine = || MachinePlacement {
+    settings: settings.clone(),
+    home: dir.clone(),
+    release: None,
+  };
+  let far_bin = dir.join("far/bin");
+
+  // The machine there holds no testbed yet, so its `bin/` is made too.
+  std::fs::remove_dir_all(&far_bin).unwrap();
+  std::fs::create_dir_all(release.join("bin")).unwrap();
+  install("#!/bin/sh\necho released\n", &release.join("bin/bmo-testbed"));
+  std::fs::write(release.join("bin/built-from"), format!("{OWN}\n")).unwrap();
+
+  let far = |name: &str| far_bin.join(name).to_string_lossy().into_owned();
+
+  assert_eq!(
+    bringing(machine(), true).bring_testbed(&release, OWN),
+    Some(("machine-2".to_owned(), Ok(vec![far("bmo-testbed"), far("built-from")])))
+  );
+
+  for name in ["bmo-testbed", "built-from"] {
+    assert_eq!(
+      std::fs::read(far_bin.join(name)).unwrap(),
+      std::fs::read(release.join("bin").join(name)).unwrap()
+    );
+  }
+
+  let mode = std::os::unix::fs::PermissionsExt::mode(
+    &std::fs::metadata(far_bin.join("bmo-testbed")).unwrap().permissions(),
+  );
+
+  assert_eq!(mode & 0o777, 0o755);
+  assert_eq!(
+    bringing(machine(), true).bring_testbed(&release, FAR),
+    Some((
+      "machine-2".to_owned(),
+      Err(fill_marks(&LANES.placed.testbed_other, &[("far", &OWN[..12]), ("own", &FAR[..12])]))
+    ))
+  );
+  assert_eq!(bringing(machine(), false).bring_testbed(&release, OWN), None);
+  assert_eq!(bringing(machine(), true).bring_testbed(&dir.join("no-release"), OWN), None);
+
+  let refusing = dir.join("refusing-ssh");
+  let mut unreached = machine();
+
+  install("#!/bin/sh\necho 'no route to stand' >&2\nexit 255\n", &refusing);
+  unreached.settings.ssh = vec![refusing.to_string_lossy().into_owned()];
+
+  assert_eq!(
+    bringing(unreached, true).bring_testbed(&release, OWN),
+    Some((
+      "machine-2".to_owned(),
+      Err(fill_marks(&LANES.placed.testbed_unreached, &[("said", "no route to stand")]))
+    ))
+  );
+
+  let env = |placement: Option<&str>| -> Env {
+    placement
+      .map(|value| ("BMO_TESTBED_PLACEMENT".to_owned(), value.to_owned()))
+      .into_iter()
+      .collect()
+  };
+
+  assert!(!brings_testbed(&env(Some(""))));
+  assert!(brings_testbed(&env(None)));
+  assert!(brings_testbed(&env(Some("http://placement.invalid/place"))));
 }
 
 // A checkout holding one package, its manifest naming the dependency given by a path, committed.

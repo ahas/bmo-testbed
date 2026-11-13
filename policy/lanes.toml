@@ -105,6 +105,14 @@ unreleased = "the testbed on {machine} names no release ({file}: {said}); bring 
 # A run that is no deployment's, kept here because the placed machine's testbed is not this one's release, {said}
 # the `stale` or `unreleased` line.
 other_release = "testbed: not placed on {machine}: {said}; running here"
+# The placed machine's testbed not brought to a release the testbed's deployment put live (docs/deploy.md,
+# 「Where a deployment runs」): the machine that cannot be reached, {said} what `ssh` said; a file that could not
+# be written there, {file} its place there; a `built-from` read back that names none, {file} the file asked for;
+# or one naming {far}, not {own}, the commit put live.
+testbed_unreached = "it cannot be reached ({said})"
+testbed_unwritten = "{file} could not be written there: {said}"
+testbed_unread = "{file} read back names no release: {said}"
+testbed_other = "its built-from read back names {far}, not {own}"
 # A run kept here because its environment sets {variable}, a variable its declaration names as reaching what only
 # this machine reaches.
 kept = "testbed: {variable} names what only this machine reaches; running here"

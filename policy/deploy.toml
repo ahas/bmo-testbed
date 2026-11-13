@@ -162,6 +162,11 @@ warning = "WARNING: {warning}"
 # {machine} the machine's label and {said} what the machine or `ssh` said.
 placed_laid = "laid {names} on the placed machine {machine}, its timers started"
 placed_unlaid = "{names} could not be laid on the placed machine {machine}: {said}; the next deployment tries again"
+# The placed machine's testbed brought to the release put live (docs/deploy.md, 「Where a deployment runs」):
+# {files} the files written there, {machine} the machine's label, {commit} the commit put live and {said} what the
+# machine answered where it was not brought to it.
+testbed_brought = "copied the release's testbed to the placed machine {machine} as {files}; its built-from read back names {commit}"
+testbed_unbrought = "the testbed on the placed machine {machine} was not brought to {commit}: {said}; this deployment stays live, and the testbed's next deployment copies again"
 upload_started = "the backup upload runs as {unit}"
 upload_failed = "the backup upload could not be started: {said}"
 live = "{commit} is live, with {backup} behind it"

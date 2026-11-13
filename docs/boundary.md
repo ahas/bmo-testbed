@@ -416,7 +416,7 @@ verb's own name, and each noun takes what that verb takes.
 | `BMO_TESTBED_SCOPE` | the turn, the record | The caller's opaque scope, which a ticket, a holder and a test run carry and the testbed never reads |
 | `BMO_TESTBED_TOKEN` | `serve`, `mcp` | The HTTP service's bearer token |
 | `BMO_TESTBED_SERVICE` | `mcp` | The HTTP service's address the reading tools call |
-| `BMO_TESTBED_PLACEMENT` | `run`, `suite` | The placement endpoint, over the settings and the declaration |
+| `BMO_TESTBED_PLACEMENT` | `run`, `suite`, `deploy` | The placement endpoint, over the settings and the declaration. Set empty for `deploy`, the testbed's deployment leaves the placed machine's testbed as it stands (`docs/deploy.md`, 「Where a deployment runs」) |
 | `BMO_TESTBED_PLACED` | the turn, `placed` | Set by `placed` for the run it starts: `1`. A run finding it is never placed again |
 | `BMO_TESTBED_CHECKOUTS` | `dependents`, `deploy`, `prune`, `check shared-versions`, the hosted deploy tool | The machine's registry of checkouts, over the data root's `testbed/checkouts.toml` |
 | `BMO_TESTBED_EVENT_HOOK` | every verb that sends events | The event hook, over the declaration's, and the hook for a verb run outside a repository |
@@ -707,7 +707,7 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   | `bench` | string | `~/.local/share/bmo/bench` | The runs' bench root there: every tree a run copies over stands under it at the path it has under this machine's home |
   | `deploy_bench` | string | `~/.local/share/bmo/deploy-bench` | The deployments' bench root there: every tree a deployment copies over stands under the folder of its repository's name in it, at the path it has under this machine's home (「A deployment's bench stands apart」) |
   | `ssh` | list of strings | `["ssh"]` | The `ssh` program and its options |
-  | `testbed` | string | `~/.local/share/bmo-testbed/deploy/bin/bmo-testbed` | The testbed binary there |
+  | `testbed` | string | `~/.local/share/bmo-testbed/deploy/bin/bmo-testbed` | The testbed binary there, its `built-from` beside it; the testbed's deployment copies its release's binary of the same name and its `built-from` onto them |
   | `cargo_target` | string | `~/.local/share/bmo/cargo-target` | That machine's shared Cargo build directory; a deployment's build is read back from the bench's own directory under it, the one that machine's Cargo verb builds in (`docs/deploy.md`, 「The Cargo build directory」) |
   | `disk_free_gigabytes` | number | 50, the prune policy's | The free space, in gigabytes of a thousand million bytes, below which a disk of that machine sends `placed-disk-low` from this machine's prune (`docs/deploy.md`, 「The Cargo build directory」). Not negative |
   | `disk_paths` | list of strings | none | Paths on that machine whose disks' free space the prune reads beside `cargo_target`'s, such as the mount of the host drive a virtual disk stands on |
@@ -721,6 +721,16 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   runs here instead, each on a line naming the machine and both commits, since the same command would
   meet that machine the same way until its testbed is brought to this release. A testbed running from
   no release, such as a checkout's own build, compares nothing.
+- **The testbed's own deployment brings that machine's testbed to its release.** Once the release is
+  live and nothing can roll it back any more, after the steps after the health, the releases' prune
+  and the units laid there, a deployment whose release's `bin/` holds a file of the name the settings'
+  `testbed` ends in copies that binary onto `testbed` there and the release's `bin/built-from` beside
+  it, then reads that `built-from` back and checks it names the commit put live (`docs/deploy.md`,
+  「Where a deployment runs」, and step 16 of 「What the deploy run does, in order」). It reads
+  `destination`, `ssh`, `machine` and `testbed`. Its failure is a warning, never a failed deployment: a
+  machine that cannot be reached, a copy or a read that fails, or another commit read back is said on a
+  line naming the machine and what it answered, and the deployment stays live. Nothing is copied where
+  the settings name no machine or the caller sets `BMO_TESTBED_PLACEMENT` empty.
 - **The caller makes the bench ready** before it runs: where the checkout's place under the bench root
   holds no repository it clones the checkout's reachable remote there, or makes an empty repository where
   the checkout has none or the clone fails there, the push then carrying the history the bench lacks;

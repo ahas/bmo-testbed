@@ -135,6 +135,8 @@ pub struct RunWords {
   pub warning: String,
   pub placed_laid: String,
   pub placed_unlaid: String,
+  pub testbed_brought: String,
+  pub testbed_unbrought: String,
   pub upload_started: String,
   pub upload_failed: String,
   pub live: String,

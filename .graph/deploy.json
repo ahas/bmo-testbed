@@ -59,7 +59,7 @@
   {
     "id": "deploy/deploy-run",
     "title": "Deploy run",
-    "what": "A deploy run in a unit of its own, by its commit's declaration: gate, backup, release, the wait for quiet, flip, restarts watched, a console face probed, rolled back where either fails, the placed machine's units laid, progress mirrored into the record, outcome written before the hook hears.",
+    "what": "A deploy run in a unit of its own, by its commit's declaration: gate, backup, release, quiet, flip, restarts watched, console face probed, rolled back where either fails, then the placed machine's units laid and its testbed brought to the release, outcome written before the hook hears.",
     "files": [
       "deploy/src/deployment.rs",
       "deploy/src/progress.rs",
@@ -84,7 +84,8 @@
       "빌드 트리",
       "Wait for quiet",
       "배포가 배포하는 커밋의 선언",
-      "로그 분류 슬라이스"
+      "로그 분류 슬라이스",
+      "배치 기계의 testbed도 같은 릴리스로 자동으로 맞추기"
     ],
     "needs": [
       "core/declaration",
@@ -100,8 +101,8 @@
       "suite/quick-checks",
       "core/silence-watch"
     ],
-    "base": "2a697e7005d23d4201403e8c2b1af370614661c3",
-    "changed": 1794562786015
+    "base": "69c743b39984c32b984d190a832d5459c05b783c",
+    "changed": 1794566608521
   },
   {
     "id": "deploy/hosted-deploy-tool",

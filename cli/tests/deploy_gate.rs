@@ -1,11 +1,16 @@
 //! The tree a deployment's gate reads (docs/deploy.md, 「What the deploy run does, in order」): the
 //! declared setup runs there before the static check and the suite, so a fresh checkout whose check needs
 //! installed packages passes, and a check that fails for its own reason still blocks the deployment; and
-//! the suite a passed run of the whole suite on the commit already stands for is left out.
+//! the suite a passed run of the whole suite on the commit already stands for is left out. A release carrying
+//! the testbed binary, once live, brings the placed machine's testbed to it over that machine's `ssh`, and a
+//! machine out of reach leaves the deployment live with a warning naming it and what it answered.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use bmo_testbed_client::{TestRun, TestRunKind, TestRunState, TestRunsQuery};
+use bmo_testbed_core::policy::deploy::DEPLOY;
+use bmo_testbed_core::policy::fill_marks;
+use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::queue::now_ms;
 use bmo_testbed_record::{Record, TestRunEnd};
 
@@ -73,17 +78,23 @@ data_root = "{runtime}"
 
   // The deployment run inside a unit of its own, with a service manager that says every command passed.
   fn run(&self) -> Ran {
+    self.run_with(&["deploy"], &[])
+  }
+
+  // The same, with the words and the variables given.
+  fn run_with(&self, args: &[&str], variables: &[(&str, &str)]) -> Ran {
     let bin = self.dir.path().join("bin");
 
     std::fs::create_dir_all(&bin).unwrap();
     install("#!/bin/sh\nexit 0\n", &bin.join("systemctl"));
 
-    let mut command = testbed(&self.repo, &self.data, &["deploy"]);
+    let mut command = testbed(&self.repo, &self.data, args);
 
     command
       .env("BMO_DEPLOY_UNIT", "bmo-deploy-test")
       .env("XDG_CONFIG_HOME", self.dir.path().join("config"))
-      .env("PATH", format!("{}:{}", bin.display(), std::env::var("PATH").unwrap_or_default()));
+      .env("PATH", format!("{}:{}", bin.display(), std::env::var("PATH").unwrap_or_default()))
+      .envs(variables.iter().copied());
 
     ran(&mut command)
   }
@@ -208,4 +219,109 @@ fn a_passed_whole_suite_from_a_dirty_tree_leaves_the_gate_suite_in() {
   assert_eq!(done.code, 0, "{}\n{}", done.out, done.err);
   assert!(!done.out.contains("the suite is left out"), "{}", done.out);
   assert_eq!(scene.suite_runs(), 2, "the gate ran its own suite: {}", done.err);
+}
+
+// The release carries the testbed binary: committed as `bin/bmo-testbed`, so the release's `bin/` holds it beside
+// the `built-from` the deployment writes. The placement settings name a machine whose `ssh` is the stand-in the
+// scene's directory gives, the testbed there at its default place under that machine's home.
+fn carrying_the_testbed(ssh: impl Fn(&Path) -> String) -> Scene {
+  let scene = Scene::new("");
+  let far_ssh = scene.dir.path().join("far-ssh");
+
+  std::fs::create_dir_all(scene.repo.join("bin")).unwrap();
+  std::fs::write(scene.repo.join("bin/bmo-testbed"), "#!/bin/sh\necho the released testbed\n").unwrap();
+  git(&scene.repo, &["add", "."]);
+  git(&scene.repo, &["commit", "-q", "-m", "carry the testbed"]);
+  git(&scene.repo, &["push", "-q", "origin", "HEAD:main"]);
+  install(&ssh(scene.dir.path()), &far_ssh);
+  std::fs::create_dir_all(scene.data.join("env")).unwrap();
+  std::fs::write(
+    scene.data.join("env/placement.toml"),
+    format!(
+      "machine = \"machine-2\"\ndestination = \"stand\"\nssh = [\"{ssh}\"]\nbench = \"{bench}\"\n\
+       deploy_bench = \"{bench}\"\ncargo_target = \"{bench}\"\n",
+      ssh = far_ssh.display(),
+      bench = scene.dir.path().join("bench").display(),
+    ),
+  )
+  .unwrap();
+
+  scene
+}
+
+// A stand-in `ssh` whose far side is a home of its own under the directory given: past the destination, the line
+// runs there.
+fn far_home_ssh(dir: &Path) -> String {
+  format!(
+    "#!/bin/sh\nshift\nexport HOME='{}'\nexec sh -c \"$*\"\n",
+    dir.join("far-home").display()
+  )
+}
+
+// Where the testbed binary stands on the stand-in machine.
+fn far_bin(scene: &Scene) -> PathBuf {
+  scene.dir.path().join("far-home/.local/share/bmo-testbed/deploy/bin")
+}
+
+// "once it is live ... copies the live release's binary of that name onto the settings' `testbed` and the
+// release's `bin/built-from` beside it ... then reads that `built-from` back ... The deployment's line names the
+// machine, the files written there and the commit read back"
+#[test]
+fn a_live_release_carrying_the_testbed_brings_the_placed_machine_s_testbed_to_its_commit() {
+  let scene = carrying_the_testbed(far_home_ssh);
+  let done = scene.run_with(&["deploy", "--no-check"], &[]);
+  let head = git(&scene.repo, &["rev-parse", "HEAD"]);
+  let brought = fill_marks(
+    &DEPLOY.run.testbed_brought,
+    &[
+      ("machine", "machine-2"),
+      (
+        "files",
+        "~/.local/share/bmo-testbed/deploy/bin/bmo-testbed, ~/.local/share/bmo-testbed/deploy/bin/built-from",
+      ),
+      ("commit", &head[..12]),
+    ],
+  );
+
+  assert_eq!(done.code, 0, "{}\n{}", done.out, done.err);
+  assert!(scene.deployed(), "{}", done.err);
+  assert_eq!(
+    std::fs::read(far_bin(&scene).join("bmo-testbed")).unwrap(),
+    std::fs::read(scene.dir.path().join("live/deploy/bin/bmo-testbed")).unwrap()
+  );
+  assert_eq!(std::fs::read_to_string(far_bin(&scene).join("built-from")).unwrap().trim(), head);
+  assert!(done.out.contains(&brought), "{}\n{}", done.out, done.err);
+}
+
+// "A machine that cannot be reached ... is a warning on a line naming the machine and what it answered: the
+// deployment here stays live"
+#[test]
+fn a_placed_machine_out_of_reach_leaves_the_deployment_live_with_a_line_naming_it() {
+  let answered = "ssh: connect to host stand port 22: No route to host";
+  let scene = carrying_the_testbed(|_| format!("#!/bin/sh\necho '{answered}' >&2\nexit 255\n"));
+  let done = scene.run_with(&["deploy", "--no-check"], &[]);
+  let head = git(&scene.repo, &["rev-parse", "HEAD"]);
+  let unbrought = fill_marks(
+    &DEPLOY.run.testbed_unbrought,
+    &[
+      ("machine", "machine-2"),
+      ("commit", &head[..12]),
+      ("said", &fill_marks(&LANES.placed.testbed_unreached, &[("said", answered)])),
+    ],
+  );
+
+  assert_eq!(done.code, 0, "{}\n{}", done.out, done.err);
+  assert!(scene.deployed(), "{}", done.err);
+  assert!(done.out.contains(&unbrought), "{}\n{}", done.out, done.err);
+}
+
+// "Nothing is copied where ... the deployment's caller sets `BMO_TESTBED_PLACEMENT` empty"
+#[test]
+fn a_placement_set_empty_leaves_the_placed_machine_s_testbed_as_it_stands() {
+  let scene = carrying_the_testbed(far_home_ssh);
+  let done = scene.run_with(&["deploy", "--no-check"], &[("BMO_TESTBED_PLACEMENT", "")]);
+
+  assert_eq!(done.code, 0, "{}\n{}", done.out, done.err);
+  assert!(scene.deployed(), "{}", done.err);
+  assert!(!far_bin(&scene).exists(), "{}", done.out);
 }
