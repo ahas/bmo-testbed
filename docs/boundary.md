@@ -716,10 +716,13 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   on a line.
 - **The testbed there is this one's release.** A testbed running from a release reads, before it makes
   a bench ready, the commit the `built-from` file beside that machine's `testbed` binary names, and
-  compares it with the commit of its own release. Where they differ, or no such file reads there,
-  nothing runs there: a deployment's stage fails, and a `run`, a suite, a change check or a Cargo verb
-  runs here instead, each on a line naming the machine and both commits, since the same command would
-  meet that machine the same way until its testbed is brought to this release. A testbed running from
+  compares it with the commit of its own release. Where they differ, or no such file reads there, a
+  deployment first brings the testbed there to this one's release, as the testbed's own deployment
+  brings it to a release it puts live (below), with this testbed's release as the source, and fails its
+  stage only where that does not take or the caller sets `BMO_TESTBED_PLACEMENT` empty, naming both
+  commits and what the machine answered. A `run`, a suite, a change check or a Cargo verb copies
+  nothing and runs here instead, on a line naming the machine and both commits, since the same command
+  would meet that machine the same way until its testbed is brought to this release. A testbed running from
   no release, such as a checkout's own build, compares nothing.
 - **The testbed's own deployment brings that machine's testbed to its release.** Once the release is
   live and nothing can roll it back any more, after the steps after the health, the releases' prune

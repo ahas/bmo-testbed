@@ -208,9 +208,15 @@
   placed gate found stay in that machine's record, so the deployment reports none.
 - **The placed machine runs the deploying testbed's own release, or nothing runs there.** Before the
   bench is made ready, the commit that machine's testbed was built from is read and compared with the
-  commit the running testbed was built from; where they differ, or that machine's testbed names none,
-  the stage fails with nothing changed, its reason naming both commits, since an older testbed there
-  would judge the gate by older rules without saying so (`docs/boundary.md`, 「The placed machine」).
+  commit the running testbed was built from, since an older testbed there would judge the gate by older
+  rules without saying so (`docs/boundary.md`, 「The placed machine」). Where they differ, or that
+  machine's testbed names none, the deployment first brings that machine's testbed to the running
+  testbed's own release, copied and read back as the step after the switch does (below), and says so
+  on a line. Where that does not take, or the caller sets `BMO_TESTBED_PLACEMENT` empty, the stage
+  fails with nothing changed, its reason naming both commits and what the machine answered. A placed
+  machine left on another release, by a copy after the switch that did not take or by a testbed
+  deployed by a release without that step, is so brought to the deploying release by the next
+  deployment of any repository.
 - **A deployment of the testbed brings the placed machine's testbed to its release** once it is live
   (「What the deploy run does, in order」, step 16). A deployment is the testbed's where its release's
   `bin/` holds a file of the name the settings' `testbed` binary ends in. It reads the settings'
@@ -222,8 +228,9 @@
   deployment's line names the machine, the files written there and the commit read back. A machine
   that cannot be reached, a copy or a read that fails, or a `built-from` that names another commit or
   none is a warning on a line naming the machine and what it answered: the deployment here stays
-  live, and the next deployment of the testbed copies again. Nothing is copied where the settings name
-  no machine, or where the deployment's caller sets `BMO_TESTBED_PLACEMENT` empty.
+  live, and the next deployment of any repository brings that machine's testbed to its own release
+  before it places anything there (above). Nothing is copied where the settings name no machine, or
+  where the deployment's caller sets `BMO_TESTBED_PLACEMENT` empty.
 - **A passed suite is looked for in each machine's own record,** since a record is per machine and a run
   placed elsewhere is written by the machine it ran on (`docs/boundary.md`, 「The record」). The
   deployment reads its own machine's record first, before the gate is asked or placed, which holds a

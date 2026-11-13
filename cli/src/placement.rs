@@ -625,18 +625,28 @@ pub struct ReadyBench {
 pub struct MachinePlacement {
   pub settings: MachineSettings,
   pub home: PathBuf,
-  /// The commit the running testbed's release was built from, which the testbed there must be built from
-  /// too; none where this one runs from no release, such as a checkout's own build, and then nothing is
-  /// compared.
-  pub release: Option<String>,
+  /// The running testbed's release, which the testbed there must be built from too; none where this one runs
+  /// from no release, such as a checkout's own build, and then nothing is compared.
+  pub release: Option<OwnRelease>,
 }
 
-/// The commit the running binary's release was built from: the `built-from` beside it in the release's
-/// `bin/`. None where the binary stands in no release.
-pub fn own_release() -> Option<String> {
-  let binary = std::env::current_exe().ok()?;
+/// The release the running testbed stands in: its directory, and the commit it was built from.
+#[derive(Clone, Debug, PartialEq)]
+pub struct OwnRelease {
+  pub dir: PathBuf,
+  pub commit: String,
+}
 
-  built_from(binary.parent()?.parent()?)
+/// The running binary's release: the directory above its `bin/`, and the commit the `built-from` beside it
+/// names. None where the binary stands in no release.
+pub fn own_release() -> Option<OwnRelease> {
+  let binary = std::env::current_exe().ok()?;
+  let dir = binary.parent()?.parent()?.to_path_buf();
+
+  Some(OwnRelease {
+    commit: built_from(&dir)?,
+    dir,
+  })
 }
 
 /// What a run on the placed machine came to: it ran there, with its code; or it did not go, said on a line,
@@ -787,7 +797,7 @@ impl MachinePlacement {
   /// the `built-from` beside its binary names, compared with this one's own; the line naming both where they
   /// differ or none reads there. Nothing is compared where this one runs from no release.
   pub fn same_release(&self) -> Result<(), String> {
-    let Some(own) = &self.release else { return Ok(()) };
+    let Some(OwnRelease { commit: own, .. }) = &self.release else { return Ok(()) };
     let words = &LANES.placed;
     let machine = self.settings.label();
 
@@ -833,9 +843,15 @@ impl MachinePlacement {
   /// The binary of a release the testbed there would run: the file in the release's `bin/` of the name the
   /// settings' `testbed` ends in; none where the release holds no such file, so it carries no testbed.
   pub fn testbed_in(&self, release: &Path) -> Option<PathBuf> {
-    let name = Path::new(&self.settings.testbed).file_name()?;
+    Some(release.join(self.testbed_name())).filter(|binary| binary.is_file())
+  }
 
-    Some(release.join("bin").join(name)).filter(|binary| binary.is_file())
+  // The name the settings' `testbed` ends in, under `bin/`.
+  fn testbed_name(&self) -> String {
+    format!(
+      "bin/{}",
+      Path::new(&self.settings.testbed).file_name().unwrap_or_default().to_string_lossy()
+    )
   }
 
   /// The testbed there brought to a release's (docs/boundary.md, 「The placed machine」): the release's
@@ -886,6 +902,36 @@ impl MachinePlacement {
       Ok(far) if far == commit => Ok(vec![far_testbed, far_built_from]),
       Ok(far) => Err(fill_marks(&words.testbed_other, &[("far", &short(&far)), ("own", &short(commit))])),
       Err(why) => Err(fill_marks(&words.testbed_unread, &[("file", &far_built_from), ("said", &why)])),
+    }
+  }
+
+  /// The testbed there brought to this one's own release before a deployment's bench (docs/deploy.md, 「Where a
+  /// deployment runs」), where it is not that release already, said on a line; the reason naming both commits
+  /// and what the machine answered where it could not be.
+  pub fn brought_to_own(&self) -> Result<(), String> {
+    let (Err(stale), Some(own)) = (self.same_release(), &self.release) else {
+      return Ok(());
+    };
+    let words = &LANES.placed;
+    let binary = self.testbed_in(&own.dir).ok_or_else(|| {
+      fill_marks(
+        &words.own_uncarried,
+        &[("release", &own.dir.to_string_lossy()), ("binary", &self.testbed_name())],
+      )
+    });
+
+    match binary.and_then(|binary| self.bring_testbed(&binary, &own.commit)) {
+      Ok(_) => {
+        eprintln!(
+          "{}",
+          fill_marks(
+            &words.brought_own,
+            &[("machine", self.settings.label()), ("own", &short(&own.commit))]
+          )
+        );
+        Ok(())
+      }
+      Err(why) => Err(fill_marks(&words.unbrought_own, &[("stale", &stale), ("said", &why)])),
     }
   }
 

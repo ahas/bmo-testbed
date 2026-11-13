@@ -24,7 +24,7 @@ use axum::routing::{get, post};
 use bmo_testbed_cli::cargo::placed_disk;
 use bmo_testbed_cli::deploy::{PlacedGate, brings_testbed};
 use bmo_testbed_cli::placement::{
-  BenchFor, MachinePlacement, MachineSettings, ReadyBench, reachable_remote,
+  BenchFor, MachinePlacement, MachineSettings, OwnRelease, ReadyBench, reachable_remote,
 };
 use bmo_testbed_core::events::Hook;
 use bmo_testbed_core::placement::{PlaceAsk, PlacedRun, Placement, read_placed};
@@ -478,7 +478,8 @@ fn a_caller_keeps_its_place_in_the_line_on_the_placed_machine() {
 }
 
 // The placed machine reached through the stand-in `ssh`, its testbed under the directory given with the commit
-// `far` beside it where one is named, and this testbed's own release `own`.
+// `far` beside it where one is named, and this testbed's own release `own`, standing in `own/` under the directory
+// with nothing in it.
 fn released(dir: &Path, far: Option<&str>, own: Option<&str>) -> MachinePlacement {
   let ssh = dir.join("ssh");
   let bin = dir.join("far/bin");
@@ -503,7 +504,10 @@ fn released(dir: &Path, far: Option<&str>, own: Option<&str>) -> MachinePlacemen
       disk_paths: Vec::new(),
     },
     home: dir.to_path_buf(),
-    release: own.map(str::to_owned),
+    release: own.map(|commit| OwnRelease {
+      dir: dir.join("own"),
+      commit: commit.to_owned(),
+    }),
   }
 }
 
@@ -531,6 +535,41 @@ fn a_testbed_there_of_another_release_is_refused_naming_both_commits_and_no_benc
   assert_eq!(refused, Err(stale));
   assert!(!dir.join("bench").exists());
   assert!(!dir.join("deploy-bench").exists());
+}
+
+// "Where they differ ... the deployment first brings that machine's testbed to the running testbed's own
+// release ... Where that does not take ... the stage fails with nothing changed, its reason naming both commits
+// and what the machine answered"
+#[test]
+fn a_testbed_there_of_another_release_is_brought_to_this_one_s_before_a_deployment_s_bench() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let machine = released(&dir, Some(FAR), Some(OWN));
+  let far_bin = dir.join("far/bin");
+  let own_bin = dir.join("own/bin");
+  let stale = fill_marks(
+    &LANES.placed.stale,
+    &[("machine", "machine-2"), ("far", &FAR[..12]), ("own", &OWN[..12])],
+  );
+  let uncarried = fill_marks(
+    &LANES.placed.own_uncarried,
+    &[("release", &dir.join("own").to_string_lossy()), ("binary", "bin/bmo-testbed")],
+  );
+
+  assert_eq!(
+    machine.brought_to_own(),
+    Err(fill_marks(&LANES.placed.unbrought_own, &[("stale", &stale), ("said", &uncarried)]))
+  );
+  assert_eq!(std::fs::read_to_string(far_bin.join("built-from")).unwrap().trim(), FAR);
+
+  std::fs::create_dir_all(&own_bin).unwrap();
+  std::fs::write(own_bin.join("bmo-testbed"), "this testbed").unwrap();
+  std::fs::write(own_bin.join("built-from"), format!("{OWN}\n")).unwrap();
+
+  assert_eq!(machine.brought_to_own(), Ok(()));
+  assert_eq!(std::fs::read_to_string(far_bin.join("bmo-testbed")).unwrap(), "this testbed");
+  assert_eq!(std::fs::read_to_string(far_bin.join("built-from")).unwrap().trim(), OWN);
+  assert_eq!(machine.same_release(), Ok(()));
 }
 
 // "where no such file reads there, the run is not run"; "a testbed running from no release compares nothing"

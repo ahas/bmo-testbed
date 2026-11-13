@@ -88,6 +88,9 @@ pub struct PlacedWords {
   pub testbed_unwritten: String,
   pub testbed_unread: String,
   pub testbed_other: String,
+  pub brought_own: String,
+  pub unbrought_own: String,
+  pub own_uncarried: String,
   pub kept: String,
   pub turn_came: String,
 }

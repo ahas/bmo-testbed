@@ -146,14 +146,24 @@ pub struct PlacedGate<'a> {
   pub here: &'a dyn Gate,
   /// Whether the gate is passed at all; the build goes to the machine either way.
   pub checked: bool,
-  /// Whether the testbed there is brought to a live release that carries one; not where the caller set the
-  /// placement empty (docs/boundary.md, 「The environment」).
+  /// Whether the testbed there is brought to this testbed's release before the bench and to a live release that
+  /// carries one; not where the caller set the placement empty (docs/boundary.md, 「The environment」).
   pub brings_testbed: bool,
 }
 
 impl PlacedGate<'_> {
   fn testbed(&self) -> String {
     self.machine.settings.testbed.clone()
+  }
+
+  // The repository's deployment bench there, made ready at the commit once the testbed there is brought to
+  // this one's release, unless the caller keeps it as it stands.
+  fn bench(&self, root: &Path, commit: &str) -> Result<ReadyBench, String> {
+    if self.brings_testbed {
+      self.machine.brought_to_own()?;
+    }
+
+    self.machine.ready(root, commit, BenchFor::Deployment(&self.repository))
   }
 
   // One verb of the machine's testbed run in the bench, timed: its step.
@@ -203,7 +213,7 @@ impl Gate for PlacedGate<'_> {
       return self.here.pass(ask);
     }
 
-    let bench = match self.machine.ready(ask.root, ask.commit, BenchFor::Deployment(&self.repository)) {
+    let bench = match self.bench(ask.root, ask.commit) {
       Ok(bench) => bench,
       Err(why) => {
         return GateOutcome {
@@ -268,7 +278,7 @@ impl Gate for PlacedGate<'_> {
       return None;
     }
 
-    let bench = match self.machine.ready(ask.root, ask.commit, BenchFor::Deployment(&self.repository)) {
+    let bench = match self.bench(ask.root, ask.commit) {
       Ok(bench) => bench,
       Err(why) => return Some(Err(why)),
     };

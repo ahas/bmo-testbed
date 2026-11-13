@@ -113,6 +113,13 @@ testbed_unreached = "it cannot be reached ({said})"
 testbed_unwritten = "{file} could not be written there: {said}"
 testbed_unread = "{file} read back names no release: {said}"
 testbed_other = "its built-from read back names {far}, not {own}"
+# A deployment's bench, where the placed machine's testbed is not this testbed's release, brings it there first
+# (docs/deploy.md, 「Where a deployment runs」): {machine} the machine, {own} this testbed's release; where that does
+# not take, {stale} the `stale` or `unreleased` line and {said} what the machine answered, or this testbed's
+# release {release} holding no {binary} to copy.
+brought_own = "testbed: brought the testbed on {machine} to this testbed's release {own} before the deployment's bench"
+unbrought_own = "{stale}; it could not be brought there: {said}"
+own_uncarried = "this testbed's release {release} holds no {binary}"
 # A run kept here because its environment sets {variable}, a variable its declaration names as reaching what only
 # this machine reaches.
 kept = "testbed: {variable} names what only this machine reaches; running here"
