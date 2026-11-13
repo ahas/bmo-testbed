@@ -58,7 +58,7 @@ make their own databases names neither, and its tests are handed the server alon
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `discover` | boolean | `true` | Find every directory carrying its own package manifest and a declared language's lockfile that the root workspace does not list |
+| `discover` | boolean | `true` | Find every directory carrying its own package manifest and a declared language's lockfile that the root workspace does not list, one inside another project included |
 | `paths` | list of paths | `[]` | Projects named outright, beside or instead of the ones found |
 | `check_script` | string | `check` | The manifest script that is a project's check, run by the first declared language that runs package scripts |
 

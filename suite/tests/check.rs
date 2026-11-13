@@ -547,6 +547,76 @@ fn a_project_whose_manifest_names_no_check_script_fails_its_step_with_why() {
   assert_eq!(done.output.trim(), fill_marks(&SUITE.file.no_check, &[("script", "check")]));
 }
 
+// The `site` project with a project of its own standing inside it, `site/client`, whose manifest names a
+// check script of its own.
+fn with_nested_project(root: &Path) {
+  with_projects(root);
+  write(
+    root,
+    "site/client/package.json",
+    r#"{ "name": "site-client", "scripts": { "check": "bun test" } }"#,
+  );
+  write(root, "site/client/bun.lock", "{}\n");
+  write(root, "site/client/screen.ts", "export const screen = 1;\n");
+  git(root, &["add", "-A"]);
+}
+
+// The project check steps a change owes, each by its name and the folder it runs in.
+fn project_steps(planned: &CheckPlan) -> Vec<(String, String)> {
+  planned
+    .steps
+    .iter()
+    .filter(|step| step.name.ends_with("/ check"))
+    .map(|step| (step.name.clone(), step.step.dir.to_string_lossy().into_owned()))
+    .collect()
+}
+
+#[test]
+fn a_change_inside_a_nested_project_its_manifest_and_lockfile_among_it_runs_that_project_s_check_alone() {
+  let (dir, _) = checkout();
+  let root = dir.path();
+
+  with_nested_project(root);
+
+  let planned = plan(
+    &repo(root),
+    &files(&["site/client/package.json", "site/client/bun.lock", "site/client/screen.ts"]),
+  )
+  .unwrap();
+
+  assert_eq!(project_steps(&planned), [("site/client/ check".to_owned(), "site/client".to_owned())]);
+}
+
+#[test]
+fn a_change_of_the_outer_project_outside_the_nested_one_runs_the_outer_project_s_check_alone() {
+  let (dir, _) = checkout();
+  let root = dir.path();
+
+  with_nested_project(root);
+
+  let planned = plan(&repo(root), &files(&["site/page.ts"])).unwrap();
+
+  assert_eq!(project_steps(&planned), [("site/ check".to_owned(), "site".to_owned())]);
+}
+
+#[test]
+fn a_change_holding_paths_of_the_outer_and_the_nested_project_runs_both_checks() {
+  let (dir, _) = checkout();
+  let root = dir.path();
+
+  with_nested_project(root);
+
+  let planned = plan(&repo(root), &files(&["site/page.ts", "site/client/screen.ts"])).unwrap();
+
+  assert_eq!(
+    project_steps(&planned),
+    [
+      ("site/ check".to_owned(), "site".to_owned()),
+      ("site/client/ check".to_owned(), "site/client".to_owned()),
+    ]
+  );
+}
+
 // A service's own checkout: a crate at the workspace's root, with its tests and their shared module, and a
 // crate of its own folder it depends on; a TypeScript project of its own listing a package of its own
 // workspace, whose check the declaration names; test files in a folder of their runner's configuration,

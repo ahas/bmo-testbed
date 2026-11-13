@@ -16,13 +16,14 @@
     package's folder through `sh`, as one unit of the suite where the package is marked and as one step
     of the change check where a changed path is the package's or matches its `reads`.
 - **A project of its own declares its browser test files** in the same `bmo` section of its own
-  manifest, as `browser`: globs from the project's folder. Where the suite marks the project, each file
-  they reach is a unit of its own in the suite's browser lane, started once the project's check has
-  ended (`docs/suite.md`, 「Browser files run in a lane of one」).
+  manifest, as `browser`: globs from the project's folder, reaching none of a project standing inside it.
+  Where the suite marks the project, each file they reach is a unit of its own in the suite's browser
+  lane, started once the project's check has ended (`docs/suite.md`, 「Browser files run in a lane of one」).
 - **A project of its own** is a directory carrying its own package manifest and the lockfile a declared
   language names (`docs/testbed.md`, 「Languages」) that the root workspace does not list; a
-  repository declaring no such language has none to find. The directory declares itself by its two
-  files, unless the declaration
+  repository declaring no such language has none to find. Projects nest: a directory carrying the two
+  files inside another project is a project of its own, beside the one holding it. The directory
+  declares itself by its two files, unless the declaration
   turns discovery off or names its projects (`docs/declaration.md`). It names its own check: the
   `check` script of its manifest, run inside it, its static check and its tests together, readying the
   project first: the testbed itself installs nothing in a project, so the check installs the project's
@@ -54,7 +55,11 @@
   - a path matching a crate's `reads` marks that crate, and the mark stops there;
   - a crate whose dependencies name a marked crate is marked in turn, read from `cargo metadata`.
 - **A path inside a project of its own marks that project** for its own check and no package; so does
-  the project's own path where a range moved a submodule's pin.
+  the project's own path where a range moved a submodule's pin. Where projects nest, a path belongs to
+  the innermost project whose directory holds it, as a path belongs to the deepest package: a path
+  inside the nested project, its manifest and lockfile among them, marks the nested project alone,
+  and a path of the outer project outside it marks the outer project alone. A change holding paths of
+  both marks both, each for its own check.
 - **The changed paths** are the commits of the range the caller names, with every file in the working
   tree that is modified or not yet tracked. With no range the run takes everything.
 - **The run says why.** Its first lines name every marked unit and the rule that marked it.

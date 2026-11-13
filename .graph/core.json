@@ -51,8 +51,8 @@
       "core/lanes-and-turn",
       "core/policy-loader"
     ],
-    "base": "93e631758d9e668b2cd9cc007838e3a62eedca56",
-    "changed": 1794545338890
+    "base": "6dabc83764d4656ee0b33e707f39ef8853b817db",
+    "changed": 1794547133076
   },
   {
     "id": "core/event-hook",

@@ -538,6 +538,12 @@ fn run_held(
     ),
     None => picked_units(&all_crates(), |one| one.dir.as_str(), &ask.picked),
   };
+  // Every project of its own the checkout holds, which keeps a nested project's files out of the one holding
+  // it; and the ones the run checks.
+  let every_project: Vec<OwnProject> = match &selected {
+    Some((layout, _)) => layout.projects.clone(),
+    None => own_projects(repo),
+  };
   let projects: Vec<OwnProject> = match &selected {
     Some((layout, chosen)) => picked_units(
       &layout
@@ -549,7 +555,7 @@ fn run_held(
       |one| one.dir.as_str(),
       &ask.picked,
     ),
-    None => picked_units(&own_projects(repo), |one| one.dir.as_str(), &ask.picked),
+    None => picked_units(&every_project, |one| one.dir.as_str(), &ask.picked),
   };
   // A package declaring a check of its own is checked as a tool is, wherever the package is marked.
   let tools: Vec<CheckedTool> = match &selected {
@@ -649,7 +655,7 @@ fn run_held(
   let project_browser: Vec<(String, String)> = projects
     .iter()
     .flat_map(|project| {
-      project_browser_files(root, project)
+      project_browser_files(root, project, &every_project)
         .into_iter()
         .map(|file| (file, unit_of(&project.dir)))
     })

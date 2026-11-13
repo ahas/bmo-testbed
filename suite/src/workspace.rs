@@ -173,7 +173,7 @@ fn lockfile_dirs(repo: &Repository) -> Vec<String> {
 
 /// Every project of its own the checkout holds, by directory: where the declaration leaves discovery on,
 /// each directory carrying its own `package.json` and the lockfile a declared language names that the root's
-/// workspaces do not list and no such directory above it holds; then each directory the declaration names
+/// workspaces do not list, one standing inside another included; then each directory the declaration names
 /// outright.
 pub fn own_projects(repo: &Repository) -> Vec<OwnProject> {
   let root = repo.root.as_path();
@@ -182,18 +182,10 @@ pub fn own_projects(repo: &Repository) -> Vec<OwnProject> {
   let mut dirs: Vec<String> = Vec::new();
 
   if declared.discover {
-    let mut found: Vec<String> = lockfile_dirs(repo)
+    dirs = lockfile_dirs(repo)
       .into_iter()
       .filter(|dir| !listed.contains(dir) && root.join(dir).join("package.json").is_file())
       .collect();
-
-    found.sort();
-
-    for dir in found {
-      if !dirs.iter().any(|above| dir.starts_with(&format!("{above}/"))) {
-        dirs.push(dir);
-      }
-    }
   }
 
   for path in &declared.paths {
@@ -229,8 +221,9 @@ pub fn own_projects(repo: &Repository) -> Vec<OwnProject> {
 }
 
 /// The browser test files a project of its own declares, each a path from the repository's root: every file
-/// git tracks or holds new and not ignored inside the project that one of its globs reaches from its folder.
-pub fn project_browser_files(root: &Path, project: &OwnProject) -> Vec<String> {
+/// git tracks or holds new and not ignored inside the project that one of its globs reaches from its folder,
+/// none of a project of `projects` standing inside it among them.
+pub fn project_browser_files(root: &Path, project: &OwnProject, projects: &[OwnProject]) -> Vec<String> {
   if project.browser.is_empty() {
     return Vec::new();
   }
@@ -240,6 +233,7 @@ pub fn project_browser_files(root: &Path, project: &OwnProject) -> Vec<String> {
     git_lines(root, &["ls-files", "--cached", "--others", "--exclude-standard", "--", &project.dir])
       .unwrap_or_default()
       .into_iter()
+      .filter(|file| !nested_project_holds(projects, project, file))
       .filter(|file| globs.iter().any(|glob| glob_matches(glob, file)))
       .collect();
 
@@ -249,17 +243,19 @@ pub fn project_browser_files(root: &Path, project: &OwnProject) -> Vec<String> {
 }
 
 /// Every directory a project of its own installs in, from the root: each one inside it that holds the
-/// lockfile a declared language names, the project's own directory first (docs/checks.md, 「Which tests a
-/// change runs」).
+/// lockfile a declared language names and no project standing inside it holds, the project's own directory
+/// first (docs/checks.md, 「Which tests a change runs」).
 pub fn own_project_install_dirs(repo: &Repository) -> Vec<String> {
   let lockfiles = lockfile_dirs(repo);
+  let projects = own_projects(repo);
 
-  own_projects(repo)
-    .into_iter()
+  projects
+    .iter()
     .flat_map(|one| {
       let mut dirs = vec![one.dir.clone()];
+      let below = lockfiles.iter().filter(|dir| dir.starts_with(&format!("{}/", one.dir)));
 
-      for nested in lockfiles.iter().filter(|dir| dir.starts_with(&format!("{}/", one.dir))) {
+      for nested in below.filter(|dir| !nested_project_holds(&projects, one, dir)) {
         if !dirs.contains(nested) {
           dirs.push(nested.clone());
         }
@@ -270,14 +266,27 @@ pub fn own_project_install_dirs(repo: &Repository) -> Vec<String> {
     .collect()
 }
 
-/// The project of its own a path lies in, or none: the project's own path counts, which a submodule's
-/// moved pin is, and a path inside a workspace package standing in the project is the package's.
+// Whether a project of `projects` standing inside `project` holds `path`, its own directory counting: such a
+// path is that project's, not the one holding it.
+fn nested_project_holds(projects: &[OwnProject], project: &OwnProject, path: &str) -> bool {
+  let inside = |dir: &str, above: &str| dir.starts_with(&format!("{above}/"));
+
+  projects
+    .iter()
+    .any(|other| inside(&other.dir, &project.dir) && (path == other.dir || inside(path, &other.dir)))
+}
+
+/// The project of its own a path lies in, or none: the innermost one whose directory holds it, its own path
+/// counting, which a submodule's moved pin is; and a path inside a workspace package standing in that project
+/// is the package's (docs/checks.md, 「Which tests a change runs」).
 pub fn own_project_of<'a>(projects: &'a [OwnProject], path: &str) -> Option<&'a OwnProject> {
   let inside = |dir: &str| path == dir || path.starts_with(&format!("{dir}/"));
 
   projects
     .iter()
-    .find(|one| inside(&one.dir) && !one.members.iter().any(|member| inside(member)))
+    .filter(|one| inside(&one.dir))
+    .max_by_key(|one| one.dir.len())
+    .filter(|one| !one.members.iter().any(|member| inside(member)))
 }
 
 /// The package a path belongs to: the deepest one whose directory holds it, or none.

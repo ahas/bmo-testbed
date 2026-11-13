@@ -55,13 +55,13 @@
       "calls/bmo-text",
       "core/silence-watch"
     ],
-    "base": "93e631758d9e668b2cd9cc007838e3a62eedca56",
-    "changed": 1794545338744
+    "base": "6dabc83764d4656ee0b33e707f39ef8853b817db",
+    "changed": 1794547133055
   },
   {
     "id": "suite/change-selection",
     "title": "Change selection",
-    "what": "Which packages, crates, projects of their own and tools a set of changed paths reaches, read from the repository's own manifests, cargo metadata and the declared languages' root files and lockfiles.",
+    "what": "Which packages, crates, projects of their own and tools a set of changed paths reaches, read from the repository's own manifests, cargo metadata and the declared languages' root files and lockfiles; projects nest, and a path is the innermost one's that holds it.",
     "files": [
       "suite/src/selection.rs",
       "suite/src/workspace.rs",
@@ -81,8 +81,8 @@
       "core/languages",
       "core/policy-loader"
     ],
-    "base": "95a986f9facd7b2c260f292ec454c9ced2ea2bdf",
-    "changed": 1794219181621
+    "base": "6dabc83764d4656ee0b33e707f39ef8853b817db",
+    "changed": 1794547120120
   },
   {
     "id": "suite/dependents",
@@ -248,8 +248,8 @@
       "core/run-verb-and-status",
       "core/silence-watch"
     ],
-    "base": "eea0ad4e637bbdf8e6e15bf119a760bdb7bf3f0b",
-    "changed": 1794545596450
+    "base": "6dabc83764d4656ee0b33e707f39ef8853b817db",
+    "changed": 1794547133066
   },
   {
     "id": "suite/test-count",

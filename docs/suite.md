@@ -56,8 +56,9 @@
 
 - **A crate's tests, a project's check and a declared package check** each run as one entry of the
   sweep, as the head of a process group of its own, in a second lane of one
-  beside the browser lane. Each spends the machine's threads on its own, so two never run side by
-  side; the projects go down the lane first, then the crates.
+  beside the browser lane. A project standing inside another is an entry of its own, its check run in
+  its own folder beside the outer one's. Each spends the machine's threads on its own, so two never
+  run side by side; the projects go down the lane first, then the crates.
 - **Their verdicts stand in the log as a file's do,** and the totals count Cargo's result lines with
   the runner's, ignored tests as skipped.
 - **Crates are built once, before the units start.** Every crate to be tested is built once the run
