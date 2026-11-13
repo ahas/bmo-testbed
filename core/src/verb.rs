@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 use crate::close_line::{CloseEntry, read_close_line};
 use crate::languages::{LANGUAGES, language_for};
-use crate::placement::{PlaceAsk, Placement, runs_here};
+use crate::placement::{PlaceAsk, PlacedEntry, Placement, read_placed, runs_here};
 use crate::policy::fill_marks;
 use crate::policy::lanes::LANES;
 use crate::queue::now_ms;
@@ -58,6 +58,18 @@ fn entry_line(entry: &TurnEntry, now: i64) -> String {
   .concat()
 }
 
+// A run placed elsewhere in the lane: the machine, whether it waits there or its turn there came, and the run
+// with since when.
+fn placed_line(placed: &PlacedEntry, now: i64) -> String {
+  let said = &LANES.status;
+  let state = if placed.entry.since.is_some() { &said.placed_running } else { &said.placed_waiting };
+
+  fill_marks(
+    &said.placed,
+    &[("machine", &placed.machine), ("state", state), ("who", &entry_line(&placed.entry, now))],
+  )
+}
+
 fn close_entry_line(entry: &CloseEntry, at: i64, now: i64) -> String {
   format!("{}{}", entry.words(), age(at, now))
 }
@@ -89,6 +101,7 @@ pub fn status_lines(close_line: Option<&Path>) -> Vec<String> {
 
     lines.extend(queue.holders.iter().map(|holder| holding(entry_line(holder, now))));
     lines.extend(queue.waiting.iter().enumerate().map(|(at, entry)| waiting(at, entry_line(entry, now))));
+    lines.extend(read_placed(&lock_path(&env, lane)).iter().map(|placed| placed_line(placed, now)));
   }
 
   if let Some(path) = close_line {

@@ -479,6 +479,14 @@
           "name": {
             "$ref": "#/components/schemas/LaneName"
           },
+          "placed": {
+            "default": [],
+            "description": "The runs of this lane this machine placed on another and has not seen end, in the order they were placed;\neach names its `machine`, and its `heldAt` is null while it waits there.",
+            "items": {
+              "$ref": "#/components/schemas/QueueEntry"
+            },
+            "type": "array"
+          },
           "waiting": {
             "items": {
               "$ref": "#/components/schemas/QueueEntry"
@@ -496,7 +504,8 @@
           "width",
           "holders",
           "holder",
-          "waiting"
+          "waiting",
+          "placed"
         ],
         "type": "object"
       },
@@ -532,6 +541,14 @@
             "description": "Always false: a waiter waits its turn out, and no place is kept for one that left.",
             "type": "boolean"
           },
+          "machine": {
+            "default": null,
+            "description": "The label of the machine a placed run runs on; null for an entry of this machine's own seats and line.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "next": {
             "description": "Standing next after the front.",
             "type": "boolean"
@@ -555,6 +572,7 @@
           "pid",
           "askedAt",
           "heldAt",
+          "machine",
           "kept",
           "front",
           "next"
@@ -872,7 +890,7 @@
   "info": {
     "description": "One machine's testbed shared by every checkout on it: the queue heavy commands wait in, whole-suite runs with change selection, quick static checks, and release-based deployments. The HTTP service only reads, from the record every verb writes and the lanes as they stand; running anything is the command line's, and the MCP server wraps those commands where the harness runs. Times are integers of epoch milliseconds, and every failure is answered in the error shape with its status.",
     "title": "bmo-testbed",
-    "version": "0.1.0-rev.22"
+    "version": "0.1.0-rev.23"
   },
   "openapi": "3.1.0",
   "paths": {

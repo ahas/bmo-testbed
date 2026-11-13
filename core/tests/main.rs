@@ -4,6 +4,7 @@ mod declaration;
 mod events;
 mod languages;
 mod memory;
+mod placement;
 mod policy;
 mod run;
 mod silence;

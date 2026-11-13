@@ -103,6 +103,10 @@ pub struct Queue {
   /// The first of `holders`, or null where no seat is held.
   pub holder: Option<QueueEntry>,
   pub waiting: Vec<QueueEntry>,
+  /// The runs of this lane this machine placed on another and has not seen end, in the order they were placed;
+  /// each names its `machine`, and its `heldAt` is null while it waits there.
+  #[serde(default)]
+  pub placed: Vec<QueueEntry>,
 }
 
 /// Who stands in a lane's line, or holds its turn.
@@ -120,6 +124,9 @@ pub struct QueueEntry {
   pub asked_at: i64,
   /// When the turn came; null while it waits.
   pub held_at: Option<i64>,
+  /// The label of the machine a placed run runs on; null for an entry of this machine's own seats and line.
+  #[serde(default)]
+  pub machine: Option<String>,
   /// Always false: a waiter waits its turn out, and no place is kept for one that left.
   pub kept: bool,
   /// Standing at the front.

@@ -91,8 +91,8 @@
     "needs": [
       "core/policy-loader"
     ],
-    "base": "9d6ad2fe61bc35bad21d2332908605bbacecb561",
-    "changed": 1794496803316
+    "base": "9aa0db29574b9e50c97edc189f30b6ad31c01d32",
+    "changed": 1794544126335
   },
   {
     "id": "core/languages",
@@ -116,12 +116,13 @@
   {
     "id": "core/placement",
     "title": "Placement",
-    "what": "Where a run goes: here by default or where its environment sets a variable its declaration names as this machine's, else on another machine the endpoint or settings name, over ssh in a bench made from a remote it reaches, only where that testbed is this release.",
+    "what": "Where a run goes: here by default or where its environment sets a variable its declaration names as this machine's, else on another machine the endpoint or settings name, over ssh in a bench made from a remote it reaches where that testbed is this release, and named in its lane here while it lasts.",
     "files": [
       "core/src/placement.rs",
       "cli/src/placement.rs",
       "docs/boundary.md",
-      "cli/tests/placement.rs"
+      "cli/tests/placement.rs",
+      "core/tests/placement.rs"
     ],
     "symbols": [
       "reachable_remote",
@@ -130,15 +131,16 @@
       "HttpPlacement"
     ],
     "aliases": [
-      "배치 규칙"
+      "배치 규칙",
+      "다른 머신에 배치된 실행"
     ],
     "needs": [
       "core/lanes-and-turn",
       "core/policy-loader",
       "deploy/releases-and-rollback"
     ],
-    "base": "5986ef200f99fd0c1fd7a4b9377d59a76c4f23d0",
-    "changed": 1794543519551
+    "base": "9aa0db29574b9e50c97edc189f30b6ad31c01d32",
+    "changed": 1794544126218
   },
   {
     "id": "core/policy-loader",
@@ -188,13 +190,13 @@
     "symbols": [],
     "aliases": [],
     "needs": [],
-    "base": "ee7245e35a671b2555da6ef2a011b2736edde753",
-    "changed": 1794533264973
+    "base": "9aa0db29574b9e50c97edc189f30b6ad31c01d32",
+    "changed": 1794544126413
   },
   {
     "id": "core/run-verb-and-status",
     "title": "Run verb and status",
-    "what": "The run verb, which runs one heavy command in its lane's turn or places it elsewhere, tells a run witness as it begins and ends, and ends on one result line or one command run; and the status verb's lines over each lane and the close line.",
+    "what": "The run verb, which runs one heavy command in its lane's turn or places it elsewhere, tells a run witness as it begins and ends, and ends on one result line or one command run; and the status verb's lines over each lane, its placed runs and the close line.",
     "files": [
       "core/src/run.rs",
       "core/src/verb.rs",
@@ -214,7 +216,7 @@
       "core/close-line",
       "core/policy-loader"
     ],
-    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
-    "changed": 1793664723564
+    "base": "9aa0db29574b9e50c97edc189f30b6ad31c01d32",
+    "changed": 1794544126236
   }
 ]

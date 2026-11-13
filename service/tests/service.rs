@@ -1,15 +1,16 @@
 //! The HTTP service (docs/boundary.md, 「The HTTP service」), served on a loopback port of its own and asked
 //! through the published client: the token on every route, the members read from the record, the error
-//! shape and its codes, the lanes as they stand, and the event stream with the service's own
-//! `queue.changed`.
+//! shape and its codes, the lanes as they stand with the runs placed elsewhere from them, and the event
+//! stream with the service's own `queue.changed`.
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use bmo_testbed_client::{
-  ClientFailure, ErrorCode, EventKind, EventsQuery, LaneName, PageQuery, TestRun, TestRunKind,
+  ClientFailure, ErrorCode, EventKind, EventsQuery, LaneName, PageQuery, Queue, TestRun, TestRunKind,
   TestRunState, TestRunsQuery, TestbedClient,
 };
+use bmo_testbed_core::placement::{PlaceAsk, PlacedRun};
 use bmo_testbed_core::queue::now_ms;
 use bmo_testbed_core::turn::{Env, Lane, TurnAsk, take_turn};
 use bmo_testbed_record::Record;
@@ -251,6 +252,44 @@ async fn the_lanes_answer_as_they_stand_and_a_change_is_an_event() {
   assert_eq!(changed.kind, EventKind::QueueChanged);
   assert_eq!(changed.data["holder"]["scope"], "scope-9");
   drop(turn);
+}
+
+// "a run placed elsewhere answers in its lane's placed runs, naming its machine, and holds no seat"
+#[tokio::test]
+async fn a_run_placed_elsewhere_answers_in_its_lanes_placed_runs() {
+  let served = Served::start().await;
+  let env = Env::from([(
+    "BMO_TESTBED_LOCK".to_owned(),
+    served.dir.path().join("wide.lock").to_string_lossy().into_owned(),
+  )]);
+  let command = vec!["bmo-testbed".to_owned(), "check".to_owned()];
+  let _run = PlacedRun::stand(
+    &PlaceAsk {
+      command: &command,
+      adapter: None,
+      lane: Lane::Wide,
+      cwd: "/checkout".into(),
+      env: &env,
+      to_free_seat: true,
+    },
+    std::path::Path::new("/checkout"),
+    "machine-2",
+  );
+  let wide = lane_at(&served, 0).await;
+
+  assert!(wide.holders.is_empty() && wide.waiting.is_empty());
+  assert_eq!(wide.placed.len(), 1);
+  assert_eq!(wide.placed[0].machine.as_deref(), Some("machine-2"));
+  assert_eq!(
+    (wide.placed[0].checkout.as_str(), wide.placed[0].command.as_str()),
+    ("/checkout", "bmo-testbed check")
+  );
+  assert_eq!(wide.placed[0].held_at, None);
+  assert!(lane_at(&served, 1).await.placed.is_empty());
+}
+
+async fn lane_at(served: &Served, at: usize) -> Queue {
+  served.client().queues(&PageQuery::default()).await.unwrap().items.swap_remove(at)
 }
 
 // "the stream resumes after a number and carries each event written since, in its stream shape"

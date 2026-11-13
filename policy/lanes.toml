@@ -107,6 +107,11 @@ other_release = "testbed: not placed on {machine}: {said}; running here"
 # A run kept here because its environment sets {variable}, a variable its declaration names as reaching what only
 # this machine reaches.
 kept = "testbed: {variable} names what only this machine reaches; running here"
+# The line a testbed run on a placed machine writes on standard error each time a turn it takes comes there; the
+# machine that placed it reads it off the run's output, takes the run for running there, and does not pass it on
+# (docs/boundary.md, 「A run placed elsewhere stands here too」). Both machines run one release, so they read it
+# alike.
+turn_came = "testbed: placed run's turn came"
 
 # A command's wait and run, as every step of a check says them.
 [times]
@@ -152,6 +157,12 @@ waiting = "  waiting {at}: {who}"
 age = " ({seconds}s)"
 front = " (at the front)"
 next = " (next after the front)"
+# A run this machine placed on another in the lane, {machine} the machine, {state} `placed_waiting` or
+# `placed_running`, and {who} the run as a holder's line names it, with how long ago it was placed or its turn
+# there came.
+placed = "  placed on {machine}{state}: {who}"
+placed_waiting = ", waiting there"
+placed_running = ", running there"
 close_line = "the close line:"
 
 # The `run` verb's refusal of a language it does not know, {name} the name given and {names} the ones

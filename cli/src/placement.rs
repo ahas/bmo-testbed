@@ -3,13 +3,15 @@
 //! verb in a bench copy of the checkout; and the placement endpoint asked over HTTP, whose answer names the
 //! bench and the run's event stream. Either way the caller makes the bench ready over `ssh`: the commit
 //! pushed into it, the open files and the outside trees copied over, and the output and the result come back.
+//! While the run lasts it stands here as a placed run of its lane, running once the far side says its turn
+//! there came (docs/boundary.md, 「A run placed elsewhere stands here too」).
 
-use std::io::Write as _;
+use std::io::{BufRead as _, BufReader, Read, Write as _};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
 use bmo_testbed_core::declaration::Repository;
-use bmo_testbed_core::placement::{PlaceAsk, Placement};
+use bmo_testbed_core::placement::{PlaceAsk, PlacedRun, Placement};
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::policy::quick_checks::QUICK_CHECKS;
@@ -323,6 +325,33 @@ pub fn ready_bench(bench: &Bench, source: &BenchSource<'_>) -> Result<(), String
   Ok(())
 }
 
+// Whether a line of the far run's output is the one saying its turn there came.
+fn says_turn_came(line: &[u8]) -> bool {
+  let line = line.strip_suffix(b"\n").unwrap_or(line);
+
+  line.strip_suffix(b"\r").unwrap_or(line) == LANES.placed.turn_came.as_bytes()
+}
+
+// The far run's standard error passed on to this process's as it comes, line by line, but for the line saying
+// its turn there came, which marks the placed run running here, where one stands, and goes no further.
+fn passed_on(from: impl Read, placed: Option<&PlacedRun>) {
+  let mut from = BufReader::new(from);
+  let mut line = Vec::new();
+  let mut to = std::io::stderr();
+
+  while from.read_until(b'\n', &mut line).is_ok_and(|read| read > 0) {
+    if says_turn_came(&line) {
+      if let Some(placed) = placed {
+        placed.turn_came();
+      }
+    } else {
+      let _ = to.write_all(&line).and_then(|()| to.flush());
+    }
+
+    line.clear();
+  }
+}
+
 // A run the placed machine dropped: the line saying so, and the code of a run not run.
 fn dropped(machine: &str, said: &str) -> u8 {
   println!("{}", fill_marks(&LANES.run.dropped, &[("machine", machine), ("said", said)]));
@@ -344,7 +373,7 @@ impl HttpPlacement {
   }
 
   // The run read off its stream: its output to standard error, its result line to standard output.
-  async fn streamed(client: &reqwest::Client, machine: &str, run: &str) -> u8 {
+  async fn streamed(client: &reqwest::Client, machine: &str, run: &str, placed: &PlacedRun) -> u8 {
     let said = &LANES.placed;
     let opened = client.get(run).send().await.and_then(reqwest::Response::error_for_status);
     let response = match opened {
@@ -358,6 +387,7 @@ impl HttpPlacement {
       let data = event.data.unwrap_or_default();
 
       match event.event.as_deref() {
+        Some(OUTPUT_EVENT) if says_turn_came(data.as_bytes()) => placed.turn_came(),
         Some(OUTPUT_EVENT) => eprintln!("{data}"),
         Some(RESULT_EVENT) => match serde_json::from_str::<Ended>(&data) {
           Ok(ended) => {
@@ -399,6 +429,7 @@ impl HttpPlacement {
         bench,
         run,
       }) => {
+        let placed = PlacedRun::stand(ask, &checkout, &machine);
         let source = BenchSource {
           checkout: &checkout,
           remote: &remote,
@@ -417,7 +448,7 @@ impl HttpPlacement {
           fill_marks(&LANES.placed.running, &[("machine", &machine), ("bench", &bench.path)])
         );
 
-        Some(Self::streamed(&client, &machine, &run).await)
+        Some(Self::streamed(&client, &machine, &run, &placed).await)
       }
       Err(why) => local(&why),
     }
@@ -709,9 +740,10 @@ impl MachinePlacement {
     line
   }
 
-  /// The words run in the bench through the `placed` verb, the output and the result this process's; the
-  /// code it ended with, 75 where the connection broke.
-  pub fn run(&self, bench: &ReadyBench, words: &[String], setup: bool) -> u8 {
+  /// The words run in the bench through the `placed` verb, the output and the result this process's, the
+  /// placed run standing here, where one does, marked running once its turn there came; the code it ended
+  /// with, 75 where the connection broke.
+  pub fn run(&self, bench: &ReadyBench, words: &[String], setup: bool, placed: Option<&PlacedRun>) -> u8 {
     let said = &LANES.placed;
     let line = self.placed_line(bench, words, setup);
 
@@ -720,7 +752,18 @@ impl MachinePlacement {
       fill_marks(&said.running, &[("machine", self.settings.label()), ("bench", &bench.path)])
     );
 
-    let status = self.ssh().arg(line).stdout(Stdio::inherit()).stderr(Stdio::inherit()).status();
+    let started = self.ssh().arg(line).stdout(Stdio::inherit()).stderr(Stdio::piped()).spawn();
+    let status = started.and_then(|mut child| {
+      let far_errors = child.stderr.take();
+
+      std::thread::scope(|scope| {
+        if let Some(far_errors) = far_errors {
+          scope.spawn(|| passed_on(far_errors, placed));
+        }
+
+        child.wait()
+      })
+    });
 
     match status.ok().and_then(|status| status.code()) {
       // 255 is `ssh`'s own: the connection broke or was never made.
@@ -732,13 +775,22 @@ impl MachinePlacement {
   /// The words run in the bench through the `placed` verb with no setup, what they say on standard error this
   /// process's; what they printed on standard output where they ended 0, none otherwise.
   pub fn read(&self, bench: &ReadyBench, words: &[String]) -> Option<String> {
-    let done = self
+    let mut child = self
       .ssh()
       .arg(self.placed_line(bench, words, false))
       .stdout(Stdio::piped())
-      .stderr(Stdio::inherit())
-      .output()
+      .stderr(Stdio::piped())
+      .spawn()
       .ok()?;
+    let far_errors = child.stderr.take();
+    let done = std::thread::scope(|scope| {
+      if let Some(far_errors) = far_errors {
+        scope.spawn(|| passed_on(far_errors, None));
+      }
+
+      child.wait_with_output()
+    })
+    .ok()?;
 
     done.status.success().then(|| String::from_utf8_lossy(&done.stdout).into_owned())
   }
@@ -813,6 +865,7 @@ impl MachinePlacement {
 
     let found = git(&ask.cwd, &["rev-parse", "--show-toplevel"]);
     let checkout = if found.is_empty() { ask.cwd.clone() } else { PathBuf::from(found) };
+    let placed = PlacedRun::stand(ask, &checkout, self.settings.label());
     let commit = git(&checkout, &["rev-parse", "HEAD"]);
     let bench = match self.made_ready(&checkout, &commit, true) {
       Ok(bench) => bench,
@@ -839,7 +892,7 @@ impl MachinePlacement {
       words.extend(ask.command.iter().cloned());
     }
 
-    Placed::Ran(self.run(&bench, &words, true))
+    Placed::Ran(self.run(&bench, &words, true, Some(&placed)))
   }
 }
 

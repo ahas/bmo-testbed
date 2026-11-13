@@ -61,7 +61,8 @@ Both answer a command run as `testbed_run` does; the suite's `testRunId` reads b
 
 - `testbed_queues` shows each lane: its `width`, its `holders`, one for each seat held, and who is
   `waiting`, in the order they will be served, with `front` and `next` marking those who stand ahead of
-  the ordinary line.
+  the ordinary line, and the runs this machine `placed` on another, each naming its `machine`, with
+  `heldAt` null while it waits there.
 - `testbed_test_runs` pages the test runs, newest first; `checkout` narrows them to one checkout, and the
   `id` of the last one is the `after` of the next page while `more` is true.
 - `testbed_deployments` and `testbed_deployment` read the deployments the testbed ran: their `state`, each

@@ -98,8 +98,10 @@ bmo-testbed status [--json | --free]
 ```
 
 - Prints each lane, its width, a `holding it:` line for each seat held, naming its holder, or one
-  saying nobody, and its waiters in order with their age and their front and next marks; then the
-  close line of the repository it is run in. Exits 0.
+  saying nobody, its waiters in order with their age and their front and next marks, and a `placed on`
+  line for each run this machine placed elsewhere in that lane (「Placement」, 「A run placed elsewhere
+  stands here too」), naming the machine, whether it waits or runs there and since when; then the close
+  line of the repository it is run in. Exits 0.
 - **`--json`** prints one object:
   - `queues`: the page of both lanes exactly as `GET /queues` answers it (「Members」);
   - `closeLine`: the repository's close line, with `holder` (a close entry or null) and `waiting` (a
@@ -550,10 +552,14 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   every seat runs on), `holders` (a list of queue entries, one for each seat held, in the seats'
   order, so a holder of several seats stands in it once for each), `holder` (the first of `holders`,
   or null where no seat is held), `waiting` (a list of queue entries, in the order they will be
-  served).
+  served), `placed` (a list of queue entries, one for each run of this lane this machine placed on
+  another machine and has not seen end, in the order they were placed; 「A run placed elsewhere stands
+  here too」).
 - **Queue entry:** `scope` (string or null, the caller's opaque scope from `BMO_TESTBED_SCOPE`),
-  `checkout`, `command` (one line), `pid`, `askedAt`, `heldAt` (null while waiting), and the booleans
-  `front` and `next`, and `kept`, always false, since no place is kept for a waiter that left.
+  `checkout`, `command` (one line), `pid`, `askedAt`, `heldAt` (null while waiting), `machine`
+  (string or null: the label of the machine a placed run runs on, null for an entry of this machine's
+  own seats and line), and the booleans `front` and `next`, and `kept`, always false, since no place is
+  kept for a waiter that left.
 - **Test run:** `id`, `kind` (`suite` or `command`), `checkout`, `repositoryName` (string or null),
   `commit` (the checkout's `HEAD` as the run began, or null where git could not tell), `whole` (boolean
   or null: true for a suite run of every unit, with no range, no word naming a path and no word for the
@@ -591,7 +597,7 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
 
   | Kind | Data |
   |---|---|
-  | `queue.changed` | the queue whose holder or line changed |
+  | `queue.changed` | the queue whose holders, line or placed runs changed |
   | `test-run.created` | the test run as it began |
   | `test-run.ended` | the test run as it ended |
   | `deployment.created` | the deployment as it began |
@@ -599,7 +605,8 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   | `restart.created` | the restart |
 
 - **A lane's change is seen by the service itself,** which reads the lanes every second of the
-  policy's and writes a `queue.changed` event where a holder or a line differs from the last reading.
+  policy's and writes a `queue.changed` event where a holder, a line or a placed run differs from the
+  last reading.
 - **A reader resumes** with `Last-Event-ID` or `after`, and narrows with `kinds`, a comma-separated
   list. The window is the policy's; a resume from before it answers 410 `gone`.
 - **To `Accept: application/json`** the same events are a page by `after` and `limit`.
@@ -762,6 +769,30 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   on a line and runs here.
 - **A stream that ends with no `result`** ends the run as not run, exit code 75.
 - **A deployment never asks the endpoint:** its gate and its build go to a placed machine alone.
+
+### A run placed elsewhere stands here too
+
+- **While a placed `run`, `suite`, `check` or Cargo verb lasts, it stands on the machine that placed it,**
+  as a queue entry in the `placed` list of the lane it asked for (「Members」), so `status` and
+  `GET /queues` name it beside the lane's own holders and line, and a reader ties it to its caller by
+  checkout as it does an entry of this machine's own. The entry carries the caller's scope, its
+  checkout (the top of the repository it was started in, as a run here names it), its command, the
+  process that placed it, when it was placed (`askedAt`), the placed machine's label (`machine`, the
+  label the endpoint answered for a run it placed), and its front and next marks.
+- **It stands from the moment the run is placed,** its bench made ready meanwhile, until the run
+  ends there, is dropped or does not go; an entry whose process is gone is nobody's and is left out.
+- **`heldAt` is null while the run waits there,** its bench made ready, its setup run and its wait in
+  that machine's line, and is the moment its first turn there came once that machine says so. A testbed
+  run with `BMO_TESTBED_PLACED` set writes one line on standard error each time a turn it takes comes,
+  `testbed: placed run's turn came`; the placing machine reads that line off the run's output, `ssh`'s
+  standard error or the stream's `output` events, and does not pass it on. A run whose far side writes
+  no such line stands waiting until it ends.
+- **It takes no seat here:** whether a seat here is free, for `status --free` and for a run that may
+  be placed because this machine is full, is read from the lane's seats and line alone.
+- **A deployment's gate and release build on the placed machine stand as the deployment's stages**
+  (「The record」), never in a lane's `placed` list.
+- **The entries stand beside the lane's lock,** one file for each run in a directory named for the lock
+  with `.placed` after it, so every reader of the lanes reads them the way it reads the line.
 
 ## The crates
 

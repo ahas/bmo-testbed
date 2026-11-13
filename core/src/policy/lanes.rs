@@ -84,6 +84,7 @@ pub struct PlacedWords {
   pub unreleased: String,
   pub other_release: String,
   pub kept: String,
+  pub turn_came: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -127,6 +128,9 @@ pub struct StatusWords {
   pub age: String,
   pub front: String,
   pub next: String,
+  pub placed: String,
+  pub placed_waiting: String,
+  pub placed_running: String,
   pub close_line: String,
 }
 

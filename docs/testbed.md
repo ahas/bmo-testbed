@@ -305,6 +305,10 @@ flowchart TD
   next (「Next after the front」) here stands the same on the placed machine, the line run there carrying
   `BMO_TESTBED_FRONT` or `BMO_TESTBED_NEXT` as it stands here. A deployment's gate and release build
   therefore take that machine's turn ahead of every run placed there that is no deployment's.
+- **The machine that placed it still names it** while it lasts: an entry of its lane's placed runs,
+  naming the machine and whether it waits there or its turn there has come, which `status` prints and
+  the service answers (`docs/boundary.md`, 「A run placed elsewhere stands here too」). It holds no seat
+  here.
 - **A run started on a placed machine stays there.**
 - **A machine that drops it** ends the run as not run, exit code 75, and the same command run again
   goes where the placement sends it next.
@@ -312,9 +316,9 @@ flowchart TD
 ## Seeing the queue
 
 - **The `status` verb** prints each lane: its width, who holds each seat held and since when, a line
-  for each seat, or nobody, and who waits behind them in order, with the front and the next marked;
-  then the close line of the
-  repository it is run in, its holder and who waits behind it. `--json` gives the same as structure
+  for each seat, or nobody, and who waits behind them in order, with the front and the next marked, and
+  each run this machine placed on another in that lane, waiting or running there; then the close line of
+  the repository it is run in, its holder and who waits behind it. `--json` gives the same as structure
   (`docs/boundary.md`).
 
 ## Languages

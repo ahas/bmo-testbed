@@ -154,7 +154,7 @@ impl PlacedGate<'_> {
   // One verb of the machine's testbed run in the bench, timed: its step.
   fn step(&self, bench: &ReadyBench, name: &str, words: &[String], setup: bool) -> GateStep {
     let started = Instant::now();
-    let code = self.machine.run(bench, words, setup);
+    let code = self.machine.run(bench, words, setup, None);
 
     GateStep {
       name: name.to_owned(),

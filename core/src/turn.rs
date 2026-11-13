@@ -14,6 +14,7 @@ use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 
 use crate::memory::machine_available_bytes;
+use crate::placement::PLACED_VARIABLE;
 use crate::policy::fill_marks;
 use crate::policy::lanes::LANES;
 use crate::queue::{HeldSeats, LockWait, Rank, SeatWait, now_ms, process_alive, queue_tickets, take_seats};
@@ -613,6 +614,11 @@ fn take_seated_turn(ask: &TurnAsk<'_>, every: bool) -> TestbedTurn {
 
   for seat in &paths {
     let _ = std::fs::write(holder_record_path(seat), &record);
+  }
+
+  // A run on a placed machine says its turn came, which the machine that placed it reads off its output.
+  if named(env, PLACED_VARIABLE).is_some() {
+    eprintln!("{}", LANES.placed.turn_came);
   }
 
   TestbedTurn::Own {

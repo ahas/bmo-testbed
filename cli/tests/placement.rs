@@ -6,7 +6,9 @@
 //! none, the run the testbed's `placed` verb there, a machine that cannot be reached, or settings that do not
 //! read, leaving the run here, the shared versions laid over their copy as their main branch holds them, a
 //! testbed there that is not this one's release refused before any bench is made and a run meeting it kept
-//! here, and a run whose environment sets a variable its declaration names as this machine's kept here.
+//! here, a run whose environment sets a variable its declaration names as this machine's kept here, and the
+//! run standing in its lane here while it lasts, running once the far side says its turn came, that line read
+//! and not passed on.
 
 use std::convert::Infallible;
 use std::path::Path;
@@ -15,11 +17,11 @@ use std::sync::{Arc, Mutex};
 use axum::Router;
 use axum::response::sse::{Event, Sse};
 use axum::routing::{get, post};
-use bmo_testbed_cli::placement::{MachinePlacement, MachineSettings, reachable_remote};
-use bmo_testbed_core::placement::{PlaceAsk, Placement};
+use bmo_testbed_cli::placement::{MachinePlacement, MachineSettings, ReadyBench, reachable_remote};
+use bmo_testbed_core::placement::{PlaceAsk, PlacedRun, Placement, read_placed};
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
-use bmo_testbed_core::turn::{Env, Lane, NOT_RUN_EXIT_CODE};
+use bmo_testbed_core::turn::{Env, Lane, NOT_RUN_EXIT_CODE, lock_path};
 use serde_json::{Value, json};
 
 use crate::stand::{Ran, checkout, git, install, ran, testbed};
@@ -581,4 +583,74 @@ fn a_run_setting_a_variable_its_declaration_names_as_this_machines_stays_here() 
   assert_eq!(here.code, 6, "{}\n{}", here.out, here.err);
   assert!(here.err.contains(&kept), "{}", here.err);
   assert!(!dir.join("bench").exists());
+}
+
+// "while a run placed on the machine lasts it stands in its lane here, and the line saying its turn there came is
+// not passed on"
+#[test]
+fn a_run_placed_on_the_machine_stands_in_its_lane_here_while_it_lasts() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let repo = dir.join("repo");
+  let ssh = dir.join("ssh");
+  let seen = dir.join("seen.json");
+  // The run there reads what this machine names it by while it runs: the far side shares this lock here.
+  let copy = format!("cat {}/testbed.lock.placed/* > {}", dir.display(), seen.display());
+
+  install(SSH, &ssh);
+  settle(&dir, &ssh, "stand");
+  checkout(&repo, "testbed = 0\n");
+
+  let done = on_machine(&repo, &dir, &["run", "--adapter", "plain", "--", "sh", "-c", &copy]);
+  let stood: serde_json::Value =
+    serde_json::from_str(&std::fs::read_to_string(&seen).expect("the run there ran")).unwrap();
+
+  assert_eq!(done.code, 0, "{}\n{}", done.out, done.err);
+  assert_eq!(stood["machine"], "machine-2");
+  assert_eq!(stood["checkout"], repo.to_string_lossy().as_ref());
+  assert_eq!(stood["command"], format!("sh -c {copy}"));
+  assert!(!done.err.contains(&LANES.placed.turn_came), "{}", done.err);
+
+  let env =
+    Env::from([("BMO_TESTBED_LOCK".to_owned(), dir.join("testbed.lock").to_string_lossy().into_owned())]);
+
+  assert!(read_placed(&lock_path(&env, Lane::Wide)).is_empty(), "it goes as the run ends");
+}
+
+// "the placed run is running here once the far side says its turn there came"
+#[test]
+fn the_placed_run_is_running_once_the_far_side_says_its_turn_came() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let placement = released(&dir, None, None);
+  let env =
+    Env::from([("BMO_TESTBED_LOCK".to_owned(), dir.join("testbed.lock").to_string_lossy().into_owned())]);
+  let command = vec!["cargo".to_owned(), "test".to_owned()];
+  let placed = PlacedRun::stand(
+    &PlaceAsk {
+      command: &command,
+      adapter: None,
+      lane: Lane::Wide,
+      cwd: dir.clone(),
+      env: &env,
+      to_free_seat: false,
+    },
+    &dir,
+    "machine-2",
+  );
+  let bench = ReadyBench {
+    path: dir.to_string_lossy().into_owned(),
+    checkouts: Vec::new(),
+  };
+  // A stand-in `ssh` whose far side says its turn came and ends, whatever line it is handed.
+  install(
+    &format!("#!/bin/sh\necho \"{}\" >&2\nexit 4\n", LANES.placed.turn_came),
+    &dir.join("ssh"),
+  );
+
+  let wide = lock_path(&env, Lane::Wide);
+
+  assert_eq!(read_placed(&wide)[0].entry.since, None);
+  assert_eq!(placement.run(&bench, &command, false, Some(&placed)), 4);
+  assert!(read_placed(&wide)[0].entry.since.is_some());
 }
