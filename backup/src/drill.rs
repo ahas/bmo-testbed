@@ -38,7 +38,7 @@ pub fn newest(plan: &Plan, dir: &Path, say: Say<'_>, outcome: &mut Outcome) -> O
     let listed = match destination.store.list(&format!("{}/", plan.key(&[&names.hourly]))) {
       Ok(listed) => listed,
       Err(why) => {
-        say(&why);
+        say.failure(&why);
         outcome.fail("list", &destination.name, why);
         continue;
       }
@@ -69,7 +69,7 @@ pub fn newest(plan: &Plan, dir: &Path, say: Say<'_>, outcome: &mut Outcome) -> O
         Err(why) => {
           let line = fill_shown(&BACKUP.words.manifest_unread, &[("key", &object.key), ("why", &why)]);
 
-          say(&line);
+          say.failure(&line);
           outcome.fail("manifest", &destination.name, line);
         }
       }
@@ -110,13 +110,13 @@ pub fn drill(plan: &Plan, now: DateTime<Local>, say: Say<'_>) -> Outcome {
   let dir = plan.staging.join(&BACKUP.names.drill);
 
   if let Err(why) = fresh(plan, &dir) {
-    say(&why);
+    say.failure(&why);
     outcome.fail("stage", &dir.display().to_string(), why);
     return outcome;
   }
 
   let Some(newest) = newest(plan, &dir, say, &mut outcome) else {
-    say(&words.no_snapshot);
+    say.failure(&words.no_snapshot);
     outcome.fail("find", "", words.no_snapshot.clone());
     let _ = remove_tree(&dir, &plan.root);
     return outcome;
@@ -126,7 +126,7 @@ pub fn drill(plan: &Plan, now: DateTime<Local>, say: Say<'_>) -> Outcome {
   let age_ms = now.timestamp_millis() - manifest.taken_ms;
   let most_ms = i64::try_from(plan.drill_max_age_hours.saturating_mul(3_600_000)).unwrap_or(i64::MAX);
 
-  say(&fill_shown(
+  say.line(&fill_shown(
     &words.drill_from,
     &[
       ("destination", &destination.name),
@@ -141,7 +141,7 @@ pub fn drill(plan: &Plan, now: DateTime<Local>, say: Say<'_>) -> Outcome {
       &[("taken_at", &manifest.taken_at), ("hours", &plan.drill_max_age_hours)],
     );
 
-    say(&line);
+    say.failure(&line);
     outcome.fail("age", &newest.base, line);
   }
 
@@ -159,11 +159,11 @@ pub fn drill(plan: &Plan, now: DateTime<Local>, say: Say<'_>) -> Outcome {
       Ok(_) => {
         let line = fill_shown(&words.sha_mismatch, &[("file", &file.name)]);
 
-        say(&line);
+        say.failure(&line);
         outcome.fail("download", &file.name, line);
       }
       Err(why) => {
-        say(&why);
+        say.failure(&why);
         outcome.fail("download", &file.name, why);
       }
     }
@@ -177,12 +177,12 @@ pub fn drill(plan: &Plan, now: DateTime<Local>, say: Say<'_>) -> Outcome {
         for name in left {
           let line = fill_shown(&words.not_dropped, &[("database", &name), ("why", &"it still stands")]);
 
-          say(&line);
+          say.failure(&line);
           outcome.fail("drop", &name, line);
         }
       }
       Err(why) => {
-        say(&why);
+        say.failure(&why);
         outcome.fail("sweep", &plan.server, why);
       }
     }
@@ -203,21 +203,21 @@ pub fn drill(plan: &Plan, now: DateTime<Local>, say: Say<'_>) -> Outcome {
     match runtime.block_on(restore_and_count(&plan.server, &scratch, &dir.join(&database.file))) {
       Ok(restored) => {
         if let Some(left) = restored.left {
-          say(&left);
+          say.failure(&left);
           outcome.fail("drop", &scratch, left);
         }
 
         if let Some(complaint) = restored.complaint {
-          say(&complaint);
+          say.failure(&complaint);
           outcome.fail("restore", &database.name, complaint);
         }
 
         for line in differences(&database.name, &database.tables, &restored.tables) {
-          say(&line);
+          say.failure(&line);
           outcome.fail("count", &database.name, line);
         }
 
-        say(&fill_shown(
+        say.line(&fill_shown(
           &words.drill_database,
           &[
             ("database", &database.name),
@@ -228,7 +228,7 @@ pub fn drill(plan: &Plan, now: DateTime<Local>, say: Say<'_>) -> Outcome {
         ));
       }
       Err(why) => {
-        say(&why);
+        say.failure(&why);
         outcome.fail("restore", &database.name, why);
       }
     }
@@ -237,7 +237,7 @@ pub fn drill(plan: &Plan, now: DateTime<Local>, say: Say<'_>) -> Outcome {
   if let Some(data) = manifest.data.as_ref().filter(|data| whole.contains(&data.file)) {
     match entries(&dir.join(&data.file)) {
       Ok(count) if count == data.entries => {
-        say(&fill_shown(&words.drill_data, &[("file", &data.file), ("entries", &count)]));
+        say.line(&fill_shown(&words.drill_data, &[("file", &data.file), ("entries", &count)]));
       }
       Ok(count) => {
         let line = fill_shown(
@@ -245,11 +245,11 @@ pub fn drill(plan: &Plan, now: DateTime<Local>, say: Say<'_>) -> Outcome {
           &[("file", &data.file), ("expected", &data.entries), ("read", &count)],
         );
 
-        say(&line);
+        say.failure(&line);
         outcome.fail("data", &data.file, line);
       }
       Err(why) => {
-        say(&why);
+        say.failure(&why);
         outcome.fail("data", &data.file, why);
       }
     }
@@ -261,7 +261,7 @@ pub fn drill(plan: &Plan, now: DateTime<Local>, say: Say<'_>) -> Outcome {
 
   let verdict = if outcome.passed() { &words.drill_passed } else { &words.drill_failed };
 
-  say(&fill_shown(
+  say.line(&fill_shown(
     verdict,
     &[("failed", &outcome.failed.len()), ("seconds", &seconds_since(started))],
   ));

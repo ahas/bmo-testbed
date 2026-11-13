@@ -24,6 +24,7 @@
       "units/bmo-data-backup-media.timer",
       "units/bmo-data-backup-drill.service",
       "units/bmo-data-backup-drill.timer",
+      "units/bmo-backup.slice",
       "docs/backup.md"
     ],
     "symbols": [
@@ -41,7 +42,7 @@
     "needs": [
       "cli/binary-and-verbs"
     ],
-    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
-    "changed": 1793664692373
+    "base": "684d9102bf43c7e2ab34a3ece8305a70919404ee",
+    "changed": 1794545233718
   }
 ]

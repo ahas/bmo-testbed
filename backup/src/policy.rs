@@ -102,6 +102,7 @@ pub struct Words {
   pub manifest_unread: String,
   pub failed_summary: String,
   pub drill_failed_summary: String,
+  pub failed_event: String,
 }
 
 #[derive(Debug, Deserialize)]

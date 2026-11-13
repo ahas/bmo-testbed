@@ -13,8 +13,8 @@ use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::suite::SUITE;
 use bmo_testbed_core::turn::machine_width;
 use bmo_testbed_suite::fence::{
-  ClearSeams, FenceLimits, FenceSeams, clear_fence, fence_call, fence_limits, fence_suite, fence_unit,
-  fenced_build_jobs,
+  ClearSeams, FenceLimits, FenceSeams, SUITE_SLICE, clear_fence, fence_call, fence_limits, fence_suite,
+  fence_unit, fenced_build_jobs,
 };
 use bmo_testbed_suite::run::{
   SuiteWords, SweepCount, ask_of, file_groups, runner_of, script_runner, sweep_ending, unit_account,
@@ -691,7 +691,7 @@ mod fence {
     assert_eq!(fenced_build_jobs(LIMITS, 24, Some("many")), 5);
   }
 
-  // "asks the manager for a scope around the running process, with its ceilings"
+  // "asks the manager for a scope around the running process, with its ceilings, in the suite's slice"
   #[test]
   fn asks_the_manager_for_a_scope_around_the_running_process() {
     let call = fence_call("bmo-suite-7.scope", 7, LIMITS);
@@ -699,9 +699,11 @@ mod fence {
     assert_eq!(call[..3], words(&["busctl", "--user", "call"]));
     assert!(call.contains(&"bmo-suite-7.scope".to_owned()));
     assert!(call.join(" ").contains(
-      "6 PIDs au 1 7 MemoryMax t 8589934592 MemorySwapMax t 1073741824 TasksMax t 8192 OOMPolicy s continue"
+      "7 PIDs au 1 7 MemoryMax t 8589934592 MemorySwapMax t 1073741824 TasksMax t 8192 OOMPolicy s continue \
+       Slice s bmo-suite.slice"
     ));
     assert_eq!(call.last().map(String::as_str), Some("0"));
+    assert!(Path::new(env!("CARGO_MANIFEST_DIR")).join("../units").join(SUITE_SLICE).is_file());
   }
 
   // "moves the run into its scope and names it"

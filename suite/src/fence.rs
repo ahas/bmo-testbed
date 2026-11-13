@@ -45,6 +45,10 @@ pub fn fenced_build_jobs(limits: FenceLimits, width: usize, given: Option<&str>)
   }
 }
 
+/// The slice the suite's units run in: a run's fence, the daily whole run and the test server, one of this
+/// repository's `units/` (docs/deploy.md, 「The slices」).
+pub const SUITE_SLICE: &str = "bmo-suite.slice";
+
 /// The scope a run with this process id stands in.
 pub fn fence_unit(pid: u32) -> String {
   format!("bmo-suite-{pid}.scope")
@@ -57,6 +61,7 @@ pub fn fence_call(unit: &str, pid: u32, limits: FenceLimits) -> Vec<String> {
     ("MemorySwapMax", "t", (limits.swap_gb * GIB).to_string()),
     ("TasksMax", "t", limits.tasks.to_string()),
     ("OOMPolicy", "s", "continue".to_owned()),
+    ("Slice", "s", SUITE_SLICE.to_owned()),
     ("CollectMode", "s", "inactive-or-failed".to_owned()),
   ];
   let mut call: Vec<String> = [

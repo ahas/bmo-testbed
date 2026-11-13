@@ -8,6 +8,8 @@ Description=Prune of the shared Cargo build directory: what no live checkout's b
 
 [Service]
 Type=oneshot
+# docs/deploy.md, 「The slices」.
+Slice=bmo-upkeep.slice
 # The deploy tree, whose binary it runs and whose declaration names the hook.
 WorkingDirectory=%h/.local/share/bmo-testbed/deploy
 ExecStart=%h/.local/share/bmo-testbed/deploy/bin/bmo-testbed prune

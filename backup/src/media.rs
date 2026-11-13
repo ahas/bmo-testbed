@@ -54,7 +54,7 @@ pub fn media(plan: &Plan, say: Say<'_>) -> Outcome {
   let dir = plan.staging.join(&names.media);
 
   if let Err(why) = fresh(plan, &dir) {
-    say(&why);
+    say.failure(&why);
     outcome.fail("stage", &dir.display().to_string(), why);
     return outcome;
   }
@@ -71,13 +71,13 @@ pub fn media(plan: &Plan, say: Say<'_>) -> Outcome {
     let (size, sha256) = match read {
       Ok(read) => read,
       Err(why) => {
-        say(&why);
+        say.failure(&why);
         outcome.fail("pack", &name, why);
         continue;
       }
     };
 
-    say(&fill_shown(
+    say.line(&fill_shown(
       &BACKUP.words.packed_media,
       &[("name", &name), ("bytes", &size), ("seconds", &seconds_since(packed))],
     ));
@@ -105,7 +105,7 @@ pub fn media(plan: &Plan, say: Say<'_>) -> Outcome {
       });
 
       match sent {
-        Ok(()) => say(&fill_shown(
+        Ok(()) => say.line(&fill_shown(
           &BACKUP.words.sent,
           &[
             ("destination", &destination.name),
@@ -115,7 +115,7 @@ pub fn media(plan: &Plan, say: Say<'_>) -> Outcome {
           ],
         )),
         Err(why) => {
-          say(&why);
+          say.failure(&why);
           outcome.fail("upload", &format!("{}: {key}", destination.name), why);
         }
       }
@@ -126,7 +126,7 @@ pub fn media(plan: &Plan, say: Say<'_>) -> Outcome {
     }
   }
 
-  say(&fill_shown(
+  say.line(&fill_shown(
     &BACKUP.words.media_done,
     &[("failed", &outcome.failed.len()), ("seconds", &seconds_since(started))],
   ));

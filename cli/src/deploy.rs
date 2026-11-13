@@ -23,7 +23,7 @@ use bmo_testbed_deploy::deployment::{
 };
 use bmo_testbed_deploy::progress::DEPLOY_PROGRESS_VARIABLE;
 use bmo_testbed_deploy::unit::{
-  DeployUnitStart, deploy_unit_name, deploy_unit_of_process, hand_off, this_again,
+  DEPLOY_SLICE, DeployUnitStart, deploy_unit_name, deploy_unit_of_process, hand_off, this_again,
 };
 use bmo_testbed_deploy::upload::{
   AwsHands, BackupNames, Remote, send_backups, upload_failed_detail, upload_failed_summary,
@@ -358,6 +358,7 @@ pub fn deploy(args: &DeployFlags) -> u8 {
   if unit.is_none() && !args.dry_run {
     let start = DeployUnitStart {
       unit: deploy_unit_name(bmo_testbed_core::queue::now_ms()),
+      slice: DEPLOY_SLICE.to_owned(),
       cwd: repo.root.clone(),
       command: this_again(),
       env: handed(&places, &env),

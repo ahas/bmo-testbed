@@ -1,0 +1,7 @@
+[Unit]
+Description=Data backup: the snapshot, the media run, the restore drill and a deployment's backup upload
+# docs/deploy.md, 「The slices」. Every line its units write carries this slice in the journal.
+
+[Install]
+# Linked and nothing more by every deployment (docs/deploy.md, 「The unit links」).
+X-BMO-Deploy=link

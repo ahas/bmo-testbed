@@ -102,3 +102,5 @@ manifest_unread = "the manifest {key} could not be read: {why}"
 # failed.
 failed_summary = "{count} step(s) of the data backup failed."
 drill_failed_summary = "The restore drill failed: {count} mismatch(es) or step(s)."
+# The line a run that failed ends with, {event} the event it sends and {summary} the event's summary.
+failed_event = "{event}: {summary}"

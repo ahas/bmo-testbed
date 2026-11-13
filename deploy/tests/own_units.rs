@@ -1,7 +1,7 @@
-//! This repository's own units (docs/deploy.md, 「The Cargo build directory」 and 「The unit links」;
-//! docs/backup.md): its declaration reaches them, its deployment keeps the prune's and the data backup's
-//! timers with their services by their marks, and each service runs its verb of the binary its own deploy
-//! tree holds.
+//! This repository's own units (docs/deploy.md, 「The Cargo build directory」, 「The unit links」 and 「The
+//! slices」; docs/backup.md): its declaration reaches them, its deployment keeps the prune's and the data
+//! backup's timers with their services by their marks, each service runs its verb of the binary its own
+//! deploy tree holds, and every slice a unit runs in is one it ships, linked by its mark.
 
 use std::path::{Path, PathBuf};
 
@@ -9,6 +9,7 @@ use bmo_testbed_core::declaration::Repository;
 use bmo_testbed_core::turn::Env;
 use bmo_testbed_deploy::deployment::DeployPlaces;
 use bmo_testbed_deploy::tree::{UnitMark, marked_units, timer_service, unit_program};
+use bmo_testbed_deploy::unit::{BACKUP_SLICE, DEPLOY_SLICE};
 
 fn root() -> PathBuf {
   Path::new(env!("CARGO_MANIFEST_DIR")).join("..")
@@ -49,6 +50,7 @@ fn the_repositorys_deployment_keeps_the_prune_the_data_backup_and_their_timers()
   assert_eq!(
     files,
     [
+      "units/bmo-backup.slice",
       "units/bmo-cargo-prune.service",
       "units/bmo-cargo-prune.timer",
       "units/bmo-data-backup-drill.service",
@@ -57,6 +59,9 @@ fn the_repositorys_deployment_keeps_the_prune_the_data_backup_and_their_timers()
       "units/bmo-data-backup-media.timer",
       "units/bmo-data-backup.service",
       "units/bmo-data-backup.timer",
+      "units/bmo-deploy.slice",
+      "units/bmo-suite.slice",
+      "units/bmo-upkeep.slice",
     ]
   );
   assert!(files.iter().all(|file| globs.iter().any(|glob| glob.matches(file))), "{files:?}");
@@ -79,4 +84,32 @@ fn the_repositorys_deployment_keeps_the_prune_the_data_backup_and_their_timers()
   }
 
   assert!(repo.declaration.build.binaries.unwrap().contains(&"bmo-testbed".to_owned()));
+}
+
+#[test]
+fn every_slice_a_unit_runs_in_is_one_the_repository_ships_and_links() {
+  let files = unit_files();
+  let read = |path: &str| std::fs::read_to_string(root().join(path)).unwrap_or_default();
+  let slices: Vec<String> = files.iter().filter(|file| file.ends_with(".slice")).cloned().collect();
+  let shipped = |slice: &str| slices.contains(&format!("units/{slice}"));
+
+  assert_eq!(marked_units(&files, &read, ".slice", UnitMark::Link), slices);
+  assert!(
+    slices
+      .iter()
+      .all(|slice| read(slice).lines().any(|line| line.starts_with("Description=")))
+  );
+  assert!(shipped(DEPLOY_SLICE) && shipped(BACKUP_SLICE), "{slices:?}");
+
+  for (service, slice) in [
+    ("bmo-cargo-prune.service", "bmo-upkeep.slice"),
+    ("bmo-data-backup-drill.service", BACKUP_SLICE),
+    ("bmo-data-backup-media.service", BACKUP_SLICE),
+    ("bmo-data-backup.service", BACKUP_SLICE),
+  ] {
+    let unit = read(&format!("units/{service}"));
+
+    assert!(unit.lines().any(|line| line == format!("Slice={slice}")), "{service}");
+    assert!(shipped(slice), "{slice}");
+  }
 }

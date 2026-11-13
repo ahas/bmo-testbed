@@ -10,6 +10,7 @@
       "cli/src/cargo.rs",
       "units/bmo-cargo-prune.service",
       "units/bmo-cargo-prune.timer",
+      "units/bmo-upkeep.slice",
       "docs/deploy.md",
       "suite/tests/prune.rs",
       "suite/tests/superseded.rs"
@@ -23,8 +24,8 @@
       "suite/change-selection",
       "core/policy-loader"
     ],
-    "base": "ebe3f34e97af4315fe6feafb7908cf8efbf48b55",
-    "changed": 1794266136815
+    "base": "684d9102bf43c7e2ab34a3ece8305a70919404ee",
+    "changed": 1794545233798
   },
   {
     "id": "suite/change-check",
@@ -223,6 +224,7 @@
       "suite/src/fence.rs",
       "suite/src/once_more.rs",
       "cli/src/suite.rs",
+      "units/bmo-suite.slice",
       "docs/suite.md",
       "suite/tests/suite.rs",
       "suite/tests/unit.rs",
@@ -242,8 +244,8 @@
       "core/policy-loader",
       "core/run-verb-and-status"
     ],
-    "base": "4cc6e2bb0505c8a86b1b3ee6d8ae7da11f0453b0",
-    "changed": 1794543961624
+    "base": "684d9102bf43c7e2ab34a3ece8305a70919404ee",
+    "changed": 1794545233863
   },
   {
     "id": "suite/test-count",
@@ -300,7 +302,7 @@
       "core/declaration",
       "core/policy-loader"
     ],
-    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
-    "changed": 1793664723668
+    "base": "684d9102bf43c7e2ab34a3ece8305a70919404ee",
+    "changed": 1794545234113
   }
 ]

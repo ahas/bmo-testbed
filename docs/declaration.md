@@ -144,7 +144,7 @@ step that fails stops the deployment with every service untouched.
 | `link` | string | `deploy` | The deploy tree's link name inside `root` |
 | `data_root` | path | required with `root` | The repository's runtime data, inside no checkout |
 | `env_links` | list of tables | `[]` | Each with `link`, a path inside a release, and `target`, a file under the data root; every target must exist |
-| `units` | list of globs | every tracked `*.service` and `*.timer` | Where the commit's unit files stand |
+| `units` | list of globs | every tracked `*.service`, `*.timer` and `*.slice` | Where the commit's unit files stand |
 | `health` | command | none | Answers 0 once the `bot` service is healthy; asked until it does or the unit gives up starting (`docs/deploy.md`, 「What the deploy run does, in order」), each ask waited for until it ends |
 | `health_wait_seconds` | integer | none | Read and given no effect |
 | `stay_up_seconds` | integer | none | Read and given no effect: the `bot` service is up once its health answers and it is read running |

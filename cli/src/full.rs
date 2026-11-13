@@ -22,6 +22,7 @@ use bmo_testbed_deploy::expansion::bring_submodules;
 use bmo_testbed_deploy::run::{run_quiet, stamp_for_name, words};
 use bmo_testbed_deploy::unit::{DeployUnitStart, deploy_unit_of_process, start_deploy_unit, this_again};
 use bmo_testbed_suite::crates::{owning_crate, workspace_crates};
+use bmo_testbed_suite::fence::SUITE_SLICE;
 use bmo_testbed_suite::log::{failed_files_of, unstarted_of, verdict_of};
 use bmo_testbed_suite::static_check::{check_steps, run_static_check, spawn_step};
 use bmo_testbed_suite::workspace::{owning_package, workspace_declarations};
@@ -467,6 +468,7 @@ pub fn full(args: &FullArgs) -> u8 {
     let started = start_deploy_unit(
       &DeployUnitStart {
         unit: unit.clone(),
+        slice: SUITE_SLICE.to_owned(),
         cwd: repo.root.clone(),
         // The unit runs the run itself, whatever `--due` it was started with.
         command: vec![this_again()[0].clone(), "full".to_owned()],

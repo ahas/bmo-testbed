@@ -1,0 +1,7 @@
+[Unit]
+Description=Test suite: every suite run's fence, the daily whole run and the test server
+# docs/deploy.md, 「The slices」. Every line its units write carries this slice in the journal.
+
+[Install]
+# Linked and nothing more by every deployment (docs/deploy.md, 「The unit links」).
+X-BMO-Deploy=link

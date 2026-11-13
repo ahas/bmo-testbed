@@ -12,14 +12,14 @@ use chrono::{DateTime, Local};
 use crate::destination::free_bytes;
 use crate::dump::{databases, dump};
 use crate::manifest::{DataEntry, DatabaseEntry, FileEntry, Manifest};
-use crate::outcome::Outcome;
+use crate::outcome::{Outcome, Voice};
 use crate::pack::{Walk, digest, entries, pack};
 use crate::policy::BACKUP;
 use crate::rotation::{Rotation, rotate};
 use crate::settings::{Destination, Plan, Set};
 
-/// What a run says, line by line.
-pub type Say<'a> = &'a mut dyn FnMut(&str);
+/// What a run says, line by line, through a voice that may set its failures apart.
+pub type Say<'a> = &'a mut dyn Voice;
 
 /// Seconds since a moment, to a tenth.
 pub fn seconds_since(started: Instant) -> String {
@@ -74,7 +74,7 @@ pub fn has_room(
     ],
   );
 
-  say(&line);
+  say.failure(&line);
   outcome.fail("room", &destination.name, line);
   false
 }
@@ -95,7 +95,7 @@ fn send_snapshot(
   let target = format!("{}: {base}", destination.name);
   let manifest_key = format!("{base}/{}", names.manifest);
   let mut failed = |step: &str, why: String, say: Say<'_>| {
-    say(&why);
+    say.failure(&why);
     outcome.fail(step, &target, why);
     false
   };
@@ -152,7 +152,7 @@ fn send_snapshot(
     }
   }
 
-  say(&fill_shown(
+  say.line(&fill_shown(
     &BACKUP.words.sent,
     &[
       ("destination", &destination.name),
@@ -201,7 +201,7 @@ fn send_releases(plan: &Plan, destination: &Destination, say: Say<'_>, outcome: 
     let standing = match destination.store.list(&format!("{base}/")) {
       Ok(objects) => objects,
       Err(why) => {
-        say(&why);
+        say.failure(&why);
         outcome.fail("list", &destination.name, why);
         continue;
       }
@@ -224,7 +224,7 @@ fn send_releases(plan: &Plan, destination: &Destination, say: Say<'_>, outcome: 
       let sent = digest(&archive).and_then(|(_, sha256)| destination.store.put(&archive, &key, &sha256));
 
       match sent {
-        Ok(()) => say(&fill_shown(
+        Ok(()) => say.line(&fill_shown(
           &BACKUP.words.release_sent,
           &[
             ("destination", &destination.name),
@@ -234,7 +234,7 @@ fn send_releases(plan: &Plan, destination: &Destination, say: Say<'_>, outcome: 
           ],
         )),
         Err(why) => {
-          say(&why);
+          say.failure(&why);
           outcome.fail("upload", &format!("{}: {key}", destination.name), why);
         }
       }
@@ -254,7 +254,7 @@ fn dump_databases(plan: &Plan, dir: &Path, say: Say<'_>, outcome: &mut Outcome) 
   let listed = match runtime.block_on(databases(&plan.server)) {
     Ok(listed) => listed,
     Err(why) => {
-      say(&why);
+      say.failure(&why);
       outcome.fail("list-databases", &plan.server, why);
       return vec![];
     }
@@ -273,7 +273,7 @@ fn dump_databases(plan: &Plan, dir: &Path, say: Say<'_>, outcome: &mut Outcome) 
       Ok(tables) => {
         let size = std::fs::metadata(dir.join(&file)).map(|meta| meta.len()).unwrap_or_default();
 
-        say(&fill_shown(
+        say.line(&fill_shown(
           &BACKUP.words.dumped,
           &[
             ("database", &database),
@@ -290,7 +290,7 @@ fn dump_databases(plan: &Plan, dir: &Path, say: Say<'_>, outcome: &mut Outcome) 
         });
       }
       Err(why) => {
-        say(&why);
+        say.failure(&why);
         outcome.fail("dump", &database, why);
       }
     }
@@ -313,7 +313,7 @@ fn pack_data(plan: &Plan, dir: &Path, say: Say<'_>, outcome: &mut Outcome) -> Op
   .over(&plan.folders);
 
   for missing in &walked.missing {
-    say(&fill_shown(&words.missing_folder, &[("path", &missing.display())]));
+    say.line(&fill_shown(&words.missing_folder, &[("path", &missing.display())]));
   }
 
   let file = BACKUP.names.data_archive.clone();
@@ -324,13 +324,13 @@ fn pack_data(plan: &Plan, dir: &Path, say: Say<'_>, outcome: &mut Outcome) -> Op
     Ok(count) => {
       let size = std::fs::metadata(&archive).map(|meta| meta.len()).unwrap_or_default();
 
-      say(&fill_shown(
+      say.line(&fill_shown(
         &words.packed,
         &[("entries", &count), ("bytes", &size), ("seconds", &seconds_since(started))],
       ));
 
       if !walked.large.is_empty() {
-        say(&fill_shown(
+        say.line(&fill_shown(
           &words.left_out,
           &[
             ("count", &walked.large.len()),
@@ -346,7 +346,7 @@ fn pack_data(plan: &Plan, dir: &Path, say: Say<'_>, outcome: &mut Outcome) -> Op
       })
     }
     Err(why) => {
-      say(&why);
+      say.failure(&why);
       outcome.fail("pack", &plan.root.display().to_string(), why);
       None
     }
@@ -362,7 +362,7 @@ pub fn snapshot(plan: &Plan, now: DateTime<Local>, say: Say<'_>) -> Outcome {
   let latest = plan.staging.join(&names.latest);
 
   if let Err(why) = fresh(plan, &next) {
-    say(&why);
+    say.failure(&why);
     outcome.fail("stage", &next.display().to_string(), why);
     return outcome;
   }
@@ -399,7 +399,7 @@ pub fn snapshot(plan: &Plan, now: DateTime<Local>, say: Say<'_>) -> Outcome {
     .and_then(|()| std::fs::rename(&next, &latest).map_err(|why| why.to_string()));
 
   if let Err(why) = written {
-    say(&why);
+    say.failure(&why);
     outcome.fail("stage", &latest.display().to_string(), why);
     return outcome;
   }
@@ -422,7 +422,7 @@ pub fn snapshot(plan: &Plan, now: DateTime<Local>, say: Say<'_>) -> Outcome {
       });
 
       if let Err(why) = standing {
-        say(&why);
+        say.failure(&why);
         outcome.fail("list", &destination.name, why);
       } else if !whole && has_room(plan, destination, manifest.bytes(), say, &mut outcome) {
         send_snapshot(destination, &latest, &manifest, &base, say, &mut outcome);
@@ -438,7 +438,7 @@ pub fn snapshot(plan: &Plan, now: DateTime<Local>, say: Say<'_>) -> Outcome {
   let rotated = rotate(plan, &Rotation::of(plan, today, &media), false, say);
 
   outcome.failed.extend(rotated.failed);
-  say(&fill_shown(
+  say.line(&fill_shown(
     &BACKUP.words.snapshot_done,
     &[("slot", &slot), ("failed", &outcome.failed.len()), ("seconds", &seconds_since(started))],
   ));

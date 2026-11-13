@@ -86,8 +86,8 @@
 ## A fence of its own
 
 - **Once its turn has come, a run moves itself into a transient scope of its own,**
-  `bmo-suite-<pid>.scope`, before it starts a file, so every file and everything a file starts is born
-  inside it. Its line under the first names the scope and its ceilings.
+  `bmo-suite-<pid>.scope` in `bmo-suite.slice` (`docs/deploy.md`, 「The slices」), before it starts a
+  file, so every file and everything a file starts is born inside it. Its line under the first names the scope and its ceilings.
 - **The ceilings:** eight gigabytes of memory, one of swap beyond it, and 8,192 tasks.
   `BMO_SUITE_MEMORY_GB` sets the memory ceiling for a machine where eight is the wrong number.
 - **Why:** without a scope a run's processes count against whatever unit its caller stands in, and a
@@ -166,7 +166,8 @@
   so a run takes no connection a service needs.
   - It is a cluster of the user's own under `~/.local/state/bmo-test-postgres`, reached through a
     socket only the user can open. The first run that asks for it makes it; a run that finds it not
-    answering starts it as the transient user unit `bmo-test-postgres`, which outlives the run.
+    answering starts it as the transient user unit `bmo-test-postgres` in `bmo-suite.slice`, which
+    outlives the run.
   - What it holds is thrown away with every test, so it waits for no disk, and it takes three hundred
     connections. It is made with the `C` collation, and so is every database in it.
   - The suite names it in `BMO_TEST_POSTGRES` for every process it starts. Naming another address
@@ -275,7 +276,7 @@
     and a second meeting it is refused.
   - The main branch is the one the declaration's `[check] main` names.
 - **Where it runs:** never in its caller's process. Called from anywhere but its own unit, it starts a
-  transient unit, `bmo-full-suite-<stamp>`, and ends.
+  transient unit, `bmo-full-suite-<stamp>` in `bmo-suite.slice`, and ends.
 - **When:** whenever the consumer's scheduler starts it. A run writes its start time into `started`
   in its repository's folder before anything else, and `full --due <HH:MM>` starts one only where none
   started since the latest such time of day, local time, so a scheduler that asks every minute runs it

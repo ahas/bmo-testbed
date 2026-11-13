@@ -68,19 +68,23 @@
       "deploy/src/expansion.rs",
       "deploy/src/run.rs",
       "cli/src/deploy.rs",
+      "units/bmo-deploy.slice",
       "docs/deploy.md",
       "deploy/tests/deployment.rs",
       "deploy/tests/progress.rs",
       "deploy/tests/boot.rs",
       "cli/tests/deploy_verbs.rs",
       "deploy/tests/expansion.rs",
-      "cli/tests/deploy_gate.rs"
+      "cli/tests/deploy_gate.rs",
+      "deploy/tests/own_units.rs",
+      "deploy/tests/run.rs"
     ],
     "symbols": [],
     "aliases": [
       "빌드 트리",
       "Wait for quiet",
-      "배포가 배포하는 커밋의 선언"
+      "배포가 배포하는 커밋의 선언",
+      "로그 분류 슬라이스"
     ],
     "needs": [
       "core/declaration",
@@ -95,8 +99,8 @@
       "deploy/console-probe",
       "suite/quick-checks"
     ],
-    "base": "9aa0db29574b9e50c97edc189f30b6ad31c01d32",
-    "changed": 1794544134503
+    "base": "684d9102bf43c7e2ab34a3ece8305a70919404ee",
+    "changed": 1794545234015
   },
   {
     "id": "deploy/hosted-deploy-tool",
@@ -160,7 +164,7 @@
     "needs": [
       "core/policy-loader"
     ],
-    "base": "6e2f9339a7995fd7f34b6e158178f39b2e935f25",
-    "changed": 1794489053966
+    "base": "684d9102bf43c7e2ab34a3ece8305a70919404ee",
+    "changed": 1794545234326
   }
 ]

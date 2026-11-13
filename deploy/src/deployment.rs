@@ -57,7 +57,7 @@ use crate::tree::{
   retired_units, set_aside_plain_units, short, timer_service, tree_fault, unit_link_plan, unit_links,
   units_to_link, user_unit_dir_from, write_deploy_record,
 };
-use crate::unit::{first_chars, move_to_cgroup, own_cgroup, upload_unit_name};
+use crate::unit::{BACKUP_SLICE, first_chars, move_to_cgroup, own_cgroup, upload_unit_name};
 
 /// The variable naming another backup directory over the declaration's.
 pub const BACKUP_DIR_VARIABLE: &str = "BMO_BACKUP_DIR";
@@ -472,7 +472,8 @@ fn under_data(data_root: &Path, path: &Path) -> PathBuf {
   if path.is_absolute() { path.to_path_buf() } else { data_root.join(path) }
 }
 
-// The units of a commit's tracked files the declaration's globs reach, every one where it names none.
+// The units of a commit's tracked files the declaration's globs reach, every one where it names none: its
+// services, timers and slices.
 fn unit_files(tracked: &[String], globs: Option<&[String]>) -> Vec<String> {
   let patterns: Vec<glob::Pattern> = globs
     .unwrap_or_default()
@@ -482,7 +483,7 @@ fn unit_files(tracked: &[String], globs: Option<&[String]>) -> Vec<String> {
 
   tracked
     .iter()
-    .filter(|path| path.ends_with(".service") || path.ends_with(".timer"))
+    .filter(|path| [".service", ".timer", ".slice"].iter().any(|suffix| path.ends_with(suffix)))
     .filter(|path| globs.is_none() || patterns.iter().any(|pattern| pattern.matches(path)))
     .cloned()
     .collect()
@@ -1805,7 +1806,11 @@ pub async fn deploy(
   let restarted = marked(".service", UnitMark::Restart);
   let bound = marked(".service", UnitMark::Binary);
   let timers = marked(".timer", UnitMark::Timer);
-  let linked_only = marked(".service", UnitMark::Link);
+  // A slice is linked alone too: the units placed in it start it.
+  let linked_only: Vec<String> = [".service", ".slice"]
+    .into_iter()
+    .flat_map(|suffix| marked(suffix, UnitMark::Link))
+    .collect();
   let declared: Vec<String> = restarted
     .iter()
     .chain(&bound)
@@ -2029,7 +2034,7 @@ pub async fn deploy(
     let line: Vec<String> = ["systemd-run", "--user", "--quiet", "--collect"]
       .into_iter()
       .map(str::to_owned)
-      .chain([format!("--unit={unit}")])
+      .chain([format!("--unit={unit}"), format!("--slice={BACKUP_SLICE}")])
       .chain(upload.iter().cloned())
       .collect();
     let started = hands.run(&line, source);

@@ -137,9 +137,11 @@
     unit itself.
   - `timer`: a timer, with the service of its own name beside it, linked, the timer enabled and
     started.
-  - `link`: a unit something else starts, linked and nothing more.
+  - `link`: a service something else starts, or a slice other units run in, linked and nothing more.
   - `retire`: a unit that goes; once the `bot` service has come up, it is stopped,
     disabled and unlinked, a timer's service with it.
+- **The unit files a deployment reads are services, timers and slices;** any other kind of file the
+  declared globs reach is not a unit of the deployment's.
 - **Before anything changes, every unit link into the deploy tree is read,** and the commit asked
   whether it has the file it points at. A link the commit would leave dangling is matched to the one
   tracked file of the commit with the unit's own name and relinked to it right after the flip. A link
@@ -149,9 +151,28 @@
 - **A repository with no `bot` unit** deploys all the same: it restarts what its marks say and waits on
   no health.
 
+## The slices
+
+- **Every unit the testbed starts or ships runs in a slice that says what kind of work it is,** so every
+  line it writes carries that slice in the journal and a reader of the journal tells the work apart by it.
+  The slices are this repository's own unit files in `units/`, each with a description, marked `link` and
+  linked by every deployment of it like its other units.
+
+| Slice | What runs in it |
+|---|---|
+| `bmo-backup.slice` | The data backup's services, `bmo-data-backup`, `bmo-data-backup-media` and `bmo-data-backup-drill` (`docs/backup.md`), and a deployment's backup upload, `bmo-backup-upload-<stamp>` |
+| `bmo-deploy.slice` | Every deployment's unit, `bmo-deploy-<stamp>` (「Where a deployment runs」) |
+| `bmo-suite.slice` | A suite run's fence, `bmo-suite-<pid>.scope`, the daily whole run's unit, `bmo-full-suite-<stamp>`, and the test server, `bmo-test-postgres` (`docs/suite.md`) |
+| `bmo-upkeep.slice` | The prune of the Cargo build directory, `bmo-cargo-prune` (「The Cargo build directory」) |
+
+- **A slice whose file is not installed yet still takes its units:** the user service manager makes a
+  slice that is named but has no file, so a unit started before the deployment that links the file runs
+  all the same.
+
 ## Where a deployment runs
 
-- **Every deploy run runs in a transient user unit of its own,** `bmo-deploy-<stamp>`. A run that is
+- **Every deploy run runs in a transient user unit of its own,** `bmo-deploy-<stamp>`, in
+  `bmo-deploy.slice` (「The slices」). A run that is
   not already inside a deployment's unit starts one, prints its name and the command that reads its
   journal, and exits 0; the caller's death reaches nothing from then on.
 - **A unit that cannot be started is a refusal.**
@@ -386,7 +407,8 @@
     what is due, so the next deployment runs it again from where it stands.
 14. **Prune the releases.** A release that cannot be removed is a warning.
 15. **Start the backup upload,** where the declaration names a remote, as a transient user unit of its
-    own, `bmo-backup-upload-<stamp>`, running the `backups` verb, and end without waiting for it.
+    own, `bmo-backup-upload-<stamp>`, in `bmo-backup.slice`, running the `backups` verb, and end without
+    waiting for it.
 
 - **The deployment ends** with its outcome written into the progress record and the testbed's record,
   and only then sends its `deployed` event naming the commit, the flaky tests its gate found, and the
@@ -591,9 +613,9 @@ flowchart TD
   place, with the generation it was built in. The removal takes Cargo's build lock only where no build
   holds it at that moment, leaving what it found to the next build otherwise; it stands in no queue of
   its own, and never fails its build.
-- **The prune,** the `prune` verb, run every six hours by `bmo-cargo-prune.timer`, holding Cargo's own
-  build lock in every profile directory of the build root and of each checkout's directory, and standing
-  at the front of each lock's line, never in the testbed's, removes:
+- **The prune,** the `prune` verb, run every six hours by `bmo-cargo-prune.timer` in `bmo-upkeep.slice`,
+  holding Cargo's own build lock in every profile directory of the build root and of each checkout's
+  directory, and standing at the front of each lock's line, never in the testbed's, removes:
   - from a profile directory standing at the build root itself, a unit of a checkout's own crates no live
     checkout's record names, built more than half a day ago, and any other unit no build has read for
     two days, or `--older-than` days, never a day or less;

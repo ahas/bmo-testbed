@@ -71,12 +71,15 @@ fn the_git_tree_a_path_stands_in_is_the_nearest_folder_holding_git() {
   assert_eq!(git_tree_above(&root.path().join("repo/data/inner")), Some(root.path().join("repo")));
 }
 
-// "the unit line hands over the marker, the PATH, the roots and the working tree, then the command"
+// "the unit line puts the unit in its slice, hands over the marker, the PATH, the roots and the working tree,
+// then the command"
 #[test]
-fn the_unit_line_hands_over_the_marker_the_path_the_roots_and_the_working_tree_then_the_command() {
+fn the_unit_line_hands_over_the_slice_the_marker_the_path_the_roots_and_the_working_tree_then_the_command()
+{
   let line = deploy_unit_line(
     &DeployUnitStart {
       unit: "bmo-deploy-9".to_owned(),
+      slice: "work.slice".to_owned(),
       cwd: PathBuf::from("/tree"),
       command: words(["/tree/bin/tool", "deploy", "--then", "why"]),
       env: vec![("BMO_DATA_DIR".to_owned(), "/data".to_owned())],
@@ -85,6 +88,7 @@ fn the_unit_line_hands_over_the_marker_the_path_the_roots_and_the_working_tree_t
   );
 
   assert_eq!(&line[..5], ["systemd-run", "--user", "--quiet", "--collect", "--unit=bmo-deploy-9"]);
+  assert!(line.contains(&"--slice=work.slice".to_owned()));
   assert!(line.contains(&"--setenv=BMO_DEPLOY_UNIT=bmo-deploy-9".to_owned()));
   assert!(line.contains(&"--setenv=PATH=/bin:/usr/bin".to_owned()));
   assert!(line.contains(&"--setenv=BMO_DATA_DIR=/data".to_owned()));

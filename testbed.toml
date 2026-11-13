@@ -36,8 +36,9 @@ binaries = ["bmo-testbed", "deploy-tool"]
 [deploy]
 root = "~/.local/share/bmo-testbed"
 data_root = "~/.local/share/bmo-testbed/data"
-# The prune of the shared Cargo build directory and its timer, kept by every deployment by their marks.
-units = ["units/*.service", "units/*.timer"]
+# The prune and the data backup with their timers, and the slices the testbed's units run in, kept by every
+# deployment by their marks.
+units = ["units/*.service", "units/*.timer", "units/*.slice"]
 
 # The binary, linked into `.local/bin` under the home directory beside `bmo`, which serves the nouns this
 # binary declares from there (docs/boundary.md, 「The binary」). The link names the deploy tree's own link,

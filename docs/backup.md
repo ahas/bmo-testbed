@@ -12,7 +12,11 @@
   have defaults in the testbed's policy, which the file may set otherwise.
 - **The words:** `backup snapshot`, `backup media`, `backup drill` and `backup prune [--dry-run]`, each
   with a timer of its own in this repository's `units/`, kept by every deployment of it (`docs/deploy.md`,
-  「The unit links」).
+  「The unit links」), its service running in `bmo-backup.slice` (`docs/deploy.md`, 「The slices」).
+- **A failure is written at the journal's error priority.** The line saying a step failed, and the line
+  naming the run's failure event with its summary, carry the priority prefix `<3>` where the verb's output
+  goes to the journal, which its service's does; every other line is written at the journal's default
+  priority. Output going anywhere else carries no prefix.
 
 ## What is backed up
 

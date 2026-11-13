@@ -24,6 +24,13 @@ pub const DEPLOY_UNIT_PREFIX: &str = "bmo-deploy-";
 /// What the unit a deployment starts its backup upload in is called by.
 pub const UPLOAD_UNIT_PREFIX: &str = "bmo-backup-upload-";
 
+/// The slice every deployment's unit runs in, one of this repository's `units/` (docs/deploy.md, 「The
+/// slices」).
+pub const DEPLOY_SLICE: &str = "bmo-deploy.slice";
+
+/// The slice a deployment's backup upload runs in, beside the data backup's services.
+pub const BACKUP_SLICE: &str = "bmo-backup.slice";
+
 /// The unit this process stands in as a deployment, or none where it stands in none.
 pub fn deploy_unit_of_process() -> Option<String> {
   std::env::var(DEPLOY_UNIT_MARKER).ok().filter(|unit| !unit.is_empty())
@@ -67,6 +74,8 @@ pub fn upload_unit_name(now_ms: i64) -> String {
 #[derive(Debug, Clone)]
 pub struct DeployUnitStart {
   pub unit: String,
+  /// The slice the unit runs in, which says in the journal what kind of work it is.
+  pub slice: String,
   /// The tree the run starts in.
   pub cwd: PathBuf,
   /// The command the unit runs, the program first.
@@ -84,6 +93,7 @@ pub fn deploy_unit_line(start: &DeployUnitStart, path: &str) -> Vec<String> {
     "--quiet".to_owned(),
     "--collect".to_owned(),
     format!("--unit={}", start.unit),
+    format!("--slice={}", start.slice),
     format!("--setenv={DEPLOY_UNIT_MARKER}={}", start.unit),
     format!("--setenv=PATH={path}"),
   ];

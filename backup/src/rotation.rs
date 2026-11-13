@@ -10,6 +10,7 @@ use crate::destination::Object;
 use crate::outcome::Outcome;
 use crate::policy::BACKUP;
 use crate::settings::Plan;
+use crate::snapshot::Say;
 
 /// What the rotation keeps.
 pub struct Rotation<'a> {
@@ -92,7 +93,7 @@ impl Rotation<'_> {
 }
 
 /// The rotation at every destination: what it removes, or with `dry_run` what it would, each said.
-pub fn rotate(plan: &Plan, rotation: &Rotation<'_>, dry_run: bool, say: &mut dyn FnMut(&str)) -> Outcome {
+pub fn rotate(plan: &Plan, rotation: &Rotation<'_>, dry_run: bool, say: Say<'_>) -> Outcome {
   let words = &BACKUP.words;
   let mut outcome = Outcome::default();
   let mut any = false;
@@ -101,7 +102,7 @@ pub fn rotate(plan: &Plan, rotation: &Rotation<'_>, dry_run: bool, say: &mut dyn
     let objects = match destination.store.list(&format!("{}/", plan.prefix)) {
       Ok(objects) => objects,
       Err(why) => {
-        say(&why);
+        say.failure(&why);
         outcome.fail("list", &destination.name, why);
         continue;
       }
@@ -113,14 +114,14 @@ pub fn rotate(plan: &Plan, rotation: &Rotation<'_>, dry_run: bool, say: &mut dyn
       let marks: [(&str, &dyn std::fmt::Display); 2] = [("destination", &destination.name), ("key", &key)];
 
       if dry_run {
-        say(&fill_shown(&words.would_remove, &marks));
+        say.line(&fill_shown(&words.would_remove, &marks));
         continue;
       }
 
       match destination.store.remove(&key) {
-        Ok(()) => say(&fill_shown(&words.removed, &marks)),
+        Ok(()) => say.line(&fill_shown(&words.removed, &marks)),
         Err(why) => {
-          say(&why);
+          say.failure(&why);
           outcome.fail("remove", &format!("{}: {key}", destination.name), why);
         }
       }
@@ -128,7 +129,7 @@ pub fn rotate(plan: &Plan, rotation: &Rotation<'_>, dry_run: bool, say: &mut dyn
   }
 
   if !any {
-    say(&words.nothing_to_remove);
+    say.line(&words.nothing_to_remove);
   }
 
   outcome

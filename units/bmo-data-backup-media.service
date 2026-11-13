@@ -8,6 +8,8 @@ After=network-online.target
 
 [Service]
 Type=oneshot
+# docs/deploy.md, 「The slices」.
+Slice=bmo-backup.slice
 WorkingDirectory=%h/.local/share/bmo-testbed/deploy
 ExecStart=%h/.local/share/bmo-testbed/deploy/bin/bmo-testbed backup media
 Environment=PATH=%h/.local/bin:%h/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin

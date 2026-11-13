@@ -19,7 +19,7 @@ fn each_media_set_and_the_large_files_go_out_under_their_own_names() {
      [[media]]\nname = \"song\"\nfolders = [\"data/song\"]",
   ));
   let mut said = Vec::new();
-  let outcome = media(&plan, &mut |line| said.push(line.to_owned()));
+  let outcome = media(&plan, &mut |line: &str| said.push(line.to_owned()));
 
   assert!(outcome.passed(), "{:?} {said:?}", outcome.failed);
   assert_eq!(
@@ -43,7 +43,7 @@ fn a_destination_whose_disk_would_fall_under_the_floor_is_sent_nothing() {
     .settings("folders = []\ndatabases = []\nroom_floor_bytes = 9223372036854775807\n[[media]]\nname = \"song\"\nfolders = [\"data/song\"]")
     .replacen("kind = \"s3\"", &format!("kind = \"s3\"\nroom = \"{}\"", ground.path("s3").display()), 1);
   let plan = ground.plan(&text);
-  let outcome = media(&plan, &mut |_| {});
+  let outcome = media(&plan, &mut |_: &str| {});
 
   assert_eq!(outcome.failed.len(), 1, "{:?}", outcome.failed);
   assert_eq!(outcome.failed[0].step, "room");

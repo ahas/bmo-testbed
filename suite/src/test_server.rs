@@ -197,7 +197,14 @@ pub fn test_server_up() -> Result<(), String> {
   let mut start = Command::new("systemd-run");
 
   start
-    .args(["--user", &format!("--unit={OWN_UNIT}"), "--collect", "--quiet", "--"])
+    .args([
+      "--user",
+      &format!("--unit={OWN_UNIT}"),
+      &format!("--slice={}", crate::fence::SUITE_SLICE),
+      "--collect",
+      "--quiet",
+      "--",
+    ])
     .arg(program(&bin, "postgres"))
     .arg("-D")
     .arg(&data)

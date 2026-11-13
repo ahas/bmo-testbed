@@ -85,7 +85,7 @@ fn a_dry_run_removes_nothing_and_a_run_removes_what_it_said() {
   let today = NaiveDate::from_ymd_opt(2026, 10, 24).unwrap();
   let rotation = Rotation::of(&plan, today, &media);
   let mut said = Vec::new();
-  let dry = rotate(&plan, &rotation, true, &mut |line| said.push(line.to_owned()));
+  let dry = rotate(&plan, &rotation, true, &mut |line: &str| said.push(line.to_owned()));
 
   assert!(dry.passed(), "{:?}", dry.failed);
   assert!(
@@ -96,7 +96,7 @@ fn a_dry_run_removes_nothing_and_a_run_removes_what_it_said() {
   );
   assert_eq!(ground.in_bucket().len(), 3);
 
-  let ran = rotate(&plan, &rotation, false, &mut |_| {});
+  let ran = rotate(&plan, &rotation, false, &mut |_: &str| {});
 
   assert!(ran.passed(), "{:?}", ran.failed);
   assert_eq!(ground.in_bucket(), ["data-backup/hourly/1/app.pgdump", "hourly/9/app.pgdump"]);

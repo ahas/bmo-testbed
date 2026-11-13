@@ -5,6 +5,7 @@
 use bmo_testbed_backup::drill::drill;
 use bmo_testbed_backup::dump::address_in;
 use bmo_testbed_backup::manifest::Manifest;
+use bmo_testbed_backup::outcome::Voice;
 use bmo_testbed_backup::policy::BACKUP;
 use bmo_testbed_backup::snapshot::{slot_of, snapshot};
 use bmo_testbed_scratch_database::{SCRATCH, test_address};
@@ -94,7 +95,7 @@ fn a_snapshot_is_sent_whole_and_the_drill_restores_every_count() {
   let slot = slot_of(now, plan.hourly_slots);
   let day = now.format("%Y-%m-%d").to_string();
   let mut said = Vec::new();
-  let outcome = snapshot(&plan, now, &mut |line| said.push(line.to_owned()));
+  let outcome = snapshot(&plan, now, &mut |line: &str| said.push(line.to_owned()));
 
   assert!(outcome.passed(), "{:?} {said:?}", outcome.failed);
 
@@ -124,7 +125,7 @@ fn a_snapshot_is_sent_whole_and_the_drill_restores_every_count() {
   assert_eq!(manifest.data.as_ref().unwrap().entries, 5);
 
   let mut said = Vec::new();
-  let drilled = drill(&plan, now, &mut |line| said.push(line.to_owned()));
+  let drilled = drill(&plan, now, &mut |line: &str| said.push(line.to_owned()));
 
   assert!(drilled.passed(), "{:?} {said:?}", drilled.failed);
   assert!(
@@ -141,7 +142,7 @@ fn a_snapshot_is_sent_whole_and_the_drill_restores_every_count() {
   altered.databases[0].tables.insert("public.notes".to_owned(), 24);
   std::fs::write(&tampered, serde_json::to_string(&altered).unwrap()).unwrap();
 
-  let failed = drill(&plan, now, &mut |_| {});
+  let failed = drill(&plan, now, &mut |_: &str| {});
 
   assert_eq!(failed.failed.len(), 1, "{:?}", failed.failed);
   assert_eq!(failed.failed[0].step, "count");
@@ -168,14 +169,34 @@ fn a_snapshot_is_sent_whole_and_the_drill_restores_every_count() {
   assert!(left.is_empty(), "{left:?}");
 }
 
+// A voice keeping the lines it is told and the failures apart.
+#[derive(Default)]
+struct Heard {
+  lines: Vec<String>,
+  failures: Vec<String>,
+}
+
+impl Voice for Heard {
+  fn line(&mut self, line: &str) {
+    self.lines.push(line.to_owned());
+  }
+
+  fn failure(&mut self, line: &str) {
+    self.failures.push(line.to_owned());
+  }
+}
+
 #[test]
-fn a_drill_with_no_snapshot_anywhere_fails() {
+fn a_drill_with_no_snapshot_anywhere_fails_and_says_it_as_a_failure() {
   let ground = Ground::new();
   let plan = ground.plan(&ground.settings("folders = []\ndatabases = []"));
-  let outcome = drill(&plan, chrono::Local::now(), &mut |_| {});
+  let mut heard = Heard::default();
+  let outcome = drill(&plan, chrono::Local::now(), &mut heard);
 
   assert_eq!(outcome.failed.len(), 1, "{:?}", outcome.failed);
   assert_eq!(outcome.failed[0].step, "find");
+  assert_eq!(heard.failures, std::slice::from_ref(&BACKUP.words.no_snapshot));
+  assert!(!heard.lines.contains(&BACKUP.words.no_snapshot), "{:?}", heard.lines);
 }
 
 #[test]

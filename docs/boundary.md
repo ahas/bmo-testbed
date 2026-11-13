@@ -335,6 +335,9 @@ bmo-testbed backup prune [--dry-run]
   the newest snapshot restored and counted; `prune` the rotation alone, `--dry-run` saying what it would
   remove.
 - Thin: a line for each dump, archive, send and removal, with its bytes and seconds, and one closing line.
+  A step that failed is said on a line of its own, and a run that failed ends with a line naming its event,
+  `data-backup-failed` or `restore-drill-failed`, and the event's summary; where the output goes to the
+  journal, those lines are written at its error priority (`docs/backup.md`, 「What it is」).
 - Exits 0 where every step passed, 1 where any failed, the rest done all the same, 2 where the settings
   file is missing or does not read, and 75 where another run of the same word holds its lock; `prune`
   shares the snapshot's.
