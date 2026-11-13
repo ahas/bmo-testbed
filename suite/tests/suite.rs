@@ -343,9 +343,19 @@ mod sweeping {
     let kind = |item: &&str| (*item == "b").then(|| "browser".to_owned());
     let all = AtomicUsize::new(0);
     let most = AtomicUsize::new(0);
+    let entered = AtomicUsize::new(0);
     let done = sweep(&["b", "a"], &plan(1, &kind), &|item: &&str| {
       most.fetch_max(all.fetch_add(1, Ordering::SeqCst) + 1, Ordering::SeqCst);
-      std::thread::sleep(Duration::from_millis(5));
+      entered.fetch_add(1, Ordering::SeqCst);
+
+      // Each waits for the other to begin, however loaded the machine, and a sweep that runs them one after
+      // the other lets the first go after the bound, having seen one at a time.
+      let bound = std::time::Instant::now() + Duration::from_secs(5);
+
+      while entered.load(Ordering::SeqCst) < 2 && std::time::Instant::now() < bound {
+        std::thread::sleep(Duration::from_millis(1));
+      }
+
       all.fetch_sub(1, Ordering::SeqCst);
       *item
     });

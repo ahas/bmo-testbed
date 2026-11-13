@@ -411,13 +411,18 @@ mod a_run_with_its_waits_read_back {
   // hung and fails with exit code 124"
   #[test]
   fn a_watched_step_that_writes_nothing_for_the_limit_is_ended_as_hung() {
-    let command = vec!["sh".to_owned(), "-c".to_owned(), "echo once; sleep 30".to_owned()];
+    // The shell gives way to the sleep, so no shell outlives it to say how it was ended.
+    let command = vec!["sh".to_owned(), "-c".to_owned(), "echo once; exec sleep 30".to_owned()];
     let began = std::time::Instant::now();
     let run = run_timed(&command, &std::env::temp_dir(), &[], Some(short()));
 
     assert!(began.elapsed().as_secs() < 10, "the hung step was not ended");
     assert_eq!(run.code, i32::from(HUNG_EXIT_CODE));
-    assert!(run.output.starts_with("once\ntestbed: sh -c echo once; sleep 30 "), "{}", run.output);
+    assert!(
+      run.output.starts_with("once\ntestbed: sh -c echo once; exec sleep 30 "),
+      "{}",
+      run.output
+    );
   }
 
   // "every step runs to its end": a watched step that keeps writing past the limit is not ended.
