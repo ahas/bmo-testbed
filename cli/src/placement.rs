@@ -9,12 +9,15 @@
 use std::io::{BufRead as _, BufReader, Read, Write as _};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
+use std::sync::Arc;
+use std::sync::atomic::AtomicU64;
 
 use bmo_testbed_core::declaration::Repository;
 use bmo_testbed_core::placement::{PlaceAsk, PlacedRun, Placement};
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::policy::quick_checks::QUICK_CHECKS;
+use bmo_testbed_core::silence::{Heard, Silence, pass_on};
 use bmo_testbed_core::turn::{
   FRONT_VARIABLE, Lane, NEXT_VARIABLE, NOT_RUN_EXIT_CODE, process_env, stands_at_front, stands_next,
 };
@@ -752,11 +755,20 @@ impl MachinePlacement {
       fill_marks(&said.running, &[("machine", self.settings.label()), ("bench", &bench.path)])
     );
 
-    let started = self.ssh().arg(line).stdout(Stdio::inherit()).stderr(Stdio::piped()).spawn();
+    // The far side's `placed` verb ends a command there that falls silent; this side passes the output on, and
+    // tells its own holder while it comes.
+    let count = Arc::new(AtomicU64::new(0));
+    let look = Silence::default().look;
+    let started = self.ssh().arg(line).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn();
     let status = started.and_then(|mut child| {
-      let far_errors = child.stderr.take();
+      let far_output = child.stdout.take().map(|out| Heard::new(out, Arc::clone(&count), look));
+      let far_errors = child.stderr.take().map(|errors| Heard::new(errors, Arc::clone(&count), look));
 
       std::thread::scope(|scope| {
+        if let Some(far_output) = far_output {
+          scope.spawn(|| pass_on(far_output, std::io::stdout()));
+        }
+
         if let Some(far_errors) = far_errors {
           scope.spawn(|| passed_on(far_errors, placed));
         }

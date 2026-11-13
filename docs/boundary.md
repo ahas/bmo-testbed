@@ -83,6 +83,10 @@ bmo-testbed placed [--setup] [--checkout <path>…] -- <command…>
   bench holds what its check and its run read; a step that fails exits 75 with a line naming it. It then
   runs the words as a command of its own, with `BMO_TESTBED_PLACED` set so the run is never placed
   again, and ends with that command's exit code; the command's output is this verb's.
+- **It watches what it runs for silence** (`docs/testbed.md`, 「A holder whose command falls silent lets
+  go」): the setup steps and the command pass their output on through pipes it counts, and are handed
+  `BMO_TESTBED_HEARD`. A command that writes nothing for the bench's silence limit is ended whole and
+  the verb exits 124 with the hung line; a setup step ended so fails as any setup step does, exit 75.
 - **The checkouts the run knows are the ones `--checkout` names:** the bench and the trees copied beside
   it. They stand in a registry written for this run alone under the data root's `testbed/`, handed to
   the setup and the command as `BMO_TESTBED_CHECKOUTS`, and taken away as the run ends; with none named,
@@ -436,7 +440,8 @@ verb's own name, and each noun takes what that verb takes.
 
 - `testbed`: the major targeted;
 - `upstreams`: the repositories this one builds on, by their declared names;
-- `[test]` with `[test.database]`: the languages, files, fence and setup of the suite;
+- `[test]` with `[test.database]`: the languages, files, fence and setup of the suite, and the silence
+  limit of every command run for the repository;
 - `[projects]` and `[tools]`: units found by their own files;
 - `[check]` with `[[check.step]]`: the quick checks enabled and their inputs, and the static steps;
 - `[build]` with `[[build.step]]`: the release build;
@@ -733,7 +738,10 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   not run, exit code 75, with a line naming the step and what it said.
 - **The run is then one `ssh` command:** the testbed binary there, in the bench, asked the `placed`
   verb with the words. Its standard error is this run's standard error, its standard output its one
-  result line, and its exit code this run's exit code.
+  result line, and its exit code this run's exit code. The caller passes both on as they come, but for
+  the line saying the run's turn there came (「A run placed elsewhere stands here too」), touching the file
+  its own holder handed it in `BMO_TESTBED_HEARD` while they do; ending a silent command is the `placed`
+  verb's there.
 - **A connection that cannot be made is local:** the caller says so on a line and runs here. A
   connection that breaks once the run has begun ends the run as not run, exit code 75.
 

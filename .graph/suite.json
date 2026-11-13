@@ -22,10 +22,11 @@
       "core/event-hook",
       "core/declaration",
       "suite/change-selection",
-      "core/policy-loader"
+      "core/policy-loader",
+      "core/silence-watch"
     ],
-    "base": "684d9102bf43c7e2ab34a3ece8305a70919404ee",
-    "changed": 1794545233798
+    "base": "93e631758d9e668b2cd9cc007838e3a62eedca56",
+    "changed": 1794545338789
   },
   {
     "id": "suite/change-check",
@@ -51,10 +52,11 @@
       "core/declaration",
       "core/lanes-and-turn",
       "core/policy-loader",
-      "calls/bmo-text"
+      "calls/bmo-text",
+      "core/silence-watch"
     ],
-    "base": "9d6ad2fe61bc35bad21d2332908605bbacecb561",
-    "changed": 1794496813424
+    "base": "93e631758d9e668b2cd9cc007838e3a62eedca56",
+    "changed": 1794545338744
   },
   {
     "id": "suite/change-selection",
@@ -208,10 +210,11 @@
       "suite/change-selection",
       "suite/cargo-verb-and-prune",
       "core/lanes-and-turn",
-      "core/policy-loader"
+      "core/policy-loader",
+      "core/silence-watch"
     ],
-    "base": "9d6ad2fe61bc35bad21d2332908605bbacecb561",
-    "changed": 1794496803310
+    "base": "93e631758d9e668b2cd9cc007838e3a62eedca56",
+    "changed": 1794545338688
   },
   {
     "id": "suite/suite-run",
@@ -242,10 +245,11 @@
       "suite/test-log",
       "core/event-hook",
       "core/policy-loader",
-      "core/run-verb-and-status"
+      "core/run-verb-and-status",
+      "core/silence-watch"
     ],
-    "base": "684d9102bf43c7e2ab34a3ece8305a70919404ee",
-    "changed": 1794545233863
+    "base": "93e631758d9e668b2cd9cc007838e3a62eedca56",
+    "changed": 1794545338625
   },
   {
     "id": "suite/test-count",

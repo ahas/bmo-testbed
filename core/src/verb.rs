@@ -221,7 +221,7 @@ pub fn run(words: &RunWords, ground: &VerbGround<'_>) -> RunOutcome {
       notice_seconds: None,
     },
     witness: ground.witness,
-    silence: Silence::default(),
+    silence: Silence::at(&cwd),
   };
   let result = match run_in_testbed(&ask) {
     Ok(result) => result,

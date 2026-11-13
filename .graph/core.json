@@ -31,13 +31,13 @@
       "core/lanes-and-turn",
       "core/policy-loader"
     ],
-    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
-    "changed": 1793664723526
+    "base": "93e631758d9e668b2cd9cc007838e3a62eedca56",
+    "changed": 1794545339212
   },
   {
     "id": "core/declaration",
     "title": "Declaration reader",
-    "what": "Reads a repository's root testbed.toml into typed tables (test, projects, tools, check with its shared versions, build, deploy, runner, events), refusing unknown keys and another major, and finds the repository's root and paths.",
+    "what": "Reads a repository's root testbed.toml into typed tables (test with its silence limit, projects, tools, check with its shared versions, build, deploy, runner, events), refusing unknown keys and another major, and finds the repository's root and paths.",
     "files": [
       "core/src/declaration.rs",
       "testbed.toml",
@@ -51,8 +51,8 @@
       "core/lanes-and-turn",
       "core/policy-loader"
     ],
-    "base": "684d9102bf43c7e2ab34a3ece8305a70919404ee",
-    "changed": 1794545234448
+    "base": "93e631758d9e668b2cd9cc007838e3a62eedca56",
+    "changed": 1794545338890
   },
   {
     "id": "core/event-hook",
@@ -91,8 +91,8 @@
     "needs": [
       "core/policy-loader"
     ],
-    "base": "9aa0db29574b9e50c97edc189f30b6ad31c01d32",
-    "changed": 1794544126335
+    "base": "93e631758d9e668b2cd9cc007838e3a62eedca56",
+    "changed": 1794545338938
   },
   {
     "id": "core/languages",
@@ -110,8 +110,8 @@
     "symbols": [],
     "aliases": [],
     "needs": [],
-    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
-    "changed": 1793664723549
+    "base": "93e631758d9e668b2cd9cc007838e3a62eedca56",
+    "changed": 1794545339294
   },
   {
     "id": "core/placement",
@@ -137,10 +137,11 @@
     "needs": [
       "core/lanes-and-turn",
       "core/policy-loader",
-      "deploy/releases-and-rollback"
+      "deploy/releases-and-rollback",
+      "core/silence-watch"
     ],
-    "base": "9aa0db29574b9e50c97edc189f30b6ad31c01d32",
-    "changed": 1794544126218
+    "base": "93e631758d9e668b2cd9cc007838e3a62eedca56",
+    "changed": 1794545338572
   },
   {
     "id": "core/policy-loader",
@@ -190,8 +191,8 @@
     "symbols": [],
     "aliases": [],
     "needs": [],
-    "base": "9aa0db29574b9e50c97edc189f30b6ad31c01d32",
-    "changed": 1794544126413
+    "base": "93e631758d9e668b2cd9cc007838e3a62eedca56",
+    "changed": 1794545338982
   },
   {
     "id": "core/run-verb-and-status",
@@ -214,9 +215,29 @@
       "core/languages",
       "core/placement",
       "core/close-line",
+      "core/policy-loader",
+      "core/silence-watch"
+    ],
+    "base": "93e631758d9e668b2cd9cc007838e3a62eedca56",
+    "changed": 1794545338835
+  },
+  {
+    "id": "core/silence-watch",
+    "title": "Silence watch",
+    "what": "The watch that ends a command holding a turn once its output and the BMO_TESTBED_HEARD file stay still for the silence limit, the policy's or the repository's declared one, in core/src/silence.rs; it also passes a placed run's output on through counted pipes.",
+    "files": [
+      "core/src/silence.rs",
+      "core/tests/silence.rs",
+      "docs/testbed.md"
+    ],
+    "symbols": [],
+    "aliases": [],
+    "needs": [
+      "core/declaration",
+      "core/lanes-and-turn",
       "core/policy-loader"
     ],
-    "base": "9aa0db29574b9e50c97edc189f30b6ad31c01d32",
-    "changed": 1794544126236
+    "base": "93e631758d9e668b2cd9cc007838e3a62eedca56",
+    "changed": 1794545338521
   }
 ]

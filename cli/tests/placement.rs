@@ -6,9 +6,10 @@
 //! none, the run the testbed's `placed` verb there, a machine that cannot be reached, or settings that do not
 //! read, leaving the run here, the shared versions laid over their copy as their main branch holds them, a
 //! testbed there that is not this one's release refused before any bench is made and a run meeting it kept
-//! here, a run whose environment sets a variable its declaration names as this machine's kept here, and the
+//! here, a run whose environment sets a variable its declaration names as this machine's kept here, the
 //! run standing in its lane here while it lasts, running once the far side says its turn came, that line read
-//! and not passed on.
+//! and not passed on, and the `placed` verb there passing its command's output on, telling its own holder
+//! while it comes and ending it whole once it falls silent for the declared limit.
 
 use std::convert::Infallible;
 use std::path::Path;
@@ -21,6 +22,7 @@ use bmo_testbed_cli::placement::{MachinePlacement, MachineSettings, ReadyBench, 
 use bmo_testbed_core::placement::{PlaceAsk, PlacedRun, Placement, read_placed};
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
+use bmo_testbed_core::queue::process_alive;
 use bmo_testbed_core::turn::{Env, Lane, NOT_RUN_EXIT_CODE, lock_path};
 use serde_json::{Value, json};
 
@@ -653,4 +655,55 @@ fn the_placed_run_is_running_once_the_far_side_says_its_turn_came() {
   assert_eq!(read_placed(&wide)[0].entry.since, None);
   assert_eq!(placement.run(&bench, &command, false, Some(&placed)), 4);
   assert!(read_placed(&wide)[0].entry.since.is_some());
+}
+
+// "a command that writes nothing for the bench's silence limit is ended whole and the verb exits 124 with the
+// hung line": the declared limit of a second, the command's output passed on as it came, and what it left
+// standing gone with it.
+#[test]
+fn the_placed_verb_ends_a_command_silent_for_the_declared_limit_whole() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let repo = dir.join("repo");
+  let left = dir.join("left");
+  let line = format!("echo once; echo said >&2; sleep 30 & echo $! > {}; wait", left.display());
+
+  checkout(&repo, "testbed = 0\n\n[test]\nsilence_seconds = 1\n");
+
+  let done = ran(&mut testbed(&repo, &dir, &["placed", "--", "sh", "-c", &line]));
+  let hung = fill_marks(
+    &LANES.silence.hung,
+    &[
+      ("command", &format!("sh -c {line}")),
+      ("output", &LANES.silence.piped),
+      ("seconds", "1"),
+    ],
+  );
+  let pid: i64 = std::fs::read_to_string(&left).unwrap().trim().parse().unwrap();
+
+  assert_eq!(done.code, 124, "{}\n{}", done.out, done.err);
+  assert_eq!(done.out, "once\n");
+  assert_eq!(done.err, format!("said\n{hung}\n"));
+  assert!(!process_alive(pid));
+}
+
+// "the setup steps and the command pass their output on through pipes it counts": while the command writes, the
+// file the verb's own holder handed it in `BMO_TESTBED_HEARD` is touched.
+#[test]
+fn the_placed_verb_tells_its_own_holder_while_its_command_writes() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let repo = dir.join("repo");
+  let heard = dir.join("heard");
+  let long_ago = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(3600);
+
+  checkout(&repo, "testbed = 0\n");
+  std::fs::File::create(&heard).unwrap().set_modified(long_ago).unwrap();
+
+  let done = ran(
+    testbed(&repo, &dir, &["placed", "--", "sh", "-c", "echo written"]).env("BMO_TESTBED_HEARD", &heard),
+  );
+
+  assert_eq!((done.code, done.out.as_str()), (0, "written\n"), "{}", done.err);
+  assert!(std::fs::metadata(&heard).unwrap().modified().unwrap() > long_ago);
 }

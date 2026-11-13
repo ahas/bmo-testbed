@@ -6,6 +6,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::time::Duration;
 
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
@@ -13,6 +14,7 @@ use serde::de::DeserializeOwned;
 use crate::languages::{LANGUAGES, Language};
 use crate::policy::declaration::DECLARATION;
 use crate::policy::fill_marks;
+use crate::silence::Silence;
 use crate::turn::{Env, Lane};
 
 /// The major version of the testbed this build is, the one a declaration names.
@@ -111,6 +113,10 @@ pub struct Test {
   /// Read and given no effect: nothing the testbed runs has a span it must end within.
   #[serde(default)]
   pub test_timeout_seconds: Option<u64>,
+  /// How long a command run for the repository may write nothing before it is ended as hung; none leaves the
+  /// lane policy's limit.
+  #[serde(default)]
+  pub silence_seconds: Option<u64>,
   #[serde(default = "Test::memory_gb")]
   pub memory_gb: u64,
   #[serde(default)]
@@ -122,6 +128,17 @@ pub struct Test {
 impl Test {
   fn memory_gb() -> u64 {
     DECLARATION.defaults.test.memory_gb
+  }
+
+  /// The silence every watch over a command run for the repository keeps to: the declared limit, the lane
+  /// policy's where none is declared.
+  pub fn silence(&self) -> Silence {
+    let policy = Silence::default();
+
+    Silence {
+      limit: self.silence_seconds.map_or(policy.limit, Duration::from_secs),
+      ..policy
+    }
   }
 
   /// The members the declared languages name, in the declaration's order.
@@ -590,6 +607,10 @@ impl Declaration {
       && database.migrations.is_empty() != database.migrate.is_none()
     {
       return Some(("test.database", why.half_database.clone()));
+    }
+
+    if self.test.silence_seconds == Some(0) {
+      return Some(("test.silence_seconds", why.no_silence.clone()));
     }
 
     for quick in &self.check.quick {

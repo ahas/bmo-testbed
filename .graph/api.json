@@ -118,8 +118,8 @@
       "suite/test-log",
       "suite/test-template"
     ],
-    "base": "684d9102bf43c7e2ab34a3ece8305a70919404ee",
-    "changed": 1794545234566,
+    "base": "93e631758d9e668b2cd9cc007838e3a62eedca56",
+    "changed": 1794545339138,
     "boundary": {
       "side": "exposes"
     }

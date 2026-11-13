@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use crate::policy::fill_marks;
 use crate::policy::lanes::LANES;
-use crate::silence::{HUNG_EXIT_CODE, Waited};
+use crate::silence::{HUNG_EXIT_CODE, Waited, speak_for_holder};
 use crate::turn::{
   Env, Lane, NOT_RUN_EXIT_CODE, TestbedTurn, TurnAsk, record_turn_times, take_turn, times_words,
 };
@@ -433,8 +433,10 @@ impl HeavyHands for MachineHands<'_> {
     machine_fences()
   }
 
+  // A wait for memory is no silence: each pause ends by telling the holder above that the command still stands.
   fn sleep(&mut self, how_long: Duration) {
     std::thread::sleep(how_long);
+    speak_for_holder();
   }
 
   fn now(&self) -> f64 {

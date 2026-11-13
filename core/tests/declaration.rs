@@ -3,8 +3,10 @@
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::time::Duration;
 
 use bmo_testbed_core::declaration::{Declaration, Phase, QuickCheck, Repository, own_major};
+use bmo_testbed_core::silence::Silence;
 use bmo_testbed_core::turn::{Env, Lane};
 
 fn parse(text: &str) -> Result<Declaration, String> {
@@ -61,6 +63,7 @@ fn a_checkout_with_no_declaration_has_every_default_and_its_directorys_name() {
     ),
     (None, None, None, 12)
   );
+  assert_eq!(declaration.test.silence(), Silence::default());
   assert!(declaration.test.database.is_none());
   assert!(declaration.projects.discover);
   assert_eq!(declaration.projects.check_script, "check");
@@ -137,6 +140,7 @@ browser = ["browser/**/*.test.ts"]
 guard_seconds = 100
 file_guard_seconds = 50
 test_timeout_seconds = 10
+silence_seconds = 1200
 memory_gb = 4
 setup = ["bun install"]
 
@@ -237,6 +241,13 @@ timeout_seconds = 5
     ["bun", "cargo", "node", "browser"]
   );
   assert_eq!(declaration.test.memory_gb, 4);
+  assert_eq!(
+    declaration.test.silence(),
+    Silence {
+      limit: Duration::from_secs(1200),
+      ..Silence::default()
+    }
+  );
   let database = declaration.test.database.as_ref().unwrap();
   assert_eq!((database.migrate.as_deref(), database.max_files), (Some("cargo run -p migrate"), 3));
   assert!(!declaration.projects.discover);
@@ -534,4 +545,13 @@ fn the_shared_versions_and_their_exceptions_read_and_what_breaks_them_is_refused
   assert!(without.contains("shared_versions.repository"), "{without}");
   assert!(no_reason.contains("the exception for rt gives no reason"), "{no_reason}");
   assert!(naming_nothing.contains("the exception for rt names neither"), "{naming_nothing}");
+}
+
+// "a silence limit of no seconds" is refused naming the key
+#[test]
+fn a_silence_limit_of_no_seconds_is_refused_naming_the_key() {
+  let refusal = refused(&declared("[test]\nsilence_seconds = 0\n"));
+
+  assert!(refusal.contains("test.silence_seconds"), "{refusal}");
+  assert!(refusal.contains("at least one second"), "{refusal}");
 }

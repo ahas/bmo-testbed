@@ -376,7 +376,7 @@ pub fn run_step(root: &Path, step: &Step) -> TimedRun {
   handed.extend(turn.held_variable().map(|(name, value)| (name.to_owned(), value)));
 
   let mut done =
-    run_timed(&step.step.command, &root.join(&step.step.dir), &handed, Some(Silence::default()));
+    run_timed(&step.step.command, &root.join(&step.step.dir), &handed, Some(Silence::at(root)));
 
   done.waited_seconds += turn.waited_seconds();
   done

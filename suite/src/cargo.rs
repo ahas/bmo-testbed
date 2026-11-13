@@ -169,9 +169,10 @@ pub fn run_cargo(root: &Path, args: &[String]) -> u8 {
     .collect::<Vec<_>>()
     .join(" ");
   let env: Env = process_env();
+  let silence = Silence::at(root);
   let start = |turn: Option<&TestbedTurn>| {
     let output = if compiling { Output::own() } else { Output::Files(Vec::new()) };
-    let watch = Watch::new(output, Silence::default());
+    let watch = Watch::new(output, silence);
     let mut command = invocation.command(root);
     // The turn's share of the lane, as Cargo's jobs, where neither the words nor a caller already name them.
     let widened = turn

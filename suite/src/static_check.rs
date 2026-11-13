@@ -486,15 +486,16 @@ pub fn run_static_check(
 pub fn spawn_step(root: &Path, step: &CheckStep) -> TimedRun {
   let cwd = root.join(&step.dir);
   let Some(lane) = step.lane else {
-    return run_timed(&step.command, &cwd, &step.env, step.watched.then(Silence::default));
+    return run_timed(&step.command, &cwd, &step.env, step.watched.then(|| Silence::at(root)));
   };
+  let silence = Silence::at(root);
 
   timed(|times| {
     let mut output = String::new();
     let mut signal = None;
     let mut start = |turn: &TestbedTurn| {
       let held = turn.held_variable();
-      let (end, said) = output_of(&step.command, &cwd, &step.env, times, held, Some(Silence::default()));
+      let (end, said) = output_of(&step.command, &cwd, &step.env, times, held, Some(silence));
 
       output.push_str(&said);
       signal = end.signal;

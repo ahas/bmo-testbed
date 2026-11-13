@@ -73,6 +73,7 @@ pub struct WhyWords {
   pub needs_input: String,
   pub needs_data_root: String,
   pub half_database: String,
+  pub no_silence: String,
   pub duplicate_step: String,
   pub no_reason: String,
   pub empty_exception: String,

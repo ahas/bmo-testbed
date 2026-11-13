@@ -2,15 +2,18 @@
 //! passes on (docs/testbed.md, 「A holder whose command falls silent lets go」). The holder watches where the
 //! command's output goes and the file it hands the command for a watch under it to touch; once neither has
 //! moved for the limit, the command's process group and every process under it are sent a TERM, and whatever
-//! still stands after the grace a KILL.
+//! still stands after the grace a KILL. A command whose output this process passes on as its own, as a placed
+//! run's is, is counted byte by byte as it goes through.
 
-use std::path::PathBuf;
-use std::process::{Child, ExitStatus};
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
+use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::time::{Duration, Instant, SystemTime};
 
+use crate::declaration::Repository;
 use crate::policy::fill_marks;
 use crate::policy::lanes::LANES;
 use crate::queue::process_alive;
@@ -24,7 +27,7 @@ pub const HEARD_VARIABLE: &str = "BMO_TESTBED_HEARD";
 
 /// How long a command may write nothing, how long it is given to end once sent a TERM, and how often its
 /// output is looked at.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Silence {
   pub limit: Duration,
   pub grace: Duration,
@@ -41,6 +44,14 @@ impl Default for Silence {
       grace: Duration::from_secs(numbers.silence_grace_seconds),
       look: Duration::from_secs(numbers.silence_look_seconds),
     }
+  }
+}
+
+impl Silence {
+  /// The silence of the repository a command runs for in `dir`, as its declaration names it; the policy's
+  /// where the declaration does not read, since the verb reading it refuses the run on its own.
+  pub fn at(dir: &Path) -> Self {
+    Repository::read(dir).map_or_else(|_| Self::default(), |repo| repo.declaration.test.silence())
   }
 }
 
@@ -155,9 +166,9 @@ fn touched(path: Option<&PathBuf>) -> Option<SystemTime> {
   std::fs::metadata(path?).and_then(|meta| meta.modified()).ok()
 }
 
-// The file the holder above this process handed it touched, so that holder counts this command's writing as
-// its own command's.
-fn speak_for_holder() {
+/// The file the holder above this process handed it touched, so that holder counts this process as its
+/// command writing.
+pub fn speak_for_holder() {
   let Some(path) = std::env::var_os(HEARD_VARIABLE) else { return };
   let file = std::fs::File::options().append(true).open(path);
 
@@ -304,6 +315,104 @@ impl Watch {
       ],
     )
   }
+}
+
+/// A command's output read through this process: every byte read counted into `count`, and the holder above
+/// this process told at most once every `look` while bytes come, so the holder counts the command writing.
+pub struct Heard<R> {
+  from: R,
+  count: Arc<AtomicU64>,
+  look: Duration,
+  told: Option<Instant>,
+}
+
+impl<R: Read> Heard<R> {
+  pub fn new(from: R, count: Arc<AtomicU64>, look: Duration) -> Self {
+    Self {
+      from,
+      count,
+      look,
+      told: None,
+    }
+  }
+}
+
+impl<R: Read> Read for Heard<R> {
+  fn read(&mut self, into: &mut [u8]) -> std::io::Result<usize> {
+    let read = self.from.read(into)?;
+
+    if read > 0 {
+      self.count.fetch_add(read as u64, Ordering::Relaxed);
+
+      if self.told.is_none_or(|at| at.elapsed() >= self.look) {
+        speak_for_holder();
+        self.told = Some(Instant::now());
+      }
+    }
+
+    Ok(read)
+  }
+}
+
+/// A stream read to its end and written on to `to` as it comes. Writing on stops once `to` refuses, and the
+/// stream is still read to its end, so its writer never stalls on a full pipe.
+pub fn pass_on(mut from: impl Read, mut to: impl Write) {
+  let mut chunk = [0u8; 16 * 1024];
+  let mut writing = true;
+
+  while let Ok(read) = from.read(&mut chunk) {
+    if read == 0 {
+      break;
+    }
+
+    if writing {
+      writing = to.write_all(&chunk[..read]).and_then(|()| to.flush()).is_ok();
+    }
+  }
+}
+
+/// A command run with its standard output and error passed on to this process's own as they come, every byte
+/// counted as the command writing and the holder above this process told while bytes come, and ended as hung
+/// once nothing of it has moved for `silence`'s limit; `what` names it on the hung line.
+pub fn run_passed_on(command: &mut Command, silence: Silence, what: &str) -> std::io::Result<Waited> {
+  let count = Arc::new(AtomicU64::new(0));
+  let watch = Watch::new(Output::Read(Arc::clone(&count)), silence);
+  let mut child = command.envs(watch.variable()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
+  let (done, finished) = mpsc::channel::<()>();
+  let mut streams = 0;
+
+  if let Some(out) = child.stdout.take() {
+    let (heard, done) = (Heard::new(out, Arc::clone(&count), silence.look), done.clone());
+
+    streams += 1;
+    std::thread::spawn(move || {
+      pass_on(heard, std::io::stdout());
+      let _ = done.send(());
+    });
+  }
+
+  if let Some(err) = child.stderr.take() {
+    let heard = Heard::new(err, count, silence.look);
+
+    streams += 1;
+    std::thread::spawn(move || {
+      pass_on(heard, std::io::stderr());
+      let _ = done.send(());
+    });
+  }
+
+  let waited = watch.wait(&mut child, what);
+  // A process the command left standing may hold its output open past its end; what it still writes within
+  // the grace is passed on, and nothing waits for it longer.
+  let until = Instant::now() + silence.grace;
+
+  for _ in 0..streams {
+    if finished.recv_timeout(until.saturating_duration_since(Instant::now())).is_err() {
+      break;
+    }
+  }
+
+  Ok(waited)
 }
 
 impl Drop for Watch {

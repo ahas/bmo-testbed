@@ -196,17 +196,31 @@ flowchart TD
 
 ## A holder whose command falls silent lets go
 
-- **A command holding a lane's turn that writes nothing for ten minutes is ended as hung,** and its
+- **A command holding a lane's turn that writes nothing for the silence limit is ended as hung,** and its
   seats pass on. Its length alone never cuts it: a command that keeps writing runs until it ends,
   however long that takes, and a person who wants it gone stops it.
+- **The silence limit is ten minutes,** or the seconds a repository's declaration names in `[test]
+  silence_seconds` (`docs/declaration.md`): every watch over a command run for that repository, in its
+  checkout or a bench copy of it, keeps to the declared number.
 - **The holder watches where its command's output goes,** every three seconds: the log of a `run`, the
-  files a check step's output is taken into, the pipes a suite's unit or a deployment's heavy step is read
-  through, and the files the Cargo verb's own standard output and error stand in. Once none of them has
-  grown for the limit, the command is hung.
+  files a check step's output is taken into, the pipes a suite's unit, a deployment's heavy step or a placed
+  run's command is read through, and the files the Cargo verb's own standard output and error stand in.
+  Once none of them has grown for the limit, the command is hung.
 - **A command under it that is watched in turn speaks for it.** The holder hands its command
   `BMO_TESTBED_HEARD`, a file of its own; a watch under it, such as a suite's over a unit whose output it
   holds back until the unit ends, touches that file while its own command writes, and the holder counts the
-  touch as its command writing.
+  touch as its command writing. A command waiting for memory to free before it runs again
+  (「Memory」) touches the file each time it looks, so the wait is never taken for silence.
+- **A run placed on another machine is watched where it runs** (「A run on another machine」). The
+  `placed` verb there passes its command's standard output and error on as they come, through pipes of its
+  own, counts every byte as the command writing, and hands the command `BMO_TESTBED_HEARD`; so a placed
+  command whose own output is that pipe, such as the Cargo verb's, is ended as hung on that machine at the
+  limit, its seats there pass on, and the line and code 124 come back over the connection. The declared
+  setup a placed run starts with is watched the same way.
+- **The caller passes a placed run's output on the same way,** and while bytes come over the connection it
+  touches the file its own holder handed it in `BMO_TESTBED_HEARD`. It ends nothing itself: a placed
+  command that holds its output back, a `run` writing to its log there or a check whose step still runs, is
+  heard only by the watches on that machine.
 - **A hung command is ended whole:** its process group where it heads one, and every process under it, are
   sent a TERM, and whatever still stands ten seconds later a KILL.
 - **It says so in one line,** `testbed:` first, naming the command, where its output went and the limit,
@@ -214,8 +228,9 @@ flowchart TD
   unit as failed with it.
 - **A person's command whose output is a terminal or a pipe is not watched:** the Cargo verb whose
   standard output or error is a screen, another program or anything but a file runs until it ends, since
-  nothing the testbed reads says whether it still writes there.
-- The limit, the pause before the KILL and how often the holder looks stand in the lane policy.
+  nothing the testbed reads says whether it still writes there. On a placed machine the `placed` verb
+  above it is that watch.
+- The default limit, the pause before the KILL and how often the holder looks stand in the lane policy.
 
 ## Memory
 

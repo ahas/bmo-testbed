@@ -396,7 +396,7 @@ impl DeployHands for Machine {
     } else {
       Output::Files(Vec::new())
     };
-    let watch = Watch::new(output, Silence::default());
+    let watch = Watch::new(output, Silence::at(&ask.cwd));
     let mut command = crate::run::command(&ask.command, Some(&ask.cwd));
 
     command

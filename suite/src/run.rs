@@ -729,6 +729,7 @@ fn run_held(
       .find(|(name, _)| name == "CARGO_HOME")
       .map_or("", |(_, home)| home.as_str()),
   );
+  let silence = test.silence();
   let unit_command = |file: &String| -> UnitCommand {
     // No unit inherits what a Cargo running this suite set for its own package: a unit that runs Cargo would
     // build as though for that package (docs/deploy.md, 「The Cargo build directory」). Nor does it inherit the
@@ -823,7 +824,10 @@ fn run_held(
       return 1;
     }
 
-    let ran = run_unit(&unit_command(file));
+    let ran = run_unit(&UnitCommand {
+      silence,
+      ..unit_command(file)
+    });
 
     say(&unit_account(file, &ran));
 

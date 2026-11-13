@@ -17,8 +17,8 @@
   refused naming the key: a language or a quick check the testbed has no member for, a quick check
   without the input it reads, an exception to the shared versions naming neither a line nor a version or
   with no reason, a deploy root without its data root, a test database naming only one of its migrations
-  and its migrate command, and two steps of one table under the same id. Whether a path
-  exists is asked by the verb that reads it, not here.
+  and its migrate command, a silence limit of no seconds, and two steps of one table under the same id.
+  Whether a path exists is asked by the verb that reads it, not here.
 
 ## The top level
 
@@ -38,6 +38,7 @@
 | `guard_seconds` | integer | none | Read and given no effect: every unit of a run is started and runs to its end |
 | `file_guard_seconds` | integer | none | Read and given no effect: a unit runs until it ends, or until it writes nothing for the silence limit (`docs/testbed.md`) |
 | `test_timeout_seconds` | integer | none | Read and given no effect: no per-test limit is handed to the runner, and one a runner keeps by default is lifted (`docs/suite.md`, 「Every unit runs to its end」) |
+| `silence_seconds` | integer | 600, the lane policy's | How long a command run for the repository may write nothing before it is ended as hung: a run, a check's step, a suite's unit, the Cargo verb, a deployment's step, and a placed run on the machine it runs on (`docs/testbed.md`, 「A holder whose command falls silent lets go」). At least 1 |
 | `memory_gb` | integer | 12 | The fence's memory ceiling, which `BMO_SUITE_MEMORY_GB` overrides |
 | `setup` | list of commands | `[]` | Run in order to set up a fresh tree: the checkout a deployment's gate reads, a release, the daily whole run's tree, a bench copy on another machine |
 

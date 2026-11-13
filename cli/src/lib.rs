@@ -32,6 +32,7 @@ use bmo_testbed_core::placement::{KeptHere, Local, PLACED_VARIABLE, Placement, w
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::policy::verbs::VERBS;
+use bmo_testbed_core::silence::{Silence, run_passed_on};
 use bmo_testbed_core::turn::{Env, NOT_RUN_EXIT_CODE, process_env};
 use bmo_testbed_core::verb::{self, REFUSED_EXIT_CODE, RunWords, VerbGround, data_root};
 use bmo_testbed_suite::dependents::CHECKOUTS_VARIABLE;
@@ -114,8 +115,28 @@ pub fn home_of(env: &Env) -> PathBuf {
   env.get("HOME").map(PathBuf::from).unwrap_or_default()
 }
 
+// A step of a placed run, its output passed on and watched for the bench's silence (docs/testbed.md, 「A holder
+// whose command falls silent lets go」): the code it ended with, the hung code with its line said where it was
+// ended as hung; none where it did not start, said.
+fn watched(command: &mut Command, what: &str, silence: Silence) -> Option<i32> {
+  match run_passed_on(command, silence, what) {
+    Ok(waited) => {
+      if let Some(hung) = &waited.hung {
+        eprintln!("{hung}");
+      }
+
+      Some(waited.code().unwrap_or(1))
+    }
+    Err(why) => {
+      eprintln!("{why}");
+      None
+    }
+  }
+}
+
 /// The far side of a placed run (docs/boundary.md, 「`placed`」): the declared setup where asked, then the
-/// words run as a command of their own, marked so the run is never placed again; its code.
+/// words run as a command of their own, marked so the run is never placed again, each watched for the bench's
+/// silence; its code.
 fn placed(args: PlacedArgs) -> u8 {
   let said = &LANES.placed;
   let cwd = std::env::current_dir().unwrap_or_default();
@@ -138,8 +159,11 @@ fn placed(args: PlacedArgs) -> u8 {
     }
   };
 
+  let repo = Repository::read(&cwd).ok();
+  let silence = repo.as_ref().map_or_else(Silence::default, |repo| repo.declaration.test.silence());
+
   if args.setup
-    && let Ok(repo) = Repository::read(&cwd)
+    && let Some(repo) = &repo
   {
     for step in &repo.declaration.test.setup {
       let mut command = Command::new("sh");
@@ -147,8 +171,7 @@ fn placed(args: PlacedArgs) -> u8 {
       command.args(["-c", step]).current_dir(&repo.root).stdin(Stdio::null());
       handed(&mut command);
 
-      let ran = command.status();
-      let code = ran.ok().and_then(|status| status.code()).unwrap_or(1);
+      let code = watched(&mut command, step, silence).unwrap_or(1);
 
       if code != 0 {
         eprintln!("{}", fill_marks(&said.setup_failed, &[("command", step), ("code", &code.to_string())]));
@@ -166,13 +189,8 @@ fn placed(args: PlacedArgs) -> u8 {
   command.args(rest).current_dir(&cwd).stdin(Stdio::null());
   handed(&mut command);
 
-  match command.status() {
-    Ok(status) => status.code().and_then(|code| u8::try_from(code).ok()).unwrap_or(1),
-    Err(why) => {
-      eprintln!("{why}");
-      NOT_RUN_EXIT_CODE
-    }
-  }
+  watched(&mut command, &args.command.join(" "), silence)
+    .map_or(NOT_RUN_EXIT_CODE, |code| u8::try_from(code).unwrap_or(1))
 }
 
 fn run(args: RunArgs) -> u8 {
