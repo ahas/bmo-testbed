@@ -467,7 +467,11 @@ meets first, as a console asks them.
 
 - **What it asks with.** The declared `reach` command runs from the release and answers the service's base
   address, the console's credential and the service's own token. The two credentials go as bearer tokens;
-  neither is written into the deployment's output, its record or its events.
+  neither is written into the deployment's output, its record or its events. A service holding no token
+  of its own answers none (`docs/declaration.md`, `[deploy.console]`): the probe then makes a credential of
+  its own, one no service holds, asks with it where it would ask with the service's token, and says so on
+  one line. The contract refuses every call lacking the console's credential with a 401, so the point
+  holds a face to the same answer either way.
 - **The release the manifest is held to.** The shared versions the declaration names
   (`[check.shared_versions]`) pin the release of the console layer every console and bundle builds on, by
   its version, its packed file and the file's sha256 (`docs/checks.md`, 「The quick checks」,
@@ -491,7 +495,7 @@ flowchart TD
   D --> E[words, no role: 200 and a JSON object]
   E --> F[module and stylesheet, no role: 403]
   F --> G[module and stylesheet with the manifest's role: 200]
-  G --> H[the four paths with the service's own token: 401]
+  G --> H[the four paths with the service's own token, or the probe's own where it holds none: 401]
 ```
 
   - the manifest at `/console-manifest`, asked with the console's credential and no owner key or role,
@@ -505,8 +509,9 @@ flowchart TD
   - the same, asked with the manifest's role as `Owner-Role`, and an owner key as `Owner-Key` where the
     manifest asks for one, answer 200;
   - the manifest, the words, the module and the stylesheet, asked with the service's own token and the
-    manifest's role, answer 401. Only these four paths are asked so: a service whose API prefix is its
-    root still answers its own token on every other route.
+    manifest's role, answer 401, and so do they asked with the probe's own credential where the service
+    holds no token. Only these four paths are asked so: a service whose API prefix is its root still
+    answers its own token on every other route.
 - **A wait that runs out is a refusal.** Each ask waits the policy's seconds, thirty, for an answer, as a
   console leaves out a service that does not answer.
 - **How a refusal reads.** The deployment fails at the stage after the health, naming the point, what it

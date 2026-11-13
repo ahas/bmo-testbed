@@ -171,7 +171,7 @@ screen declares no such table.
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `reach` | command | required | Run from the release once the service is up: answers on its standard output one JSON object naming how a console reaches the service, `address`, the base address of the service's API as a console calls it, `consoleToken`, the credential the console calls it with, and `token`, the service's own token, which the console's routes refuse. Where each stands is the repository's own |
+| `reach` | command | required | Run from the release once the service is up: answers on its standard output one JSON object naming how a console reaches the service, `address`, the base address of the service's API as a console calls it, `consoleToken`, the credential the console calls it with, and `token`, the service's own token, which the console's routes refuse. `address` and `consoleToken` are non-empty strings; `token` is one too where the service holds a token of its own, and is left out or answered `null` where it holds none, as a service whose callers sign in by session holds none. Where each stands is the repository's own |
 
 ### `[deploy.backup]`: the backup a deployment takes
 

@@ -1,6 +1,7 @@
 //! The console probe (docs/deploy.md, 「The console probe」), over a stand-in service and a stand-in for the
 //! layer's reading: a face keeping the contract holds every point and no credential is said; each way a face
-//! breaks it is refused at its point; share reads open the module with no role; the layer is held to the
+//! breaks it is refused at its point; share reads open the module with no role; a service holding no token of
+//! its own is asked with one the probe made; the layer is held to the
 //! pinned release where one is pinned and passed over, said, where none is; and the pinned release's packed
 //! file is found among the files a release tracks by its name and its bytes.
 
@@ -26,6 +27,8 @@ pub struct Face {
   pub open_without_role: bool,
   /// Answers its own token on the console's routes.
   pub takes_own_token: bool,
+  /// Answers any credential at all on the console's routes.
+  pub takes_any_token: bool,
   pub words: String,
   pub reach: Result<String, String>,
   /// The release tracks no copy of the pinned layer.
@@ -49,6 +52,7 @@ impl Default for Face {
       }),
       open_without_role: false,
       takes_own_token: false,
+      takes_any_token: false,
       words: "{\"en\": {\"sample\": {\"title\": \"Sample\"}}}".to_owned(),
       reach: Ok(format!(
         "{{\"address\": \"{ADDRESS}\", \"consoleToken\": \"{CONSOLE}\", \"token\": \"{OWN}\"}}\n"
@@ -78,6 +82,7 @@ impl Face {
     match token {
       Some(CONSOLE) => {}
       Some(OWN) if self.takes_own_token => {}
+      Some(_) if self.takes_any_token => {}
       _ => return status(401, "{}"),
     }
 
@@ -210,6 +215,29 @@ fn a_face_taking_the_services_own_token_is_refused() {
   assert_eq!(refusal.why, "GET /console-manifest answered 200 where the contract asks 401");
 }
 
+// "a service holding no token of its own is asked with a credential the probe made, which the contract refuses
+// as any credential not the console's"
+#[test]
+fn a_service_holding_no_token_is_asked_with_a_credential_the_probe_made() {
+  let mut face = Face {
+    reach: Ok(format!("{{\"address\": \"{ADDRESS}\", \"consoleToken\": \"{CONSOLE}\"}}\n")),
+    ..Face::default()
+  };
+  let (outcome, said) = probed(&face, &pinned());
+
+  assert_eq!(outcome, Ok(13));
+  assert!(
+    said
+      .iter()
+      .any(|line| line.starts_with("the reach names no token of the service's own")),
+    "{said:?}"
+  );
+
+  face.takes_any_token = true;
+
+  assert_eq!(refused_at(&face, &pinned()).point, "the manifest with a credential the probe made");
+}
+
 // "a layer other than the pinned release is refused, and with none pinned it is passed over and said"
 #[test]
 fn the_layer_is_held_to_the_pinned_release_and_passed_over_where_none_is_pinned() {
@@ -299,6 +327,15 @@ fn a_reach_that_fails_or_does_not_read_is_refused_before_anything_is_asked() {
   let unread = read_reach("{\"address\": \"http://service.test\", \"consoleToken\": \"\"}").unwrap_err();
 
   assert!(unread.contains("consoleToken"), "{unread}");
+
+  let base = "\"address\": \"http://service.test\", \"consoleToken\": \"console\"";
+  let none = read_reach(&format!("{{{base}, \"token\": null}}")).expect("a null token reads as none");
+
+  assert_eq!(none.token, None);
+
+  let empty = read_reach(&format!("{{{base}, \"token\": \"\"}}")).unwrap_err();
+
+  assert!(empty.contains("token"), "{empty}");
 }
 
 // "a manifest the layer's reading refuses is refused in the reading's words, and words that are no JSON object

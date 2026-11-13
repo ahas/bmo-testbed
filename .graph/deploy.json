@@ -27,7 +27,7 @@
   {
     "id": "deploy/console-probe",
     "title": "Console probe",
-    "what": "Once a unit declaring [deploy.console] is up, the deploy run asks its console face as a console would: manifest read by the pinned bmo-ui release, layer, words, module and stylesheet guard, own token refused; the first point refused rolls back (deploy/src/console.rs).",
+    "what": "Once a unit declaring [deploy.console] is up, the deploy run asks its console face as a console would: manifest read by the pinned bmo-ui release, layer, words, module and stylesheet guard, and a non-console token refused; the first point refused rolls back (deploy/src/console.rs).",
     "files": [
       "deploy/src/console.rs",
       "deploy/tests/console.rs",
@@ -53,8 +53,8 @@
       "core/declaration",
       "core/policy-loader"
     ],
-    "base": "ee7245e35a671b2555da6ef2a011b2736edde753",
-    "changed": 1794533264966
+    "base": "9857140b0a13d79c075291a25773f6585264cb35",
+    "changed": 1794572728000
   },
   {
     "id": "deploy/deploy-run",

@@ -55,8 +55,8 @@ pub struct Reach {
   pub address: String,
   /// The credential the console calls the service with.
   pub console_token: String,
-  /// The service's own token, which the console's routes refuse.
-  pub token: String,
+  /// The service's own token, which the console's routes refuse; none where the service holds none.
+  pub token: Option<String>,
 }
 
 /// What a service answered an ask: its status and its body.
@@ -118,18 +118,35 @@ pub fn read_reach(output: &str) -> Result<Reach, String> {
       .map(str::to_owned)
       .ok_or_else(|| unread(key.to_owned()))
   };
+  // The service's own token, absent or null where it holds none; an empty one is a reading gone wrong.
+  let token = match value.get(&words.token_key) {
+    None | Some(Value::Null) => None,
+    Some(_) => Some(field(&words.token_key)?),
+  };
 
   Ok(Reach {
     address: field(&words.address_key)?,
     console_token: field(&words.console_token_key)?,
-    token: field(&words.token_key)?,
+    token,
   })
 }
 
+fn hex_sha256(bytes: &[u8]) -> String {
+  Sha256::digest(bytes).iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
 fn sha256_of(path: &Path) -> Option<String> {
-  std::fs::read(path)
-    .ok()
-    .map(|bytes| Sha256::digest(&bytes).iter().map(|byte| format!("{byte:02x}")).collect())
+  std::fs::read(path).ok().map(|bytes| hex_sha256(&bytes))
+}
+
+// A credential no service holds, made for one probe from the moment and the process: what it asks with in
+// place of the service's own token where the service holds none.
+fn made_credential() -> String {
+  let moment = std::time::SystemTime::now()
+    .duration_since(std::time::UNIX_EPOCH)
+    .map_or(0, |since| since.as_nanos());
+
+  hex_sha256(format!("{moment}-{}", std::process::id()).as_bytes())
 }
 
 /// The file of a git tree named as the pin names its packed file and holding its bytes, or why none does.
@@ -313,7 +330,14 @@ pub async fn probe(
     held: 1,
   };
   let console = probe.reach.console_token.clone();
-  let own = probe.reach.token.clone();
+  // The service's own token, or a credential the probe made where it holds none, and the point it is asked at.
+  let (own, own_point) = match probe.reach.token.clone() {
+    Some(token) => (token, &words.point_own_token),
+    None => {
+      say(&words.no_token);
+      (made_credential(), &words.point_made_token)
+    }
+  };
 
   // The manifest, read by the layer's own reading and held to the pinned release.
   let text = probe
@@ -375,7 +399,8 @@ pub async fn probe(
     probe.holds(&point, &asked.path, &console, &with_role, words.answered).await?;
   }
 
-  // The four paths of the console face, refused to the service's own token whatever the role.
+  // The four paths of the console face, refused to the service's own token, or the probe's own, whatever the
+  // role.
   let own_paths = [
     Asked {
       what: words.manifest.clone(),
@@ -390,7 +415,7 @@ pub async fn probe(
   .chain(screens);
 
   for asked in own_paths {
-    let point = fill_marks(&words.point_own_token, &[("what", &asked.what)]);
+    let point = fill_marks(own_point, &[("what", &asked.what)]);
 
     probe.holds(&point, &asked.path, &own, &with_role, words.not_console).await?;
   }

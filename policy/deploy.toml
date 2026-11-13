@@ -333,6 +333,8 @@ no_pin = "the shared versions pin no {package}, so the manifest is read by no re
 no_shared = "the declaration names no shared versions, so the manifest is read by no release of the layer and its layer {layer} is held to none"
 # A manifest naming no layer, as those lines name it.
 no_layer = "none"
+# Said where the reach names no token of the service's own.
+no_token = "the reach names no token of the service's own, so the console's routes are asked to refuse a credential the probe made"
 refused = "the console probe refused the release at {point}: {why}"
 # The points: {what} is one of the four paths' names, {role} the manifest's role.
 point_reach = "the reach"
@@ -344,6 +346,7 @@ point_words = "the words"
 point_no_role = "the {what} with no role"
 point_role = "the {what} with the role {role}"
 point_own_token = "the {what} with the service's own token"
+point_made_token = "the {what} with a credential the probe made"
 manifest = "manifest"
 words = "words"
 module = "module"
@@ -354,7 +357,7 @@ stylesheet = "stylesheet"
 reach_failed = "the reach command ended {code}: {said}"
 # How the reach command ended where a signal ended it.
 signal = "by a signal"
-reach_unread = "the reach command did not answer one JSON object naming address, consoleToken and token: {why}"
+reach_unread = "the reach command did not answer one JSON object naming address and consoleToken, and token where the service holds one: {why}"
 status = "GET {path} answered {found} where the contract asks {wanted}"
 unanswered = "GET {path} was not answered: {why}"
 not_object = "GET {path} answered no JSON object: {why}"
