@@ -701,9 +701,11 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   every tree the checkout's workspace names outside the repository, the base libraries and the
   sibling crates among them, and the checkout holding the shared versions the declaration names, found
   through this machine's registry, each to its own place under the bench root the same way, so a path a
-  manifest names resolves there as it does here and the quick checks find what they read; over that
-  checkout's copy it then lays the shared versions' file as that checkout's main branch holds it, which a
-  placed run reads as it stands (`docs/checks.md`, 「The quick checks」, `shared-versions`). The bench and
+  manifest names resolves there as it does here and the quick checks find what they read. The copy of
+  the checkout holding the shared versions leaves their file out, and the caller writes it there instead
+  as that checkout's main branch holds it, whole or not at all, so no copy, its own or another run's
+  copying the same tree, puts the working tree's file there; a placed run reads it as it stands
+  (`docs/checks.md`, 「The quick checks」, `shared-versions`). The bench and
   every tree copied are the checkouts the run there knows (「`placed`」). A step that fails ends the run as
   not run, exit code 75, with a line naming the step and what it said.
 - **The run is then one `ssh` command:** the testbed binary there, in the bench, asked the `placed`

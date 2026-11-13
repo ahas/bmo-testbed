@@ -3,8 +3,9 @@
 //! here; an answer of remote makes the bench ready over a stand-in `ssh` that runs its line on this machine,
 //! and the run's output and result come back off its stream. On the placed machine the settings name: the
 //! bench made ready over the same stand-in, the run the testbed's `placed` verb there, a machine that
-//! cannot be reached, or settings that do not read, leaving the run here, and a testbed there that is not
-//! this one's release refused before any bench is made.
+//! cannot be reached, or settings that do not read, leaving the run here, the shared versions laid over their
+//! copy as their main branch holds them, and a testbed there that is not this one's release refused before
+//! any bench is made.
 
 use std::convert::Infallible;
 use std::path::Path;
@@ -294,6 +295,54 @@ fn a_bench_whose_place_stands_as_a_copied_folder_is_made_a_repository_there() {
 
   assert_eq!(done.code, 0, "{}\n{}", done.out, done.err);
   assert_eq!(git(&bench, &["rev-parse", "HEAD"]), git(&repo, &["rev-parse", "HEAD"]));
+}
+
+// "the copy of the checkout holding the shared versions leaves their file out, and the caller writes it there
+// as that checkout's main branch holds it, whole"
+#[test]
+fn the_shared_versions_are_laid_over_their_copy_as_their_main_branch_holds_them() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let repo = dir.join("repo");
+  let shared = dir.join("shared");
+  let ssh = dir.join("ssh");
+  let copy = dir.join("bench/shared");
+  let on_main = "[snapshot]\nrt = \"1.0.0\"\n";
+
+  install(SSH, &ssh);
+  settle(&dir, &ssh, "stand");
+  checkout(&shared, "testbed = 0\nname = \"shared-base\"\n");
+  std::fs::write(shared.join("shared-versions.toml"), on_main).unwrap();
+  git(&shared, &["add", "."]);
+  git(&shared, &["commit", "-q", "-m", "pin"]);
+  git(&shared, &["checkout", "-q", "-b", "release-next"]);
+  std::fs::write(shared.join("shared-versions.toml"), "[snapshot]\nrt = \"1.1.0\"\n").unwrap();
+  git(&shared, &["commit", "-q", "-am", "pin the next"]);
+  std::fs::write(shared.join("shared-versions.toml"), "[snapshot]\nrt = \"1.2.0\"\n").unwrap();
+  std::fs::write(shared.join("other.txt"), "copied").unwrap();
+  checkout(&repo, "testbed = 0\n\n[check.shared_versions]\nrepository = \"shared-base\"\n");
+  std::fs::create_dir_all(dir.join("testbed")).unwrap();
+  std::fs::write(
+    dir.join("testbed/checkouts.toml"),
+    format!("checkouts = [{:?}, {:?}]\n", repo.to_string_lossy(), shared.to_string_lossy()),
+  )
+  .unwrap();
+  // What an earlier copy of the working tree left there.
+  std::fs::create_dir_all(&copy).unwrap();
+  std::fs::write(copy.join("shared-versions.toml"), "[snapshot]\nrt = \"1.2.0\"\n").unwrap();
+
+  let done = on_machine(&repo, &dir, &["run", "--adapter", "plain", "--", "sh", "-c", "exit 0"]);
+
+  assert_eq!(done.code, 0, "{}\n{}", done.out, done.err);
+  assert_eq!(std::fs::read_to_string(copy.join("shared-versions.toml")).unwrap(), on_main);
+  assert_eq!(std::fs::read_to_string(copy.join("other.txt")).unwrap(), "copied");
+  assert!(
+    std::fs::read_dir(&copy).unwrap().all(|entry| !entry
+      .unwrap()
+      .file_name()
+      .to_string_lossy()
+      .starts_with("shared-versions.toml."))
+  );
 }
 
 // "a machine that cannot be reached, or settings that do not read, leave the run here and say so"

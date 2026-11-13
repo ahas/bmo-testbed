@@ -151,7 +151,9 @@ fn far_path(path: &str) -> String {
   }
 }
 
-// The text written to a file on the far machine through one `ssh` command reading it from its input.
+// The text written to a file on the far machine through one `ssh` command reading it from its input: into a
+// file beside it named by the far shell's process, then renamed over it, so a run there reading the file reads
+// the whole of one text or the other.
 fn laid_over(
   program: &str,
   options: &[String],
@@ -162,7 +164,7 @@ fn laid_over(
   let mut child = Command::new(program)
     .args(options)
     .arg(destination)
-    .arg(format!("cat > {}", far_path(file)))
+    .arg(format!("cat > {far}.$$ && mv -f {far}.$$ {far}", far = far_path(file)))
     .stdin(Stdio::piped())
     .stdout(Stdio::piped())
     .stderr(Stdio::piped())
@@ -176,9 +178,18 @@ fn laid_over(
   written.and(done)
 }
 
-fn rsync_over(ssh_command: &str, from: &Path, to: &str) -> std::io::Result<Output> {
-  Command::new("rsync")
-    .args(["-a", "--delete", "--filter=:- .gitignore", "--exclude", ".git", "-e", ssh_command])
+// A tree copied over with `rsync`, the files git ignores, the `.git` directory and each path `kept` names left
+// out, so the copy neither writes nor deletes them.
+fn rsync_over(ssh_command: &str, from: &Path, to: &str, kept: &[String]) -> std::io::Result<Output> {
+  let mut command = Command::new("rsync");
+
+  command.args(["-a", "--delete", "--filter=:- .gitignore", "--exclude", ".git", "-e", ssh_command]);
+
+  for path in kept {
+    command.arg("--exclude").arg(path);
+  }
+
+  command
     .arg(format!("{}/", from.display()))
     .arg(format!("{to}/"))
     .stdin(Stdio::null())
@@ -241,7 +252,7 @@ pub fn ready_bench(bench: &Bench, source: &BenchSource<'_>) -> Result<(), String
   }
 
   if source.open_files {
-    let copied = rsync_over(&ssh_command, checkout, &format!("{}:{}", bench.destination, bench.path));
+    let copied = rsync_over(&ssh_command, checkout, &format!("{}:{}", bench.destination, bench.path), &[]);
 
     if !succeeded(&copied) {
       return Err(failed(&said_of.uncopied, &copied));
@@ -255,7 +266,15 @@ pub fn ready_bench(bench: &Bench, source: &BenchSource<'_>) -> Result<(), String
       return Err(failed(&said_of.failed, &made));
     }
 
-    let copied = rsync_over(&ssh_command, tree, &format!("{}:{}", bench.destination, place));
+    // A file laid over this tree is left out of its copy, with the one its laying writes beside it, so neither
+    // this copy nor another run's copying the same tree there puts the tree's own file back over it.
+    let kept: Vec<String> = source
+      .laid
+      .iter()
+      .filter_map(|(file, _)| file.strip_prefix(&format!("{place}/")))
+      .map(|relative| format!("/{relative}*"))
+      .collect();
+    let copied = rsync_over(&ssh_command, tree, &format!("{}:{}", bench.destination, place), &kept);
 
     if !succeeded(&copied) {
       return Err(fill_marks(
