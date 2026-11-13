@@ -284,12 +284,27 @@ mod sweeping {
     let all = AtomicUsize::new(0);
     let most = AtomicUsize::new(0);
     let order = Mutex::new(Vec::new());
+    // The first three items hold each other until all three have started, however late a place's thread is
+    // scheduled: only a lane that starts with the sweep can be one of them, since the rest have two places
+    // and both are held. The wait is bounded, so a sweep that holds its lane back fails rather than hangs.
+    let entered = Mutex::new(0);
+    let one_entered = Condvar::new();
 
     sweep(&items, &plan(3, &kind), &|item: &&str| {
       order.lock().unwrap().push(*item);
       most.fetch_max(all.fetch_add(1, Ordering::SeqCst) + 1, Ordering::SeqCst);
       running.enter(kind(item));
-      std::thread::sleep(Duration::from_millis(5));
+
+      let mut so_far = entered.lock().unwrap();
+
+      *so_far += 1;
+      one_entered.notify_all();
+      drop(
+        one_entered
+          .wait_timeout_while(so_far, Duration::from_secs(5), |so_far| *so_far < 3)
+          .unwrap(),
+      );
+
       running.leave(kind(item));
       all.fetch_sub(1, Ordering::SeqCst);
     });
