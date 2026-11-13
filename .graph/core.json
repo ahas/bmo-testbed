@@ -116,7 +116,7 @@
   {
     "id": "core/placement",
     "title": "Placement",
-    "what": "Where a run goes: here by default or where its environment sets a variable its declaration names as this machine's, else on another machine the endpoint or settings name, over ssh in a bench made from a remote it reaches where that testbed is this release, and named in its lane here while it lasts.",
+    "what": "Where a run goes: here by default or where its environment sets a variable its declaration names as this machine's, else on another machine over ssh in a bench from a remote it reaches where that testbed is this release; that machine is also laid a release's placed units and read for free disk.",
     "files": [
       "core/src/placement.rs",
       "cli/src/placement.rs",
@@ -132,7 +132,8 @@
     ],
     "aliases": [
       "배치 규칙",
-      "다른 머신에 배치된 실행"
+      "다른 머신에 배치된 실행",
+      "배치 기계"
     ],
     "needs": [
       "core/lanes-and-turn",
@@ -140,8 +141,8 @@
       "deploy/releases-and-rollback",
       "core/silence-watch"
     ],
-    "base": "93e631758d9e668b2cd9cc007838e3a62eedca56",
-    "changed": 1794545338572
+    "base": "2a697e7005d23d4201403e8c2b1af370614661c3",
+    "changed": 1794550656482
   },
   {
     "id": "core/policy-loader",

@@ -3,5 +3,7 @@ Description=Machine upkeep: the prune of the shared Cargo build directory
 # docs/deploy.md, 「The slices」. Every line its units write carries this slice in the journal.
 
 [Install]
-# Linked and nothing more by every deployment (docs/deploy.md, 「The unit links」).
+# Linked and nothing more by every deployment, and laid on the placed machine as well (docs/deploy.md, 「The
+# unit links」).
 X-BMO-Deploy=link
+X-BMO-Placed=link

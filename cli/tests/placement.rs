@@ -9,7 +9,9 @@
 //! here, a run whose environment sets a variable its declaration names as this machine's kept here, the
 //! run standing in its lane here while it lasts, running once the far side says its turn came, that line read
 //! and not passed on, and the `placed` verb there passing its command's output on, telling its own holder
-//! while it comes and ending it whole once it falls silent for the declared limit.
+//! while it comes and ending it whole once it falls silent for the declared limit. The units a release marks
+//! for the machine laid in its user units and their timers started there, and the prune's reading of its free
+//! disk against the settings' floor, sending `placed-disk-low` for each disk below it.
 
 use std::convert::Infallible;
 use std::path::Path;
@@ -18,10 +20,14 @@ use std::sync::{Arc, Mutex};
 use axum::Router;
 use axum::response::sse::{Event, Sse};
 use axum::routing::{get, post};
+use bmo_testbed_cli::cargo::placed_disk;
 use bmo_testbed_cli::placement::{MachinePlacement, MachineSettings, ReadyBench, reachable_remote};
+use bmo_testbed_core::events::Hook;
 use bmo_testbed_core::placement::{PlaceAsk, PlacedRun, Placement, read_placed};
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
+use bmo_testbed_core::policy::prune::PRUNE;
+use bmo_testbed_core::policy::verbs::VERBS;
 use bmo_testbed_core::queue::process_alive;
 use bmo_testbed_core::turn::{Env, Lane, NOT_RUN_EXIT_CODE, lock_path};
 use serde_json::{Value, json};
@@ -487,6 +493,8 @@ fn released(dir: &Path, far: Option<&str>, own: Option<&str>) -> MachinePlacemen
       ssh: vec![ssh.to_string_lossy().into_owned()],
       testbed: bin.join("bmo-testbed").to_string_lossy().into_owned(),
       cargo_target: dir.join("cargo-target").to_string_lossy().into_owned(),
+      disk_free_gigabytes: None,
+      disk_paths: Vec::new(),
     },
     home: dir.to_path_buf(),
     release: own.map(str::to_owned),
@@ -706,4 +714,179 @@ fn the_placed_verb_tells_its_own_holder_while_its_command_writes() {
 
   assert_eq!((done.code, done.out.as_str()), (0, "written\n"), "{}", done.err);
   assert!(std::fs::metadata(&heard).unwrap().modified().unwrap() > long_ago);
+}
+
+// A stand-in `ssh` whose far side is a home of its own under the directory given, with a `systemctl` there
+// that writes down each line it is asked and answers 0.
+fn far_home(dir: &Path) -> std::path::PathBuf {
+  let ssh = dir.join("far-ssh");
+  let bin = dir.join("far-bin");
+
+  std::fs::create_dir_all(&bin).unwrap();
+  install(
+    &format!(
+      "#!/bin/sh\nexport HOME='{home}'\nexport PATH='{bin}':\"$PATH\"\nexec '{ssh}' \"$@\"\n",
+      home = dir.join("far-home").display(),
+      bin = bin.display(),
+      ssh = dir.join("ssh").display(),
+    ),
+    &ssh,
+  );
+  install(SSH, &dir.join("ssh"));
+  install(
+    &format!("#!/bin/sh\necho \"$*\" >> '{}'\n", dir.join("systemctl.log").display()),
+    &bin.join("systemctl"),
+  );
+  ssh
+}
+
+// "written whole under that machine's ~/.config/systemd/user/ and renamed over whatever stood at its name
+// there, then that machine's user service manager reloaded and each laid timer enabled and started"
+#[test]
+fn the_units_marked_for_the_machine_are_laid_in_its_user_units_and_their_timers_started_there() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let mut machine = released(&dir, None, None);
+  let units_there = dir.join("far-home/.config/systemd/user");
+  let units = [
+    ("sweep.timer".to_owned(), "[Timer]\nOnCalendar=daily\n".to_owned()),
+    ("sweep.service".to_owned(), "[Service]\nType=oneshot\n".to_owned()),
+  ];
+
+  machine.settings.ssh = vec![far_home(&dir).to_string_lossy().into_owned()];
+  std::fs::create_dir_all(&units_there).unwrap();
+  std::os::unix::fs::symlink(dir.join("elsewhere.timer"), units_there.join("sweep.timer")).unwrap();
+
+  assert_eq!(machine.lay_units(&units, &["sweep.timer".to_owned()]), Ok(()));
+
+  for (name, text) in &units {
+    let at = units_there.join(name);
+
+    assert!(!std::fs::symlink_metadata(&at).unwrap().file_type().is_symlink(), "{name}");
+    assert_eq!(&std::fs::read_to_string(at).unwrap(), text);
+  }
+
+  assert_eq!(
+    std::fs::read_to_string(dir.join("systemctl.log")).unwrap(),
+    "--user daemon-reload\n--user enable --now sweep.timer\n"
+  );
+
+  let refusing = dir.join("refusing-ssh");
+
+  install("#!/bin/sh\necho 'no route to stand' >&2\nexit 255\n", &refusing);
+  machine.settings.ssh = vec![refusing.to_string_lossy().into_owned()];
+
+  assert_eq!(machine.lay_units(&units, &[]), Err("no route to stand".to_owned()));
+}
+
+// "disk_free_gigabytes: 50, the prune policy's ... Not negative"
+#[test]
+fn the_disk_floor_is_the_policy_s_unless_the_settings_name_one_and_a_negative_one_does_not_read() {
+  let dir = tempfile::tempdir().unwrap();
+  let settings = |text: &str| {
+    std::fs::create_dir_all(dir.path().join("env")).unwrap();
+    std::fs::write(dir.path().join("env/placement.toml"), text).unwrap();
+    MachineSettings::read(dir.path()).unwrap()
+  };
+  let named =
+    settings("destination = \"stand\"\ndisk_free_gigabytes = 2.5\ndisk_paths = [\"/mnt/c\"]\n").unwrap();
+
+  assert_eq!(named.disk_floor_bytes(), 2_500_000_000);
+  assert_eq!(named.disk_paths(), ["~/.local/share/bmo/cargo-target", "/mnt/c"]);
+  assert_eq!(
+    settings("destination = \"stand\"\n").unwrap().disk_floor_bytes(),
+    (PRUNE.placed_disk_free_gigabytes * 1e9) as u64
+  );
+  assert!(
+    settings("destination = \"stand\"\ndisk_free_gigabytes = -1\n")
+      .unwrap_err()
+      .contains(&LANES.placed.negative_floor)
+  );
+}
+
+// A hook that writes down the name and the payload of each event it is handed.
+fn writing_hook(dir: &Path) -> Hook {
+  let script = dir.join("hook");
+
+  install(
+    &format!(
+      "#!/bin/sh\necho \"$1\" >> '{names}'\ncat >> '{payloads}'\necho >> '{payloads}'\n",
+      names = dir.join("events").display(),
+      payloads = dir.join("payloads").display(),
+    ),
+    &script,
+  );
+  Hook {
+    command: Some(script.to_string_lossy().into_owned()),
+    time: std::time::Duration::from_secs(60),
+    repository: None,
+    root: None,
+  }
+}
+
+// "A disk below the settings' disk_free_gigabytes ... sends a placed-disk-low event naming the machine, the
+// floor and each path below it"; "a path whose free space does not read is said on a line"; "a dry run reads
+// and says the free space and sends nothing"
+#[test]
+fn a_disk_of_the_placed_machine_below_its_floor_sends_placed_disk_low_and_one_above_it_sends_nothing() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let mut machine = released(&dir, None, None);
+  let target = machine.settings.cargo_target.clone();
+  let gone = dir.join("gone").to_string_lossy().into_owned();
+  let hook = writing_hook(&dir);
+  let said = &VERBS.prune;
+
+  std::fs::create_dir_all(&target).unwrap();
+  machine.settings.disk_paths = vec![gone.clone()];
+  machine.settings.disk_free_gigabytes = Some(0.0);
+
+  let above = placed_disk(&machine, true, &hook);
+
+  assert!(above[1].starts_with(&format!("  {target}: ")), "{above:?}");
+  assert!(!above[1].contains("below"), "{above:?}");
+  assert_eq!(above[2], fill_marks(&said.placed_unread, &[("path", &gone)]));
+  assert!(!dir.join("events").exists());
+
+  // A floor no disk reaches.
+  machine.settings.disk_free_gigabytes = Some(1e9);
+
+  let dry = placed_disk(&machine, false, &hook);
+
+  assert!(dry[1].ends_with(" free, below the floor"), "{dry:?}");
+  assert!(!dir.join("events").exists());
+
+  placed_disk(&machine, true, &hook);
+
+  let payload: Value =
+    serde_json::from_str(std::fs::read_to_string(dir.join("payloads")).unwrap().trim()).unwrap();
+
+  assert_eq!(std::fs::read_to_string(dir.join("events")).unwrap(), "placed-disk-low\n");
+  assert_eq!(payload["detail"]["machine"], "machine-2");
+  assert_eq!(payload["detail"]["floor_bytes"], machine.settings.disk_floor_bytes());
+  assert_eq!(payload["detail"]["disks"].as_array().unwrap().len(), 1);
+  assert_eq!(payload["detail"]["disks"][0]["path"], target.as_str());
+  assert!(payload["detail"]["disks"][0]["free_bytes"].as_u64().unwrap() > 0);
+}
+
+// "a machine that cannot be reached is said on one line, its disk not read"
+#[test]
+fn a_placed_machine_out_of_reach_has_its_disk_said_unread_and_sends_nothing() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let mut machine = released(&dir, None, None);
+  let refusing = dir.join("refusing-ssh");
+  let hook = writing_hook(&dir);
+
+  install("#!/bin/sh\necho 'no route to stand' >&2\nexit 255\n", &refusing);
+  machine.settings.ssh = vec![refusing.to_string_lossy().into_owned()];
+  machine.settings.disk_free_gigabytes = Some(1e9);
+
+  let lines = placed_disk(&machine, true, &hook);
+
+  assert_eq!(
+    lines[1..],
+    [fill_marks(&VERBS.prune.placed_unreached, &[("said", "no route to stand")])]
+  );
+  assert!(!dir.join("events").exists());
 }

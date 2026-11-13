@@ -13,6 +13,7 @@ pub struct Prune {
   pub deploy_build_days: i64,
   pub shared_ceiling_bytes: u64,
   pub checkout_ceiling_bytes: u64,
+  pub placed_disk_free_gigabytes: f64,
 }
 
 super::part!(pub PRUNE: Prune = "prune.toml");

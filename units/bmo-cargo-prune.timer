@@ -9,5 +9,7 @@ RandomizedDelaySec=600
 
 [Install]
 WantedBy=timers.target
-# Linked with its service, enabled and started by every deployment (docs/deploy.md, 「The unit links」).
+# Linked with its service, enabled and started by every deployment, and laid with its service, enabled and
+# started on the placed machine as well (docs/deploy.md, 「The unit links」).
 X-BMO-Deploy=timer
+X-BMO-Placed=timer

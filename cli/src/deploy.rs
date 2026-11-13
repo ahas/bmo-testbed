@@ -18,8 +18,8 @@ use bmo_testbed_core::turn::{Env, FRONT_VARIABLE, NOT_RUN_EXIT_CODE, harness_pid
 use bmo_testbed_core::verb::{REFUSED_EXIT_CODE, data_root};
 use bmo_testbed_deploy::console::{LayerPin, PinnedLayer};
 use bmo_testbed_deploy::deployment::{
-  BuildAsk, DeployAsk, DeployPlaces, Gate, GateAsk, GateOutcome, GateStep, Machine, Passed, SuitePassed,
-  deploy as deploy_run,
+  BuildAsk, DeployAsk, DeployPlaces, Gate, GateAsk, GateOutcome, GateStep, LaidUnits, Machine, Passed,
+  SuitePassed, deploy as deploy_run,
 };
 use bmo_testbed_deploy::progress::DEPLOY_PROGRESS_VARIABLE;
 use bmo_testbed_deploy::unit::{
@@ -278,6 +278,10 @@ impl Gate for PlacedGate<'_> {
     }
 
     Some(self.machine.fetch_binaries(&bench, ask.profile, ask.binaries, ask.built))
+  }
+
+  fn lay_units(&self, ask: &LaidUnits<'_>) -> Option<(String, Result<(), String>)> {
+    Some((self.machine.settings.label().to_owned(), self.machine.lay_units(ask.units, ask.timers)))
   }
 }
 

@@ -86,6 +86,7 @@ running = "testbed: running on {machine} in {bench}"
 # place there; the binaries that could not be read back; and the
 # connection that broke once the run had begun.
 unsettled = "testbed: the placement settings {file} do not read ({why}); running here"
+negative_floor = "disk_free_gigabytes takes a number of gigabytes of 0 or more"
 unreached = "testbed: the placed machine {machine} cannot be reached ({said}); running here"
 # A run placed because this machine is full finds every seat on the placed machine held or waited for, or no
 # answer saying otherwise; it waits for a seat here instead.

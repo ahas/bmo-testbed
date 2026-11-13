@@ -152,6 +152,13 @@ pub struct PruneWords {
   pub build_counts: String,
   pub build_not_removed: String,
   pub registry_unread: String,
+  pub placed_heading: String,
+  pub placed_free: String,
+  pub placed_low: String,
+  pub placed_unread: String,
+  pub placed_unreached: String,
+  pub placed_disk: String,
+  pub placed_low_summary: String,
 }
 
 #[derive(Debug, Deserialize)]

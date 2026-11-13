@@ -8,10 +8,11 @@ use std::path::{Path, PathBuf};
 use bmo_testbed_core::policy::deploy::DEPLOY;
 use bmo_testbed_core::policy::fill_shown;
 use bmo_testbed_deploy::tree::{
-  DeployRecord, UnitInstall, UnitLink, UnitMark, UnitRelink, backup_name, backup_stamp, base_name,
-  binary_restarts, bot_unit, link_units, mark_built_from, marked_units, outside_relinks,
-  read_deploy_record, relink_units, retired_units, set_aside_plain_units, timer_service, tree_fault,
-  unit_link_plan, unit_links, unit_program, units_to_link, user_unit_dir_from, write_deploy_record,
+  DeployRecord, PlacedMark, PlacedUnits, UnitInstall, UnitLink, UnitMark, UnitRelink, backup_name,
+  backup_stamp, base_name, binary_restarts, bot_unit, link_units, mark_built_from, marked_units,
+  outside_relinks, placed_units, read_deploy_record, relink_units, retired_units, set_aside_plain_units,
+  timer_service, tree_fault, unit_link_plan, unit_links, unit_program, units_to_link, user_unit_dir_from,
+  write_deploy_record,
 };
 use chrono::TimeZone as _;
 
@@ -372,6 +373,40 @@ fn a_unit_something_else_starts_carries_the_link_mark_and_only_it_is_linked_alon
   assert_eq!(
     marked_units(&tracked, &|path| files[path].clone(), ".service", UnitMark::Link),
     ["down-alert.service"]
+  );
+}
+
+// "a timer, with the service of its own name beside it, laid"; "a service or a slice, laid and nothing more"
+#[test]
+fn the_placed_machine_lays_its_marked_timers_with_their_services_then_the_units_marked_to_lay_alone() {
+  let (tracked, files) = reading(&[
+    (
+      "units/sweep.timer",
+      "[Install]\nWantedBy=timers.target\nX-BMO-Deploy=timer\nX-BMO-Placed=timer\n",
+    ),
+    ("units/sweep.service", "[Service]\nType=oneshot\n"),
+    ("units/lone.timer", "[Install]\nX-BMO-Placed=timer\n"),
+    ("units/upkeep.slice", "[Install]\nX-BMO-Deploy=link\nX-BMO-Placed=link\n"),
+    ("units/alert.service", "[Install]\n  X-BMO-Placed=link  \n"),
+    ("units/snapshot.timer", "[Install]\nX-BMO-Deploy=timer\n"),
+    ("units/snapshot.service", "[Service]\nType=oneshot\n"),
+    ("units/helper.service", "[Install]\n# X-BMO-Placed=link is named here, not set\n"),
+    ("docs/deploy.md", "X-BMO-Placed=timer\n"),
+  ]);
+
+  assert_eq!(PlacedMark::Timer.line(), "X-BMO-Placed=timer");
+  assert_eq!(
+    placed_units(&tracked, &|path| files[path].clone()),
+    PlacedUnits {
+      laid: names(&[
+        "units/lone.timer",
+        "units/sweep.timer",
+        "units/sweep.service",
+        "units/alert.service",
+        "units/upkeep.slice",
+      ]),
+      timers: names(&["lone.timer", "sweep.timer"]),
+    }
   );
 }
 

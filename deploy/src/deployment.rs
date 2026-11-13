@@ -53,9 +53,9 @@ use crate::rollback::{
 use crate::run::{Ran, run_quiet, shell_words, words};
 use crate::tree::{
   DEPLOY_LOG, DEPLOY_RECORD, DeployRecord, UnitMark, backup_name, backup_stamp, base_name, binary_restarts,
-  bot_unit, link_units, mark_built_from, marked_units, outside_relinks, read_deploy_record, relink_units,
-  retired_units, set_aside_plain_units, short, timer_service, tree_fault, unit_link_plan, unit_links,
-  units_to_link, user_unit_dir_from, write_deploy_record,
+  bot_unit, link_units, mark_built_from, marked_units, outside_relinks, placed_units, read_deploy_record,
+  relink_units, retired_units, set_aside_plain_units, short, timer_service, tree_fault, unit_link_plan,
+  unit_links, units_to_link, user_unit_dir_from, write_deploy_record,
 };
 use crate::unit::{BACKUP_SLICE, first_chars, move_to_cgroup, own_cgroup, upload_unit_name};
 
@@ -235,14 +235,27 @@ pub struct BuildAsk<'a> {
   pub built: &'a Path,
 }
 
+/// The units a live release marks for the placed machine, asked of the gate: each by its unit name with the
+/// release's text of it, and the timers to start there (docs/deploy.md, 「The unit links」).
+pub struct LaidUnits<'a> {
+  pub units: &'a [(String, String)],
+  pub timers: &'a [String],
+}
+
 /// The gate a deployment passes before anything changes: the declared static check and the suite; and the
-/// Cargo release build, where the gate's machine builds elsewhere.
+/// Cargo release build and the units marked for it, where the gate's machine is another.
 pub trait Gate {
   fn pass(&self, ask: &GateAsk<'_>) -> GateOutcome;
 
   /// The Cargo release build run elsewhere, its binaries brought into the directory asked, or none where
   /// the build runs here.
   fn build(&self, _: &BuildAsk<'_>) -> Option<Result<(), String>> {
+    None
+  }
+
+  /// The units laid on the gate's machine and its timers started there: that machine's label, with what
+  /// it said where they were not; none where the gate's machine is this one.
+  fn lay_units(&self, _: &LaidUnits<'_>) -> Option<(String, Result<(), String>)> {
     None
   }
 
@@ -2025,6 +2038,29 @@ pub async fn deploy(
     .flatten()
     .collect(),
   );
+
+  // The units the release marks for the placed machine, laid there; what fails there is a warning.
+  let placed = placed_units(&files, &read);
+
+  if !placed.laid.is_empty() {
+    let units: Vec<(String, String)> =
+      placed.laid.iter().map(|path| (base_name(path), read(path))).collect();
+    let names = units.iter().map(|(name, _)| name.as_str()).collect::<Vec<_>>().join(", ");
+
+    match gate.lay_units(&LaidUnits {
+      units: &units,
+      timers: &placed.timers,
+    }) {
+      None => {}
+      Some((machine, Ok(()))) => {
+        run.say(&fill_marks(&said.placed_laid, &[("names", &names), ("machine", &machine)]));
+      }
+      Some((machine, Err(why))) => run.warn(fill_marks(
+        &said.placed_unlaid,
+        &[("names", &names), ("machine", &machine), ("said", &why)],
+      )),
+    }
+  }
 
   // 13. The backup upload, in a unit of its own, not waited on.
   let remote = repo.declaration.deploy.backup.as_ref().and_then(|backup| backup.remote.as_ref());

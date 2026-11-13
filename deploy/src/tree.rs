@@ -293,14 +293,51 @@ impl UnitMark {
   pub fn line(self) -> String {
     format!("{DEPLOY_MARK_KEY}={}", self.word())
   }
+}
 
-  // systemd ignores keys beginning `X-` and shows them through no command, so the mark is found as the
-  // one exact line it is, the file not otherwise read.
-  fn carried_by(self, text: &str) -> bool {
-    let line = self.line();
+/// The key a unit file carries in its `[Install]` section to be laid on the placed machine as well, before
+/// its mark (docs/deploy.md, 「The unit links」).
+pub const PLACED_MARK_KEY: &str = "X-BMO-Placed";
 
-    text.lines().any(|one| one.trim() == line)
+/// What a unit file's placed mark asks of every deployment where a placed machine is named: laid there as a
+/// timer with its service and started, or laid alone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlacedMark {
+  Timer,
+  Link,
+}
+
+impl PlacedMark {
+  /// The mark's own word, as the line after the key names it.
+  pub fn word(self) -> &'static str {
+    match self {
+      Self::Timer => "timer",
+      Self::Link => "link",
+    }
   }
+
+  /// The one line a unit file carrying the mark holds.
+  pub fn line(self) -> String {
+    format!("{PLACED_MARK_KEY}={}", self.word())
+  }
+}
+
+// Whether a unit file's text holds a mark's line, found as the one exact line it is, since systemd ignores
+// keys beginning `X-` and shows them through no command.
+fn carries(text: &str, line: &str) -> bool {
+  text.lines().any(|one| one.trim() == line)
+}
+
+// The tracked files of a tree ending in a suffix and holding a mark's line, in name order.
+fn marked_by(tracked: &[String], read: &dyn Fn(&str) -> String, suffix: &str, line: &str) -> Vec<String> {
+  let mut found: Vec<String> = tracked
+    .iter()
+    .filter(|path| path.ends_with(suffix) && carries(&read(path), line))
+    .cloned()
+    .collect();
+
+  found.sort();
+  found
 }
 
 /// The tracked files of a tree ending in a suffix and carrying a mark, in name order.
@@ -310,14 +347,45 @@ pub fn marked_units(
   suffix: &str,
   mark: UnitMark,
 ) -> Vec<String> {
-  let mut found: Vec<String> = tracked
-    .iter()
-    .filter(|path| path.ends_with(suffix) && mark.carried_by(&read(path)))
-    .cloned()
-    .collect();
+  marked_by(tracked, read, suffix, &mark.line())
+}
 
-  found.sort();
-  found
+/// The units a tree marks for the placed machine: the files laid there, by their paths in the tree, each
+/// timer followed by the tracked service of its own name, then the services and slices laid alone; and the
+/// timers started there, by their unit names.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct PlacedUnits {
+  pub laid: Vec<String>,
+  pub timers: Vec<String>,
+}
+
+/// The units a tree's tracked files mark for the placed machine.
+pub fn placed_units(tracked: &[String], read: &dyn Fn(&str) -> String) -> PlacedUnits {
+  let timers = marked_by(tracked, read, ".timer", &PlacedMark::Timer.line());
+  let mut laid: Vec<String> = Vec::new();
+
+  for timer in &timers {
+    laid.push(timer.clone());
+
+    let service = timer_service(timer);
+
+    if tracked.contains(&service) {
+      laid.push(service);
+    }
+  }
+
+  for suffix in [".service", ".slice"] {
+    for path in marked_by(tracked, read, suffix, &PlacedMark::Link.line()) {
+      if !laid.contains(&path) {
+        laid.push(path);
+      }
+    }
+  }
+
+  PlacedUnits {
+    laid,
+    timers: timers.iter().map(|timer| base_name(timer)).collect(),
+  }
 }
 
 /// The unit whose health a deployment waits on: the one service of a tree marked `bot`, by its unit name;

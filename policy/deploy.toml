@@ -158,6 +158,10 @@ kept_pinned = "kept the release {release}, which the processes {pids} stand in"
 pinned_summary = "{count} releases stand after the prune, the ones past the policy's kept by processes standing in them"
 retired_trees = "took away the retired trees {names}"
 warning = "WARNING: {warning}"
+# The units the release marks for the placed machine (docs/deploy.md, 「The unit links」): {names} the units,
+# {machine} the machine's label and {said} what the machine or `ssh` said.
+placed_laid = "laid {names} on the placed machine {machine}, its timers started"
+placed_unlaid = "{names} could not be laid on the placed machine {machine}: {said}; the next deployment tries again"
 upload_started = "the backup upload runs as {unit}"
 upload_failed = "the backup upload could not be started: {said}"
 live = "{commit} is live, with {backup} behind it"

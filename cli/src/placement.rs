@@ -16,6 +16,7 @@ use bmo_testbed_core::declaration::Repository;
 use bmo_testbed_core::placement::{PlaceAsk, PlacedRun, Placement};
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
+use bmo_testbed_core::policy::prune::PRUNE;
 use bmo_testbed_core::policy::quick_checks::QUICK_CHECKS;
 use bmo_testbed_core::silence::{Heard, Silence, pass_on};
 use bmo_testbed_core::turn::{
@@ -468,7 +469,7 @@ impl Placement for HttpPlacement {
 
 /// The placed machine the settings name (docs/boundary.md, 「The placed machine」), read from
 /// `<data root>/env/placement.toml`.
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct MachineSettings {
   pub destination: String,
@@ -482,7 +483,17 @@ pub struct MachineSettings {
   pub testbed: String,
   #[serde(default = "MachineSettings::cargo_target")]
   pub cargo_target: String,
+  /// The free space in gigabytes below which a disk there sends `placed-disk-low`; the prune policy's where
+  /// none is named.
+  #[serde(default)]
+  pub disk_free_gigabytes: Option<f64>,
+  /// The paths there whose disks' free space is read beside the build directory's.
+  #[serde(default)]
+  pub disk_paths: Vec<String>,
 }
+
+/// Where the placed machine keeps the user units laid on it, under its home.
+pub const FAR_UNIT_DIR: &str = "~/.config/systemd/user";
 
 /// The settings file's name under the data root's `env/`.
 pub const PLACEMENT_SETTINGS: &str = "placement.toml";
@@ -505,9 +516,38 @@ impl MachineSettings {
     let file = data_root.join("env").join(PLACEMENT_SETTINGS);
     let text = std::fs::read_to_string(&file).ok()?;
 
-    Some(toml::from_str::<Self>(&text).map_err(|why| {
-      fill_marks(&LANES.placed.unsettled, &[("file", &file.to_string_lossy()), ("why", &why.to_string())])
-    }))
+    let unsettled =
+      |why: &str| fill_marks(&LANES.placed.unsettled, &[("file", &file.to_string_lossy()), ("why", why)]);
+
+    Some(
+      toml::from_str::<Self>(&text)
+        .map_err(|why| unsettled(&why.to_string()))
+        .and_then(|settings| match settings.disk_free_gigabytes {
+          Some(floor) if !floor.is_finite() || floor < 0.0 => Err(unsettled(&LANES.placed.negative_floor)),
+          _ => Ok(settings),
+        }),
+    )
+  }
+
+  /// The free space below which a disk there sends `placed-disk-low`, in bytes.
+  pub fn disk_floor_bytes(&self) -> u64 {
+    let gigabytes = self.disk_free_gigabytes.unwrap_or(PRUNE.placed_disk_free_gigabytes);
+
+    (gigabytes * 1e9) as u64
+  }
+
+  /// The paths there whose disks' free space is read: the build directory's, then each the settings name,
+  /// once each.
+  pub fn disk_paths(&self) -> Vec<String> {
+    let mut paths = vec![self.cargo_target.clone()];
+
+    for path in &self.disk_paths {
+      if !paths.contains(path) {
+        paths.push(path.clone());
+      }
+    }
+
+    paths
   }
 
   /// The label the lines name the machine by.
@@ -594,6 +634,77 @@ impl MachinePlacement {
 
     command.args(options).arg(&self.settings.destination).stdin(Stdio::null());
     command
+  }
+
+  /// The units a release marks for this machine laid there (docs/deploy.md, 「The unit links」): each written
+  /// whole under that machine's user units and renamed over whatever stood at its name, then its service
+  /// manager reloaded and each timer enabled and started; what that machine or `ssh` said where a step failed.
+  pub fn lay_units(&self, units: &[(String, String)], timers: &[String]) -> Result<(), String> {
+    let (program, options) = self.settings.ssh.split_first().map_or(("ssh", &[][..]), |(p, o)| (p, o));
+    let made = self.ssh().arg(format!("mkdir -p {}", far_path(FAR_UNIT_DIR))).output();
+
+    if !succeeded(&made) {
+      return Err(said(&made));
+    }
+
+    for (name, text) in units {
+      let file = format!("{FAR_UNIT_DIR}/{name}");
+      let laid = laid_over(program, options, &self.settings.destination, &file, text);
+
+      if !succeeded(&laid) {
+        return Err(said(&laid));
+      }
+    }
+
+    let started = std::iter::once("systemctl --user daemon-reload".to_owned())
+      .chain(timers.iter().map(|timer| format!("systemctl --user enable --now {}", quoted(timer))))
+      .collect::<Vec<_>>()
+      .join(" && ");
+    let done = self.ssh().arg(started).output();
+
+    if succeeded(&done) { Ok(()) } else { Err(said(&done)) }
+  }
+
+  /// The free space of each disk path there (docs/deploy.md, 「The Cargo build directory」), in the settings'
+  /// order, none for a path whose free space does not read; what `ssh` said where the machine was not
+  /// reached.
+  pub fn disk_free(&self) -> Result<Vec<(String, Option<u64>)>, String> {
+    let paths = self.settings.disk_paths();
+    // One line a path, in order: the blocks free to an account and the block size, or a dash where `stat`
+    // cannot read the path. The format is this command's own, two numbers, not a general one.
+    let line = paths
+      .iter()
+      .map(|path| {
+        format!("{{ stat --file-system --format='%a %S' -- {} 2>/dev/null || echo -; }}", far_path(path))
+      })
+      .collect::<Vec<_>>()
+      .join("; ");
+    let read = self.ssh().arg(line).output();
+
+    if !succeeded(&read) {
+      return Err(said(&read));
+    }
+
+    let out = read.map(|done| String::from_utf8_lossy(&done.stdout).into_owned()).unwrap_or_default();
+    let mut lines = out.lines();
+
+    Ok(
+      paths
+        .into_iter()
+        .map(|path| {
+          let free = lines.next().and_then(|line| {
+            let mut numbers = line.split_whitespace().map(str::parse::<u64>);
+
+            match (numbers.next(), numbers.next(), numbers.next()) {
+              (Some(Ok(blocks)), Some(Ok(size)), None) => blocks.checked_mul(size),
+              _ => None,
+            }
+          });
+
+          (path, free)
+        })
+        .collect(),
+    )
   }
 
   /// Whether a seat of the wide lane there is free now with nobody waiting for one, as that machine's

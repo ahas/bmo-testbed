@@ -11,11 +11,12 @@ use bmo_testbed_client::{DeploymentState, PageQuery, RestartsQuery, TestRun, Tes
 use bmo_testbed_core::declaration::Repository;
 use bmo_testbed_core::events::Hook;
 use bmo_testbed_core::policy::deploy::DEPLOY;
+use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::turn::Env;
 use bmo_testbed_deploy::console::{ConsoleHands, MachineConsole};
 use bmo_testbed_deploy::deployment::{
-  BuildAsk, DeployAsk, DeployHands, DeployPlaces, Gate, GateAsk, GateOutcome, Machine, StepAsk, StepRan,
-  SuitePassed, deploy, major_change, release_build, version_major, workspace_binaries,
+  BuildAsk, DeployAsk, DeployHands, DeployPlaces, Gate, GateAsk, GateOutcome, LaidUnits, Machine, StepAsk,
+  StepRan, SuitePassed, deploy, major_change, release_build, version_major, workspace_binaries,
 };
 use bmo_testbed_deploy::progress::{Outcome, read_deploy_progress};
 use bmo_testbed_deploy::release::{LiveProcess, release_dir};
@@ -173,6 +174,31 @@ impl Gate for BuiltElsewhere {
     std::fs::create_dir_all(ask.built).unwrap();
     std::fs::write(ask.built.join("app"), "built elsewhere").unwrap();
     Some(Ok(()))
+  }
+}
+
+// One ask to lay units: each unit's name with its text, and the timers to start.
+type LayAsked = (Vec<(String, String)>, Vec<String>);
+
+// A gate whose machine is another, which passes, keeps the units it is asked to lay there and the timers to
+// start, and answers that machine's label with the failure given.
+#[derive(Default)]
+struct LaysElsewhere {
+  asked: RefCell<Vec<LayAsked>>,
+  fails: Option<String>,
+}
+
+impl Gate for LaysElsewhere {
+  fn pass(&self, _: &GateAsk<'_>) -> GateOutcome {
+    GateOutcome {
+      passed: true,
+      ..GateOutcome::default()
+    }
+  }
+
+  fn lay_units(&self, ask: &LaidUnits<'_>) -> Option<(String, Result<(), String>)> {
+    self.asked.borrow_mut().push((ask.units.to_vec(), ask.timers.to_vec()));
+    Some(("machine-2".to_owned(), self.fails.clone().map_or(Ok(()), Err)))
   }
 }
 
@@ -628,6 +654,47 @@ fn a_release_build_the_gate_makes_elsewhere_is_placed_from_what_it_brought_back(
     [(head, "release".to_owned(), vec!["app".to_owned()])],
     "the gate is asked the commit, the profile and the workspace's binaries"
   );
+}
+
+// "every deployment lays these units there once it is live"; "a unit that cannot be laid or a timer started
+// there, is a warning naming the machine and what it said, and the deployment goes on"
+#[test]
+fn a_live_release_lays_the_units_it_marks_for_the_placed_machine_and_a_failure_there_is_a_warning() {
+  let scene = Scene::new();
+  let timer = "[Timer]\nOnCalendar=daily\n\n[Install]\nX-BMO-Deploy=timer\nX-BMO-Placed=timer\n";
+  let service = "[Service]\nType=oneshot\nExecStart=%h/live/deploy/bin/app\n";
+
+  scene.write("units/sweep.timer", timer);
+  scene.write("units/sweep.service", service);
+  scene.push("a timer the placed machine keeps too");
+
+  let hands = Hands::default();
+  let gate = LaysElsewhere {
+    fails: Some("connection closed".to_owned()),
+    ..LaysElsewhere::default()
+  };
+  let code = scene.run_with(&DeployAsk::default(), &gate, &hands, &scene.env());
+  let unlaid = fill_marks(
+    &DEPLOY.run.placed_unlaid,
+    &[
+      ("names", "sweep.timer, sweep.service"),
+      ("machine", "machine-2"),
+      ("said", "connection closed"),
+    ],
+  );
+
+  assert_eq!(code, 0, "{}", said(&hands));
+  assert_eq!(
+    gate.asked.borrow().as_slice(),
+    [(
+      vec![
+        ("sweep.timer".to_owned(), timer.to_owned()),
+        ("sweep.service".to_owned(), service.to_owned())
+      ],
+      vec!["sweep.timer".to_owned()]
+    )]
+  );
+  assert!(said(&hands).contains(&unlaid), "{}", said(&hands));
 }
 
 // "the records stand under the deploy root, and a data root another deployment records into is left alone"

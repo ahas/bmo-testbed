@@ -29,9 +29,10 @@ use bmo_testbed_suite::prune::{
 };
 use serde_json::json;
 
-use crate::placement_of;
+use crate::placement::MachinePlacement;
 use crate::said::Said;
 use crate::words::{BINARY, PruneArgs};
+use crate::{home_of, placement_of};
 
 /// `cargo`: Cargo's own code, 75 where the turn did not come. A command that tests, checks or lints, started
 /// while every seat of this machine's wide lane is taken, is placed first where the machine's placement sends it
@@ -340,12 +341,82 @@ pub fn prune_in(args: &PruneArgs, root: &Path, deployments: &Deployments, hook: 
   answer
 }
 
+/// The placed machine's free disk read against its floor (docs/deploy.md, 「The Cargo build directory」): what
+/// the prune says of it, and, where `send` holds, a `placed-disk-low` event to the hook naming each disk there
+/// below the floor.
+pub fn placed_disk(machine: &MachinePlacement, send: bool, hook: &Hook) -> Vec<String> {
+  let said = &VERBS.prune;
+  let label = machine.settings.label();
+  let floor = machine.settings.disk_floor_bytes();
+  let mut lines =
+    vec![fill_marks(&said.placed_heading, &[("machine", label), ("floor", &gigabytes(floor))])];
+  let readings = match machine.disk_free() {
+    Ok(readings) => readings,
+    Err(why) => {
+      lines.push(fill_marks(&said.placed_unreached, &[("said", &why)]));
+      return lines;
+    }
+  };
+  let mut low: Vec<(String, u64)> = Vec::new();
+
+  for (path, free) in readings {
+    let Some(free) = free else {
+      lines.push(fill_marks(&said.placed_unread, &[("path", &path)]));
+      continue;
+    };
+    let shown = [("path", path.as_str()), ("free", &gigabytes(free))];
+
+    if free < floor {
+      lines.push(fill_marks(&said.placed_low, &shown));
+      low.push((path, free));
+    } else {
+      lines.push(fill_marks(&said.placed_free, &shown));
+    }
+  }
+
+  if send && !low.is_empty() {
+    let disks = low
+      .iter()
+      .map(|(path, free)| fill_marks(&said.placed_disk, &[("path", path), ("free", &gigabytes(*free))]))
+      .collect::<Vec<_>>()
+      .join(", ");
+
+    hook.send(&Event {
+      name: "placed-disk-low",
+      commit: None,
+      summary: fill_marks(
+        &said.placed_low_summary,
+        &[("machine", label), ("floor", &gigabytes(floor)), ("disks", &disks)],
+      ),
+      detail: json!({
+        "machine": label,
+        "floor_bytes": floor,
+        "disks": low
+          .iter()
+          .map(|(path, free)| json!({ "path": path, "free_bytes": free }))
+          .collect::<Vec<_>>(),
+      }),
+    });
+  }
+
+  lines
+}
+
 /// `prune` over the shared build directory and the build trees of the deployments the machine's registry
-/// names, its events to the hook the environment or the repository it is run in names.
+/// names, then the placed machine's free disk read where the settings name one, its events to the hook the
+/// environment or the repository it is run in names.
 pub fn prune(args: &PruneArgs) -> u8 {
   let env = process_env();
   let repo = Repository::read(&std::env::current_dir().unwrap_or_default()).ok();
   let deployments = Deployments::of_registry(&registry_path(&data_root(), &env), &env);
+  let hook = Hook::of(repo.as_ref(), &env);
+  let mut answer = prune_in(args, &cargo_target_root(), &deployments, &hook);
 
-  prune_in(args, &cargo_target_root(), &deployments, &Hook::of(repo.as_ref(), &env)).print()
+  if !args.all
+    && let Some(machine) = MachinePlacement::named(&data_root(), &home_of(&env))
+  {
+    answer.out.extend(placed_disk(&machine, !args.dry_run, &hook));
+  }
+
+  answer.print()
 }

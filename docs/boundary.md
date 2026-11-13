@@ -288,6 +288,8 @@ bmo-testbed prune --all
   each of Cargo's build locks until the build holding it lets go, and removes the target directory of
   every deployment's build tree whose last deployment is three days old (`docs/deploy.md`, 「The
   releases」). Exits 2 for a unit span of a day or less or a disk that keeps no access times.
+- Then reads the free disk of the placed machine the settings name and sends `placed-disk-low` where a
+  disk there stands below the floor (「The placed machine」); `--all` reads none.
 
 ### `full`
 
@@ -495,6 +497,7 @@ keep (`docs/deploy.md`, 「The unit links」).
 | `restore-drill-failed` | `verb` (`drill`), `failures`, each with `step`, `target` and `said`, a count mismatch naming its database, table and both counts |
   | `releases-pinned` | `releases`, each with `release` and `processes`, each with `pid`, `unit` and `command` |
   | `cargo-target-over-ceiling` | `bytes`, `ceiling_bytes`, `checkouts` |
+  | `placed-disk-low` | `machine` (the placed machine's label), `floor_bytes`, `disks`, each with `path` (as the settings name it) and `free_bytes` |
   | `full-suite-failed` | `head`, `log`, `step` (the failing setup or static step, or null), `failures`, each with `unit` and `package` |
   | `suite-flaky` | `tests`, each with `test` and `unit`, `units`, `log` |
 
@@ -705,6 +708,8 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   | `ssh` | list of strings | `["ssh"]` | The `ssh` program and its options |
   | `testbed` | string | `~/.local/share/bmo-testbed/deploy/bin/bmo-testbed` | The testbed binary there |
   | `cargo_target` | string | `~/.local/share/bmo/cargo-target` | That machine's shared Cargo build directory; a deployment's build is read back from the bench's own directory under it, the one that machine's Cargo verb builds in (`docs/deploy.md`, 「The Cargo build directory」) |
+  | `disk_free_gigabytes` | number | 50, the prune policy's | The free space, in gigabytes of a thousand million bytes, below which a disk of that machine sends `placed-disk-low` from this machine's prune (`docs/deploy.md`, 「The Cargo build directory」). Not negative |
+  | `disk_paths` | list of strings | none | Paths on that machine whose disks' free space the prune reads beside `cargo_target`'s, such as the mount of the host drive a virtual disk stands on |
 
   A `~` opening a path there is that machine's home. A file that does not read is no placement, said
   on a line.

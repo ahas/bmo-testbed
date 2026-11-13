@@ -59,7 +59,7 @@
   {
     "id": "deploy/deploy-run",
     "title": "Deploy run",
-    "what": "The deploy run in a unit of its own, by the declaration its commit carries: gate, backup, release, the wait for quiet, flip, restarts watched, a console face probed, rolled back where either fails, its progress mirrored into the testbed record, its outcome written before the event hook hears.",
+    "what": "The deploy run in a unit of its own, by its commit's declaration: gate, backup, release, the wait for quiet, flip, restarts watched, a console face probed, rolled back where either fails, the placed machine's units laid, progress mirrored into the record, outcome written before the hook hears.",
     "files": [
       "deploy/src/deployment.rs",
       "deploy/src/progress.rs",
@@ -100,8 +100,8 @@
       "suite/quick-checks",
       "core/silence-watch"
     ],
-    "base": "93e631758d9e668b2cd9cc007838e3a62eedca56",
-    "changed": 1794545338875
+    "base": "2a697e7005d23d4201403e8c2b1af370614661c3",
+    "changed": 1794560966773
   },
   {
     "id": "deploy/hosted-deploy-tool",
@@ -144,7 +144,7 @@
   {
     "id": "deploy/releases-and-rollback",
     "title": "Releases and rollback",
-    "what": "The deploy tree as a link to a release worktree, flipped by one rename; adoption of a plain directory, unit links by their deploy marks, retired trees, guarded removal, the deploy record, and rolling back to the release before.",
+    "what": "The deploy tree as a link to a release worktree, flipped by one rename; adoption of a plain directory, unit links by their deploy marks and the units marked for the placed machine, retired trees, guarded removal, the deploy record, and rolling back to the release before.",
     "files": [
       "deploy/src/release.rs",
       "deploy/src/tree.rs",
@@ -165,7 +165,7 @@
     "needs": [
       "core/policy-loader"
     ],
-    "base": "684d9102bf43c7e2ab34a3ece8305a70919404ee",
-    "changed": 1794545234326
+    "base": "2a697e7005d23d4201403e8c2b1af370614661c3",
+    "changed": 1794550648007
   }
 ]

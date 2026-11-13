@@ -1,10 +1,11 @@
 [Unit]
 Description=Prune of the shared Cargo build directory: what no live checkout's build stands on, gone checkouts' target directories, and the target directories of deploy build trees idle three days
 # docs/deploy.md, 「The Cargo build directory」. Started by its timer, which every deployment of this
-# repository links with this unit and starts (docs/deploy.md, 「The unit links」). It waits at the front of
-# Cargo's own build locks, never in the testbed's line, so it never removes anything under a build and
-# never waits out a queue of heavy commands while the disk fills. Where the directory stays over its
-# ceiling it sends an event to the hook its environment or the declaration names.
+# repository links with this unit and starts, here and on the placed machine (docs/deploy.md, 「The unit
+# links」). It waits at the front of Cargo's own build locks, never in the testbed's line, so it never
+# removes anything under a build and never waits out a queue of heavy commands while the disk fills. Where
+# the directory stays over its ceiling, or a disk of the placed machine its settings name stands below its
+# floor, it sends an event to the hook its environment or the declaration names.
 
 [Service]
 Type=oneshot

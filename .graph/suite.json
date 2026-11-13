@@ -2,7 +2,7 @@
   {
     "id": "suite/cargo-verb-and-prune",
     "title": "Cargo verb and prune",
-    "what": "The cargo verb, Cargo run over the shared build directory and removing what a build superseded, and the prune verb with its timer, removing what no build reads any more and telling the event hook when the directory stays over its ceiling.",
+    "what": "The cargo verb over the shared build directory, removing what a build superseded; the prune verb with its timer, laid on the placed machine too, removing what no build reads and telling the event hook when the directory stays over its ceiling or a placed machine's disk falls below its floor.",
     "files": [
       "suite/src/cargo.rs",
       "suite/src/superseded.rs",
@@ -16,17 +16,21 @@
       "suite/tests/superseded.rs"
     ],
     "symbols": [],
-    "aliases": [],
+    "aliases": [
+      "cargo prune 타이머",
+      "디스크 여유 경고"
+    ],
     "needs": [
       "core/lanes-and-turn",
       "core/event-hook",
       "core/declaration",
       "suite/change-selection",
       "core/policy-loader",
-      "core/silence-watch"
+      "core/silence-watch",
+      "core/placement"
     ],
-    "base": "93e631758d9e668b2cd9cc007838e3a62eedca56",
-    "changed": 1794545338789
+    "base": "2a697e7005d23d4201403e8c2b1af370614661c3",
+    "changed": 1794550656181
   },
   {
     "id": "suite/change-check",

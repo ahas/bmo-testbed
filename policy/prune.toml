@@ -30,3 +30,8 @@ shared_ceiling_bytes = 120_000_000_000
 # generation, its builds, tests and lints.
 checkout_ceiling_bytes = 8_000_000_000
 
+
+# The free space below which a disk of the placed machine sends `placed-disk-low` where its settings name no
+# other floor, in gigabytes of a thousand million bytes (docs/deploy.md, 「The Cargo build directory」):
+# room for the builds of one prune's span and a deployment's release build beside them.
+placed_disk_free_gigabytes = 50

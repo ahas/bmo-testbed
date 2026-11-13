@@ -140,6 +140,20 @@
   - `link`: a service something else starts, or a slice other units run in, linked and nothing more.
   - `retire`: a unit that goes; once the `bot` service has come up, it is stopped,
     disabled and unlinked, a timer's service with it.
+- **A unit the placed machine keeps as well says so by a second line,** `X-BMO-Placed=` and its mark,
+  beside its deploy mark. Where the settings name a placed machine (「Where a deployment runs」), every
+  deployment lays these units there once it is live (「What the deploy run does, in order」):
+  - `timer`: a timer, with the service of its own name beside it, laid, the timer enabled and started
+    there;
+  - `link`: a service or a slice, laid and nothing more.
+
+  A laid unit is the release's file as it stands, written whole under that machine's
+  `~/.config/systemd/user/` and renamed over whatever stood at its name there, then that machine's user
+  service manager reloaded and each laid timer enabled and started. The placed machine keeps no release
+  of the repository, so a laid unit is a plain file rather than a link; it names its programs by the
+  same paths under that machine's home as here, `%h` read there as that machine's home. A machine that
+  cannot be reached, or a unit that cannot be laid or a timer started there, is a warning naming the
+  machine and what it said, and the deployment goes on.
 - **The unit files a deployment reads are services, timers and slices;** any other kind of file the
   declared globs reach is not a unit of the deployment's.
 - **Before anything changes, every unit link into the deploy tree is read,** and the commit asked
@@ -406,7 +420,9 @@
     since what the release declares it needs once it is up did not happen. A step is written to do only
     what is due, so the next deployment runs it again from where it stands.
 14. **Prune the releases.** A release that cannot be removed is a warning.
-15. **Start the backup upload,** where the declaration names a remote, as a transient user unit of its
+15. **Lay the placed machine's units,** where the settings name a placed machine and the release marks
+    units for it (「The unit links」). What fails there is a warning.
+16. **Start the backup upload,** where the declaration names a remote, as a transient user unit of its
     own, `bmo-backup-upload-<stamp>`, in `bmo-backup.slice`, running the `backups` verb, and end without
     waiting for it.
 
@@ -640,8 +656,29 @@ flowchart TD
   clears the whole directory but Cargo's lock files, run by hand only.
 - **Its ceiling is 120 GB, and 8 GB more for each live checkout that records its builds.** A timed prune
   that leaves it over sends a `cargo-target-over-ceiling` event, each run it stays over.
+- **The placed machine runs the same prune on the same timer** over its own build root, the settings'
+  `cargo_target` (`docs/boundary.md`, 「The placed machine」), where its builds, its benches' checks and
+  the deployments' release builds land. `bmo-cargo-prune.timer`, its service and `bmo-upkeep.slice`
+  carry the placed mark beside their deploy mark, so every deployment of the testbed lays them on the
+  placed machine and starts the timer there (「The unit links」); the service runs the testbed binary at
+  its deploy tree's path under that machine's home, which is where that machine's settings' `testbed`
+  stands by default. Its events, `cargo-target-over-ceiling` among them, go to that machine's own hook,
+  or its own journal where it has none.
+- **The placed machine's free disk is read here after every prune** where the settings name a placed
+  machine: the free space of that machine's build root and of every path the settings' `disk_paths`
+  names, through one `ssh` command. A disk below the settings' `disk_free_gigabytes`, 50 GB unless they
+  name another (the prune policy's), sends a `placed-disk-low` event naming the machine, the floor and
+  each path below it, each run it stays below (`docs/boundary.md`, 「Events」). The event goes to this
+  machine's hook; where none is named, it is the line the prune writes on its standard error, which a
+  timed prune leaves in this machine's journal, read with `journalctl --user -u bmo-cargo-prune.service`.
+  A path whose free space does not read is said on a line, and a machine that cannot be reached is said
+  on one line, its disk not read. A dry run reads and says the free space and sends nothing. A machine
+  whose disk is a virtual one inside another, as a WSL machine's is inside its host's drive, names the
+  host drive's mount in `disk_paths`, since the virtual disk's own free space does not shrink as the
+  host drive fills.
 - **What it says:** how many units, incremental directories, loose files, checkout target directories and
   stray checkout `target/` directories it removed, about how much disk they held, the disk's free space
   before and after, and what the directory holds against its ceiling; then the build trees' target
   directories it removed, by their deploy roots, about how much disk they held, and each one it could not
-  remove with why.
+  remove with why; then, where the settings name a placed machine, the free space of each path read there
+  against the floor.

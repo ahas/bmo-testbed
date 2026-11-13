@@ -72,6 +72,7 @@ pub struct PlacedWords {
   pub no_result: String,
   pub running: String,
   pub unsettled: String,
+  pub negative_floor: String,
   pub unreached: String,
   pub full: String,
   pub tree_uncopied: String,

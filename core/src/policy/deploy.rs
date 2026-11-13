@@ -133,6 +133,8 @@ pub struct RunWords {
   pub pinned_summary: String,
   pub retired_trees: String,
   pub warning: String,
+  pub placed_laid: String,
+  pub placed_unlaid: String,
   pub upload_started: String,
   pub upload_failed: String,
   pub live: String,
