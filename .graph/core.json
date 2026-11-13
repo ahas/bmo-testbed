@@ -129,7 +129,8 @@
       "ready_bench",
       "MachinePlacement",
       "HttpPlacement",
-      "BenchFor"
+      "BenchFor",
+      "FarEnd"
     ],
     "aliases": [
       "배치 규칙",
@@ -142,8 +143,8 @@
       "deploy/releases-and-rollback",
       "core/silence-watch"
     ],
-    "base": "5c41abcfb95a728ddc60539040df1bca2f33cef8",
-    "changed": 1794568407779
+    "base": "a11c3a5fce5ae0a3c49b923c11cc54d7b3e8910d",
+    "changed": 1794574277862
   },
   {
     "id": "core/policy-loader",

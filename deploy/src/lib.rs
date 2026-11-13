@@ -1,5 +1,5 @@
 //! A repository's releases on the machine it runs on (docs/deploy.md): the commands a deployment runs, the
-//! guarded removal, the deploy tree's record and its unit links, the releases and the link flip, a deploy
+//! guarded removal, the machine's deployment line, the deploy tree's record and its unit links, the releases and the link flip, a deploy
 //! tree still a directory adopted, the build tree, the transient unit a deploy run stands in, the wait for
 //! the service to come up and the rollback where it does not, the probe of a console face, the run's progress record, and the backups
 //! with their upload.
@@ -10,6 +10,7 @@ pub mod boot;
 pub mod console;
 pub mod deployment;
 pub mod expansion;
+pub mod line;
 pub mod progress;
 pub mod release;
 pub mod remove;

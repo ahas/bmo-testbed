@@ -658,6 +658,14 @@ pub enum Placed {
   Full,
 }
 
+/// What words run on the placed machine came to: the code they ended with there, or the connection broken
+/// under them, `ssh`'s own 255 or no code at all.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FarEnd {
+  Ended(u8),
+  Broken,
+}
+
 impl MachinePlacement {
   /// The placement under a data root for an account's home: none where the settings name no machine or do
   /// not read, the reason said on a line.
@@ -1025,10 +1033,25 @@ impl MachinePlacement {
     line
   }
 
-  /// The words run in the bench through the `placed` verb, the output and the result this process's, the
-  /// placed run standing here, where one does, marked running once its turn there came; the code it ended
-  /// with, 75 where the connection broke.
+  /// The words run in the bench through the `placed` verb, as `run_there` runs them; the code they ended with,
+  /// 75 where the connection broke, said on the `dropped` line.
   pub fn run(&self, bench: &ReadyBench, words: &[String], setup: bool, placed: Option<&PlacedRun>) -> u8 {
+    match self.run_there(bench, words, setup, placed) {
+      FarEnd::Ended(code) => code,
+      FarEnd::Broken => dropped(self.settings.label(), &LANES.placed.broken),
+    }
+  }
+
+  /// The words run in the bench through the `placed` verb, the output and the result this process's, the
+  /// placed run standing here, where one does, marked running once its turn there came: the code they ended
+  /// with there, or the connection broken under them.
+  pub fn run_there(
+    &self,
+    bench: &ReadyBench,
+    words: &[String],
+    setup: bool,
+    placed: Option<&PlacedRun>,
+  ) -> FarEnd {
     let said = &LANES.placed;
     let line = self.placed_line(bench, words, setup);
 
@@ -1061,9 +1084,14 @@ impl MachinePlacement {
 
     match status.ok().and_then(|status| status.code()) {
       // 255 is `ssh`'s own: the connection broke or was never made.
-      Some(255) | None => dropped(self.settings.label(), &said.broken),
-      Some(code) => u8::try_from(code).unwrap_or(1),
+      Some(255) | None => FarEnd::Broken,
+      Some(code) => FarEnd::Ended(u8::try_from(code).unwrap_or(1)),
     }
+  }
+
+  /// The line saying the connection to the machine broke, as a deployment's work there names it.
+  pub fn broke(&self) -> String {
+    fill_marks(&LANES.placed.broke, &[("machine", self.settings.label())])
   }
 
   /// The words run in the bench through the `placed` verb with no setup, what they say on standard error this

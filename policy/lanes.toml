@@ -95,6 +95,10 @@ tree_uncopied = "the tree {tree} could not be copied: {said}"
 file_unlaid = "the file {file} could not be laid there: {said}"
 unfetched = "the binaries could not be read back from {machine}: {said}"
 broken = "the connection to it broke"
+# The same, as a deployment's work there names it, {machine} the machine.
+broke = "the connection to {machine} broke"
+# Where a deployment's work there ran, as a build that failed there names it, {bench} the bench there.
+ran_there = "it ran on {machine} in {bench}"
 setup_failed = "testbed: the setup step {command} failed with code {code}"
 no_registry = "testbed: the run's registry of checkouts could not be written at {file}: {why}"
 # The placed machine's testbed is not this one's release: {machine} the machine, {far} the commit its testbed

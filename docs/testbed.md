@@ -326,7 +326,8 @@ flowchart TD
   here.
 - **A run started on a placed machine stays there.**
 - **A machine that drops it** ends the run as not run, exit code 75, and the same command run again
-  goes where the placement sends it next.
+  goes where the placement sends it next. A deployment's gate and release build there are tried again
+  instead (`docs/deploy.md`, 「A connection that breaks under the placed machine」).
 
 ## Seeing the queue
 

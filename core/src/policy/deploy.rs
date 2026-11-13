@@ -46,6 +46,9 @@ pub struct Numbers {
   pub quiet_poll_ms: u64,
   pub quiet_unanswered_asks: u32,
   pub passed_suite_hours: i64,
+  pub line_say_seconds: u64,
+  pub line_bound_minutes: u64,
+  pub retry_pauses_seconds: Vec<u64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -66,6 +69,13 @@ pub struct RunWords {
   pub commit_elsewhere: String,
   pub remote: String,
   pub deploying: String,
+  pub line_waiting: String,
+  pub line_taken: String,
+  pub line_bound: String,
+  pub line_nobody: String,
+  pub retrying: String,
+  pub connection_lost: String,
+  pub gate_work: String,
   pub again: String,
   pub major: String,
   pub unit_faults: String,
@@ -90,6 +100,7 @@ pub struct RunWords {
   pub taken: String,
   pub setup_failed: String,
   pub build_failed: String,
+  pub build_unfinished: String,
   pub metadata_failed: String,
   pub place_failed: String,
   pub placed: String,

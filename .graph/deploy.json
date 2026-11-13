@@ -59,9 +59,10 @@
   {
     "id": "deploy/deploy-run",
     "title": "Deploy run",
-    "what": "A deploy run in a unit of its own, by its commit's declaration: gate, backup, release, quiet, flip, restarts watched, console face probed, rolled back where either fails, then the placed machine's units laid and its testbed brought to the release, outcome written before the hook hears.",
+    "what": "A deploy run in its own unit, by its commit's declaration: the deployment line held from gate to build, placed gate and build tried again where the connection breaks, backup, release, quiet, flip, restarts watched, console probed, rolled back where either fails.",
     "files": [
       "deploy/src/deployment.rs",
+      "deploy/src/line.rs",
       "deploy/src/progress.rs",
       "deploy/src/boot.rs",
       "deploy/src/unit.rs",
@@ -79,13 +80,18 @@
       "deploy/tests/own_units.rs",
       "deploy/tests/run.rs"
     ],
-    "symbols": [],
+    "symbols": [
+      "DeployLine",
+      "GateFault",
+      "PlacedGate"
+    ],
     "aliases": [
       "빌드 트리",
       "Wait for quiet",
       "배포가 배포하는 커밋의 선언",
       "로그 분류 슬라이스",
-      "배치 기계의 testbed도 같은 릴리스로 자동으로 맞추기"
+      "배치 기계의 testbed도 같은 릴리스로 자동으로 맞추기",
+      "배포 17건을 한꺼번에 걸면"
     ],
     "needs": [
       "core/declaration",
@@ -102,8 +108,8 @@
       "core/silence-watch",
       "suite/cargo-verb-and-prune"
     ],
-    "base": "4d220b85b600ca845c1ef8e47581851a34f625a7",
-    "changed": 1794569480490
+    "base": "a11c3a5fce5ae0a3c49b923c11cc54d7b3e8910d",
+    "changed": 1794574703277
   },
   {
     "id": "deploy/hosted-deploy-tool",

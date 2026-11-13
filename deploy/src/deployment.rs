@@ -41,6 +41,7 @@ use crate::console::{ConsoleHands, MachineConsole, PinnedLayer, probe};
 use crate::expansion::{
   BuildTree, bring_submodules, build_target, expansion_tree, lay_outside_trees, put_build_tree,
 };
+use crate::line::DeployLine;
 use crate::progress::{DeployRun, DeployStart, Outcome, Part, Stage, begin_deploy, deploy_progress_path};
 use crate::release::{
   LiveProcess, Preparing, differing_binaries, flip, link_of, live_processes, live_release, logged_before,
@@ -150,6 +151,13 @@ pub struct DeployAsk {
   /// names, which the console probe reads a manifest by and holds its layer to (docs/deploy.md, 「The
   /// console probe」); none reads none, as though the declaration named no shared versions.
   pub layer_pin: Option<fn(&str, &Env) -> PinnedLayer>,
+  /// The deployment line the run stands in from its gate to the end of its build (docs/deploy.md, 「The
+  /// deployment line」); none stands in none.
+  pub line: Option<DeployLine>,
+  /// The pauses between the tries of the gate's work on another machine whose connection broke under it
+  /// (docs/deploy.md, 「A connection that breaks under the placed machine」), one try more than pauses; none
+  /// tries once.
+  pub retry: Vec<Duration>,
 }
 
 /// What the gate is asked: the commit, in the checkout it is taken from, over the range from what was live,
@@ -178,13 +186,15 @@ pub struct GateStep {
   pub ran_seconds: f64,
 }
 
-/// What the gate came to: whether the commit passed, why not where it did not, the tests that passed only
-/// when run once more, each with its unit, the steps it ran, and the passed run it took in place of its
-/// suite where it found one.
+/// What the gate came to: whether the commit passed, why not where it did not, whether that was the connection
+/// to the gate's machine breaking under it, the tests that passed only when run once more, each with its unit,
+/// the steps it ran, and the passed run it took in place of its suite where it found one.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct GateOutcome {
   pub passed: bool,
   pub reason: String,
+  /// The connection to the gate's machine broke under it, as `reason` says, so the run tries again.
+  pub broken: bool,
   pub flaky: Vec<(String, String)>,
   pub steps: Vec<GateStep>,
   pub suite_passed: Option<SuitePassed>,
@@ -236,6 +246,15 @@ pub struct BuildAsk<'a> {
   pub built: &'a Path,
 }
 
+/// Why the Cargo release build the gate ran on its own machine did not end built: it failed, with the exit
+/// code it ended on where one names it and what was said, or the connection to that machine broke under it,
+/// as the line naming the machine says.
+#[derive(Debug, Clone, PartialEq)]
+pub enum GateFault {
+  Failed { code: Option<i64>, said: String },
+  Broken(String),
+}
+
 /// The units a live release marks for the placed machine, asked of the gate: each by its unit name with the
 /// release's text of it, and the timers to start there (docs/deploy.md, 「The unit links」).
 pub struct LaidUnits<'a> {
@@ -250,7 +269,7 @@ pub trait Gate {
 
   /// The Cargo release build run elsewhere, its binaries brought into the directory asked, or none where
   /// the build runs here.
-  fn build(&self, _: &BuildAsk<'_>) -> Option<Result<(), String>> {
+  fn build(&self, _: &BuildAsk<'_>) -> Option<Result<(), GateFault>> {
     None
   }
 
@@ -671,6 +690,40 @@ impl<'a> Laying<'a> {
     }
   }
 
+  // Work on the gate's machine asked again while the connection to that machine breaks under it, the ask's
+  // pauses between the tries (docs/deploy.md, 「A connection that breaks under the placed machine」): its last
+  // answer, with how many tries it took.
+  fn tried<T>(
+    &self,
+    work: &str,
+    mut ask: impl FnMut() -> T,
+    broke: impl Fn(&T) -> Option<String>,
+  ) -> (T, usize) {
+    let pauses = &self.ask.retry;
+    let tries = (pauses.len() + 1).to_string();
+    let mut taken = 1;
+
+    loop {
+      let answer = ask();
+      let (Some(said), Some(pause)) = (broke(&answer), pauses.get(taken - 1)) else {
+        return (answer, taken);
+      };
+
+      self.say(&fill_marks(
+        &DEPLOY.run.retrying,
+        &[
+          ("said", &said),
+          ("work", work),
+          ("seconds", &pause.as_secs().to_string()),
+          ("next", &(taken + 1).to_string()),
+          ("tries", &tries),
+        ],
+      ));
+      std::thread::sleep(*pause);
+      taken += 1;
+    }
+  }
+
   // A step run through the hands and written into the progress record as it begins and ends.
   fn step(&self, ask: &StepAsk) -> StepRan {
     if let Some(progress) = &self.progress {
@@ -898,22 +951,45 @@ impl<'a> Laying<'a> {
     let built = target.join(if profile == "dev" { "debug" } else { profile.as_str() });
 
     if cargo {
-      let elsewhere = self.gate.build(&BuildAsk {
+      let step = OwnStep::CargoRelease.name();
+      let ask = BuildAsk {
         root: &self.repo.root,
         commit: &self.commit,
         tree: &tree,
         profile,
         binaries: &binaries,
         built: &built,
-      });
+      };
+      let (elsewhere, tries) = self.tried(
+        step,
+        || self.gate.build(&ask),
+        |built| match built {
+          Some(Err(GateFault::Broken(said))) => Some(said.clone()),
+          _ => None,
+        },
+      );
 
       match elsewhere {
         Some(Ok(())) => {}
-        Some(Err(why)) => {
+        Some(Err(GateFault::Failed {
+          code: Some(code),
+          said: why,
+        })) => {
           return Err(fill_marks(
             &said.build_failed,
-            &[("step", OwnStep::CargoRelease.name()), ("code", "75"), ("said", &why)],
+            &[("step", step), ("code", &code.to_string()), ("said", &why)],
           ));
+        }
+        Some(Err(GateFault::Failed {
+          code: None,
+          said: why,
+        })) => {
+          return Err(fill_marks(&said.build_unfinished, &[("step", step), ("said", &why)]));
+        }
+        Some(Err(GateFault::Broken(broke))) => {
+          let lost = fill_marks(&said.connection_lost, &[("said", &broke), ("tries", &tries.to_string())]);
+
+          return Err(fill_marks(&said.build_unfinished, &[("step", step), ("said", &lost)]));
         }
         None => {
           let ask = StepAsk {
@@ -1367,6 +1443,17 @@ pub async fn deploy(
     return 0;
   }
 
+  // The deployment line, once nothing is left to refuse, its turn taken before the progress record is begun so
+  // two deployments of one repository never write one record at once; then what the deployment before it put
+  // live, read again (docs/deploy.md, 「The deployment line」).
+  let line = ask.line.as_ref().and_then(|line| {
+    let unit = ask.unit.as_deref().map(|unit| format!(" ({unit})")).unwrap_or_default();
+
+    line.take(&format!("{} {shown}{unit}", repo.name()), &|line| run.say(line))
+  });
+
+  run.previous = read_deploy_record(&places.record);
+
   // The deploy root holds the run's own record, log and progress file; the first deployment makes it
   // before the run begins writing there.
   let _ = std::fs::create_dir_all(&places.deploy_root);
@@ -1468,29 +1555,44 @@ pub async fn deploy(
       }));
     }
 
-    let passed = gate.pass(&GateAsk {
-      root: source,
-      commit: &commit,
-      since: since.as_deref(),
-      suite: passed_here.is_none(),
-    });
+    // The gate is asked again while the connection to its machine breaks under it, every try's steps written.
+    let (passed, tries) = run.tried(
+      &said.gate_work,
+      || {
+        let passed = gate.pass(&GateAsk {
+          root: source,
+          commit: &commit,
+          since: since.as_deref(),
+          suite: passed_here.is_none(),
+        });
 
-    if let Some(cgroup) = &unit_cgroup {
-      let _ = move_to_cgroup(cgroup);
-    }
+        if let Some(cgroup) = &unit_cgroup {
+          let _ = move_to_cgroup(cgroup);
+        }
+
+        for step in &passed.steps {
+          run.step_done(&step.name, None, step.code, step.waited_seconds, step.ran_seconds);
+        }
+
+        passed
+      },
+      |passed| passed.broken.then(|| passed.reason.clone()),
+    );
 
     if let Some(found) = &passed.suite_passed {
       run.say(&suite_left_out(found));
     }
 
-    for step in &passed.steps {
-      run.step_done(&step.name, None, step.code, step.waited_seconds, step.ran_seconds);
-    }
-
     if !passed.passed {
+      let reason = if passed.broken {
+        fill_marks(&said.connection_lost, &[("said", &passed.reason), ("tries", &tries.to_string())])
+      } else {
+        passed.reason
+      };
+
       return run.failed(
         Stage::Check,
-        fill_marks(&said.gate_failed, &[("commit", &shown), ("reason", &passed.reason)]),
+        fill_marks(&said.gate_failed, &[("commit", &shown), ("reason", &reason)]),
         Outcome::Stopped,
       );
     }
@@ -1667,6 +1769,9 @@ pub async fn deploy(
   } else {
     live.as_deref().map(|live| differing_binaries(live, &release)).unwrap_or_default()
   };
+
+  // The release is built, so the next deployment's gate may begin while this one restarts.
+  drop(line);
 
   // 7. The steps before the flip.
   run.stage(Stage::Before);

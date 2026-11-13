@@ -61,6 +61,15 @@ quiet_unanswered_asks = 3
 # How many hours back a passed run of the whole suite on the commit leaves the gate's own suite out
 # (docs/deploy.md, 「What the deploy run does, in order」); a run begun earlier is none.
 passed_suite_hours = 24
+# How often a deployment waiting in the deployment line says where it stands, in seconds (docs/deploy.md,
+# 「The deployment line」).
+line_say_seconds = 60
+# How long a deployment waits in the deployment line before it goes on beside the holder, in minutes; far past
+# what a whole batch of deployments takes.
+line_bound_minutes = 720
+# The pauses between the tries of a deployment's work on the placed machine whose connection broke under it, in
+# seconds (docs/deploy.md, 「A connection that breaks under the placed machine」); one try more than pauses.
+retry_pauses_seconds = [30, 90, 180]
 
 # What the deploy run says as it goes (docs/deploy.md, 「What the deploy run does, in order」): {commit} a
 # short commit, {release}, {path}, {dir} and {data} places, {unit} and {name} units, {said} and {why}
@@ -84,6 +93,18 @@ commit_elsewhere = "the declaration {commit} carries names the repository or pla
 # Where a commit must stand to be deployable, as a refusal names it.
 remote = "any branch of the remote"
 deploying = "deploying {commit}: {subject}"
+# The deployment line (docs/deploy.md, 「The deployment line」): {seconds} and {minutes} how long it waited,
+# {ahead} how many deployments stand ahead, {holder} the one holding the line, or `line_nobody`.
+line_waiting = "waiting for the deployment line ({seconds}s so far): {ahead} ahead, held by {holder}"
+line_taken = "the deployment line's turn came after {seconds}s"
+line_bound = "waited {minutes} minutes for the deployment line, its bound; going on beside {holder}"
+line_nobody = "nobody"
+# The connection to the placed machine broke under the deployment's work there (docs/deploy.md, 「A connection that
+# breaks under the placed machine」): {said} the line naming the machine, {work} the work, {seconds} the pause,
+# {next} the try about to begin and {tries} every try there is, or {tries} the tries it broke on running.
+retrying = "{said} during the {work}; trying again in {seconds}s, try {next} of {tries}"
+connection_lost = "{said} on {tries} tries running"
+gate_work = "gate"
 again = "{commit} is already what is deployed; laying it down again"
 major = "the change is major: version {version} against the live {previous}; the repositories that build on this one are run"
 unit_faults = "{faults}; the reload after the flip would make that unit vanish, so put its file back or relink it in {dir} by hand first"
@@ -112,6 +133,8 @@ made = "made afresh"
 taken = "taken as it stands"
 setup_failed = "`{command}` failed in {release}: {said}"
 build_failed = "the build failed at {step} (exit {code}): {said}; every service is untouched"
+# A build that failed with no exit code to name: binaries not read back, or a connection that broke.
+build_unfinished = "the build failed at {step}: {said}; every service is untouched"
 metadata_failed = "the Cargo workspace's binaries could not be read: {why}; every service is untouched"
 place_failed = "the binaries could not be placed into the release: {why}; every service is untouched"
 placed = "placed {count} binaries; changed: {changed}"

@@ -203,9 +203,11 @@
   from which the deployment reads the built binaries back over `rsync` into its own build directory
   before it places them. The declared `[build]` steps, which write into the release and read the data
   root, run where the deployment runs, as does everything after the build. A placed machine that
-  cannot be reached leaves the gate and the build where the deployment runs, said on a line; a bench
-  that cannot be made ready, or a run the machine drops once begun, fails the stage. The flaky tests a
-  placed gate found stay in that machine's record, so the deployment reports none.
+  cannot be reached before the deployment has begun there leaves the gate and the build where the
+  deployment runs, said on a line; a bench that cannot be made ready while the machine answers fails the
+  stage; a connection that breaks once the deployment has begun there is tried again (「A connection
+  that breaks under the placed machine」). The flaky tests a placed gate found stay in that machine's
+  record, so the deployment reports none.
 - **The placed machine runs the deploying testbed's own release, or nothing runs there.** Before the
   bench is made ready, the commit that machine's testbed was built from is read and compared with the
   commit the running testbed was built from, since an older testbed there would judge the gate by older
@@ -247,6 +249,72 @@
   the deployment unit's journal.
 - **A dry run and a refusal stay in the caller's process:** a refusal exits 2 there, and `--dry-run`
   says there what the run would do, changing nothing and starting no unit.
+
+## The deployment line
+
+```mermaid
+flowchart TD
+  A[deployments asked together] --> B[each starts its own unit]
+  B --> C[ticket in the deployment line]
+  C --> D{its turn?}
+  D -- not yet --> E[says where it stands]
+  E --> F{bound passed?}
+  F -- no --> D
+  F -- yes --> G[goes on beside the holder, said on a line]
+  D -- yes --> H[gate, backup, release, build]
+  G --> H
+  H --> I[lets the line go]
+  I --> J[steps before the flip to the end, its own outcome]
+```
+
+- **Deployments on one machine pass their gate and their build one after the other.** Every deployment
+  stands in the machine's one deployment line, the lock `deploy-line.lock` under the testbed data root's
+  `locks/`, the first to ask going first. Each one's static check, suite and release build therefore have
+  the placed machine to themselves among deployments, since several side by side there each hold a seat
+  and a suite's fence of their own, and together they can take that machine past the memory and disk it
+  has and cut every run on it at once.
+- **The verb and the hosted tool take any number of deployments at once.** Each call starts its own unit
+  as before; the unit waits its turn in the line and ends with its own outcome, which its caller reads as
+  it reads any deployment's.
+- **A deployment stands in the line once its refusals are judged,** after the commit is read and before
+  it writes its progress record (「What the deploy run does, in order」, step 2), so a refusal and a dry
+  run never wait. A deployment waiting there has written nothing into its progress record or the
+  testbed's record yet, so two deployments of one repository never write one progress record at once:
+  it is read through its unit's journal, which the hosted tool follows it by. A call of the same
+  repository and commit asked while one waits therefore attaches to nothing and waits behind it.
+- **Its turn reads the live release again.** Once its turn comes, the deployment reads the deployment
+  record again, so the range its gate checks and the major change it judges are against what the
+  deployment before it put live.
+- **It holds the line from the gate to the end of the build** (steps 3 to 6), then lets it go. What
+  follows waits on services rather than on any machine's threads, and the wait for quiet lasts as long
+  as the work it waits on, so the next deployment's gate begins while this one restarts. A deployment that
+  ends sooner, failed or stopped, lets the line go as it ends, and one whose process dies lets go with it.
+- **While it waits it says so,** every policy's seconds, sixty: how long it has waited, how many
+  deployments stand ahead and which one holds the line. Once its turn comes it says how long it waited.
+- **The wait has a bound and never fails the deployment.** Once it has waited the policy's minutes, 720,
+  it says so on a line naming the holder and goes on beside it, outside the line. The bound stands far
+  past what a whole batch of deployments takes, so only a holder that has stopped coming to an end is
+  passed.
+
+## A connection that breaks under the placed machine
+
+- **A deployment's work on the placed machine is tried again where the connection breaks under it.** The
+  gate and the release build there run over that machine's `ssh`. The connection counts as broken where
+  `ssh` ends with its own code, 255, or where a bench that could not be made ready or binaries that could
+  not be read back leave the machine not answering. The deployment then says so on a line naming the
+  machine, the work and the pause, waits the pause, and runs that work again from its bench: the whole
+  gate, or the build with its read-back.
+- **The pauses are the policy's,** 30, 90 and 180 seconds, so the work is tried four times over some five
+  minutes, which outlasts the few minutes a placed machine takes to come back once it has restarted.
+- **A try waits for the placed machine.** Once the deployment has begun there, a try that finds the
+  machine not answering is one more broken try; nothing moves back to the machine the deployment runs
+  on, since the check judged there and the build read back from there are that machine's.
+- **Once the tries are spent, the stage fails naming the connection:** the machine and how many tries
+  running it broke on. No exit code stands in for it.
+- **A failure of the work's own is not tried again:** a check or a suite that fails, or a build that
+  fails, ends its stage at once with its own exit code, as the build's line names it.
+- **A run that is no deployment's is not tried again:** it ends as not run, exit code 75 (`docs/testbed.md`,
+  「A run on another machine」), and its caller runs it again.
 
 ## The hosted deploy tool
 
@@ -333,8 +401,9 @@
 2. **Pick the commit.** After `git fetch`, take the commit `--commit` names, or the checkout's `HEAD`,
    and check it is on the remote. Read the commit's declaration, and stop where it does not read, names
    the repository otherwise than the checkout's, places the deployment elsewhere or deploys nothing, or
-   where an env file it declares is missing. Adopt a deploy tree that is still a directory. Check every unit link
-   will still find its unit file.
+   where an env file it declares is missing. Check every unit link will still find its unit file. Then
+   stand in the deployment line until its turn comes or its bound passes, and read the deployment record
+   again (「The deployment line」). Adopt a deploy tree that is still a directory.
 3. **Pass the gate:** the declared static check and the suite over the range from the deployed commit,
    holding every lane at the front (`docs/testbed.md`), with what failed run once more, on the placed
    machine where the settings name one (「Where a deployment runs」). `--no-check`
@@ -386,7 +455,9 @@
    settings name one, then the declared `[build]` steps in the build tree, then the
    declared binaries placed into the release's `bin/`, hard-linked or copied, the ones that differ
    noted. `bin/built-from` is written last. A taken release is compared with the live one instead. A
-   build that fails stops the deployment with every service untouched.
+   build that fails stops the deployment with every service untouched, its line naming the step and
+   the exit code it ended on, or the connection where that broke (「A connection that breaks under the
+   placed machine」). The deployment line is let go here.
 7. **The steps before the flip,** declared under `[deploy]` with that phase: each runs in the release;
    one that fails stops the deployment with nothing flipped.
 8. **Wait for quiet,** where the declaration names a `quiet` command: run from the release, it answers 0
@@ -521,8 +592,8 @@ flowchart TD
 ## What a deployment says of itself as it runs
 
 - **Every run writes where it stands into one progress record,** `deploy-progress.json` under the
-  deploy root, or the file `BMO_DEPLOY_PROGRESS` names. A reader needs only the file and the run's
-  process.
+  deploy root, or the file `BMO_DEPLOY_PROGRESS` names, from the moment its turn in the deployment line
+  comes (「The deployment line」). A reader needs only the file and the run's process.
 - **It names from its start every stage the run means to pass,** its plan: `check`, `backup`, `tree`,
   `build`, `before`, `restart`, `stay-up`, `after`; `rollback` is never planned. Each stage is written
   with when it began.

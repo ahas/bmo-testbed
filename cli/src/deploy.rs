@@ -2,8 +2,9 @@
 //! transient unit of its own and run there, its gate answered by the suite crate; and the backups sent away
 //! and rotated, one run at a time. The runs themselves are the deploy crate's; this is the verbs' side.
 
+use std::cell::Cell;
 use std::path::Path;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use bmo_testbed_client::{TestRun, TestRunState};
 use bmo_testbed_core::declaration::Repository;
@@ -18,9 +19,10 @@ use bmo_testbed_core::turn::{Env, FRONT_VARIABLE, NOT_RUN_EXIT_CODE, harness_pid
 use bmo_testbed_core::verb::{REFUSED_EXIT_CODE, data_root};
 use bmo_testbed_deploy::console::{LayerPin, PinnedLayer};
 use bmo_testbed_deploy::deployment::{
-  BuildAsk, DeployAsk, DeployPlaces, Gate, GateAsk, GateOutcome, GateStep, LaidUnits, Machine, Passed,
-  SuitePassed, deploy as deploy_run,
+  BuildAsk, DeployAsk, DeployPlaces, Gate, GateAsk, GateFault, GateOutcome, GateStep, LaidUnits, Machine,
+  Passed, SuitePassed, deploy as deploy_run,
 };
+use bmo_testbed_deploy::line::DeployLine;
 use bmo_testbed_deploy::progress::DEPLOY_PROGRESS_VARIABLE;
 use bmo_testbed_deploy::unit::{
   DEPLOY_SLICE, DeployUnitStart, deploy_unit_name, deploy_unit_of_process, hand_off, this_again,
@@ -34,7 +36,7 @@ use bmo_testbed_suite::run::{SuiteAsk, SuiteWords, ask_of};
 use bmo_testbed_suite::static_check::{check_steps, run_static_check, spawn_step};
 
 use crate::home_of;
-use crate::placement::{BenchFor, MachinePlacement, PLACEMENT_VARIABLE, ReadyBench};
+use crate::placement::{BenchFor, FarEnd, MachinePlacement, PLACEMENT_VARIABLE, ReadyBench};
 use crate::recorded::suite_record;
 use crate::suite::repository;
 use crate::words::{BINARY, DeployFlags};
@@ -111,7 +113,7 @@ impl Gate for SuiteGate<'_> {
       reason: fill_marks(&DEPLOY.run.gate_suite, &[("code", &code.to_string())]),
       flaky: flaky.tests.iter().map(|one| (one.test.clone(), one.file.clone())).collect(),
       steps,
-      suite_passed: None,
+      ..GateOutcome::default()
     }
   }
 
@@ -138,7 +140,9 @@ impl Gate for SuiteGate<'_> {
 /// commit benched there with the checkout's outside trees, in the repository's own deployment bench, the
 /// static check and the suite run there as that machine's own verbs, the suite left out where that machine's
 /// record holds a passed run of the whole suite on the commit, and the Cargo release build run there and
-/// read back. The gate here stands in where the machine cannot be reached.
+/// read back. The gate here stands in where the machine cannot be reached before the deployment has begun
+/// there; once it has, work the connection breaks under answers broken, which the run tries again (docs/deploy.md,
+/// 「A connection that breaks under the placed machine」).
 pub struct PlacedGate<'a> {
   pub machine: MachinePlacement,
   /// The deployed repository's name, which its bench there stands under.
@@ -149,6 +153,15 @@ pub struct PlacedGate<'a> {
   /// Whether the testbed there is brought to this testbed's release before the bench and to a live release that
   /// carries one; not where the caller set the placement empty (docs/boundary.md, 「The environment」).
   pub brings_testbed: bool,
+  /// Whether the deployment has begun on the machine: false to begin with, set once the machine answered.
+  pub begun: Cell<bool>,
+}
+
+// What one step the gate ran there came to: its step as the progress record writes it, and whether the connection
+// broke under it.
+struct FarStep {
+  step: GateStep,
+  broken: bool,
 }
 
 impl PlacedGate<'_> {
@@ -156,26 +169,71 @@ impl PlacedGate<'_> {
     self.machine.settings.testbed.clone()
   }
 
-  // The repository's deployment bench there, made ready at the commit once the testbed there is brought to
-  // this one's release, unless the caller keeps it as it stands.
-  fn bench(&self, root: &Path, commit: &str) -> Result<ReadyBench, String> {
-    if self.brings_testbed {
-      self.machine.brought_to_own()?;
+  // Whether the machine answers for the deployment's work: it does, and the deployment has begun there from now
+  // on; or it does not, and the work goes here where it has not begun there, and is broken where it has.
+  fn reached(&self) -> Reach {
+    if self.machine.reached() {
+      self.begun.set(true);
+      Reach::There
+    } else if self.begun.get() {
+      Reach::Broken
+    } else {
+      Reach::Here
     }
-
-    self.machine.ready(root, commit, BenchFor::Deployment(&self.repository))
   }
 
-  // One verb of the machine's testbed run in the bench, timed: its step.
-  fn step(&self, bench: &ReadyBench, name: &str, words: &[String], setup: bool) -> GateStep {
-    let started = Instant::now();
-    let code = self.machine.run(bench, words, setup, None);
+  // Work there that failed, as the gate's machine left it: broken where that machine no longer answers, the
+  // failure's own otherwise.
+  fn failed(&self, why: String) -> GateFault {
+    if self.machine.reached() {
+      GateFault::Failed {
+        code: None,
+        said: why,
+      }
+    } else {
+      GateFault::Broken(self.machine.broke())
+    }
+  }
 
-    GateStep {
-      name: name.to_owned(),
-      code: i64::from(code),
-      waited_seconds: 0.0,
-      ran_seconds: started.elapsed().as_secs_f64(),
+  // The repository's deployment bench there, made ready at the commit once the testbed there is brought to
+  // this one's release, unless the caller keeps it as it stands.
+  fn bench(&self, root: &Path, commit: &str) -> Result<ReadyBench, GateFault> {
+    let made = if self.brings_testbed { self.machine.brought_to_own() } else { Ok(()) };
+
+    made
+      .and_then(|()| self.machine.ready(root, commit, BenchFor::Deployment(&self.repository)))
+      .map_err(|why| self.failed(why))
+  }
+
+  // One verb of the machine's testbed run in the bench, timed: its step, which a broken connection ends as not
+  // run.
+  fn step(&self, bench: &ReadyBench, name: &str, words: &[String], setup: bool) -> FarStep {
+    let started = Instant::now();
+    let ended = self.machine.run_there(bench, words, setup, None);
+    let (code, broken) = match ended {
+      FarEnd::Ended(code) => (i64::from(code), false),
+      FarEnd::Broken => (i64::from(NOT_RUN_EXIT_CODE), true),
+    };
+
+    FarStep {
+      step: GateStep {
+        name: name.to_owned(),
+        code,
+        waited_seconds: 0.0,
+        ran_seconds: started.elapsed().as_secs_f64(),
+      },
+      broken,
+    }
+  }
+
+  // The gate's answer where the connection to the machine broke under it, with the steps it ran.
+  fn broken(&self, steps: Vec<GateStep>) -> GateOutcome {
+    GateOutcome {
+      passed: false,
+      reason: self.machine.broke(),
+      broken: true,
+      steps,
+      ..GateOutcome::default()
     }
   }
 
@@ -203,22 +261,32 @@ impl PlacedGate<'_> {
   }
 }
 
+// Where the deployment's work on the placed machine goes: there, here, or nowhere since the connection broke.
+enum Reach {
+  There,
+  Here,
+  Broken,
+}
+
 impl Gate for PlacedGate<'_> {
   fn pass(&self, ask: &GateAsk<'_>) -> GateOutcome {
     if !self.checked {
       return self.here.pass(ask);
     }
 
-    if !self.machine.reached() {
-      return self.here.pass(ask);
+    match self.reached() {
+      Reach::There => {}
+      Reach::Here => return self.here.pass(ask),
+      Reach::Broken => return self.broken(Vec::new()),
     }
 
     let bench = match self.bench(ask.root, ask.commit) {
       Ok(bench) => bench,
-      Err(why) => {
+      Err(GateFault::Broken(_)) => return self.broken(Vec::new()),
+      Err(GateFault::Failed { said, .. }) => {
         return GateOutcome {
           passed: false,
-          reason: why,
+          reason: said,
           ..GateOutcome::default()
         };
       }
@@ -228,7 +296,12 @@ impl Gate for PlacedGate<'_> {
       .into_iter()
       .chain(since.clone())
       .collect::<Vec<_>>();
-    let mut steps = vec![self.step(&bench, "check", &check, true)];
+    let checked = self.step(&bench, "check", &check, true);
+    let mut steps = vec![checked.step];
+
+    if checked.broken {
+      return self.broken(steps);
+    }
 
     if steps[0].code != 0 {
       return GateOutcome {
@@ -256,8 +329,13 @@ impl Gate for PlacedGate<'_> {
       .into_iter()
       .chain(since)
       .collect::<Vec<_>>();
+    let ran = self.step(&bench, OwnStep::Tests.name(), &suite, false);
 
-    steps.push(self.step(&bench, OwnStep::Tests.name(), &suite, false));
+    steps.push(ran.step);
+
+    if ran.broken {
+      return self.broken(steps);
+    }
 
     let code = steps[1].code;
 
@@ -273,14 +351,16 @@ impl Gate for PlacedGate<'_> {
     self.here.dependents(ask)
   }
 
-  fn build(&self, ask: &BuildAsk<'_>) -> Option<Result<(), String>> {
-    if !self.machine.reached() {
-      return None;
+  fn build(&self, ask: &BuildAsk<'_>) -> Option<Result<(), GateFault>> {
+    match self.reached() {
+      Reach::There => {}
+      Reach::Here => return None,
+      Reach::Broken => return Some(Err(GateFault::Broken(self.machine.broke()))),
     }
 
     let bench = match self.bench(ask.root, ask.commit) {
       Ok(bench) => bench,
-      Err(why) => return Some(Err(why)),
+      Err(fault) => return Some(Err(fault)),
     };
     let build = [self.testbed(), "cargo".to_owned()]
       .into_iter()
@@ -288,11 +368,28 @@ impl Gate for PlacedGate<'_> {
       .collect::<Vec<_>>();
     let built = self.step(&bench, OwnStep::CargoRelease.name(), &build, true);
 
-    if built.code != 0 {
-      return Some(Err(fill_marks(&LANES.run.exit, &[("code", &built.code.to_string())])));
+    if built.broken {
+      return Some(Err(GateFault::Broken(self.machine.broke())));
     }
 
-    Some(self.machine.fetch_binaries(&bench, ask.profile, ask.binaries, ask.built))
+    if built.step.code != 0 {
+      let there = fill_marks(
+        &LANES.placed.ran_there,
+        &[("machine", self.machine.settings.label()), ("bench", &bench.path)],
+      );
+
+      return Some(Err(GateFault::Failed {
+        code: Some(built.step.code),
+        said: there,
+      }));
+    }
+
+    Some(
+      self
+        .machine
+        .fetch_binaries(&bench, ask.profile, ask.binaries, ask.built)
+        .map_err(|why| self.failed(why)),
+    )
   }
 
   fn lay_units(&self, ask: &LaidUnits<'_>) -> Option<(String, Result<(), String>)> {
@@ -424,6 +521,13 @@ pub fn deploy(args: &DeployFlags) -> u8 {
     upload: Some(upload),
     record: Some(data_root()),
     layer_pin: Some(pinned_layer),
+    line: Some(DeployLine::under(&data_root())),
+    retry: DEPLOY
+      .numbers
+      .retry_pauses_seconds
+      .iter()
+      .map(|seconds| Duration::from_secs(*seconds))
+      .collect(),
   };
   let suite = SuiteGate {
     repo: &repo,
@@ -436,6 +540,7 @@ pub fn deploy(args: &DeployFlags) -> u8 {
     here,
     checked: !args.no_check,
     brings_testbed: brings_testbed(&env),
+    begun: Cell::new(false),
   });
   let gate: &dyn Gate = placed.as_ref().map_or(here, |placed| placed);
   let runtime = match tokio::runtime::Builder::new_current_thread().enable_all().build() {

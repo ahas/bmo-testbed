@@ -14,6 +14,7 @@
 //! disk against the settings' floor, sending `placed-disk-low` for each disk below it. The testbed there brought to
 //! a live release carrying one and read back at its commit, unless the caller keeps it as it stands.
 
+use std::cell::Cell;
 use std::convert::Infallible;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -34,7 +35,7 @@ use bmo_testbed_core::policy::prune::PRUNE;
 use bmo_testbed_core::policy::verbs::VERBS;
 use bmo_testbed_core::queue::process_alive;
 use bmo_testbed_core::turn::{Env, Lane, NOT_RUN_EXIT_CODE, lock_path};
-use bmo_testbed_deploy::deployment::{Gate, Passed};
+use bmo_testbed_deploy::deployment::{BuildAsk, Gate, GateAsk, GateFault, Passed};
 use serde_json::{Value, json};
 
 use crate::stand::{Ran, checkout, git, install, ran, testbed};
@@ -600,6 +601,7 @@ fn bringing(machine: MachinePlacement, brings: bool) -> PlacedGate<'static> {
     here: &Passed,
     checked: true,
     brings_testbed: brings,
+    begun: Cell::new(false),
   }
 }
 
@@ -1082,4 +1084,139 @@ fn a_placed_machine_out_of_reach_has_its_disk_said_unread_and_sends_nothing() {
     [fill_marks(&VERBS.prune.placed_unreached, &[("said", "no route to stand")])]
   );
   assert!(!dir.join("events").exists());
+}
+
+// A stand-in `ssh` that runs its line on this machine as `SSH` does, in a home and a data root of the far
+// machine's own under the directory given, standing for no harness and inside no turn; the first `drops` lines
+// running the `placed` verb end as a connection that broke does, with `ssh`'s own 255.
+fn dropping_ssh(dir: &Path, drops: usize) -> String {
+  let far = dir.join("far-home");
+
+  format!(
+    r#"#!/bin/sh
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -o|-p|-i|-l|-F) shift 2 ;;
+    -*) shift ;;
+    *) break ;;
+  esac
+done
+shift
+case "$*" in
+  *" placed "*)
+    n=$(( $(cat {count} 2>/dev/null || echo 0) + 1 ))
+    echo $n > {count}
+    if [ $n -le {drops} ]; then echo 'client_loop: send disconnect: Broken pipe' >&2; exit 255; fi ;;
+esac
+mkdir -p {far}/data
+export HOME={far} BMO_DATA_DIR={far}/data BMO_TESTBED_LOCK={far}/data/testbed.lock XDG_RUNTIME_DIR={far}/data
+unset CLAUDE_PID BMO_TESTBED_SCOPE BMO_TESTBED_SERVICE BMO_TESTBED_TOKEN BMO_TESTBED_HELD BMO_TESTBED_FRONT \
+  BMO_TESTBED_NEXT BMO_TESTBED_PLACEMENT BMO_TESTBED_PLACED BMO_TESTBED_CHECKOUTS BMO_DEPLOY_UNIT \
+  DBUS_SESSION_BUS_ADDRESS
+exec sh -c "$*"
+"#,
+    count = dir.join("placed-lines").display(),
+    far = far.display(),
+  )
+}
+
+// A deployment's gate on the placed machine whose `ssh` drops the first `drops` runs there, its testbed this
+// binary, over a checkout whose static check is one step that passes.
+fn dropping_gate(dir: &Path, drops: usize) -> PlacedGate<'static> {
+  let mut machine = released(dir, None, None);
+  let ssh = dir.join("ssh");
+
+  install(&dropping_ssh(dir, drops), &ssh);
+  machine.settings.ssh = vec![ssh.to_string_lossy().into_owned()];
+  machine.settings.testbed = env!("CARGO_BIN_EXE_bmo-testbed").to_owned();
+  checkout(
+    &dir.join("repo"),
+    "testbed = 0\n\n[[check.step]]\nid = \"passes\"\ncommand = \"true\"\n",
+  );
+
+  bringing(machine, false)
+}
+
+// The gate asked of the scene's checkout at its `HEAD`, its suite left out.
+fn passed_at(gate: &PlacedGate<'_>, dir: &Path) -> bmo_testbed_deploy::deployment::GateOutcome {
+  let repo = dir.join("repo");
+  let commit = git(&repo, &["rev-parse", "HEAD"]);
+
+  gate.pass(&GateAsk {
+    root: &repo,
+    commit: &commit,
+    since: None,
+    suite: false,
+  })
+}
+
+// "The connection counts as broken where `ssh` ends with its own code, 255 ... and runs that work again from its
+// bench"
+#[test]
+fn a_static_check_the_connection_breaks_under_answers_broken_and_passes_when_asked_again() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let gate = dropping_gate(&dir, 1);
+  let broke = fill_marks(&LANES.placed.broke, &[("machine", "machine-2")]);
+
+  let first = passed_at(&gate, &dir);
+
+  assert!(!first.passed && first.broken, "{first:?}");
+  assert_eq!(first.reason, broke);
+  assert_eq!(first.steps[0].code, i64::from(NOT_RUN_EXIT_CODE));
+
+  let again = passed_at(&gate, &dir);
+
+  assert!(again.passed && !again.broken, "{again:?}");
+  assert_eq!(again.steps[0].code, 0);
+}
+
+// "A machine out of reach before the deployment begins there leaves the gate and the build here"; "Once the
+// deployment has begun there, a try that finds the machine not answering is one more broken try; nothing moves back
+// to the machine the deployment runs on"
+#[test]
+fn a_machine_that_stops_answering_once_begun_there_answers_broken_rather_than_running_here() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let refusing = dir.join("refusing-ssh");
+  let broke = fill_marks(&LANES.placed.broke, &[("machine", "machine-2")]);
+  let build = |gate: &PlacedGate<'_>, at: &Path| {
+    let repo = at.join("repo");
+
+    gate.build(&BuildAsk {
+      root: &repo,
+      commit: &git(&repo, &["rev-parse", "HEAD"]),
+      tree: &repo,
+      profile: "release",
+      binaries: &[],
+      built: &at.join("built"),
+    })
+  };
+  let (fresh_at, begun_at) = (dir.join("fresh"), dir.join("begun"));
+
+  install("#!/bin/sh\necho 'no agent named stand is attached' >&2\nexit 255\n", &refusing);
+  std::fs::create_dir_all(&fresh_at).unwrap();
+  std::fs::create_dir_all(&begun_at).unwrap();
+
+  let mut fresh = dropping_gate(&fresh_at, 0);
+
+  fresh.machine.settings.ssh = vec![refusing.to_string_lossy().into_owned()];
+
+  assert!(
+    passed_at(&fresh, &fresh_at).passed,
+    "the gate here stands in before anything began there"
+  );
+  assert_eq!(build(&fresh, &fresh_at), None, "the build goes here before anything began there");
+
+  let mut begun = dropping_gate(&begun_at, 0);
+
+  assert!(passed_at(&begun, &begun_at).passed);
+
+  begun.machine.settings.ssh = vec![refusing.to_string_lossy().into_owned()];
+
+  let unreached = passed_at(&begun, &begun_at);
+
+  assert!(!unreached.passed && unreached.broken, "{unreached:?}");
+  assert_eq!(unreached.reason, broke);
+  assert_eq!(build(&begun, &begun_at), Some(Err(GateFault::Broken(broke))));
 }

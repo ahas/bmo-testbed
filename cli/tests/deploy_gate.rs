@@ -6,6 +6,7 @@
 //! machine out of reach leaves the deployment live with a warning naming it and what it answered.
 
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use bmo_testbed_client::{TestRun, TestRunKind, TestRunState, TestRunsQuery};
 use bmo_testbed_core::policy::deploy::DEPLOY;
@@ -14,7 +15,7 @@ use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::queue::now_ms;
 use bmo_testbed_record::{Record, TestRunEnd};
 
-use crate::stand::{Ran, git, install, ran, testbed};
+use crate::stand::{Ran, finished, git, install, ran, testbed};
 
 // A declaration whose one check runs the package its setup installs, ending 0.
 const PASSING: &str = r#"[test]
@@ -83,12 +84,17 @@ data_root = "{runtime}"
 
   // The same, with the words and the variables given.
   fn run_with(&self, args: &[&str], variables: &[(&str, &str)]) -> Ran {
+    ran(&mut self.deploying(&self.data, args, variables))
+  }
+
+  // The deployment as a command, its testbed data root the one given.
+  fn deploying(&self, data: &Path, args: &[&str], variables: &[(&str, &str)]) -> Command {
     let bin = self.dir.path().join("bin");
 
     std::fs::create_dir_all(&bin).unwrap();
     install("#!/bin/sh\nexit 0\n", &bin.join("systemctl"));
 
-    let mut command = testbed(&self.repo, &self.data, args);
+    let mut command = testbed(&self.repo, data, args);
 
     command
       .env("BMO_DEPLOY_UNIT", "bmo-deploy-test")
@@ -96,7 +102,7 @@ data_root = "{runtime}"
       .env("PATH", format!("{}:{}", bin.display(), std::env::var("PATH").unwrap_or_default()))
       .envs(variables.iter().copied());
 
-    ran(&mut command)
+    command
   }
 
   fn deployed(&self) -> bool {
@@ -324,4 +330,72 @@ fn a_placement_set_empty_leaves_the_placed_machine_s_testbed_as_it_stands() {
   assert_eq!(done.code, 0, "{}\n{}", done.out, done.err);
   assert!(scene.deployed(), "{}", done.err);
   assert!(!far_bin(&scene).exists(), "{}", done.out);
+}
+
+// A declaration whose check writes into the file given that the deployment of that name began its gate, and whose
+// build step writes that it ended its build; one whose check fails writes both and ends 1, since its stretch in
+// the line ends there.
+fn noting(file: &Path, name: &str, passes: bool) -> String {
+  let file = file.display();
+
+  if passes {
+    format!(
+      "[[check.step]]\nid = \"notes\"\ncommand = \"echo begins {name} >> {file}\"\n\n\
+       [[build.step]]\nid = \"notes\"\ncommand = \"echo ends {name} >> {file}\"\n"
+    )
+  } else {
+    format!(
+      "[[check.step]]\nid = \"notes\"\ncommand = \"echo begins {name} >> {file}; echo ends {name} >> {file}; exit 1\"\n"
+    )
+  }
+}
+
+// "The verb and the hosted tool take any number of deployments at once. Each call starts its own unit as before;
+// the unit waits its turn in the line and ends with its own outcome"; "Deployments on one machine pass their gate and
+// their build one after the other"
+#[test]
+fn deployments_asked_at_once_pass_their_gates_one_after_the_other_and_each_ends_with_its_own_outcome() {
+  let shared = tempfile::tempdir().unwrap();
+  let notes = shared.path().join("notes");
+  let data = shared.path().join("testbed-data");
+  let scenes: Vec<(Scene, bool)> = [("first", true), ("second", false), ("third", true), ("fourth", true)]
+    .into_iter()
+    .map(|(name, passes)| (Scene::new(&noting(&notes, name, passes)), passes))
+    .collect();
+
+  std::fs::create_dir_all(&data).unwrap();
+
+  let started: Vec<_> = scenes
+    .iter()
+    .map(|(scene, _)| scene.deploying(&data, &["deploy"], &[]).spawn().expect("the binary starts"))
+    .collect();
+  let ended: Vec<Ran> = started.into_iter().map(finished).collect();
+
+  for ((scene, passes), done) in scenes.iter().zip(&ended) {
+    let head = git(&scene.repo, &["rev-parse", "HEAD"]);
+    // The line naming the deployment's own failure: its gate, and the check step that failed it.
+    let failed = fill_marks(&DEPLOY.run.gate_failed, &[("commit", &head[..12]), ("reason", "")]);
+    let own_cause =
+      |said: &str| said.lines().any(|line| line.starts_with(&failed) && line.contains("notes"));
+
+    if *passes {
+      assert_eq!(done.code, 0, "{}\n{}", done.out, done.err);
+      assert!(scene.deployed(), "{}", done.err);
+    } else {
+      assert_eq!(done.code, 1, "{}\n{}", done.out, done.err);
+      assert!(!scene.deployed(), "{}", done.err);
+      assert!(own_cause(&done.out) || own_cause(&done.err), "{}\n{}", done.out, done.err);
+    }
+  }
+
+  // Each deployment's gate began only once the one before it had ended its build, or failed its gate.
+  let lines: Vec<String> = std::fs::read_to_string(&notes).unwrap().lines().map(str::to_owned).collect();
+
+  assert_eq!(lines.len(), 8, "{lines:?}");
+
+  for pair in lines.chunks(2) {
+    let name = pair[0].strip_prefix("begins ").expect("a gate begins");
+
+    assert_eq!(pair[1], format!("ends {name}"), "{lines:?}");
+  }
 }

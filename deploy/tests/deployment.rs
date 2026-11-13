@@ -5,8 +5,9 @@
 //! not come up is rolled back onto the release before. Once live, the testbed the placed machine runs is
 //! brought to the release, and a machine that does not take it leaves the deployment live with a warning.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use bmo_testbed_client::{DeploymentState, PageQuery, RestartsQuery, TestRun, TestRunKind, TestRunState};
 use bmo_testbed_core::declaration::Repository;
@@ -16,9 +17,11 @@ use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::turn::Env;
 use bmo_testbed_deploy::console::{ConsoleHands, MachineConsole};
 use bmo_testbed_deploy::deployment::{
-  BuildAsk, DeployAsk, DeployHands, DeployPlaces, Gate, GateAsk, GateOutcome, LaidUnits, Machine, StepAsk,
-  StepRan, SuitePassed, deploy, major_change, release_build, version_major, workspace_binaries,
+  BuildAsk, DeployAsk, DeployHands, DeployPlaces, Gate, GateAsk, GateFault, GateOutcome, LaidUnits,
+  Machine, StepAsk, StepRan, SuitePassed, deploy, major_change, release_build, version_major,
+  workspace_binaries,
 };
+use bmo_testbed_deploy::line::DeployLine;
 use bmo_testbed_deploy::progress::{Outcome, read_deploy_progress};
 use bmo_testbed_deploy::release::{LiveProcess, release_dir};
 use bmo_testbed_deploy::run::{Ran, run_quiet};
@@ -40,6 +43,8 @@ struct Hands {
   gives_up: bool,
   /// The service's console face the probe asks, where the declaration brings a console screen.
   console: Option<Face>,
+  /// Where each line said is told as well, for a test reading the run while it runs.
+  told: Option<std::sync::mpsc::Sender<String>>,
 }
 
 impl DeployHands for Hands {
@@ -81,6 +86,10 @@ impl DeployHands for Hands {
 
   fn say(&self, line: &str) {
     self.said.borrow_mut().push(line.to_owned());
+
+    if let Some(told) = &self.told {
+      let _ = told.send(line.to_owned());
+    }
   }
 
   fn now_ms(&self) -> i64 {
@@ -129,8 +138,7 @@ impl Gate for Told {
       passed: self.0,
       reason: if self.0 { String::new() } else { "the suite failed: a.test.ts".to_owned() },
       flaky: if self.0 { vec![("a test".to_owned(), "a.test.ts".to_owned())] } else { Vec::new() },
-      steps: Vec::new(),
-      suite_passed: None,
+      ..GateOutcome::default()
     }
   }
 }
@@ -167,7 +175,7 @@ impl Gate for BuiltElsewhere {
     }
   }
 
-  fn build(&self, ask: &BuildAsk<'_>) -> Option<Result<(), String>> {
+  fn build(&self, ask: &BuildAsk<'_>) -> Option<Result<(), GateFault>> {
     self
       .0
       .borrow_mut()
@@ -1445,4 +1453,245 @@ fn a_passed_run_the_gate_found_on_its_machine_is_named_with_the_machine() {
     "{}",
     said(&hands)
   );
+}
+
+// The line naming the machine whose connection broke, as the placed gate says it.
+const BROKE: &str = "the connection to machine-2 broke";
+
+// A gate on another machine whose connection breaks under its gate and under its build the number of times given
+// before each answers: the gate passing, the build bringing a binary back. How many times each was asked.
+#[derive(Default)]
+struct Breaking {
+  gate_breaks: usize,
+  build_breaks: usize,
+  gates: Cell<usize>,
+  builds: Cell<usize>,
+}
+
+impl Gate for Breaking {
+  fn pass(&self, _: &GateAsk<'_>) -> GateOutcome {
+    let asked = self.gates.get();
+
+    self.gates.set(asked + 1);
+    GateOutcome {
+      passed: asked >= self.gate_breaks,
+      broken: asked < self.gate_breaks,
+      reason: if asked < self.gate_breaks { BROKE.to_owned() } else { String::new() },
+      ..GateOutcome::default()
+    }
+  }
+
+  fn build(&self, ask: &BuildAsk<'_>) -> Option<Result<(), GateFault>> {
+    let asked = self.builds.get();
+
+    self.builds.set(asked + 1);
+
+    if asked < self.build_breaks {
+      return Some(Err(GateFault::Broken(BROKE.to_owned())));
+    }
+
+    std::fs::create_dir_all(ask.built).unwrap();
+    std::fs::write(ask.built.join("app"), "built elsewhere").unwrap();
+    Some(Ok(()))
+  }
+}
+
+// A gate on another machine that passes and whose build there fails with Cargo's own code.
+struct FailsBuildThere;
+
+impl Gate for FailsBuildThere {
+  fn pass(&self, _: &GateAsk<'_>) -> GateOutcome {
+    GateOutcome {
+      passed: true,
+      ..GateOutcome::default()
+    }
+  }
+
+  fn build(&self, _: &BuildAsk<'_>) -> Option<Result<(), GateFault>> {
+    Some(Err(GateFault::Failed {
+      code: Some(101),
+      said: "it ran on machine-2 in the bench".to_owned(),
+    }))
+  }
+}
+
+// An ask whose work on the gate's machine is tried as many times as pauses are given plus one, no pause waiting.
+fn retrying(pauses: usize) -> DeployAsk {
+  DeployAsk {
+    retry: vec![Duration::ZERO; pauses],
+    ..DeployAsk::default()
+  }
+}
+
+// The line saying the work is tried again: the try about to begin of every try there is.
+fn retried(work: &str, next: usize, tries: usize) -> String {
+  fill_marks(
+    &DEPLOY.run.retrying,
+    &[
+      ("said", BROKE),
+      ("work", work),
+      ("seconds", "0"),
+      ("next", &next.to_string()),
+      ("tries", &tries.to_string()),
+    ],
+  )
+}
+
+// "where the connection breaks under one ... the deployment then says so on a line naming the machine, the work and
+// the pause, waits the pause, and runs that work again from its bench: the whole gate, or the build with its
+// read-back"
+#[test]
+fn a_gate_and_a_build_the_connection_breaks_under_are_tried_again_and_the_commit_goes_live() {
+  let scene = Scene::over_an_outside_tree();
+  let hands = Hands::default();
+  let gate = Breaking {
+    gate_breaks: 1,
+    build_breaks: 2,
+    ..Breaking::default()
+  };
+  let code = scene.run_with(&retrying(3), &gate, &hands, &scene.env());
+
+  assert_eq!(code, 0, "{}", said(&hands));
+  assert_eq!((gate.gates.get(), gate.builds.get()), (2, 3));
+  assert_eq!(std::fs::read_to_string(scene.at("live/deploy/bin/app")).unwrap(), "built elsewhere");
+
+  let lines = said(&hands);
+
+  for line in [
+    retried(&DEPLOY.run.gate_work, 2, 4),
+    retried("cargo release build", 2, 4),
+    retried("cargo release build", 3, 4),
+  ] {
+    assert!(lines.contains(&line), "{line}\n{lines}");
+  }
+}
+
+// "Once the tries are spent, the stage fails naming the connection: the machine and how many tries running it
+// broke on"
+#[test]
+fn a_connection_that_keeps_breaking_fails_the_stage_naming_it() {
+  let lost = fill_marks(&DEPLOY.run.connection_lost, &[("said", BROKE), ("tries", "3")]);
+
+  let scene = Scene::new();
+  let hands = Hands::default();
+  let gate = Breaking {
+    gate_breaks: usize::MAX,
+    ..Breaking::default()
+  };
+  let code = scene.run_with(&retrying(2), &gate, &hands, &scene.env());
+  let head = must(&["rev-parse", "HEAD"], &scene.source);
+  let failed = fill_marks(&DEPLOY.run.gate_failed, &[("commit", &head[..12]), ("reason", &lost)]);
+
+  assert_eq!(code, 1, "{}", said(&hands));
+  assert_eq!(gate.gates.get(), 3);
+  assert!(said(&hands).contains(&failed), "{failed}\n{}", said(&hands));
+  assert!(!scene.deploy_dir().exists(), "{}", said(&hands));
+
+  let scene = Scene::over_an_outside_tree();
+  let hands = Hands::default();
+  let gate = Breaking {
+    build_breaks: usize::MAX,
+    ..Breaking::default()
+  };
+  let code = scene.run_with(&retrying(2), &gate, &hands, &scene.env());
+  let unbuilt =
+    fill_marks(&DEPLOY.run.build_unfinished, &[("step", "cargo release build"), ("said", &lost)]);
+
+  assert_eq!(code, 1, "{}", said(&hands));
+  assert_eq!(gate.builds.get(), 3);
+  assert!(said(&hands).contains(&unbuilt), "{unbuilt}\n{}", said(&hands));
+  assert!(!scene.deploy_dir().exists(), "{}", said(&hands));
+}
+
+// "A failure of the work's own is not tried again: ... a build that fails, ends its stage at once with its own exit
+// code, as the build's line names it"
+#[test]
+fn a_build_that_fails_there_is_not_tried_again_and_names_its_own_exit_code() {
+  let scene = Scene::over_an_outside_tree();
+  let hands = Hands::default();
+  let code = scene.run_with(&retrying(3), &FailsBuildThere, &hands, &scene.env());
+  let failed = fill_marks(
+    &DEPLOY.run.build_failed,
+    &[
+      ("step", "cargo release build"),
+      ("code", "101"),
+      ("said", "it ran on machine-2 in the bench"),
+    ],
+  );
+
+  assert_eq!(code, 1, "{}", said(&hands));
+  assert!(said(&hands).contains(&failed), "{failed}\n{}", said(&hands));
+  assert!(!said(&hands).contains("trying again"), "{}", said(&hands));
+}
+
+// The scene's own deployment line, its waits said every few milliseconds, with the bound given.
+fn line_of(scene: &Scene, bound: Duration) -> DeployLine {
+  DeployLine {
+    lock: scene.at("locks/deploy-line.lock"),
+    bound,
+    say_every: Duration::from_millis(5),
+    poll: Some(Duration::from_millis(5)),
+  }
+}
+
+// "Every deployment stands in the machine's one deployment line ... the unit waits its turn in the line and ends
+// with its own outcome"; "While it waits it says so"; "A deployment waiting there has written nothing into its
+// progress record"
+#[test]
+fn a_deployment_that_must_wait_in_the_line_ends_live_once_its_turn_comes() {
+  let scene = Scene::new();
+  let line = line_of(&scene, Duration::from_secs(3600));
+  let held = line.take("an earlier deployment", &|_| {}).unwrap();
+  let (told, heard) = std::sync::mpsc::channel();
+  let ask = DeployAsk {
+    line: Some(line),
+    ..DeployAsk::default()
+  };
+
+  let ((code, lines), waiting, unwritten) = std::thread::scope(|scope| {
+    let deploying = scope.spawn(|| {
+      let hands = Hands {
+        told: Some(told),
+        ..Hands::default()
+      };
+      let code = scene.run_with(&ask, &Told(true), &hands, &scene.env());
+
+      (code, said(&hands))
+    });
+    // Its turn is let go once it has said it waits behind the holder, or once a minute has gone without it.
+    let given_up = Instant::now() + Duration::from_secs(60);
+    let waiting =
+      std::iter::from_fn(|| heard.recv_timeout(given_up.saturating_duration_since(Instant::now())).ok())
+        .find(|line| line.contains("waiting for the deployment line"));
+    let unwritten = !scene.at("live/deploy-progress.json").exists();
+
+    drop(held);
+    (deploying.join().unwrap(), waiting, unwritten)
+  });
+  let waiting = waiting.expect("the deployment says it waits");
+
+  assert!(waiting.contains("held by an earlier deployment"), "{waiting}");
+  assert!(unwritten, "nothing is written while it waits: {lines}");
+  assert_eq!(code, 0, "{lines}");
+  assert!(scene.deploy_dir().exists(), "{lines}");
+}
+
+// "Once it has waited the policy's minutes ... it says so on a line naming the holder and goes on beside it,
+// outside the line"
+#[test]
+fn a_deployment_whose_wait_in_the_line_passes_its_bound_goes_on_beside_the_holder_and_ends_live() {
+  let scene = Scene::new();
+  let hands = Hands::default();
+  let line = line_of(&scene, Duration::ZERO);
+  let _held = line.take("an earlier deployment", &|_| {}).unwrap();
+  let ask = DeployAsk {
+    line: Some(line),
+    ..DeployAsk::default()
+  };
+  let code = scene.run_with(&ask, &Told(true), &hands, &scene.env());
+  let passed = fill_marks(&DEPLOY.run.line_bound, &[("minutes", "0"), ("holder", "an earlier deployment")]);
+
+  assert_eq!(code, 0, "{}", said(&hands));
+  assert!(said(&hands).contains(&passed), "{passed}\n{}", said(&hands));
+  assert!(scene.deploy_dir().exists(), "{}", said(&hands));
 }

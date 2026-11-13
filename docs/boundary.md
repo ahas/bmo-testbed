@@ -316,6 +316,9 @@ bmo-testbed deploy [--commit <sha>] [--message <why>] [--dry-run] [--no-check] [
   deployment's unit it starts one, prints its name
   and the command that reads its journal, and exits 0; inside it, it runs and exits 0 where the commit
   went live, 1 where it failed or was rolled back. Its refusals exit 2 in the caller's own process.
+  Deployments started together each run in their own unit and pass their gate and their build one after
+  the other, in the order they asked, through the deployment line under the data root's `locks/`
+  (`docs/deploy.md`, 「The deployment line」).
   `--dry-run` says in the caller's own process what it would do, changes nothing and starts no unit.
   `--force-live` goes on at once past a declared `quiet` command that names work under way or could not
   tell, instead of waiting for it to answer 0 (`docs/deploy.md`, 「What the deploy run does, in order」),
