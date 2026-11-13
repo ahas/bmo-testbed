@@ -28,7 +28,7 @@ use std::process::{Command, Stdio};
 use bmo_testbed_core::close_line::close_line_path;
 use bmo_testbed_core::declaration::Repository;
 use bmo_testbed_core::languages::LANGUAGES;
-use bmo_testbed_core::placement::{Local, PLACED_VARIABLE, Placement, wide_lane_full};
+use bmo_testbed_core::placement::{KeptHere, Local, PLACED_VARIABLE, Placement, wide_lane_full};
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::policy::verbs::VERBS;
@@ -44,21 +44,29 @@ use crate::words::{
   TestArgs, TestWord, Verb,
 };
 
-/// The placement a run started in a directory asks: the endpoint the environment names, the placed machine the
-/// settings name, the endpoint the declaration names, or the local one.
+/// The placement a run started in a directory asks: kept here where its environment sets a variable the
+/// directory's declaration names as this machine's, else the endpoint the environment names, the placed machine
+/// the settings name, the endpoint the declaration names, or the local one. A declaration that does not read
+/// names nothing.
 pub fn placement_of(env: &Env, dir: &Path) -> Box<dyn Placement> {
-  if let Some(endpoint) = env.get(placement::PLACEMENT_VARIABLE).filter(|named| !named.is_empty()) {
-    return Box::new(HttpPlacement {
-      endpoint: endpoint.clone(),
-    });
+  let runner = Repository::read(dir).map(|repo| repo.declaration.runner).unwrap_or_default();
+
+  if let Some(kept) = KeptHere::of(env, &runner.local_variables) {
+    return Box::new(kept);
+  }
+
+  let endpoint = env.get(placement::PLACEMENT_VARIABLE).filter(|named| !named.is_empty()).cloned();
+
+  if let Some(endpoint) = endpoint {
+    return Box::new(HttpPlacement { endpoint });
   }
 
   if let Some(machine) = MachinePlacement::named(&data_root(), &home_of(env)) {
     return Box::new(machine);
   }
 
-  match HttpPlacement::named(env, dir) {
-    Some(http) => Box::new(http),
+  match runner.placement {
+    Some(endpoint) => Box::new(HttpPlacement { endpoint }),
     None => Box::new(Local),
   }
 }

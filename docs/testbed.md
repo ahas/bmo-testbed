@@ -272,6 +272,12 @@ flowchart TD
   (`docs/boundary.md`, 「Placement」): the placed machine its settings name, reached over `ssh`, or the
   placement endpoint's answer; with neither, or one that does not answer, the run stays on the machine
   it was started on.
+- **A run that reads what only this machine reaches stays here:** one whose environment sets a variable
+  the checkout's declaration names as such, the address of a console standing on this machine's
+  loopback among them, since a placed run carries none of the caller's environment.
+- **A placed machine whose testbed is another release than this one's runs nothing,** so the run stays
+  here, said on a line naming both commits; a deployment's gate and build fail their stage instead
+  (`docs/deploy.md`, 「Where a deployment runs」).
 - **A Cargo verb that tests, checks or lints is such a run while this machine is full:** `test`, `check`
   and `clippy` through `bmo-testbed cargo`, started while every seat of this machine's wide lane is held
   or someone already waits for one, are placed the same way and run there as the same verb of that

@@ -101,6 +101,12 @@ no_registry = "testbed: the run's registry of checkouts could not be written at 
 # asked for and {said} what reading it came to.
 stale = "the testbed on {machine} is the release of {far}, not this testbed's {own}; bring that machine's testbed to {own} before anything runs there"
 unreleased = "the testbed on {machine} names no release ({file}: {said}); bring that machine's testbed to {own} before anything runs there"
+# A run that is no deployment's, kept here because the placed machine's testbed is not this one's release, {said}
+# the `stale` or `unreleased` line.
+other_release = "testbed: not placed on {machine}: {said}; running here"
+# A run kept here because its environment sets {variable}, a variable its declaration names as reaching what only
+# this machine reaches.
+kept = "testbed: {variable} names what only this machine reaches; running here"
 
 # A command's wait and run, as every step of a check says them.
 [times]
@@ -135,9 +141,6 @@ unstarted = "testbed: {program} could not be started: {why}"
 no_log = "testbed: the log could not be written in {dir}: {why}"
 # A run a placed machine dropped, {machine} the machine and {said} the last line it gave.
 dropped = "testbed: not run, {machine} dropped it: {said}; run the same command again"
-# A run a placed machine refused because its testbed is not this one's release, {said} the line saying so; the
-# same command fails the same way until that machine's testbed is brought to this release.
-refused = "testbed: not run, {machine} refused it: {said}"
 
 # The lanes and the close line, as `status` prints them.
 [status]

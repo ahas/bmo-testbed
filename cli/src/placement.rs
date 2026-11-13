@@ -14,7 +14,7 @@ use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::policy::quick_checks::QUICK_CHECKS;
 use bmo_testbed_core::turn::{
-  Env, FRONT_VARIABLE, Lane, NEXT_VARIABLE, NOT_RUN_EXIT_CODE, process_env, stands_at_front, stands_next,
+  FRONT_VARIABLE, Lane, NEXT_VARIABLE, NOT_RUN_EXIT_CODE, process_env, stands_at_front, stands_next,
 };
 use bmo_testbed_deploy::release::built_from;
 use bmo_testbed_deploy::tree::{BUILT_FROM, short};
@@ -38,20 +38,6 @@ const RESULT_EVENT: &str = "result";
 /// The placement endpoint asked over HTTP.
 pub struct HttpPlacement {
   pub endpoint: String,
-}
-
-impl HttpPlacement {
-  /// The endpoint the environment names, or the declaration of the repository a directory stands in; none
-  /// where neither names one, or where the declaration does not read.
-  pub fn named(env: &Env, dir: &Path) -> Option<Self> {
-    let endpoint = env
-      .get(PLACEMENT_VARIABLE)
-      .filter(|named| !named.is_empty())
-      .cloned()
-      .or_else(|| Repository::read(dir).ok()?.declaration.runner.placement)?;
-
-    Some(Self { endpoint })
-  }
 }
 
 // What a run posts to the endpoint.
@@ -542,12 +528,12 @@ pub fn own_release() -> Option<String> {
   built_from(binary.parent()?.parent()?)
 }
 
-/// What a run on the placed machine came to: it ran there, with its code; or it did not go, the machine
-/// unreached or, for a run that goes only to a free seat, every seat there held or waited for, said on a
-/// line, and the run is the caller's.
+/// What a run on the placed machine came to: it ran there, with its code; or it did not go, said on a line,
+/// and the run is the caller's: the machine unreached or its testbed another release than this one's, or, for
+/// a run that goes only to a free seat, every seat there held or waited for.
 pub enum Placed {
   Ran(u8),
-  Unreached,
+  Here,
   Full,
 }
 
@@ -808,16 +794,17 @@ impl MachinePlacement {
   /// the words run there as the testbed's own `run`.
   fn placed(&self, ask: &PlaceAsk<'_>) -> Placed {
     if !self.reached() {
-      return Placed::Unreached;
+      return Placed::Here;
     }
 
-    // A testbed there of another release is a refusal the same command meets again, never a dropped run.
+    // A testbed there of another release would meet the same command the same way until it is brought to this
+    // release, so the run is this machine's.
     if let Err(said) = self.same_release() {
       let machine = self.settings.label();
 
-      println!("{}", fill_marks(&LANES.run.refused, &[("machine", machine), ("said", &said)]));
+      eprintln!("{}", fill_marks(&LANES.placed.other_release, &[("machine", machine), ("said", &said)]));
 
-      return Placed::Ran(NOT_RUN_EXIT_CODE);
+      return Placed::Here;
     }
 
     if ask.to_free_seat && !self.seat_free() {
@@ -860,7 +847,7 @@ impl Placement for MachinePlacement {
   fn place(&self, ask: &PlaceAsk<'_>) -> Option<u8> {
     match self.placed(ask) {
       Placed::Ran(code) => Some(code),
-      Placed::Unreached | Placed::Full => None,
+      Placed::Here | Placed::Full => None,
     }
   }
 }

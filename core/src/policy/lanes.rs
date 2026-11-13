@@ -82,6 +82,8 @@ pub struct PlacedWords {
   pub no_registry: String,
   pub stale: String,
   pub unreleased: String,
+  pub other_release: String,
+  pub kept: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -113,7 +115,6 @@ pub struct RunWords {
   pub unstarted: String,
   pub no_log: String,
   pub dropped: String,
-  pub refused: String,
 }
 
 #[derive(Debug, Deserialize)]

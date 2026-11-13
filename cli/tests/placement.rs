@@ -4,8 +4,9 @@
 //! and the run's output and result come back off its stream. On the placed machine the settings name: the
 //! bench made ready over the same stand-in, from the remote that machine can reach or empty where it can reach
 //! none, the run the testbed's `placed` verb there, a machine that cannot be reached, or settings that do not
-//! read, leaving the run here, the shared versions laid over their copy as their main branch holds them, and a
-//! testbed there that is not this one's release refused before any bench is made.
+//! read, leaving the run here, the shared versions laid over their copy as their main branch holds them, a
+//! testbed there that is not this one's release refused before any bench is made and a run meeting it kept
+//! here, and a run whose environment sets a variable its declaration names as this machine's kept here.
 
 use std::convert::Infallible;
 use std::path::Path;
@@ -15,9 +16,10 @@ use axum::Router;
 use axum::response::sse::{Event, Sse};
 use axum::routing::{get, post};
 use bmo_testbed_cli::placement::{MachinePlacement, MachineSettings, reachable_remote};
+use bmo_testbed_core::placement::{PlaceAsk, Placement};
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
-use bmo_testbed_core::turn::NOT_RUN_EXIT_CODE;
+use bmo_testbed_core::turn::{Env, Lane, NOT_RUN_EXIT_CODE};
 use serde_json::{Value, json};
 
 use crate::stand::{Ran, checkout, git, install, ran, testbed};
@@ -530,4 +532,53 @@ fn the_same_release_passes_one_naming_none_is_refused_and_none_here_compares_not
   assert!(unreleased.starts_with(opening.split("{said}").next().unwrap()), "{unreleased}");
   assert!(unreleased.contains(&OWN[..12]), "{unreleased}");
   assert_eq!(released(&dir, None, None).same_release(), Ok(()));
+}
+
+// "where they differ, a run, a suite, a change check or a Cargo verb runs here instead"
+#[test]
+fn a_run_meeting_a_testbed_there_of_another_release_is_kept_here_and_no_bench_is_made() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let repo = dir.join("repo");
+
+  checkout(&repo, "testbed = 0\n");
+
+  let command = vec!["true".to_owned()];
+  let env = Env::new();
+  let ask = PlaceAsk {
+    command: &command,
+    adapter: Some("plain"),
+    lane: Lane::Wide,
+    cwd: repo.clone(),
+    env: &env,
+    to_free_seat: false,
+  };
+
+  assert_eq!(released(&dir, Some(FAR), Some(OWN)).place(&ask), None);
+  assert!(!dir.join("bench").exists());
+}
+
+// "a run whose environment sets a variable its checkout's declaration names in `[runner] local_variables` is
+// never placed, said on a line naming the variable"
+#[test]
+fn a_run_setting_a_variable_its_declaration_names_as_this_machines_stays_here() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let repo = dir.join("repo");
+  let ssh = dir.join("ssh");
+
+  install(SSH, &ssh);
+  settle(&dir, &ssh, "stand");
+  checkout(&repo, "testbed = 0\n\n[runner]\nlocal_variables = [\"CONSOLE_URL\"]\n");
+
+  let here = ran(
+    testbed(&repo, &dir, &["run", "--adapter", "plain", "--", "sh", "-c", "exit 6"])
+      .env("HOME", &dir)
+      .env("CONSOLE_URL", "http://127.0.0.1:1"),
+  );
+  let kept = fill_marks(&LANES.placed.kept, &[("variable", "CONSOLE_URL")]);
+
+  assert_eq!(here.code, 6, "{}\n{}", here.out, here.err);
+  assert!(here.err.contains(&kept), "{}", here.err);
+  assert!(!dir.join("bench").exists());
 }

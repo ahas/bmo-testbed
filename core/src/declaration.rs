@@ -486,6 +486,9 @@ impl Backup {
 #[serde(deny_unknown_fields)]
 pub struct Runner {
   pub placement: Option<String>,
+  /// The variables naming what only the machine a run starts on reaches; one set keeps the run there.
+  #[serde(default)]
+  pub local_variables: Vec<String>,
 }
 
 /// `[events]`: where events go.

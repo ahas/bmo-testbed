@@ -190,6 +190,7 @@ screen declares no such table.
 | Key | Type | Default | Meaning |
 |---|---|---|---|
 | `placement` | URL | none | The placement endpoint (`docs/boundary.md`, 「Placement」); `BMO_TESTBED_PLACEMENT` overrides it, and none runs every run where it was started |
+| `local_variables` | list of strings | `[]` | The variables this repository's runs read that name what only the machine they start on reaches, such as the address of a server on its loopback; a run whose environment sets one to a value that is not empty is never placed elsewhere |
 
 ## `[events]`: where events go
 

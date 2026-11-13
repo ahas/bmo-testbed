@@ -4,6 +4,8 @@
 
 use std::path::PathBuf;
 
+use crate::policy::fill_marks;
+use crate::policy::lanes::LANES;
 use crate::turn::{Env, HELD_VARIABLE, Lane, lock_path, read_queue};
 
 /// The variable a deployment's or a whole run's unit is named by inside it.
@@ -36,6 +38,32 @@ pub struct Local;
 
 impl Placement for Local {
   fn place(&self, _: &PlaceAsk<'_>) -> Option<u8> {
+    None
+  }
+}
+
+/// The placement of a run that reads what only this machine reaches: a variable its checkout's declaration
+/// names, set in its environment. Asked, it says which variable keeps the run here, and keeps it here.
+pub struct KeptHere {
+  pub variable: String,
+}
+
+impl KeptHere {
+  /// The placement of a run whose environment sets one of the variables named, the first of them it sets;
+  /// none where it sets none.
+  pub fn of(env: &Env, variables: &[String]) -> Option<Self> {
+    variables
+      .iter()
+      .find(|name| env.get(*name).is_some_and(|value| !value.is_empty()))
+      .map(|variable| Self {
+        variable: variable.clone(),
+      })
+  }
+}
+
+impl Placement for KeptHere {
+  fn place(&self, _: &PlaceAsk<'_>) -> Option<u8> {
+    eprintln!("{}", fill_marks(&LANES.placed.kept, &[("variable", &self.variable)]));
     None
   }
 }

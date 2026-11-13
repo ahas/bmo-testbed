@@ -437,7 +437,7 @@ verb's own name, and each noun takes what that verb takes.
 - `[build]` with `[[build.step]]`: the release build;
 - `[deploy]` with `[[deploy.step]]`, `[deploy.console]` and `[deploy.backup]`: the deploy tree, data root,
   env links, units, health, declared steps, the console screen the deployment probes and backups;
-- `[runner]`: the placement endpoint;
+- `[runner]`: the placement endpoint and the variables that keep a run here;
 - `[events]`: the event hook.
 
 Units are declared by their files: every unit file the `deploy.units` globs find that carries an
@@ -662,14 +662,21 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   work — its gate and its Cargo release build — goes to the placed machine the settings name
   (`docs/deploy.md`, 「Where a deployment runs」) and nowhere else; anything else a deployment's unit
   runs stays where it is.
+- **A run whose environment sets a variable its checkout's declaration names in `[runner]
+  local_variables` is never placed,** said on a line naming the variable. A placed run carries none of
+  the caller's environment but its place in the line, and what such a variable names, a server on this
+  machine's loopback address among them, only this machine reaches. The variables a repository's runs
+  read are that repository's to name, so the platform's own addresses every session carries keep
+  nothing here.
 - **A run placed because this machine is full goes only to a free seat there.** The ask says so; the placed
   machine is asked its `status --free` before the bench is made ready, and where every seat there is held
   or waited for, or no answer says otherwise, the run waits for a seat here, said on a line. A run that is
   placed whatever this machine holds, a `run` or a suite, goes and waits in that machine's line. The
   placement endpoint chooses for itself and is told nothing of it.
 - **In the crates the placement is a trait** in `core` with one method, asked with the run's words and
-  whether it goes only to a free seat, and answering here or elsewhere with an exit code; the local placement, always here, is the default, and
-  the placed machine and the HTTP placement in `cli` are members of it.
+  whether it goes only to a free seat, and answering here or elsewhere with an exit code; the local placement, always here, is the default, the
+  placement kept here by a variable says so and answers here, and the placed machine and the HTTP
+  placement in `cli` are members of it.
 
 ### The placed machine
 
@@ -688,9 +695,11 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   on a line.
 - **The testbed there is this one's release.** A testbed running from a release reads, before it makes
   a bench ready, the commit the `built-from` file beside that machine's `testbed` binary names, and
-  compares it with the commit of its own release. Where they differ, or no such file reads there, the
-  run is not run, exit code 75, and the deployment's stage fails, on a line naming the machine and both
-  commits. A testbed running from no release, such as a checkout's own build, compares nothing.
+  compares it with the commit of its own release. Where they differ, or no such file reads there,
+  nothing runs there: a deployment's stage fails, and a `run`, a suite, a change check or a Cargo verb
+  runs here instead, each on a line naming the machine and both commits, since the same command would
+  meet that machine the same way until its testbed is brought to this release. A testbed running from
+  no release, such as a checkout's own build, compares nothing.
 - **The caller makes the bench ready** before it runs: where the checkout's place under the bench root
   holds no repository it clones the checkout's reachable remote there, or makes an empty repository where
   the checkout has none or the clone fails there, the push then carrying the history the bench lacks;
