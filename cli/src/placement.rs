@@ -113,6 +113,44 @@ fn git(dir: &Path, args: &[&str]) -> String {
     .unwrap_or_default()
 }
 
+/// The remote a bench on another machine clones: the checkout's `origin`, and where that names a repository on
+/// this machine, which reads as nothing there, the `origin` that repository names in turn, followed until one
+/// names a repository elsewhere. Empty where the chain ends on this machine or comes back on itself.
+pub fn reachable_remote(checkout: &Path) -> String {
+  let mut seen: Vec<PathBuf> = std::fs::canonicalize(checkout).into_iter().collect();
+  let mut here = checkout.to_path_buf();
+
+  loop {
+    let remote = git(&here, &["remote", "get-url", "origin"]);
+    let Some(next) = local_repository(&here, &remote) else {
+      return remote;
+    };
+
+    if seen.contains(&next) {
+      return String::new();
+    }
+
+    seen.push(next.clone());
+    here = next;
+  }
+}
+
+// The directory on this machine a remote names: a `file` URL's path, or the remote read as a path from the
+// repository naming it, as git reads it; none where the remote is empty or names no directory here.
+fn local_repository(from: &Path, remote: &str) -> Option<PathBuf> {
+  if remote.is_empty() {
+    return None;
+  }
+
+  let path = url::Url::parse(remote)
+    .ok()
+    .filter(|url| url.scheme() == "file")
+    .and_then(|url| url.to_file_path().ok())
+    .unwrap_or_else(|| from.join(remote));
+
+  std::fs::canonicalize(path).ok().filter(|path| path.is_dir())
+}
+
 fn quoted(word: &str) -> String {
   shlex::try_quote(word).map_or_else(|_| word.to_owned(), |word| word.into_owned())
 }
@@ -128,9 +166,9 @@ fn succeeded(output: &std::io::Result<Output>) -> bool {
   output.as_ref().is_ok_and(|done| done.status.success())
 }
 
-/// A checkout the bench is made from: its root, its remote, the commit the bench is put at, whether its open
-/// files go over, the outside trees copied to their own places under the bench root, and the files laid over
-/// those copies.
+/// A checkout the bench is made from: its root, its reachable remote, the commit the bench is put at, whether
+/// its open files go over, the outside trees copied to their own places under the bench root, and the files
+/// laid over those copies.
 pub struct BenchSource<'a> {
   pub checkout: &'a Path,
   pub remote: &'a str,
@@ -196,9 +234,10 @@ fn rsync_over(ssh_command: &str, from: &Path, to: &str, kept: &[String]) -> std:
     .output()
 }
 
-/// The bench made ready from a checkout: made where it holds no repository, from the checkout's remote or
-/// empty, handed the commit and checked out at it, the checkout's open files copied over it where asked, and
-/// each outside tree copied to its place. The line saying what failed where a step did.
+/// The bench made ready from a checkout: made where it holds no repository, from the checkout's remote, or
+/// empty where it has none or the clone fails there, handed the commit and checked out at it, the checkout's
+/// open files copied over it where asked, and each outside tree copied to its place. The line saying what
+/// failed where a step did.
 pub fn ready_bench(bench: &Bench, source: &BenchSource<'_>) -> Result<(), String> {
   let checkout = source.checkout;
   let remote = source.remote;
@@ -217,10 +256,13 @@ pub fn ready_bench(bench: &Bench, source: &BenchSource<'_>) -> Result<(), String
       .output()
   };
   let path = far_path(&bench.path);
+  let empty = format!("git init -q {path}");
+  // A remote the machine there cannot read, or asks it for credentials it has none for, leaves the bench
+  // empty, and the push carries the history it lacks.
   let make = if remote.is_empty() {
-    format!("git init -q {path}")
+    empty
   } else {
-    format!("git clone -q {} {path}", quoted(remote))
+    format!("GIT_TERMINAL_PROMPT=0 git clone -q {} {path} || {empty}", quoted(remote))
   };
   // A folder an earlier run copied there as another checkout's outside tree is made a repository in place; the
   // push then carries what it lacks.
@@ -348,7 +390,7 @@ impl HttpPlacement {
   async fn placed(&self, ask: &PlaceAsk<'_>) -> Option<u8> {
     let found = git(&ask.cwd, &["rev-parse", "--show-toplevel"]);
     let checkout = if found.is_empty() { ask.cwd.clone() } else { PathBuf::from(found) };
-    let remote = git(&checkout, &["remote", "get-url", "origin"]);
+    let remote = reachable_remote(&checkout);
     let asked = Asked {
       checkout: checkout.to_string_lossy().into_owned(),
       remote: remote.clone(),
@@ -605,7 +647,7 @@ impl MachinePlacement {
 
   // The bench made ready, the release there taken as already compared.
   fn made_ready(&self, checkout: &Path, commit: &str, open_files: bool) -> Result<ReadyBench, String> {
-    let remote = git(checkout, &["remote", "get-url", "origin"]);
+    let remote = reachable_remote(checkout);
     let mut trees = bmo_testbed_deploy::expansion::outside_roots(checkout, checkout)?;
     // The shared versions' file as the shared checkout's main holds it, laid over that checkout's copy, since
     // the copy is its working tree and the run there reads the copy as it stands.

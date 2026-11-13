@@ -116,22 +116,27 @@
   {
     "id": "core/placement",
     "title": "Placement",
-    "what": "Where a run goes: here by default, or on another machine the placement endpoint or the settings name, its bench made ready over ssh with the shared versions laid as their main holds them, only once that machine's testbed is shown to be this release, and its output read back.",
+    "what": "Where a run goes: here by default, or on another machine the placement endpoint or the settings name, its bench made ready over ssh from a remote it reaches, with the shared versions laid as their main holds them, only once that machine's testbed is shown to be this release, its output read back.",
     "files": [
       "core/src/placement.rs",
       "cli/src/placement.rs",
       "docs/boundary.md",
       "cli/tests/placement.rs"
     ],
-    "symbols": [],
+    "symbols": [
+      "reachable_remote",
+      "ready_bench",
+      "MachinePlacement",
+      "HttpPlacement"
+    ],
     "aliases": [],
     "needs": [
       "core/lanes-and-turn",
       "core/policy-loader",
       "deploy/releases-and-rollback"
     ],
-    "base": "2181dead6a5c0744102ea56444de0f0a7ab01ff9",
-    "changed": 1794539158463
+    "base": "28df00d93ed31a25e6a4b1f519432ea99dccf13f",
+    "changed": 1794543124903
   },
   {
     "id": "core/policy-loader",

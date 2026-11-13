@@ -2,10 +2,10 @@
 //! stand-in endpoint the test serves: an answer of local, or one that does not come or does not read, runs
 //! here; an answer of remote makes the bench ready over a stand-in `ssh` that runs its line on this machine,
 //! and the run's output and result come back off its stream. On the placed machine the settings name: the
-//! bench made ready over the same stand-in, the run the testbed's `placed` verb there, a machine that
-//! cannot be reached, or settings that do not read, leaving the run here, the shared versions laid over their
-//! copy as their main branch holds them, and a testbed there that is not this one's release refused before
-//! any bench is made.
+//! bench made ready over the same stand-in, from the remote that machine can reach or empty where it can reach
+//! none, the run the testbed's `placed` verb there, a machine that cannot be reached, or settings that do not
+//! read, leaving the run here, the shared versions laid over their copy as their main branch holds them, and a
+//! testbed there that is not this one's release refused before any bench is made.
 
 use std::convert::Infallible;
 use std::path::Path;
@@ -14,7 +14,7 @@ use std::sync::{Arc, Mutex};
 use axum::Router;
 use axum::response::sse::{Event, Sse};
 use axum::routing::{get, post};
-use bmo_testbed_cli::placement::{MachinePlacement, MachineSettings};
+use bmo_testbed_cli::placement::{MachinePlacement, MachineSettings, reachable_remote};
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::turn::NOT_RUN_EXIT_CODE;
@@ -343,6 +343,47 @@ fn the_shared_versions_are_laid_over_their_copy_as_their_main_branch_holds_them(
       .to_string_lossy()
       .starts_with("shared-versions.toml."))
   );
+}
+
+// "a bench whose checkout's remote the machine there cannot read is made empty and handed the commit"
+#[test]
+fn a_bench_whose_remote_the_machine_there_cannot_read_is_made_empty_and_handed_the_commit() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let repo = dir.join("repo");
+  let ssh = dir.join("ssh");
+  let bench = dir.join("bench/repo");
+
+  install(SSH, &ssh);
+  settle(&dir, &ssh, "stand");
+  checkout(&repo, "testbed = 0\n");
+  // A path the machine there does not hold, as a support checkout's main checkout is to it.
+  git(&repo, &["remote", "add", "origin", &dir.join("elsewhere").to_string_lossy()]);
+
+  let done = on_machine(&repo, &dir, &["run", "--adapter", "plain", "--", "sh", "-c", "exit 0"]);
+
+  assert_eq!(done.code, 0, "{}\n{}", done.out, done.err);
+  assert_eq!(git(&bench, &["rev-parse", "HEAD"]), git(&repo, &["rev-parse", "HEAD"]));
+}
+
+// "a support checkout's reachable remote is the one its main checkout names; a chain that ends on this machine,
+// or comes back on itself, names none"
+#[test]
+fn the_reachable_remote_follows_a_support_checkouts_main_to_the_remote_it_names() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let main = dir.join("main");
+  let support = dir.join("support");
+
+  checkout(&main, "testbed = 0\n");
+  git(&dir, &["clone", "-q", &main.to_string_lossy(), &support.to_string_lossy()]);
+  assert_eq!(reachable_remote(&support), "");
+
+  git(&main, &["remote", "add", "origin", "https://example.com/main.git"]);
+  assert_eq!(reachable_remote(&support), "https://example.com/main.git");
+
+  git(&main, &["remote", "set-url", "origin", &format!("file://{}", support.display())]);
+  assert_eq!(reachable_remote(&support), "");
 }
 
 // "a machine that cannot be reached, or settings that do not read, leave the run here and say so"

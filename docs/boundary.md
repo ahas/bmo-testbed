@@ -692,9 +692,13 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   run is not run, exit code 75, and the deployment's stage fails, on a line naming the machine and both
   commits. A testbed running from no release, such as a checkout's own build, compares nothing.
 - **The caller makes the bench ready** before it runs: where the checkout's place under the bench root
-  holds no repository it clones the checkout's remote there, or makes an empty repository where the
-  checkout has none, and where the place stands as a folder already — a tree an earlier run copied there
-  beside another checkout — it makes the repository in that folder; it pushes the commit there as the branch `bmo-bench` and checks it out detached;
+  holds no repository it clones the checkout's reachable remote there, or makes an empty repository where
+  the checkout has none or the clone fails there, the push then carrying the history the bench lacks;
+  the reachable remote is the checkout's `origin`, and where that names a repository on this machine, as
+  a support checkout cloned from its main checkout does, the `origin` that repository names in turn,
+  followed until one names a repository elsewhere, and none where the chain ends on this machine; and
+  where the place stands as a folder already — a tree an earlier run copied there beside another
+  checkout — it makes the repository in that folder; it pushes the commit there as the branch `bmo-bench` and checks it out detached;
   for a run it copies its open files over with `rsync`, the files git ignores and the `.git` directory
   left out, and for a deployment it copies none and takes every untracked file away, since the release is
   the commit alone; and it copies
@@ -721,7 +725,7 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   | Field | Type | Meaning |
   |---|---|---|
   | `checkout` | string | The caller's checkout |
-  | `remote` | string | The checkout's remote address |
+  | `remote` | string | The checkout's reachable remote (「The placed machine」), empty where it has none |
   | `commit` | string | The checkout's `HEAD` |
   | `command` | list of strings | The command's words |
   | `lane` | string | `wide` or `narrow` |

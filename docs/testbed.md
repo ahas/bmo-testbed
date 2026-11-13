@@ -286,7 +286,8 @@ flowchart TD
   in that machine's turn.
   Its log stays on that machine, named in the lines that come back.
 - **There it runs in a bench copy of the caller's checkout under that machine's own testbed:** the
-  caller pushes its commit into a clone of the checkout's remote in the bench, copies its open files
+  caller pushes its commit into a clone of the checkout's remote in the bench, the remote a support
+  checkout's main checkout names where the support checkout's own is a path on this machine, copies its open files
   over, ignored ones left out, and copies every tree the checkout's workspace names outside the
   repository to its own place under the bench root; the checkout's setup then runs there, and the
   command in that machine's own turn, on its own seats and its own memory gate. Its output and its
