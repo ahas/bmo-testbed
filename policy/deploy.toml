@@ -77,6 +77,10 @@ backup_in_tree = "the backup directory {backup} sits inside the git work tree at
 env_missing = "the env file {target} that {link} links to is missing, and the services cannot start without it"
 fetch_failed = "git fetch failed, so what the remote has cannot be known: {said}"
 no_commit = "{commit} names no commit of this checkout"
+# The declaration the commit carries, where the deployment cannot run by it: {commit} a short commit, {source}
+# the checkout.
+commit_no_deploy = "the declaration {commit} carries names no [deploy] root and data root, so the commit deploys nothing"
+commit_elsewhere = "the declaration {commit} carries names the repository or places the deployment otherwise than the checkout's at {source}; deploy it from a checkout brought to {commit}"
 # Where a commit must stand to be deployable, as a refusal names it.
 remote = "any branch of the remote"
 deploying = "deploying {commit}: {subject}"

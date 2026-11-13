@@ -319,21 +319,11 @@ fn refused(line: &str) -> u8 {
   REFUSED_EXIT_CODE
 }
 
-// The release of the console layer the shared versions the declaration names pin, which the console probe
-// reads a manifest by and holds its layer to (docs/deploy.md, 「The console probe」); asked only where the
-// repository brings a console screen.
-fn pinned_layer(repo: &Repository, env: &Env) -> PinnedLayer {
-  let declaration = &repo.declaration;
-  let Some(shared) = declaration
-    .check
-    .shared_versions
-    .as_ref()
-    .filter(|_| declaration.deploy.console.is_some())
-  else {
-    return PinnedLayer::Unnamed;
-  };
-
-  match find_shared(&shared.repository, env) {
+// The release of the console layer the shared versions of a repository pin, which the console probe reads a
+// manifest by and holds its layer to (docs/deploy.md, 「The console probe」); the deploy run asks it of the
+// repository the deployed commit's declaration names, where that commit brings a console screen.
+fn pinned_layer(repository: &str, env: &Env) -> PinnedLayer {
+  match find_shared(repository, env) {
     Ok(found) => match found.packages.get(&DEPLOY.console.layer_package) {
       Some(pin) => PinnedLayer::Pinned(LayerPin {
         version: pin.version.clone(),
@@ -396,7 +386,7 @@ pub fn deploy(args: &DeployFlags) -> u8 {
     unit,
     upload: Some(upload),
     record: Some(data_root()),
-    pinned_layer: pinned_layer(&repo, &env),
+    layer_pin: Some(pinned_layer),
   };
   let suite = SuiteGate {
     repo: &repo,

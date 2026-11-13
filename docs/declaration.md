@@ -2,7 +2,8 @@
 
 - **One file at a repository's root,** read by every verb run inside that repository's checkout. It is
   where everything that differs between repositories stands: how the repository is tested, checked,
-  built and deployed, and where its events go.
+  built and deployed, and where its events go. A deployment runs by the declaration the commit it puts
+  live carries, read from that commit (`docs/deploy.md`).
 - **The root is the checkout's top level,** as git names it. A verb run outside any checkout, or in one
   with no declaration, uses the defaults below, which test and check nothing a repository did not
   declare and deploy nothing.

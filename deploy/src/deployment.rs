@@ -16,8 +16,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use bmo_testbed_client::TestRun;
-use bmo_testbed_core::declaration::{DeployStep, Phase, Repository};
+use bmo_testbed_core::declaration::{Declaration, DeployStep, Phase, Repository};
 use bmo_testbed_core::events::{Event, Hook};
+use bmo_testbed_core::policy::declaration::DECLARATION;
 use bmo_testbed_core::policy::deploy::DEPLOY;
 use bmo_testbed_core::policy::deploy_steps::DeployStep as OwnStep;
 use bmo_testbed_core::policy::fill_marks;
@@ -144,9 +145,10 @@ pub struct DeployAsk {
   pub upload: Option<Vec<String>>,
   /// The testbed's data root whose record the deployment is written into; none writes into none.
   pub record: Option<PathBuf>,
-  /// The release of the console layer the shared versions pin, which the console probe reads a manifest by
-  /// and holds its layer to (docs/deploy.md, 「The console probe」).
-  pub pinned_layer: PinnedLayer,
+  /// How the release of the console layer is read from the shared versions of the repository a declaration
+  /// names, which the console probe reads a manifest by and holds its layer to (docs/deploy.md, 「The
+  /// console probe」); none reads none, as though the declaration named no shared versions.
+  pub layer_pin: Option<fn(&str, &Env) -> PinnedLayer>,
 }
 
 /// What the gate is asked: the commit, in the checkout it is taken from, over the range from what was live,
@@ -561,8 +563,12 @@ pub fn iso(at_ms: i64) -> String {
 
 // One run under way: what it was handed, and what it has learned.
 struct Laying<'a> {
-  repo: &'a Repository,
-  places: &'a DeployPlaces,
+  /// The checkout's root with the declaration the run goes by: the checkout's until the commit is picked,
+  /// the commit's own from then on.
+  repo: Repository,
+  /// The places the run lays its commit down in, the checkout's declaration's until the commit is picked and
+  /// the commit's own from then on, which stand where the checkout's do.
+  places: DeployPlaces,
   ask: &'a DeployAsk,
   hands: &'a dyn DeployHands,
   gate: &'a dyn Gate,
@@ -694,7 +700,7 @@ impl<'a> Laying<'a> {
   fn prune_releases(&self, mut keep: Vec<PathBuf>) {
     let said = &DEPLOY.run;
     let processes = self.hands.live_processes();
-    let places = self.places;
+    let places = &self.places;
 
     // The release the run itself runs from is never taken away under it.
     keep.extend(std::env::current_exe().ok().and_then(|exe| release_holding(&places.deploy_dir, &exe)));
@@ -742,10 +748,10 @@ impl<'a> Laying<'a> {
     }
   }
 
-  // The declared setup steps run in order in the tree given, so a fresh tree holds what its check and its
+  // The setup steps given run in order in the tree given, so a fresh tree holds what its check and its
   // release read.
-  fn set_up_test_tree(&self, tree: &Path) -> Result<(), String> {
-    for setup in &self.repo.declaration.test.setup {
+  fn set_up_test_tree(&self, steps: &[String], tree: &Path) -> Result<(), String> {
+    for setup in steps {
       let ran = self.hands.run(&shell_words(setup), tree);
 
       if !ran.ok {
@@ -763,6 +769,32 @@ impl<'a> Laying<'a> {
     Ok(())
   }
 
+  // The checkout's root with the declaration the picked commit carries, read from the commit among its tracked
+  // files: every default where it carries none, the refusal where it does not read.
+  fn declared_at(&self, tracked: &[String]) -> Result<Repository, String> {
+    let file = &DECLARATION.file;
+    let declaration = if tracked.iter().any(|path| path == file) {
+      let named = format!("{}:{file}", self.commit);
+      let shown = self.git(&["show", &named], &self.places.source);
+
+      if !shown.ok {
+        return Err(fill_marks(
+          &DECLARATION.refusal.unreadable,
+          &[("file", &named), ("table", &DECLARATION.refusal.top_level), ("error", &shown.out)],
+        ));
+      }
+
+      Declaration::parse(&named, &shown.out).map_err(|refusal| refusal.0)?
+    } else {
+      Declaration::default()
+    };
+
+    Ok(Repository {
+      root: self.repo.root.clone(),
+      declaration,
+    })
+  }
+
   // A release set up the way any checkout of the repository is: its submodules brought to their pins, the
   // declared setup steps, then the declared env links.
   fn set_up(&self, release: &Path) -> Result<(), String> {
@@ -770,7 +802,7 @@ impl<'a> Laying<'a> {
 
     bring_submodules(release, &self.places.data_root, &run)?;
     lay_outside_trees(release, &self.places.source)?;
-    self.set_up_test_tree(release)?;
+    self.set_up_test_tree(&self.repo.declaration.test.setup, release)?;
 
     for link in &self.repo.declaration.deploy.env_links {
       let at = release.join(&link.link);
@@ -790,7 +822,7 @@ impl<'a> Laying<'a> {
   // binaries whose bytes differ from the live release's; the line saying what failed where a step did.
   fn build(&self, release: &Path, live: Option<&Path>) -> Result<Vec<String>, String> {
     let said = &DEPLOY.run;
-    let places = self.places;
+    let places = &self.places;
     let build = &self.repo.declaration.build;
     let tree = expansion_tree(&places.deploy_dir);
     let run = |line: &[String], cwd: &Path| self.hands.run(line, cwd);
@@ -966,7 +998,7 @@ impl<'a> Laying<'a> {
     release: &Path,
     bound: &[(String, String)],
   ) -> u8 {
-    let places = self.places;
+    let places = &self.places;
     let failed = FailedDeploy {
       commit: self.commit.clone(),
       failure,
@@ -1050,9 +1082,18 @@ impl<'a> Laying<'a> {
   }
 }
 
-// The checks before anything changes, each a refusal where it fails: no harness's shell, the data root, the
-// backup directory and the env files where they may stand.
-fn place_refusal(repo: &Repository, places: &DeployPlaces, env: &Env) -> Option<String> {
+// The release of the console layer the shared versions a declaration names pin, read as the caller reads them,
+// which the console probe reads a manifest by and holds its layer to (docs/deploy.md, 「The console probe」).
+fn pinned_layer(repo: &Repository, ask: &DeployAsk, env: &Env) -> PinnedLayer {
+  match (&repo.declaration.check.shared_versions, ask.layer_pin) {
+    (Some(shared), Some(read)) => read(&shared.repository, env),
+    _ => PinnedLayer::Unnamed,
+  }
+}
+
+// The checks before anything changes, each a refusal where it fails: no harness's shell, and the data root and
+// the backup directory where they may stand.
+fn place_refusal(places: &DeployPlaces, env: &Env) -> Option<String> {
   let said = &DEPLOY.run;
   let data = &places.data_root;
   let shown = |path: &Path| path.to_string_lossy().into_owned();
@@ -1089,8 +1130,42 @@ fn place_refusal(repo: &Repository, places: &DeployPlaces, env: &Env) -> Option<
     }
   }
 
-  repo.declaration.deploy.env_links.iter().find_map(|link| {
-    let target = under_data(data, &link.target);
+  None
+}
+
+// The places the declaration a commit carries gives its deployment, where the deployment can run by it in the
+// places the checkout's declaration gave: a refusal where it names the repository otherwise, stands the
+// deployment elsewhere, deploys nothing, puts its backup directory where it may not stand, or links an env
+// file that is missing.
+fn declared_places(
+  checkout: &Repository,
+  declared: &Repository,
+  places: &DeployPlaces,
+  env: &Env,
+  commit: &str,
+) -> Result<DeployPlaces, String> {
+  let said = &DEPLOY.run;
+  let shown = |path: &Path| path.to_string_lossy().into_owned();
+  let at_commit = DeployPlaces::of(declared, env)
+    .map_err(|_| fill_marks(&said.commit_no_deploy, &[("commit", &short(commit))]))?;
+  let elsewhere = declared.name() != checkout.name()
+    || at_commit.deploy_root != places.deploy_root
+    || at_commit.deploy_dir != places.deploy_dir
+    || at_commit.data_root != places.data_root;
+
+  if elsewhere {
+    return Err(fill_marks(
+      &said.commit_elsewhere,
+      &[("commit", &short(commit)), ("source", &shown(&places.source))],
+    ));
+  }
+
+  if let Some(refusal) = place_refusal(&at_commit, env) {
+    return Err(refusal);
+  }
+
+  let missing = declared.declaration.deploy.env_links.iter().find_map(|link| {
+    let target = under_data(&at_commit.data_root, &link.target);
 
     (!target.exists()).then(|| {
       fill_marks(
@@ -1098,7 +1173,9 @@ fn place_refusal(repo: &Repository, places: &DeployPlaces, env: &Env) -> Option<
         &[("target", &shown(&target)), ("link", &link.link.to_string_lossy())],
       )
     })
-  })
+  });
+
+  missing.map_or(Ok(at_commit), Err)
 }
 
 /// The major of a version: its leading whole number, or none where it does not begin with one.
@@ -1134,8 +1211,8 @@ pub async fn deploy(
 ) -> u8 {
   let said = &DEPLOY.run;
   let mut run = Laying {
-    repo,
-    places,
+    repo: repo.clone(),
+    places: places.clone(),
     ask,
     hands,
     gate,
@@ -1152,7 +1229,7 @@ pub async fn deploy(
   };
 
   // 1. Where it stands.
-  if let Some(refusal) = place_refusal(repo, places, env) {
+  if let Some(refusal) = place_refusal(places, env) {
     return run.refused(refusal);
   }
 
@@ -1215,6 +1292,24 @@ pub async fn deploy(
   // The unit links, judged against the commit while a refusal still changes nothing.
   let release = release_dir(&places.deploy_dir, &commit);
   let tracked = listed(run.git(&["ls-tree", "-r", "-z", "--name-only", &commit], source));
+
+  // The commit's own declaration, which everything the run does with the commit goes by from here on; the
+  // checkout's still answers the gate, which judges the checkout.
+  let declared = match run.declared_at(&tracked) {
+    Ok(declared) => declared,
+    Err(why) => return run.refused(why),
+  };
+
+  match declared_places(repo, &declared, places, env, &commit) {
+    Ok(at_commit) => run.places = at_commit,
+    Err(why) => return run.refused(why),
+  }
+
+  run.repo = declared;
+
+  let checkout = repo;
+  let repo = &run.repo;
+  let places = &run.places;
   let links = unit_links(&places.unit_dir);
   let (relinks, faults) = unit_link_plan(&links, &places.deploy_dir, &tracked, &|path| {
     !tracked.iter().any(|one| one == path) && release.join(path).exists()
@@ -1310,12 +1405,12 @@ pub async fn deploy(
   let unit_cgroup = ask.unit.is_some().then(own_cgroup).flatten();
   let mut flaky = Vec::new();
 
-  if ask.no_check || !repo.declaration.deploy.gate {
+  if ask.no_check || !checkout.declaration.deploy.gate {
     run.say(&said.gate_left_out);
   } else {
     // The gate reads the checkout, so the declared setup runs there before it, and a fresh checkout holds
     // the packages its check needs (docs/deploy.md, 「What the deploy run does, in order」).
-    if let Err(why) = run.set_up_test_tree(source) {
+    if let Err(why) = run.set_up_test_tree(&checkout.declaration.test.setup, source) {
       return run.failed(
         Stage::Check,
         fill_marks(&said.gate_failed, &[("commit", &shown), ("reason", &why)]),
@@ -1878,7 +1973,9 @@ pub async fn deploy(
   if let Some(console) = &repo.declaration.deploy.console {
     let say = |line: &str| run.say(line);
 
-    if let Err(refusal) = probe(&console.reach, &release, &ask.pinned_layer, hands.console(), &say).await {
+    let pinned = pinned_layer(repo, ask, env);
+
+    if let Err(refusal) = probe(&console.reach, &release, &pinned, hands.console(), &say).await {
       let line = refusal.said();
 
       return match &bot {

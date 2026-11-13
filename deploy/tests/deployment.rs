@@ -675,6 +675,70 @@ fn a_second_commit_goes_live_beside_the_first() {
   assert_eq!(read_deploy_record(&scene.at("live/deployed.json")).unwrap().commit, second);
 }
 
+// "a commit is deployed by its own declaration, never by the checkout's work tree"
+#[test]
+fn a_commit_goes_live_by_the_declaration_it_carries_not_the_checkouts() {
+  let scene = Scene::new();
+  let first = must(&["rev-parse", "HEAD"], &scene.source);
+  let marker = scene.at("commit-step-ran");
+
+  scene.declare("v2", "true");
+
+  let declared = std::fs::read_to_string(scene.source.join("testbed.toml")).unwrap();
+
+  scene.write(
+    "testbed.toml",
+    &format!(
+      "{declared}\n[[deploy.step]]\nid = \"commit-only\"\ncommand = \"touch {}\"\nphase = \"after-health\"\n",
+      marker.display()
+    ),
+  );
+
+  let second = scene.push("second");
+
+  // The checkout stands on the first commit, whose declaration builds v1 and has no such step.
+  must(&["checkout", "--quiet", &first], &scene.source);
+
+  let hands = Hands::default();
+  let ask = DeployAsk {
+    commit: Some(second.clone()),
+    ..DeployAsk::default()
+  };
+
+  assert_eq!(scene.run_with(&ask, &Told(true), &hands, &scene.env()), 0, "{}", said(&hands));
+  assert_eq!(std::fs::read_to_string(scene.deploy_dir().join("bin/app")).unwrap(), "echo v2\n");
+  assert!(marker.exists(), "{}", said(&hands));
+  assert_eq!(read_deploy_record(&scene.at("live/deployed.json")).unwrap().commit, second);
+}
+
+// "a commit whose declaration stands the deployment elsewhere is refused with nothing changed"
+#[test]
+fn a_commit_whose_declaration_moves_the_deploy_root_is_refused() {
+  let scene = Scene::new();
+  let first = must(&["rev-parse", "HEAD"], &scene.source);
+  let declared = std::fs::read_to_string(scene.source.join("testbed.toml")).unwrap();
+  let live = scene.at("live").display().to_string();
+  let moved = scene.at("moved").display().to_string();
+
+  scene.write("testbed.toml", &declared.replace(&live, &moved));
+
+  let second = scene.push("moved");
+
+  must(&["checkout", "--quiet", &first], &scene.source);
+
+  let hands = Hands::default();
+  let ask = DeployAsk {
+    commit: Some(second),
+    ..DeployAsk::default()
+  };
+
+  assert_eq!(scene.run_with(&ask, &Told(true), &hands, &scene.env()), 2);
+  assert!(said(&hands).contains("places the deployment otherwise"), "{}", said(&hands));
+  assert!(!scene.deploy_dir().exists());
+  assert!(!scene.at("moved").exists());
+  assert!(scene.events().is_empty());
+}
+
 // "what may not be deployed is refused before anything changes"
 #[test]
 fn an_open_change_an_unpushed_commit_and_a_backup_inside_the_data_root_are_refused() {

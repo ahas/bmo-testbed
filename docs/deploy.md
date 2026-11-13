@@ -6,6 +6,17 @@
   beside the one serving, flipped onto in one rename, with its declared services restarted and
   watched, and rolled back where they do not come up. What the repository builds, which services it
   runs and how its health is read are its declaration's (`docs/declaration.md`).
+- **A commit is deployed by its own declaration.** The `testbed.toml` the commit carries, read from the
+  commit itself and never from the checkout's work tree, is the one its deployment runs by: the release's
+  setup and env links, the build, the deploy steps, the units it marks, the backup it takes and its
+  directory, quiet, the health, the console probe and whether the backup upload starts. A commit
+  carrying none runs by every default. The checkout's own declaration answers only what the deployment
+  needs before it has picked a commit, and what reads the checkout as it stands: the repository's name,
+  where the deployment stands (its deploy root, with the deploy tree, the record, the log and the
+  progress under it, and its data root), the event hook, and the gate run on this machine, which judges
+  the checkout. A commit whose declaration does not read, names the repository otherwise, places the
+  deploy root, the deploy tree or the data root elsewhere, or deploys nothing is refused with nothing
+  changed; such a commit is deployed from a checkout brought to it.
 - **The hosted deploy tool** puts a commit live for a session the verb refuses, through the tool host
   (「The hosted deploy tool」).
 - **The `backups` verb** sends the backups deployments took to remote storage and keeps them rotated.
@@ -263,9 +274,11 @@
 ## What the deploy run does, in order
 
 1. **Check the data root and the backup directory,** and stop where either stands where it may not
-   (「What it refuses」), or a declared env file is missing.
+   (「What it refuses」).
 2. **Pick the commit.** After `git fetch`, take the commit `--commit` names, or the checkout's `HEAD`,
-   and check it is on the remote. Adopt a deploy tree that is still a directory. Check every unit link
+   and check it is on the remote. Read the commit's declaration, and stop where it does not read, names
+   the repository otherwise than the checkout's, places the deployment elsewhere or deploys nothing, or
+   where an env file it declares is missing. Adopt a deploy tree that is still a directory. Check every unit link
    will still find its unit file.
 3. **Pass the gate:** the declared static check and the suite over the range from the deployed commit,
    holding every lane at the front (`docs/testbed.md`), with what failed run once more, on the placed
@@ -285,11 +298,12 @@
      begun before the limit; a run whose commit, tree or wholeness the record does not hold. The record
      is asked where the run would have been written (「Where a deployment runs」). The suites a major
      change runs are never left out.
-   - **The tree the gate reads is set up first.** The declared `[test].setup` steps run there, in order,
-     before the static check and the suite, so a fresh checkout holds the packages its check needs
-     (`docs/declaration.md`). A step that fails stops the deployment in the check stage with nothing
-     changed. The gate is left out by `--no-check` or `gate = false`, and the setup with it. A release
-     prepared later is set up again in its own tree (「The releases」).
+   - **The tree the gate reads is set up first.** The `[test].setup` steps the checkout declares run
+     there, in order, before the static check and the suite, so a fresh checkout holds the packages its
+     check needs (`docs/declaration.md`). A step that fails stops the deployment in the check stage with
+     nothing changed. The gate is left out by `--no-check` or the checkout's `gate = false`, and the setup
+     with it. A release prepared later is set up again in its own tree, by the steps its commit declares
+     (「The releases」).
    - **The gate judges the deployed repository alone.** Its formatting and its lints read the
      repository's own packages, the members of its Cargo workspace standing inside its root, and never
      a package outside it: neither a sibling repository's crate the workspace names by a path, nor the
@@ -508,7 +522,9 @@ flowchart TD
 - **A commit the remote has never seen.** A commit only on this machine can never be fetched again if
   the disk dies.
 - **A unit link the commit would leave dangling** with no single file of its name to relink to.
-- **A data root inside a git work tree,** and **a missing env file.**
+- **A data root inside a git work tree,** and **a missing env file** the commit's declaration links.
+- **A commit whose declaration does not read,** names the repository otherwise than the checkout's,
+  places the deployment elsewhere than the checkout's does, or deploys nothing.
 - **A backup directory inside the data root or inside a git work tree.** Every file the backup writes
   and takes away again, its staging, its scratch, a part file and a backup that failed, goes through
   the guarded removal, which nothing inside the data root passes.

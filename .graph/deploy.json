@@ -53,13 +53,13 @@
       "core/declaration",
       "core/policy-loader"
     ],
-    "base": "6e2f9339a7995fd7f34b6e158178f39b2e935f25",
-    "changed": 1794489009800
+    "base": "ee7245e35a671b2555da6ef2a011b2736edde753",
+    "changed": 1794533264966
   },
   {
     "id": "deploy/deploy-run",
     "title": "Deploy run",
-    "what": "The deploy run in a unit of its own: gate, backup, release, the wait for quiet, flip, restarts watched, a console face probed, rolled back where either fails, its progress record mirrored into the testbed record with log lines and restarts, its outcome written before the event hook hears.",
+    "what": "The deploy run in a unit of its own, by the declaration its commit carries: gate, backup, release, the wait for quiet, flip, restarts watched, a console face probed, rolled back where either fails, its progress mirrored into the testbed record, its outcome written before the event hook hears.",
     "files": [
       "deploy/src/deployment.rs",
       "deploy/src/progress.rs",
@@ -79,7 +79,8 @@
     "symbols": [],
     "aliases": [
       "빌드 트리",
-      "Wait for quiet"
+      "Wait for quiet",
+      "배포가 배포하는 커밋의 선언"
     ],
     "needs": [
       "core/declaration",
@@ -94,8 +95,8 @@
       "deploy/console-probe",
       "suite/quick-checks"
     ],
-    "base": "9d6ad2fe61bc35bad21d2332908605bbacecb561",
-    "changed": 1794496813452
+    "base": "ee7245e35a671b2555da6ef2a011b2736edde753",
+    "changed": 1794533269362
   },
   {
     "id": "deploy/hosted-deploy-tool",

@@ -62,6 +62,8 @@ pub struct RunWords {
   pub env_missing: String,
   pub fetch_failed: String,
   pub no_commit: String,
+  pub commit_no_deploy: String,
+  pub commit_elsewhere: String,
   pub remote: String,
   pub deploying: String,
   pub again: String,
