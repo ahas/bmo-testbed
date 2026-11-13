@@ -1,5 +1,5 @@
 //! The numbers of the prune of the shared Cargo build directory (docs/deploy.md, 「The Cargo build
-//! directory」): its spans, its ceiling and its wait for the build locks.
+//! directory」): its spans, its ceiling, the trim run after it and the placed machine's disk floor.
 
 use serde::Deserialize;
 
@@ -13,6 +13,7 @@ pub struct Prune {
   pub deploy_build_days: i64,
   pub shared_ceiling_bytes: u64,
   pub checkout_ceiling_bytes: u64,
+  pub trim_command: Vec<String>,
   pub placed_disk_free_gigabytes: f64,
 }
 

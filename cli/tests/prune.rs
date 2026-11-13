@@ -1,6 +1,7 @@
 //! The `prune` verb (docs/deploy.md, 「The Cargo build directory」): its spans read in days and hours, a clear
 //! taking none, and a span too short to tell refused before anything is read; and the deployments' build trees
-//! found through the registry of checkouts, whose target directories go once they outlived their span.
+//! found through the registry of checkouts, whose target directories go once they outlived their span; and the
+//! filesystem holding the build directory trimmed after a prune that is not a dry run.
 
 use std::collections::HashMap;
 use std::ffi::OsString;
@@ -9,6 +10,11 @@ use std::path::Path;
 use bmo_testbed_cli::cargo::{Deployments, prune_in};
 use bmo_testbed_cli::words::{PruneArgs, Verb, read};
 use bmo_testbed_core::events::Hook;
+use bmo_testbed_core::policy::fill_marks;
+use bmo_testbed_core::policy::verbs::VERBS;
+use serde_json::Value;
+
+use crate::stand::install;
 
 fn prune_words(given: &[&str]) -> Result<PruneArgs, clap::Error> {
   let words = ["bmo-testbed", "prune"].iter().chain(given).map(OsString::from);
@@ -49,7 +55,7 @@ fn a_span_of_a_day_or_less_and_no_incremental_span_are_refused_before_anything_i
     let args = prune_words(given).unwrap();
 
     assert_eq!(
-      prune_in(&args, &dir.path().join("nowhere"), &Deployments::default(), &no_hook()).code,
+      prune_in(&args, &dir.path().join("nowhere"), &Deployments::default(), &[], &no_hook()).code,
       2,
       "{given:?}"
     );
@@ -59,6 +65,7 @@ fn a_span_of_a_day_or_less_and_no_incremental_span_are_refused_before_anything_i
     &prune_words(&[]).unwrap(),
     &dir.path().join("nowhere"),
     &Deployments::default(),
+    &[],
     &no_hook(),
   );
 
@@ -117,7 +124,7 @@ fn the_build_trees_of_the_registry_s_deployments_go_once_their_last_deployment_i
   let old = root.join("old-deployed/deploy-expand/target");
   let fresh = root.join("fresh-deployed/deploy-expand/target");
   let nowhere = root.join("nowhere");
-  let dry = prune_in(&prune_words(&["--dry-run"]).unwrap(), &nowhere, &deployments, &no_hook());
+  let dry = prune_in(&prune_words(&["--dry-run"]).unwrap(), &nowhere, &deployments, &[], &no_hook());
 
   assert_eq!(dry.code, 0);
   assert!(
@@ -135,7 +142,7 @@ fn the_build_trees_of_the_registry_s_deployments_go_once_their_last_deployment_i
   );
   assert!(old.is_dir() && fresh.is_dir());
 
-  let removed = prune_in(&prune_words(&[]).unwrap(), &nowhere, &deployments, &no_hook());
+  let removed = prune_in(&prune_words(&[]).unwrap(), &nowhere, &deployments, &[], &no_hook());
 
   assert_eq!(removed.code, 0);
   assert!(!old.exists(), "{:?}", removed.out);
@@ -148,4 +155,92 @@ fn the_build_trees_of_the_registry_s_deployments_go_once_their_last_deployment_i
 
   assert!(unread.places.is_empty());
   assert!(unread.unread.unwrap().contains("does not read"));
+}
+
+// A command at `at` standing for the trim: it writes the path it is handed into `trimmed` beside it, then says
+// `said` and ends with `code`, its words on standard output where it ends 0 and on standard error otherwise.
+fn trim_stand_in(at: &Path, said: &str, code: u8) -> Vec<String> {
+  let stream = if code == 0 { "" } else { " >&2" };
+
+  install(
+    &format!(
+      "#!/bin/sh\necho \"$1\" >> '{trimmed}'\necho '{said}'{stream}\nexit {code}\n",
+      trimmed = at.with_file_name("trimmed").display(),
+    ),
+    at,
+  );
+
+  vec![at.to_string_lossy().into_owned()]
+}
+
+// "The filesystem is trimmed after every prune that removes ... the prune runs the prune policy's trim command
+// ... on the build root"; "--dry-run ... trims nothing; --all ... trims after it"
+#[test]
+fn a_prune_trims_the_filesystem_holding_its_build_root_and_a_dry_run_trims_nothing() {
+  let dir = tempfile::tempdir().unwrap();
+  let root = dir.path().join("target");
+  let trim = trim_stand_in(&dir.path().join("trim"), "1 GiB trimmed", 0);
+
+  write(&root.join("debug/deps/unit-0123456789abcdef.rlib"), "built");
+
+  let dry = prune_in(
+    &prune_words(&["--all", "--dry-run"]).unwrap(),
+    &root,
+    &Deployments::default(),
+    &trim,
+    &no_hook(),
+  );
+
+  assert_eq!(dry.code, 0);
+  assert!(!dir.path().join("trimmed").exists(), "{:?}", dry.out);
+
+  let cleared =
+    prune_in(&prune_words(&["--all"]).unwrap(), &root, &Deployments::default(), &trim, &no_hook());
+  let shown = root.to_string_lossy();
+
+  assert_eq!(cleared.code, 0);
+  assert_eq!(std::fs::read_to_string(dir.path().join("trimmed")).unwrap(), format!("{shown}\n"));
+  assert_eq!(
+    cleared.out.last().unwrap(),
+    &fill_marks(&VERBS.prune.trimmed, &[("path", &shown), ("said", "1 GiB trimmed")])
+  );
+}
+
+// "Where sudo refuses, or the disk takes no trim, the prune says what was said on a line and sends a
+// disk-trim-failed event naming the build root; the prune's outcome does not change."
+#[test]
+fn a_trim_that_is_refused_is_said_and_sends_disk_trim_failed_and_the_prune_still_succeeds() {
+  let dir = tempfile::tempdir().unwrap();
+  let root = dir.path().join("target");
+  let refused = "sudo: a password is required";
+  let trim = trim_stand_in(&dir.path().join("trim"), refused, 1);
+  let hook_script = dir.path().join("hook");
+
+  std::fs::create_dir_all(&root).unwrap();
+  install(
+    &format!(
+      "#!/bin/sh\necho \"$1\" >> '{names}'\ncat >> '{payloads}'\n",
+      names = dir.path().join("events").display(),
+      payloads = dir.path().join("payloads").display(),
+    ),
+    &hook_script,
+  );
+
+  let hook = Hook {
+    command: Some(hook_script.to_string_lossy().into_owned()),
+    ..no_hook()
+  };
+  let pruned = prune_in(&prune_words(&["--all"]).unwrap(), &root, &Deployments::default(), &trim, &hook);
+  let shown = root.to_string_lossy();
+  let payload: Value =
+    serde_json::from_str(&std::fs::read_to_string(dir.path().join("payloads")).unwrap()).unwrap();
+
+  assert_eq!(pruned.code, 0);
+  assert_eq!(
+    pruned.out.last().unwrap(),
+    &fill_marks(&VERBS.prune.trim_failed, &[("path", &shown), ("said", refused)])
+  );
+  assert_eq!(std::fs::read_to_string(dir.path().join("events")).unwrap(), "disk-trim-failed\n");
+  assert_eq!(payload["detail"]["path"], shown.as_ref());
+  assert_eq!(payload["detail"]["said"], refused);
 }

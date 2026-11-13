@@ -1,11 +1,13 @@
 [Unit]
-Description=Prune of the shared Cargo build directory: what no live checkout's build stands on, gone checkouts' target directories, and the target directories of deploy build trees idle three days
+Description=Prune of the shared Cargo build directory: what no live checkout's build stands on, gone checkouts' target directories, and the target directories of deploy build trees idle three days, then a trim of its filesystem
 # docs/deploy.md, 「The Cargo build directory」. Started by its timer, which every deployment of this
 # repository links with this unit and starts, here and on the placed machine (docs/deploy.md, 「The unit
 # links」). It waits at the front of Cargo's own build locks, never in the testbed's line, so it never
-# removes anything under a build and never waits out a queue of heavy commands while the disk fills. Where
-# the directory stays over its ceiling, or a disk of the placed machine its settings name stands below its
-# floor, it sends an event to the hook its environment or the declaration names.
+# removes anything under a build and never waits out a queue of heavy commands while the disk fills. It then
+# trims the filesystem holding the directory, so a virtual disk gives the freed blocks back to its host drive.
+# Where the directory stays over its ceiling, the trim does not run, or a disk of the placed machine its
+# settings name stands below its floor, it sends an event to the hook its environment or the declaration
+# names.
 
 [Service]
 Type=oneshot
@@ -15,5 +17,8 @@ Slice=bmo-upkeep.slice
 WorkingDirectory=%h/.local/share/bmo-testbed/deploy
 ExecStart=%h/.local/share/bmo-testbed/deploy/bin/bmo-testbed prune
 Environment=PATH=%h/.local/bin:%h/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# The machine's own environment for its timed prune, the event hook among it, where the file exists
+# (docs/deploy.md, 「The Cargo build directory」).
+EnvironmentFile=-%h/.local/share/bmo/data/env/testbed.env
 Nice=10
 IOSchedulingClass=idle

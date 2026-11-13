@@ -374,13 +374,19 @@ build_heading = "prune: deploy build trees' target/ directories, last deployed o
 build_counts = "  {count} target directories{named}, about {size} of disk"
 build_not_removed = "  {target} not removed: {why}"
 registry_unread = "  the checkout registry does not read, so no deploy root was looked at: {why}"
+# The trim after the prune (docs/deploy.md, 「The Cargo build directory」): {path} the build root, {said} what the
+# trim command said, its own line where it ran and why it did not where it did not.
+trimmed = "prune: trimmed the filesystem holding {path}: {said}"
+trim_failed = "prune: the filesystem holding {path} was not trimmed: {said}"
+trim_failed_summary = "The filesystem holding the shared Cargo build directory {path} was not trimmed after its prune, so the blocks it freed stay with its disk: {said}"
 # The placed machine's free disk (docs/deploy.md, 「The Cargo build directory」): {machine} its label, {floor}
-# the floor, {path} a path as the settings name it, {free} its disk's free space, {said} what `ssh` said, and
-# {disks} the paths below the floor with their free space.
+# the floor, {path} a path as the settings name it, {source} the filesystem holding it by its source (the drive
+# itself for a WSL drive mount), {free} its free space, {said} what `ssh` said, and {disks} the disks below the
+# floor with their free space.
 placed_heading = "prune: free disk of the placed machine {machine}, against its floor of {floor}"
-placed_free = "  {path}: {free} free"
-placed_low = "  {path}: {free} free, below the floor"
+placed_free = "  {path} on {source}: {free} free"
+placed_low = "  {path} on {source}: {free} free, below the floor"
 placed_unread = "  {path}: its free space does not read"
 placed_unreached = "  the placed machine cannot be reached ({said}), so its disk was not read"
-placed_disk = "{path} with {free} free"
+placed_disk = "{source} at {path} with {free} free"
 placed_low_summary = "The placed machine {machine} has less than {floor} free on {disks}."

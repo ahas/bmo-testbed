@@ -1019,9 +1019,9 @@ fn writing_hook(dir: &Path) -> Hook {
   }
 }
 
-// "A disk below the settings' disk_free_gigabytes ... sends a placed-disk-low event naming the machine, the
-// floor and each path below it"; "a path whose free space does not read is said on a line"; "a dry run reads
-// and says the free space and sends nothing"
+// "A disk below the floor sends placed-disk-low ... The event names the machine, the floor, and each disk below
+// it by its path, its source ... and its free space"; "A path whose free space does not read is said on a line";
+// "A dry run reads and says the free space and sends nothing"
 #[test]
 fn a_disk_of_the_placed_machine_below_its_floor_sends_placed_disk_low_and_one_above_it_sends_nothing() {
   let dir = tempfile::tempdir().unwrap();
@@ -1038,7 +1038,7 @@ fn a_disk_of_the_placed_machine_below_its_floor_sends_placed_disk_low_and_one_ab
 
   let above = placed_disk(&machine, true, &hook);
 
-  assert!(above[1].starts_with(&format!("  {target}: ")), "{above:?}");
+  assert!(above[1].starts_with(&format!("  {target} on ")), "{above:?}");
   assert!(!above[1].contains("below"), "{above:?}");
   assert_eq!(above[2], fill_marks(&said.placed_unread, &[("path", &gone)]));
   assert!(!dir.join("events").exists());
@@ -1062,6 +1062,46 @@ fn a_disk_of_the_placed_machine_below_its_floor_sends_placed_disk_low_and_one_ab
   assert_eq!(payload["detail"]["disks"].as_array().unwrap().len(), 1);
   assert_eq!(payload["detail"]["disks"][0]["path"], target.as_str());
   assert!(payload["detail"]["disks"][0]["free_bytes"].as_u64().unwrap() > 0);
+  assert!(!payload["detail"]["disks"][0]["source"].as_str().unwrap().is_empty());
+}
+
+// "Where the machine's disk is a virtual one inside a host drive, as a WSL machine's is, the settings'
+// disk_paths names that drive's mount ... The host drive's figure is therefore the one that warns of a full
+// host. The virtual disk's own figure is read beside it"
+#[test]
+fn a_host_drive_below_the_floor_warns_by_its_drive_and_figure_while_the_virtual_disk_has_room() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let mut machine = released(&dir, None, None);
+  let answering = dir.join("answering-ssh");
+  let hook = writing_hook(&dir);
+
+  // `findmnt`'s answers for the virtual disk holding the build root and for the host drive's mount, in order.
+  install(
+    "#!/bin/sh\n\
+     printf '%s\\n' '{\"filesystems\": [{\"source\": \"/dev/sdd\", \"avail\": 435000000000}]}'\n\
+     printf '%s\\n' '{\"filesystems\": [{\"source\": \"C:\\\\\", \"avail\": \"12000000000\"}]}'\n",
+    &answering,
+  );
+  machine.settings.ssh = vec![answering.to_string_lossy().into_owned()];
+  machine.settings.disk_paths = vec!["/mnt/c".to_owned()];
+  machine.settings.disk_free_gigabytes = Some(50.0);
+
+  let lines = placed_disk(&machine, true, &hook);
+  let target = machine.settings.cargo_target.clone();
+  let payload: Value =
+    serde_json::from_str(std::fs::read_to_string(dir.join("payloads")).unwrap().trim()).unwrap();
+
+  assert_eq!(lines[1], format!("  {target} on /dev/sdd: 435.0 GB free"));
+  assert_eq!(lines[2], "  /mnt/c on C:\\: 12.0 GB free, below the floor");
+  assert_eq!(
+    payload["summary"],
+    "The placed machine machine-2 has less than 50.0 GB free on C:\\ at /mnt/c with 12.0 GB free."
+  );
+  assert_eq!(
+    payload["detail"]["disks"],
+    serde_json::json!([{ "path": "/mnt/c", "source": "C:\\", "free_bytes": 12_000_000_000_u64 }])
+  );
 }
 
 // "a machine that cannot be reached is said on one line, its disk not read"

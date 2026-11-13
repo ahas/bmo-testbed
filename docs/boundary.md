@@ -292,8 +292,12 @@ bmo-testbed prune --all
   each of Cargo's build locks until the build holding it lets go, and removes the target directory of
   every deployment's build tree whose last deployment is three days old (`docs/deploy.md`, 「The
   releases」). Exits 2 for a unit span of a day or less or a disk that keeps no access times.
-- Then reads the free disk of the placed machine the settings name and sends `placed-disk-low` where a
-  disk there stands below the floor (「The placed machine」); `--all` reads none.
+- Then trims the filesystem holding the build directory with `sudo -n fstrim`, so the blocks it freed go
+  back to the drive a virtual disk stands on, and sends `disk-trim-failed` where the trim does not run
+  (`docs/deploy.md`, 「The Cargo build directory」); a dry run trims nothing.
+- Then reads the free disk of the placed machine the settings name, the host drive a virtual disk stands
+  on among it, and sends `placed-disk-low` where a disk there stands below the floor (「The placed
+  machine」); `--all` reads none.
 
 ### `full`
 
@@ -408,7 +412,7 @@ verb's own name, and each noun takes what that verb takes.
 
 | Variable | Read by | Meaning |
 |---|---|---|
-| `BMO_DATA_DIR` | every verb, the hosted deploy tool | The testbed's data root: logs and the record under `testbed/`, locks under `locks/`, the data backup's and the placement's settings under `env/`. Default `$HOME/.local/share/bmo/data` |
+| `BMO_DATA_DIR` | every verb, the hosted deploy tool | The testbed's data root: logs and the record under `testbed/`, locks under `locks/`, the data backup's and the placement's settings and the timed prune's environment file `testbed.env` under `env/`. Default `$HOME/.local/share/bmo/data` |
 | `TMPDIR` | the turn | Where the lane locks stand. Default `/tmp` |
 | `BMO_TESTBED_LOCK` | the turn | Another first wide seat's lock, the further seats and the narrow lane's beside it |
 | `BMO_TESTBED_SEATS` | the turn | The wide lane's seats, over the lane policy's; anything that is not a positive whole number means the policy's |
@@ -504,7 +508,8 @@ keep (`docs/deploy.md`, 「The unit links」).
 | `restore-drill-failed` | `verb` (`drill`), `failures`, each with `step`, `target` and `said`, a count mismatch naming its database, table and both counts |
   | `releases-pinned` | `releases`, each with `release` and `processes`, each with `pid`, `unit` and `command` |
   | `cargo-target-over-ceiling` | `bytes`, `ceiling_bytes`, `checkouts` |
-  | `placed-disk-low` | `machine` (the placed machine's label), `floor_bytes`, `disks`, each with `path` (as the settings name it) and `free_bytes` |
+  | `placed-disk-low` | `machine` (the placed machine's label), `floor_bytes`, `disks`, each with `path` (as the settings name it), `source` (the filesystem's source, the drive itself for a WSL drive mount) and `free_bytes` |
+  | `disk-trim-failed` | `path` (the build directory the trim was run on), `said` |
   | `full-suite-failed` | `head`, `log`, `step` (the failing setup or static step, or null), `failures`, each with `unit` and `package` |
   | `suite-flaky` | `tests`, each with `test` and `unit`, `units`, `log` |
 
@@ -717,7 +722,7 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   | `testbed` | string | `~/.local/share/bmo-testbed/deploy/bin/bmo-testbed` | The testbed binary there, its `built-from` beside it; the testbed's deployment copies its release's binary of the same name and its `built-from` onto them |
   | `cargo_target` | string | `~/.local/share/bmo/cargo-target` | That machine's shared Cargo build directory; a deployment's build is read back from the bench's own directory under it, the one that machine's Cargo verb builds in (`docs/deploy.md`, 「The Cargo build directory」) |
   | `disk_free_gigabytes` | number | 50, the prune policy's | The free space, in gigabytes of a thousand million bytes, below which a disk of that machine sends `placed-disk-low` from this machine's prune (`docs/deploy.md`, 「The Cargo build directory」). Not negative |
-  | `disk_paths` | list of strings | none | Paths on that machine whose disks' free space the prune reads beside `cargo_target`'s, such as the mount of the host drive a virtual disk stands on |
+  | `disk_paths` | list of strings | none | Paths on that machine whose disks' free space the prune reads beside `cargo_target`'s. A machine on a virtual disk names the mount of the host drive the disk file stands on, `/mnt/c` for a WSL machine whose disk file is on `C:`, since the virtual disk's own free space says nothing of that drive |
 
   A `~` opening a path there is that machine's home. A file that does not read is no placement, said
   on a line.

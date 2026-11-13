@@ -500,6 +500,48 @@ pub struct MachineSettings {
   pub disk_paths: Vec<String>,
 }
 
+/// The filesystem holding a disk path of the placed machine: its source, which for a WSL drive mount is the
+/// drive itself, and its free space in bytes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FarDisk {
+  pub source: String,
+  pub free_bytes: u64,
+}
+
+// `findmnt`'s JSON answer for one target: the filesystems holding it, the deepest mount first.
+#[derive(Deserialize)]
+struct Mounts {
+  filesystems: Vec<Mount>,
+}
+
+#[derive(Deserialize)]
+struct Mount {
+  source: String,
+  avail: MountBytes,
+}
+
+// A size in `findmnt`'s JSON: a number, or a string of digits where its version writes every column as text.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum MountBytes {
+  Number(u64),
+  Text(String),
+}
+
+impl Mount {
+  fn disk(self) -> Option<FarDisk> {
+    let free_bytes = match self.avail {
+      MountBytes::Number(bytes) => bytes,
+      MountBytes::Text(text) => text.parse().ok()?,
+    };
+
+    Some(FarDisk {
+      source: self.source,
+      free_bytes,
+    })
+  }
+}
+
 /// Where the placed machine keeps the user units laid on it, under its home.
 pub const FAR_UNIT_DIR: &str = "~/.config/systemd/user";
 
@@ -729,17 +771,20 @@ impl MachinePlacement {
     if succeeded(&done) { Ok(()) } else { Err(said(&done)) }
   }
 
-  /// The free space of each disk path there (docs/deploy.md, 「The Cargo build directory」), in the settings'
-  /// order, none for a path whose free space does not read; what `ssh` said where the machine was not
+  /// The filesystem holding each disk path there (docs/deploy.md, 「The Cargo build directory」), in the
+  /// settings' order, none for a path whose filesystem does not read; what `ssh` said where the machine was not
   /// reached.
-  pub fn disk_free(&self) -> Result<Vec<(String, Option<u64>)>, String> {
+  pub fn disk_free(&self) -> Result<Vec<(String, Option<FarDisk>)>, String> {
     let paths = self.settings.disk_paths();
-    // One line a path, in order: the blocks free to an account and the block size, or a dash where `stat`
-    // cannot read the path. The format is this command's own, two numbers, not a general one.
+    // One JSON value a path, in order: `findmnt`'s own answer for the filesystem holding it, or `null` where
+    // `findmnt` cannot read the path.
     let line = paths
       .iter()
       .map(|path| {
-        format!("{{ stat --file-system --format='%a %S' -- {} 2>/dev/null || echo -; }}", far_path(path))
+        format!(
+          "{{ findmnt --json --bytes --output SOURCE,AVAIL --target {} 2>/dev/null || echo null; }}",
+          far_path(path)
+        )
       })
       .collect::<Vec<_>>()
       .join("; ");
@@ -750,22 +795,20 @@ impl MachinePlacement {
     }
 
     let out = read.map(|done| String::from_utf8_lossy(&done.stdout).into_owned()).unwrap_or_default();
-    let mut lines = out.lines();
+    let mut answers = serde_json::Deserializer::from_str(&out).into_iter::<Option<Mounts>>();
 
     Ok(
       paths
         .into_iter()
         .map(|path| {
-          let free = lines.next().and_then(|line| {
-            let mut numbers = line.split_whitespace().map(str::parse::<u64>);
+          let disk = answers
+            .next()
+            .and_then(Result::ok)
+            .flatten()
+            .and_then(|mounts| mounts.filesystems.into_iter().next())
+            .and_then(Mount::disk);
 
-            match (numbers.next(), numbers.next(), numbers.next()) {
-              (Some(Ok(blocks)), Some(Ok(size)), None) => blocks.checked_mul(size),
-              _ => None,
-            }
-          });
-
-          (path, free)
+          (path, disk)
         })
         .collect(),
     )

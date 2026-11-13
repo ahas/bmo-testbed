@@ -2,7 +2,7 @@
   {
     "id": "suite/cargo-verb-and-prune",
     "title": "Cargo verb and prune",
-    "what": "The cargo verb over the shared build directory, running a command that holds its lock on a lock whose path packages follow their manifests, and removing what a build superseded; the prune verb with its timer, also on the placed machine, removing what no build reads and warning of a full disk.",
+    "what": "The cargo verb over the shared build directory, its lock kept to its manifests, and removing what a build superseded; the prune verb on a timer, here and on the placed machine, removing what no build reads, trimming the filesystem and warning when the placed machine's disk or host drive runs low.",
     "files": [
       "suite/src/cargo.rs",
       "suite/src/superseded.rs",
@@ -20,7 +20,9 @@
     "symbols": [],
     "aliases": [
       "cargo prune 타이머",
-      "디스크 여유 경고"
+      "디스크 여유 경고",
+      "정리 타이머",
+      "디스크 부족 경고"
     ],
     "needs": [
       "core/lanes-and-turn",
@@ -31,8 +33,8 @@
       "core/silence-watch",
       "core/placement"
     ],
-    "base": "4d220b85b600ca845c1ef8e47581851a34f625a7",
-    "changed": 1794569480485
+    "base": "21d8abde8686527d303b52e463daa59396011e0d",
+    "changed": 1794576664656
   },
   {
     "id": "suite/change-check",

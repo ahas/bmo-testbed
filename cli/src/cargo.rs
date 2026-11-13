@@ -2,10 +2,12 @@
 //! directory the way every verb of the testbed runs it, and what no build reads any more removed from that
 //! directory, holding Cargo's own build lock in every profile directory, at the front of each lock's line and
 //! never in the testbed's; then the target directories of the deployments' build trees that outlived their
-//! span. The invocation, the plan, the removal and the locks are the suite crate's; this is
-//! the verbs' side of them.
+//! span; then the filesystem holding the build directory trimmed, so its freed blocks go back to the drive it
+//! stands on. The invocation, the plan, the removal and the locks are the suite crate's; this is the verbs'
+//! side of them.
 
 use std::path::Path;
+use std::process::{Command, Stdio};
 
 use bmo_testbed_core::declaration::{Repository, root_of};
 use bmo_testbed_core::events::{Event, Hook};
@@ -29,7 +31,7 @@ use bmo_testbed_suite::prune::{
 };
 use serde_json::json;
 
-use crate::placement::MachinePlacement;
+use crate::placement::{FarDisk, MachinePlacement};
 use crate::said::Said;
 use crate::words::{BINARY, PruneArgs};
 use crate::{home_of, placement_of};
@@ -311,9 +313,47 @@ fn prune_build_targets(args: &PruneArgs, deployments: &Deployments, now: i64) ->
   lines
 }
 
-/// `prune` over the build directory at `root` and the build trees of `deployments`: what it says and the code
-/// it ends with.
-pub fn prune_in(args: &PruneArgs, root: &Path, deployments: &Deployments, hook: &Hook) -> Said {
+/// The filesystem holding `root` trimmed with the command `trim`, `root` handed as its last word (docs/deploy.md,
+/// 「The Cargo build directory」): the line saying what the command said, and, where it did not run or failed, a
+/// `disk-trim-failed` event to the hook; nothing where `trim` names no command.
+pub fn trim_filesystem(root: &Path, trim: &[String], hook: &Hook) -> Option<String> {
+  let said = &VERBS.prune;
+  let shown = root.to_string_lossy();
+  let (program, words) = trim.split_first()?;
+  let ran = Command::new(program).args(words).arg(root).stdin(Stdio::null()).output();
+  let failure = match &ran {
+    Ok(done) if done.status.success() => {
+      let told = String::from_utf8_lossy(&done.stdout).trim().to_owned();
+
+      return Some(fill_marks(&said.trimmed, &[("path", &shown), ("said", &told)]));
+    }
+    Ok(done) => {
+      let told = String::from_utf8_lossy(&done.stderr).trim().to_owned();
+
+      if told.is_empty() { done.status.to_string() } else { told }
+    }
+    Err(why) => why.to_string(),
+  };
+
+  hook.send(&Event {
+    name: "disk-trim-failed",
+    commit: None,
+    summary: fill_marks(&said.trim_failed_summary, &[("path", &shown), ("said", &failure)]),
+    detail: json!({ "path": shown, "said": failure }),
+  });
+
+  Some(fill_marks(&said.trim_failed, &[("path", &shown), ("said", &failure)]))
+}
+
+/// `prune` over the build directory at `root` and the build trees of `deployments`, then, unless it was a dry run,
+/// the filesystem holding `root` trimmed with the command `trim`: what it says and the code it ends with.
+pub fn prune_in(
+  args: &PruneArgs,
+  root: &Path,
+  deployments: &Deployments,
+  trim: &[String],
+  hook: &Hook,
+) -> Said {
   let said = &VERBS.prune;
   let refused = |line: String| Said {
     err: vec![line],
@@ -338,6 +378,11 @@ pub fn prune_in(args: &PruneArgs, root: &Path, deployments: &Deployments, hook: 
   }
 
   answer.out.extend(prune_build_targets(args, deployments, now_ms()));
+
+  if !args.dry_run && root.exists() {
+    answer.out.extend(trim_filesystem(root, trim, hook));
+  }
+
   answer
 }
 
@@ -357,18 +402,22 @@ pub fn placed_disk(machine: &MachinePlacement, send: bool, hook: &Hook) -> Vec<S
       return lines;
     }
   };
-  let mut low: Vec<(String, u64)> = Vec::new();
+  let mut low: Vec<(String, FarDisk)> = Vec::new();
 
-  for (path, free) in readings {
-    let Some(free) = free else {
+  for (path, disk) in readings {
+    let Some(disk) = disk else {
       lines.push(fill_marks(&said.placed_unread, &[("path", &path)]));
       continue;
     };
-    let shown = [("path", path.as_str()), ("free", &gigabytes(free))];
+    let shown = [
+      ("path", path.as_str()),
+      ("source", disk.source.as_str()),
+      ("free", &gigabytes(disk.free_bytes)),
+    ];
 
-    if free < floor {
+    if disk.free_bytes < floor {
       lines.push(fill_marks(&said.placed_low, &shown));
-      low.push((path, free));
+      low.push((path, disk));
     } else {
       lines.push(fill_marks(&said.placed_free, &shown));
     }
@@ -377,7 +426,12 @@ pub fn placed_disk(machine: &MachinePlacement, send: bool, hook: &Hook) -> Vec<S
   if send && !low.is_empty() {
     let disks = low
       .iter()
-      .map(|(path, free)| fill_marks(&said.placed_disk, &[("path", path), ("free", &gigabytes(*free))]))
+      .map(|(path, disk)| {
+        fill_marks(
+          &said.placed_disk,
+          &[("path", path), ("source", &disk.source), ("free", &gigabytes(disk.free_bytes))],
+        )
+      })
       .collect::<Vec<_>>()
       .join(", ");
 
@@ -393,7 +447,7 @@ pub fn placed_disk(machine: &MachinePlacement, send: bool, hook: &Hook) -> Vec<S
         "floor_bytes": floor,
         "disks": low
           .iter()
-          .map(|(path, free)| json!({ "path": path, "free_bytes": free }))
+          .map(|(path, disk)| json!({ "path": path, "source": disk.source, "free_bytes": disk.free_bytes }))
           .collect::<Vec<_>>(),
       }),
     });
@@ -403,14 +457,15 @@ pub fn placed_disk(machine: &MachinePlacement, send: bool, hook: &Hook) -> Vec<S
 }
 
 /// `prune` over the shared build directory and the build trees of the deployments the machine's registry
-/// names, then the placed machine's free disk read where the settings name one, its events to the hook the
+/// names, the filesystem holding the build directory trimmed with the prune policy's command, then the placed
+/// machine's free disk read where the settings name one, its events to the hook the
 /// environment or the repository it is run in names.
 pub fn prune(args: &PruneArgs) -> u8 {
   let env = process_env();
   let repo = Repository::read(&std::env::current_dir().unwrap_or_default()).ok();
   let deployments = Deployments::of_registry(&registry_path(&data_root(), &env), &env);
   let hook = Hook::of(repo.as_ref(), &env);
-  let mut answer = prune_in(args, &cargo_target_root(), &deployments, &hook);
+  let mut answer = prune_in(args, &cargo_target_root(), &deployments, &PRUNE.trim_command, &hook);
 
   if !args.all
     && let Some(machine) = MachinePlacement::named(&data_root(), &home_of(&env))

@@ -767,10 +767,24 @@ flowchart TD
   passed over; a checkout whose declaration does not read or deploys nothing names no deploy root. The
   removal is the guarded one (「What it refuses」), and `--all` and the spans of the build root do not
   change it.
+- **The filesystem is trimmed after every prune that removes,** by the prune itself and not by its timer.
+  Once the removals are done and the build locks let go, the prune runs the prune policy's trim command,
+  `sudo -n fstrim --verbose`, on the build root, and the free blocks of the filesystem holding it go back
+  to whatever that filesystem stands on. On a virtual disk, as a WSL machine's is inside its host's drive,
+  the disk file then shrinks on the host drive. Without the trim, the blocks a prune frees stay allocated
+  in the disk file, so the host drive does not get them back.
+  - **It belongs to the verb** because only the verb knows when its removals are done and says what came of
+    them. The placed machine's prune is the same verb on the same timer, so it trims its own disk too.
+  - **The trim needs root,** so it goes through `sudo` with no password prompt. Where `sudo` refuses, or the
+    disk takes no trim, the prune says what was said on a line and sends a `disk-trim-failed` event naming
+    the build root (`docs/boundary.md`, 「Events」); the prune's outcome does not change.
+  - **A disk that has gone long untrimmed can take minutes,** and the prune waits for the trim to end.
+  - A dry run, a refused prune and a build root that does not exist trim nothing.
 - **A lock a build holds is waited for** until that build lets go, however long it takes, the prune saying
   every thirty seconds which profile directory it waits on.
-- **`--dry-run`** says what it would remove, the build trees' target directories with it; **`--all`**
-  clears the whole directory but Cargo's lock files, run by hand only.
+- **`--dry-run`** says what it would remove, the build trees' target directories with it, and trims
+  nothing; **`--all`** clears the whole directory but Cargo's lock files, run by hand only, and trims after
+  it.
 - **Its ceiling is 120 GB, and 8 GB more for each live checkout that records its builds.** A timed prune
   that leaves it over sends a `cargo-target-over-ceiling` event, each run it stays over.
 - **The placed machine runs the same prune on the same timer** over its own build root, the settings'
@@ -782,20 +796,30 @@ flowchart TD
   stands by default. Its events, `cargo-target-over-ceiling` among them, go to that machine's own hook,
   or its own journal where it has none.
 - **The placed machine's free disk is read here after every prune** where the settings name a placed
-  machine: the free space of that machine's build root and of every path the settings' `disk_paths`
-  names, through one `ssh` command. A disk below the settings' `disk_free_gigabytes`, 50 GB unless they
-  name another (the prune policy's), sends a `placed-disk-low` event naming the machine, the floor and
-  each path below it, each run it stays below (`docs/boundary.md`, 「Events」). The event goes to this
-  machine's hook; where none is named, it is the line the prune writes on its standard error, which a
-  timed prune leaves in this machine's journal, read with `journalctl --user -u bmo-cargo-prune.service`.
-  A path whose free space does not read is said on a line, and a machine that cannot be reached is said
-  on one line, its disk not read. A dry run reads and says the free space and sends nothing. A machine
-  whose disk is a virtual one inside another, as a WSL machine's is inside its host's drive, names the
-  host drive's mount in `disk_paths`, since the virtual disk's own free space does not shrink as the
-  host drive fills.
+  machine. Through one `ssh` command, `findmnt` reads the filesystem holding that machine's build root and
+  each path in the settings' `disk_paths`: its source and its free space.
+- **A machine on a virtual disk is warned by its host drive.** Where the machine's disk is a virtual one
+  inside a host drive, as a WSL machine's is, the settings' `disk_paths` names that drive's mount. For a
+  WSL machine whose disk file stands on `C:`, that mount is `/mnt/c`.
+  - Inside the virtual disk, free space says only how much room the disk file may still grow by. It says
+    nothing of the host drive: the distribution can show hundreds of gigabytes free while the host drive
+    stands at none and every write inside fails.
+  - The host drive's figure is therefore the one that warns of a full host. The virtual disk's own figure
+    is read beside it, since the disk file also stops at its own maximum size.
+- **A disk below the floor sends `placed-disk-low`,** each run it stays below. The floor is the settings'
+  `disk_free_gigabytes`, 50 GB where they name none (the prune policy's). The event names the machine,
+  the floor, and each disk below it by its path, its source (the drive itself, `C:\`, for a WSL drive
+  mount) and its free space (`docs/boundary.md`, 「Events」).
+- **The event goes to this machine's hook.** The timed prune's service reads the data root's
+  `env/testbed.env` where that file exists, so the machine names `BMO_TESTBED_EVENT_HOOK` there: the
+  command that carries an event to the person who keeps the machine. Where no hook is named, the event is
+  the line the prune writes on its standard error, which a timed prune leaves in this machine's journal,
+  read with `journalctl --user -u bmo-cargo-prune.service`.
+- A path whose free space does not read is said on a line. A machine that cannot be reached is said on
+  one line, and its disk is not read. A dry run reads and says the free space and sends nothing.
 - **What it says:** how many units, incremental directories, loose files, checkout target directories and
   stray checkout `target/` directories it removed, about how much disk they held, the disk's free space
   before and after, and what the directory holds against its ceiling; then the build trees' target
   directories it removed, by their deploy roots, about how much disk they held, and each one it could not
-  remove with why; then, where the settings name a placed machine, the free space of each path read there
-  against the floor.
+  remove with why; then what the trim said, or why it did not run; then, where the settings name a placed
+  machine, the free space of each path read there, with the drive holding it, against the floor.

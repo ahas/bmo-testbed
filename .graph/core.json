@@ -116,7 +116,7 @@
   {
     "id": "core/placement",
     "title": "Placement",
-    "what": "Where a run goes: here by default or where its environment names a variable as this machine's, else over ssh to another machine whose testbed must be this release, which a deployment brings there first; that machine is also laid units, read for free disk and handed the testbed's release.",
+    "what": "Where a run goes: here by default or where its environment names a variable as this machine's, else over ssh to another machine whose testbed must be this release, which a deployment brings there first; that machine is also laid units, read for free disk by drive and handed the release.",
     "files": [
       "core/src/placement.rs",
       "cli/src/placement.rs",
@@ -130,7 +130,8 @@
       "MachinePlacement",
       "HttpPlacement",
       "BenchFor",
-      "FarEnd"
+      "FarEnd",
+      "FarDisk"
     ],
     "aliases": [
       "배치 규칙",
@@ -143,8 +144,8 @@
       "deploy/releases-and-rollback",
       "core/silence-watch"
     ],
-    "base": "a11c3a5fce5ae0a3c49b923c11cc54d7b3e8910d",
-    "changed": 1794574277862
+    "base": "21d8abde8686527d303b52e463daa59396011e0d",
+    "changed": 1794576677018
   },
   {
     "id": "core/policy-loader",

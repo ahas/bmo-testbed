@@ -31,6 +31,11 @@ shared_ceiling_bytes = 120_000_000_000
 checkout_ceiling_bytes = 8_000_000_000
 
 
+# The trim run once a prune that is not a dry run is done, the build root handed to it as its last word
+# (docs/deploy.md, 「The Cargo build directory」): fstrim needs root, and `-n` keeps sudo from waiting on a
+# password a timer cannot give.
+trim_command = ["sudo", "-n", "fstrim", "--verbose"]
+
 # The free space below which a disk of the placed machine sends `placed-disk-low` where its settings name no
 # other floor, in gigabytes of a thousand million bytes (docs/deploy.md, 「The Cargo build directory」):
 # room for the builds of one prune's span and a deployment's release build beside them.
