@@ -17,15 +17,16 @@
     of the change check where a changed path is the package's or matches its `reads`.
 - **A project of its own declares its browser test files** in the same `bmo` section of its own
   manifest, as `browser`: globs from the project's folder. Where the suite marks the project, each file
-  they reach is a unit of its own in the suite's browser lane, beside the project's check
-  (`docs/suite.md`, 「Browser files run in a lane of one」).
+  they reach is a unit of its own in the suite's browser lane, started once the project's check has
+  ended (`docs/suite.md`, 「Browser files run in a lane of one」).
 - **A project of its own** is a directory carrying its own package manifest and the lockfile a declared
   language names (`docs/testbed.md`, 「Languages」) that the root workspace does not list; a
   repository declaring no such language has none to find. The directory declares itself by its two
   files, unless the declaration
   turns discovery off or names its projects (`docs/declaration.md`). It names its own check: the
-  `check` script of its manifest, run inside it, its static check and its tests together. A project
-  whose manifest gives none fails every run that selects it.
+  `check` script of its manifest, run inside it, its static check and its tests together, readying the
+  project first: the testbed itself installs nothing in a project, so the check installs the project's
+  locked packages. A project whose manifest gives none fails every run that selects it.
 - **A tool checked by its manifest** is a folder under the declared tools directory that no crate,
   package or project holds, declared by its own manifest, whose check command runs inside the folder.
   A manifest that does not read, or names no check, fails the unit.

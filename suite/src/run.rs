@@ -643,10 +643,17 @@ fn run_held(
     prebuild(&SUITE.lines.tests, &one.name, no_run(crate_test_args(&one.name)));
   }
 
-  // The browser test files each project of its own the run checks declares for itself, run in the browser
-  // lane beside the project's own check.
-  let project_browser: Vec<String> =
-    projects.iter().flat_map(|project| project_browser_files(root, project)).collect();
+  // The browser test files each project of its own the run checks declares for itself, each with the unit of
+  // its project: they run in the browser lane once the project's own check, which readies the project, has
+  // ended.
+  let project_browser: Vec<(String, String)> = projects
+    .iter()
+    .flat_map(|project| {
+      project_browser_files(root, project)
+        .into_iter()
+        .map(|file| (file, unit_of(&project.dir)))
+    })
+    .collect();
 
   // The TypeScript test files the run starts. A file git names that is already gone stays in.
   let tests = test_files(repo);
@@ -701,7 +708,7 @@ fn run_held(
   let mut crate_files: Vec<String> = crates.iter().map(|one| unit_of(&one.dir)).collect();
 
   files.append(&mut crate_files);
-  files.extend(project_browser.iter().cloned());
+  files.extend(project_browser.iter().map(|(file, _)| file.clone()));
   files.extend(largest_first(in_scope, |file| {
     std::fs::metadata(root.join(file)).map_or(0, |held| held.len())
   }));
@@ -823,7 +830,7 @@ fn run_held(
     ran.code
   };
   let lane = |file: &String| -> Option<String> {
-    if browser_file(test, file) || project_browser.contains(file) {
+    if browser_file(test, file) || project_browser.iter().any(|(one, _)| one == file) {
       Some("browser".to_owned())
     } else if project_units.contains_key(file)
       || tool_units.contains_key(file)
@@ -834,7 +841,20 @@ fn run_held(
       None
     }
   };
-  let codes = sweep(&files, &SweepPlan { width, lane: &lane }, &file_run);
+  let after = |file: &String| -> Option<usize> {
+    let (_, project) = project_browser.iter().find(|(one, _)| one == file)?;
+
+    files.iter().position(|one| one == project)
+  };
+  let codes = sweep(
+    &files,
+    &SweepPlan {
+      width,
+      lane: &lane,
+      after: &after,
+    },
+    &file_run,
+  );
   let failed: Vec<&str> = files
     .iter()
     .zip(&codes)

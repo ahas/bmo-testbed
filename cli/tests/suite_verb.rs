@@ -333,25 +333,48 @@ fn a_test_file_runs_from_the_folder_of_its_runner_s_configuration() {
   assert_eq!(kept.repository_name.as_deref(), Some("repo"));
 }
 
-// "the browser files a project of its own declares run in the browser lane, beside the project's check"
+// "the browser files a project of its own declares run in the browser lane, once the project's check has
+// ended": the check installs the package the browser file imports, in a copy that holds no packages yet. The
+// check installs only once the declaration's own browser file has run, which a lane holding the project's file
+// at its head would run only after that file, so the order is the sweep's and no race of start-up times.
 #[test]
-fn the_browser_files_a_project_declares_run_beside_its_check() {
+fn the_browser_files_a_project_declares_run_once_its_check_has_installed_it() {
   let dir = tempfile::tempdir().unwrap();
   let repo = dir.path().join("repo");
   let data = dir.path().join("data");
 
-  checkout(&repo, "testbed = 0\n\n[test]\nlanguages = [\"bun\"]\n");
+  checkout(
+    &repo,
+    "testbed = 0\n\n[test]\nlanguages = [\"bun\"]\nbrowser = [\"browser/*.test.ts\"]\n",
+  );
   std::fs::create_dir_all(repo.join("lab/tests")).unwrap();
+  std::fs::create_dir_all(repo.join("browser")).unwrap();
   std::fs::create_dir_all(&data).unwrap();
   std::fs::write(
+    repo.join("browser/declared.test.ts"),
+    "import { test } from \"bun:test\";\nimport { writeFileSync } from \"node:fs\";\n\n\
+     test(\"the declared browser file runs\", () => {\n  writeFileSync(`${import.meta.dir}/../ran`, \"\");\n});\n",
+  )
+  .unwrap();
+  std::fs::write(
     repo.join("lab/package.json"),
-    r#"{ "name": "lab", "scripts": { "check": "true" }, "bmo": { "browser": ["tests/*.test.ts"] } }"#,
+    r#"{ "name": "lab", "scripts": { "check": "sh install.sh" }, "bmo": { "browser": ["tests/*.test.ts"] } }"#,
   )
   .unwrap();
   std::fs::write(repo.join("lab/bun.lock"), "{}").unwrap();
   std::fs::write(
+    repo.join("lab/install.sh"),
+    "i=0\n\
+     while [ ! -e ../ran ] && [ \"$i\" -lt 200 ]; do sleep 0.05; i=$((i + 1)); done\n\
+     mkdir -p node_modules/installed\n\
+     printf '{ \"name\": \"installed\", \"main\": \"index.ts\" }' > node_modules/installed/package.json\n\
+     printf 'export const installed = true;\\n' > node_modules/installed/index.ts\n",
+  )
+  .unwrap();
+  std::fs::write(
     repo.join("lab/tests/page.test.ts"),
-    "import { expect, test } from \"bun:test\";\n\ntest(\"the page answers\", () => {\n  expect(1).toBe(1);\n});\n",
+    "import { expect, test } from \"bun:test\";\nimport { installed } from \"installed\";\n\n\
+     test(\"the page answers\", () => {\n  expect(installed).toBe(true);\n});\n",
   )
   .unwrap();
 

@@ -4,8 +4,8 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Condvar, Mutex};
 use std::time::Duration;
 
 use bmo_testbed_core::declaration::Test;
@@ -192,8 +192,16 @@ mod sweeping {
     None
   }
 
+  fn after_none<T>(_: &T) -> Option<usize> {
+    None
+  }
+
   fn plan<'a, T>(width: usize, lane: &'a dyn Fn(&T) -> Option<String>) -> SweepPlan<'a, T> {
-    SweepPlan { width, lane }
+    SweepPlan {
+      width,
+      lane,
+      after: &after_none,
+    }
   }
 
   // Counts what runs at once, by kind.
@@ -376,6 +384,79 @@ mod sweeping {
 
     assert_eq!(done, [1, 2, 3, 4, 5, 6]);
     assert_eq!(starts.load(Ordering::SeqCst), 6);
+  }
+
+  // "a project's browser file starts once its project's check has ended; while it waits, the lane takes the
+  // next browser file that waits on nothing": the check is what installs the project's packages.
+  #[test]
+  fn an_item_starts_after_the_one_it_names_and_its_lane_takes_the_next_meanwhile() {
+    let items = ["check", "own-browser", "declared-browser"];
+    let kind = |item: &&str| match *item {
+      "check" => Some("heavy".to_owned()),
+      _ => Some("browser".to_owned()),
+    };
+    let after = |item: &&str| (*item == "own-browser").then_some(0);
+    let check_ended = AtomicBool::new(false);
+    let started = Mutex::new(Vec::new());
+    let one_started = Condvar::new();
+    let check_waited_out = AtomicBool::new(false);
+    let saw_the_check_ended = AtomicBool::new(false);
+
+    sweep(
+      &items,
+      &SweepPlan {
+        width: 3,
+        lane: &kind,
+        after: &after,
+      },
+      &|item: &&str| {
+        started.lock().unwrap().push(*item);
+        one_started.notify_all();
+
+        match *item {
+          // The check goes on only once the lane has taken the browser file that waits on nothing; a lane
+          // held by the file waiting on the check never takes it, and the wait runs out.
+          "check" => {
+            let (so_far, waited) = one_started
+              .wait_timeout_while(started.lock().unwrap(), Duration::from_secs(5), |so_far| {
+                !so_far.contains(&"declared-browser")
+              })
+              .unwrap();
+
+            drop(so_far);
+            check_waited_out.store(waited.timed_out(), Ordering::SeqCst);
+            check_ended.store(true, Ordering::SeqCst);
+          }
+          "own-browser" => saw_the_check_ended.store(check_ended.load(Ordering::SeqCst), Ordering::SeqCst),
+          _ => {}
+        }
+      },
+    );
+
+    assert!(!check_waited_out.load(Ordering::SeqCst));
+    assert!(saw_the_check_ended.load(Ordering::SeqCst));
+  }
+
+  // "an item named in its own queue behind the one waiting on it is taken first", so a lane never waits on
+  // itself.
+  #[test]
+  fn an_item_waiting_on_one_behind_it_in_its_own_lane_runs_second() {
+    let items = ["waits", "first"];
+    let kind = |_: &&str| Some("browser".to_owned());
+    let after = |item: &&str| (*item == "waits").then_some(1);
+    let order = Mutex::new(Vec::new());
+
+    sweep(
+      &items,
+      &SweepPlan {
+        width: 1,
+        lane: &kind,
+        after: &after,
+      },
+      &|item: &&str| order.lock().unwrap().push(*item),
+    );
+
+    assert_eq!(*order.lock().unwrap(), ["first", "waits"]);
   }
 
   // "starts the largest first, since a large file is a long run"

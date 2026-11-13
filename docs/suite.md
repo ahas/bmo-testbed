@@ -41,6 +41,12 @@
   at a time, in a lane of their own beside the other files. A project's browser file runs as any test
   file does, by the declared language that runs it, from the folder of its runner's configuration. The lane starts with the run, so the browser files do not wait
   for the rest and the rest do not wait for them.
+- **A project's browser file starts once its project's check has ended,** whatever the check's verdict.
+  The check is what readies the project: it installs the project's locked packages and makes whatever
+  else its files import, and a tree freshly set up, such as a bench copy on another machine, holds none
+  of it until then. While a project's browser file waits, the lane takes the next browser file that
+  waits on nothing, so the declaration's own browser files run meanwhile; a lane whose every file
+  waits holds its place until a check ends.
 - **Why one at a time:** each drives a browser, and several browsers side by side slow one another far
   more than they slow the rest.
 - **Why a process each:** a browser driver freshly loaded several times inside one process can hang

@@ -215,7 +215,7 @@
   {
     "id": "suite/suite-run",
     "title": "Suite run",
-    "what": "The suite verb: every test file, crate, project and tool as one unit in a process of its own, a sweep's width at a time inside the machine's turn and a fence, each file run from its runner's configuration folder; --again runs failures once more.",
+    "what": "The suite verb: every test file, crate, project and tool as one unit in a process of its own, a sweep's width at a time inside the machine's turn and a fence; browser files go down a lane of one, a project's after its check; --again runs failures once more.",
     "files": [
       "suite/src/run.rs",
       "suite/src/sweep.rs",
@@ -242,8 +242,8 @@
       "core/policy-loader",
       "core/run-verb-and-status"
     ],
-    "base": "3d597a1c9c5d24652a849116272046ee9b92a110",
-    "changed": 1794469410422
+    "base": "4cc6e2bb0505c8a86b1b3ee6d8ae7da11f0453b0",
+    "changed": 1794543961624
   },
   {
     "id": "suite/test-count",
