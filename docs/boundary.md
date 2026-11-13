@@ -292,9 +292,9 @@ bmo-testbed prune --all
   each of Cargo's build locks until the build holding it lets go, and removes the target directory of
   every deployment's build tree whose last deployment is three days old (`docs/deploy.md`, 「The
   releases」). Exits 2 for a unit span of a day or less or a disk that keeps no access times.
-- Then trims the filesystem holding the build directory with `sudo -n fstrim`, so the blocks it freed go
-  back to the drive a virtual disk stands on, and sends `disk-trim-failed` where the trim does not run
-  (`docs/deploy.md`, 「The Cargo build directory」); a dry run trims nothing.
+- Then trims the filesystem holding the build directory with the prune policy's trim command, so the
+  blocks it freed go back to the drive a virtual disk stands on, and sends `disk-trim-failed` where the
+  trim does not run (`docs/deploy.md`, 「The Cargo build directory」); a dry run trims nothing.
 - Then reads the free disk of the placed machine the settings name, the host drive a virtual disk stands
   on among it, and sends `placed-disk-low` where a disk there stands below the floor (「The placed
   machine」); `--all` reads none.
@@ -412,7 +412,7 @@ verb's own name, and each noun takes what that verb takes.
 
 | Variable | Read by | Meaning |
 |---|---|---|
-| `BMO_DATA_DIR` | every verb, the hosted deploy tool | The testbed's data root: logs and the record under `testbed/`, locks under `locks/`, the data backup's and the placement's settings and the timed prune's environment file `testbed.env` under `env/`. Default `$HOME/.local/share/bmo/data` |
+| `BMO_DATA_DIR` | every verb, the hosted deploy tool | The testbed's data root: logs and the record under `testbed/`, locks under `locks/`, the data backup's and the placement's settings under `env/`. Default `$HOME/.local/share/bmo/data` |
 | `TMPDIR` | the turn | Where the lane locks stand. Default `/tmp` |
 | `BMO_TESTBED_LOCK` | the turn | Another first wide seat's lock, the further seats and the narrow lane's beside it |
 | `BMO_TESTBED_SEATS` | the turn | The wide lane's seats, over the lane policy's; anything that is not a positive whole number means the policy's |

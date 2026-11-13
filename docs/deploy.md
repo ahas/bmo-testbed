@@ -767,10 +767,10 @@ flowchart TD
   passed over; a checkout whose declaration does not read or deploys nothing names no deploy root. The
   removal is the guarded one (「What it refuses」), and `--all` and the spans of the build root do not
   change it.
-- **The filesystem is trimmed after every prune that removes,** by the prune itself and not by its timer.
-  Once the removals are done and the build locks let go, the prune runs the prune policy's trim command,
-  `sudo -n fstrim --verbose`, on the build root, and the free blocks of the filesystem holding it go back
-  to whatever that filesystem stands on. On a virtual disk, as a WSL machine's is inside its host's drive,
+- **The filesystem is trimmed after every prune that is not a dry run,** by the prune itself and not by its
+  timer. Once the removals are done and the build locks let go, the prune runs the prune policy's trim
+  command, which runs `fstrim` through `sudo`, on the build root, and the free blocks of the filesystem
+  holding it go back to whatever that filesystem stands on. On a virtual disk, as a WSL machine's is inside its host's drive,
   the disk file then shrinks on the host drive. Without the trim, the blocks a prune frees stay allocated
   in the disk file, so the host drive does not get them back.
   - **It belongs to the verb** because only the verb knows when its removals are done and says what came of
@@ -810,8 +810,8 @@ flowchart TD
   `disk_free_gigabytes`, 50 GB where they name none (the prune policy's). The event names the machine,
   the floor, and each disk below it by its path, its source (the drive itself, `C:\`, for a WSL drive
   mount) and its free space (`docs/boundary.md`, 「Events」).
-- **The event goes to this machine's hook.** The timed prune's service reads the data root's
-  `env/testbed.env` where that file exists, so the machine names `BMO_TESTBED_EVENT_HOOK` there: the
+- **The event goes to this machine's hook.** The timed prune's service reads `env/testbed.env` under the
+  default data root, `$HOME/.local/share/bmo/data`, where that file exists, so the machine names `BMO_TESTBED_EVENT_HOOK` there: the
   command that carries an event to the person who keeps the machine. Where no hook is named, the event is
   the line the prune writes on its standard error, which a timed prune leaves in this machine's journal,
   read with `journalctl --user -u bmo-cargo-prune.service`.
