@@ -127,6 +127,17 @@
 - **Keys read and given no effect:** `--guard`, `--file-guard` and `--turn-wait`, and a declaration's
   `guard_seconds`, `file_guard_seconds` and `test_timeout_seconds`.
 
+## A skipped test is said
+
+- **The verdict names how many tests the units skipped,** read from each unit's own output by the counts
+  the `log` verb reads (「Reading the output」), whatever kind of unit printed them: a test file, a
+  project's check script, a tool's check or a crate's tests. A run that passed with tests skipped says so
+  on its last line, so a skip never reads as a bare pass.
+- **A test that needs a program the machine lacks is the test's to skip,** saying which program and why,
+  in its own output; the suite counts the skip like any other. The testbed installs nothing on a machine,
+  the one it was started on or the one it placed the run on: a program a repository's tests need is
+  installed on every machine its runs go to, and until it is, those tests stand skipped in every verdict.
+
 ## Which files run
 
 - **Git answers:** tracked test files and test files not yet committed, matching the declared test
@@ -138,6 +149,10 @@
   caller's words, with no per-test limit of the runner's own standing. A repository declaring no language that runs
   test files has none; a project's check script is run by the first declared language that runs
   package scripts.
+- **A project of its own runs its own tests,** through its check script and in no other way: the files
+  inside it are none of the run's files, apart from the browser files it declares. A project whose check
+  script runs no tests has its tests run nowhere, so a project holding tests runs its runner in that
+  script, after its static check (`docs/checks.md`, 「Which tests a change runs」).
 - **Each file runs from the folder of its runner's configuration:** the nearest folder at or above
   the file, inside the repository, holding the configuration file its language reads (bun's
   `bunfig.toml`), or the repository's root where none does or its language reads none. It is handed
@@ -320,8 +335,9 @@
 ## The lines the run writes about itself
 
 - **Both open with `suite:`,** so a caller holding a log full of the runners' own output can find them.
-- **The last line is always the verdict:** whether it passed, how long it took, and what happened. Its
-  presence is the answer to whether the run has ended.
+- **The last line is always the verdict:** whether it passed, how long it took, and what happened: the
+  files passed, the files failed where any did, and the tests skipped where any were (「A skipped test is
+  said」). Its presence is the answer to whether the run has ended.
 - **Every line goes to the run's own log as well,** under the data root's `testbed/`, which its test
   run in the record names once its turn has come (`docs/boundary.md`, 「The record」).
 

@@ -556,6 +556,7 @@ mod endings {
       files: 10,
       passed,
       failed,
+      skipped: 0,
     }
   }
 
@@ -580,6 +581,36 @@ mod endings {
     .join(&said.joiner);
 
     assert_eq!(sweep_ending(counted(9, 1)), (false, note, 1));
+  }
+
+  // "a run that passed with tests skipped says so on its last line": the skip stands beside the files passed
+  // and beside the files failed alike.
+  #[test]
+  fn names_the_tests_skipped_on_a_pass_and_a_failure_alike() {
+    let said = &SUITE.ending;
+    let skipped = fill_marks(&said.skipped_count, &[("count", "6")]);
+    let passed = [fill_marks(&said.all_passed, &[("files", "10")]), skipped.clone()].join(&said.joiner);
+    let failed = [
+      fill_marks(&said.passed, &[("passed", "9"), ("files", "10")]),
+      fill_marks(&said.failed_count, &[("count", "1")]),
+      skipped,
+    ]
+    .join(&said.joiner);
+
+    assert_eq!(
+      sweep_ending(SweepCount {
+        skipped: 6,
+        ..counted(10, 0)
+      }),
+      (true, passed, 0)
+    );
+    assert_eq!(
+      sweep_ending(SweepCount {
+        skipped: 6,
+        ..counted(9, 1)
+      }),
+      (false, failed, 1)
+    );
   }
 }
 

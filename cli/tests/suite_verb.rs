@@ -393,6 +393,70 @@ fn the_browser_files_a_project_declares_run_once_its_check_has_installed_it() {
   assert_eq!(headings.len(), 2, "{}", done.err);
 }
 
+// A checkout holding one project of its own, `road/`, whose check script runs its tests, and the test file
+// given under it.
+fn project_with_tests(dir: &Path, test_file: &str) -> (PathBuf, PathBuf) {
+  let repo = dir.join("repo");
+  let data = dir.join("data");
+
+  checkout(&repo, "testbed = 0\n\n[test]\nlanguages = [\"bun\"]\n");
+  std::fs::create_dir_all(repo.join("road/tests")).unwrap();
+  std::fs::create_dir_all(&data).unwrap();
+  std::fs::write(
+    repo.join("road/package.json"),
+    r#"{ "name": "road", "scripts": { "check": "bun test" } }"#,
+  )
+  .unwrap();
+  std::fs::write(repo.join("road/bun.lock"), "{}").unwrap();
+  std::fs::write(repo.join("road/tests/road.test.ts"), test_file).unwrap();
+  (repo, data)
+}
+
+// A whole run of the suite in the checkout, ended.
+fn whole_run(repo: &Path, data: &Path) -> Ran {
+  let mut command = testbed(repo, data, &["suite"]);
+
+  std::os::unix::process::CommandExt::process_group(&mut command, 0);
+  ended(command.spawn().unwrap())
+}
+
+// "a project of its own runs its own tests, through its check script and in no other way": a test failing
+// under it fails the run as the project's unit, and the file is no unit of the run's own.
+#[test]
+fn a_project_s_failing_test_fails_the_run_through_its_check_script_alone() {
+  let dir = tempfile::tempdir().unwrap();
+  let (repo, data) = project_with_tests(
+    dir.path(),
+    "import { expect, test } from \"bun:test\";\n\ntest(\"the road holds\", () => {\n  \
+     expect(1).toBe(2);\n});\n",
+  );
+  let done = whole_run(&repo, &data);
+  let failed = fill_marks(&SUITE.ending.failed_files, &[("files", "road/")]);
+
+  assert_eq!(done.code, 1, "{}", done.err);
+  assert!(done.err.lines().any(|line| line == failed), "{}", done.err);
+  assert!(done.err.contains("the road holds"), "{}", done.err);
+  assert!(!done.err.lines().any(|line| line.ends_with("road/tests/road.test.ts")), "{}", done.err);
+}
+
+// "a test that needs a program the machine lacks is the test's to skip, and the verdict names how many tests
+// the units skipped": a project's check script that skips a test passes, its verdict saying so.
+#[test]
+fn a_test_a_project_s_check_skips_is_named_on_the_verdict() {
+  let dir = tempfile::tempdir().unwrap();
+  let (repo, data) = project_with_tests(
+    dir.path(),
+    "import { test } from \"bun:test\";\n\nconsole.error(\"skipped: no such program on this machine\");\n\n\
+     test.skip(\"drives a program this machine lacks\", () => {});\n",
+  );
+  let done = whole_run(&repo, &data);
+  let skipped = fill_marks(&SUITE.ending.skipped_count, &[("count", "1")]);
+
+  assert_eq!(done.code, 0, "{}", done.err);
+  assert!(verdict_of(&done.err).is_some_and(|line| line.ends_with(&skipped)), "{}", done.err);
+  assert!(done.err.contains("skipped: no such program on this machine"), "{}", done.err);
+}
+
 // "with --again what failed runs once more, and what passed only then is written down and sent as an event"
 #[test]
 fn a_run_once_more_passes_on_its_second_run_and_tells_of_the_flaky_test() {

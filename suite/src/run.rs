@@ -8,6 +8,7 @@ use std::fs::File;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -232,37 +233,42 @@ pub fn verdict_line(ok: bool, seconds: f64, note: &str) -> String {
   )
 }
 
-/// What a sweep's units came to, counted, for the verdict it ends on.
+/// What a sweep's units came to, counted, for the verdict it ends on: its files, those that passed and
+/// failed, and the tests their own output says they skipped.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct SweepCount {
   pub files: usize,
   pub passed: usize,
   pub failed: usize,
+  pub skipped: u64,
 }
 
-/// How a sweep ends: whether it passed, its verdict's clause and its exit code.
+/// How a sweep ends: whether it passed, its verdict's clause and its exit code. Tests skipped are named on a
+/// pass and a failure alike, so a skip never reads as a bare pass (docs/suite.md, 「A skipped test is said」).
 pub fn sweep_ending(count: SweepCount) -> (bool, String, u8) {
   let said = &SUITE.ending;
   let SweepCount {
     files,
     passed,
     failed,
+    skipped,
   } = count;
-
-  if passed == files {
-    return (true, fill_marks(&said.all_passed, &[("files", &files.to_string())]), 0);
-  }
-
-  let mut parts = vec![fill_marks(
-    &said.passed,
-    &[("passed", &passed.to_string()), ("files", &files.to_string())],
-  )];
+  let ok = passed == files;
+  let mut parts = vec![if ok {
+    fill_marks(&said.all_passed, &[("files", &files.to_string())])
+  } else {
+    fill_marks(&said.passed, &[("passed", &passed.to_string()), ("files", &files.to_string())])
+  }];
 
   if failed > 0 {
     parts.push(fill_marks(&said.failed_count, &[("count", &failed.to_string())]));
   }
 
-  (false, parts.join(&said.joiner), 1)
+  if skipped > 0 {
+    parts.push(fill_marks(&said.skipped_count, &[("count", &skipped.to_string())]));
+  }
+
+  (ok, parts.join(&said.joiner), if ok { 0 } else { 1 })
 }
 
 /// Every test file of this repository, the ones git has never seen included, matching the declared test
@@ -808,6 +814,8 @@ fn run_held(
 
     UnitCommand::of(line, root.join(dir), base, None)
   };
+  // The tests the units skipped, by the counts their own output gives.
+  let skipped = AtomicU64::new(0);
   let file_run = |file: &String| -> i32 {
     let no_check = match (project_units.get(file), tool_units.get(file)) {
       (Some(project), _) if !project.check => {
@@ -835,6 +843,7 @@ fn run_held(
       ..unit_command(file)
     });
 
+    skipped.fetch_add(tally_of(&ran.output).skip, Ordering::Relaxed);
     say(&unit_account(file, &ran));
 
     ran.code
@@ -895,6 +904,7 @@ fn run_held(
     files: files.len(),
     passed,
     failed: failed.len(),
+    skipped: skipped.load(Ordering::Relaxed),
   };
   let (ok, note, code) = sweep_ending(count);
 

@@ -130,6 +130,7 @@ pub struct EndingWords {
   pub all_passed: String,
   pub passed: String,
   pub failed_count: String,
+  pub skipped_count: String,
   pub joiner: String,
   pub unbuilt: String,
 }

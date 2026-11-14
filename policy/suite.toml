@@ -155,6 +155,8 @@ not_run = "not run: the harness it waited for went away before the machine's tur
 all_passed = "{files} of {files} files passed"
 passed = "{passed} of {files} files passed"
 failed_count = "{count} failed"
+# The tests the units skipped, by the counts their own output gave (docs/suite.md, 「A skipped test is said」).
+skipped_count = "{count} test(s) skipped"
 joiner = ", "
 # A checkout of the testbed whose own binary did not build, by the {code} its build ended with
 # (docs/boundary.md, 「The binary」).

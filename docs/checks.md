@@ -27,7 +27,10 @@
   turns discovery off or names its projects (`docs/declaration.md`). It names its own check: the
   `check` script of its manifest, run inside it, its static check and its tests together, readying the
   project first: the testbed itself installs nothing in a project, so the check installs the project's
-  locked packages. A project whose manifest gives none fails every run that selects it.
+  locked packages. A project whose manifest gives none fails every run that selects it. The project's
+  test files are run by that script and by nothing else of the testbed's, apart from the browser files
+  it declares: a script that stops at the static check leaves them run nowhere (`docs/suite.md`, 「Which
+  files run」).
 - **A tool checked by its manifest** is a folder under the declared tools directory that no crate,
   package or project holds, declared by its own manifest, whose check command runs inside the folder.
   A manifest that does not read, or names no check, fails the unit.
