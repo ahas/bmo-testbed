@@ -27,7 +27,7 @@
   {
     "id": "deploy/console-probe",
     "title": "Console probe",
-    "what": "Once a unit declaring [deploy.console] is up, the deploy run asks its console face as a console would: manifest read by the pinned bmo-ui release, layer, words, module and stylesheet guard, and a non-console token refused; the first point refused rolls back (deploy/src/console.rs).",
+    "what": "Once a unit declaring [deploy.console] is up, the deploy run asks its console face as a console would: manifest read by the vendored bmo-ui release of the pin's range, layer, words, module and stylesheet guard, a non-console token refused; the first refusal rolls back (deploy/src/console.rs).",
     "files": [
       "deploy/src/console.rs",
       "deploy/tests/console.rs",
@@ -42,7 +42,9 @@
       "MachineConsole",
       "PinnedLayer",
       "LayerPin",
-      "pinned_layer_file",
+      "LayerRelease",
+      "VendoredLayer",
+      "vendored_layer",
       "read_reach"
     ],
     "aliases": [
@@ -53,8 +55,8 @@
       "core/declaration",
       "core/policy-loader"
     ],
-    "base": "180b2b9181faadca65de1e7c47ee0898e09be39e",
-    "changed": 1794639006896
+    "base": "5f358e4cd41339d6274e4cfe714c529cd7cb32f8",
+    "changed": 1794639840125
   },
   {
     "id": "deploy/deploy-run",
@@ -108,8 +110,8 @@
       "core/silence-watch",
       "suite/cargo-verb-and-prune"
     ],
-    "base": "a11c3a5fce5ae0a3c49b923c11cc54d7b3e8910d",
-    "changed": 1794574703277
+    "base": "5f358e4cd41339d6274e4cfe714c529cd7cb32f8",
+    "changed": 1794639843533
   },
   {
     "id": "deploy/hosted-deploy-tool",

@@ -1,8 +1,8 @@
 //! The console probe (docs/deploy.md, 「The console probe」): a service that brings a screen to a console is
 //! asked, once it has started, the parts of bmo-ui's console plugin contract a console meets first, as a
 //! console asks them. The manifest is read by the layer's own reading through bmo-chat's console face, run on
-//! the pinned release's packed file as the release being deployed vendors it, and the contract's route and
-//! headers are the console face's own constants, so the testbed restates neither.
+//! the packed file of the release of the pin's range the release being deployed vendors, and the contract's
+//! route and headers are the console face's own constants, so the testbed restates neither.
 //!
 //! The asks go through hands of their own, so a test stands a service and the reading in for the machine's.
 
@@ -24,17 +24,40 @@ fn words() -> &'static ConsoleWords {
   &DEPLOY.console
 }
 
-/// The release of the console layer the shared versions pin: its version, the file it is packed in and that
-/// file's sha256.
+/// One release of the console layer: its version, the file it is packed in and that file's sha256.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LayerPin {
+pub struct LayerRelease {
   pub version: String,
   pub file: String,
   pub sha256: String,
 }
 
-/// The release of the console layer the shared versions pin, which a manifest is read by and its `layer` held
-/// to.
+/// The console layer as the shared versions pin it: the pinned release and the earlier releases it stays
+/// compatible with, in the order the shared versions list them. Together they are the pin's range.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LayerPin {
+  pub pinned: LayerRelease,
+  pub compatible: Vec<LayerRelease>,
+}
+
+impl LayerPin {
+  /// The releases of the range in the order a release's vendored copy is looked for: the pinned one, then
+  /// each compatible one.
+  pub fn releases(&self) -> impl Iterator<Item = &LayerRelease> {
+    std::iter::once(&self.pinned).chain(&self.compatible)
+  }
+}
+
+/// A release of the pin's range as the release being deployed vendors it: the release and the tracked file
+/// holding its packed bytes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VendoredLayer {
+  pub release: LayerRelease,
+  pub path: PathBuf,
+}
+
+/// The console layer as the shared versions pin it, whose vendored release a manifest is read by and its
+/// `layer` held to.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub enum PinnedLayer {
   /// The declaration names no shared versions.
@@ -42,7 +65,7 @@ pub enum PinnedLayer {
   Unnamed,
   /// The shared versions pin no release of the layer.
   Unpinned,
-  /// The release the shared versions pin.
+  /// The range the shared versions pin.
   Pinned(LayerPin),
   /// Why the shared versions did not read.
   Unread(String),
@@ -77,8 +100,9 @@ pub trait ConsoleHands {
   /// A `GET` of an address with the headers given, waited for the policy's seconds: what came, or why
   /// nothing did.
   fn get<'a>(&'a self, address: &'a str, headers: &'a [(String, String)]) -> Answering<'a>;
-  /// The packed file of the pinned layer as the release being deployed vendors it, or why none stands there.
-  fn layer_file(&self, release: &Path, pin: &LayerPin) -> Result<PathBuf, String>;
+  /// The release of the pin's range the release being deployed vendors, with its packed file, or why none
+  /// stands there.
+  fn vendored_layer(&self, release: &Path, pin: &LayerPin) -> Result<VendoredLayer, String>;
   /// A manifest's text read by the layer's own reading in its packed file: the manifest with its defaults
   /// filled, or the reading's fault as it words it.
   fn read(&self, manifest: &str, layer_file: &Path) -> Result<Value, String>;
@@ -149,9 +173,11 @@ fn made_credential() -> String {
   hex_sha256(format!("{moment}-{}", std::process::id()).as_bytes())
 }
 
-/// The file of a git tree named as the pin names its packed file and holding its bytes, or why none does.
-/// Every copy the tree tracks under that name is tried, so a stale copy beside the release does not hide it.
-pub fn pinned_layer_file(tree: &Path, pin: &LayerPin) -> Result<PathBuf, String> {
+/// The first release of the pin's range a git tree vendors: a file it tracks named as that release names its
+/// packed file and holding its bytes, or why none does. The pinned release is tried first, then each
+/// compatible one; every copy the tree tracks under a release's name is tried, so a stale copy beside the
+/// release does not hide it.
+pub fn vendored_layer(tree: &Path, pin: &LayerPin) -> Result<VendoredLayer, String> {
   let words = words();
   let listed = Command::new("git")
     .args(["ls-files", "-z"])
@@ -159,17 +185,33 @@ pub fn pinned_layer_file(tree: &Path, pin: &LayerPin) -> Result<PathBuf, String>
     .stdin(Stdio::null())
     .output()
     .map_err(|why| why.to_string())?;
-  let missing = || fill_marks(&words.no_release, &[("file", &pin.file), ("sha256", &pin.sha256)]);
+  let missing = || {
+    let files: Vec<&str> = pin.releases().map(|release| release.file.as_str()).collect();
+
+    fill_marks(&words.no_release, &[("files", &files.join(&words.files_joiner))])
+  };
 
   if !listed.status.success() {
     return Err(missing());
   }
 
-  String::from_utf8_lossy(&listed.stdout)
-    .split('\0')
-    .filter(|path| path.rsplit('/').next() == Some(pin.file.as_str()))
-    .map(|path| tree.join(path))
-    .find(|path| sha256_of(path).as_deref() == Some(pin.sha256.as_str()))
+  let tracked = String::from_utf8_lossy(&listed.stdout);
+  let copy_of = |release: &LayerRelease| {
+    tracked
+      .split('\0')
+      .filter(|path| path.rsplit('/').next() == Some(release.file.as_str()))
+      .map(|path| tree.join(path))
+      .find(|path| sha256_of(path).as_deref() == Some(release.sha256.as_str()))
+  };
+
+  pin
+    .releases()
+    .find_map(|release| {
+      copy_of(release).map(|path| VendoredLayer {
+        release: release.clone(),
+        path,
+      })
+    })
     .ok_or_else(missing)
 }
 
@@ -239,8 +281,8 @@ impl Probe<'_> {
     Ok(answer.body)
   }
 
-  // The manifest as the pinned layer reads it, its layer held to the pin; where no release is pinned, the
-  // manifest as it was answered, the passing over said.
+  // The manifest as the vendored release of the pin's range reads it, its layer held to that release; where no
+  // release is pinned, the manifest as it was answered, the passing over said.
   fn read(
     &mut self,
     text: &str,
@@ -264,11 +306,11 @@ impl Probe<'_> {
 
     match pinned {
       PinnedLayer::Pinned(pin) => {
-        let file = self
+        let vendored = self
           .hands
-          .layer_file(release, pin)
+          .vendored_layer(release, pin)
           .map_err(|why| Refusal::at(&words.point_release, why))?;
-        let manifest = self.hands.read(text, &file).map_err(|why| {
+        let manifest = self.hands.read(text, &vendored.path).map_err(|why| {
           Refusal::at(&words.point_reading, fill_marks(&words.reading_failed, &[("why", &why)]))
         })?;
 
@@ -276,10 +318,10 @@ impl Probe<'_> {
 
         let layer = text_field(&manifest, &words.layer_field, &words.point_layer)?;
 
-        if layer != pin.version {
+        if layer != vendored.release.version {
           return Err(Refusal::at(
             &words.point_layer,
-            fill_marks(&words.layer_differs, &[("found", &layer), ("wanted", &pin.version)]),
+            fill_marks(&words.layer_differs, &[("found", &layer), ("wanted", &vendored.release.version)]),
           ));
         }
 
@@ -307,7 +349,7 @@ impl Probe<'_> {
 }
 
 /// The service's console face asked point by point, the reach its declared command answers and the manifest
-/// read by the pinned release and held to it; how many points held, or the first that did not. Each line it
+/// read by the release of the pin's range the release vendors and held to it; how many points held, or the first that did not. Each line it
 /// says goes to `say`; neither credential is ever in one.
 pub async fn probe(
   command: &str,
@@ -339,7 +381,7 @@ pub async fn probe(
     }
   };
 
-  // The manifest, read by the layer's own reading and held to the pinned release.
+  // The manifest, read by the layer's own reading and held to the vendored release of the pin's range.
   let text = probe
     .holds(&words.point_manifest, CONSOLE_MANIFEST_ROUTE, &console, &[], words.answered)
     .await?;
@@ -469,8 +511,8 @@ impl ConsoleHands for MachineConsole {
     })
   }
 
-  fn layer_file(&self, release: &Path, pin: &LayerPin) -> Result<PathBuf, String> {
-    pinned_layer_file(release, pin)
+  fn vendored_layer(&self, release: &Path, pin: &LayerPin) -> Result<VendoredLayer, String> {
+    vendored_layer(release, pin)
   }
 
   fn read(&self, manifest: &str, layer_file: &Path) -> Result<Value, String> {

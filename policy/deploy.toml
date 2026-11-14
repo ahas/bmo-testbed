@@ -375,8 +375,8 @@ words = "words"
 module = "module"
 stylesheet = "stylesheet"
 # Why a point did not hold: {code} the reach command's exit, {said} what it said on its errors, {path} a path
-# of the service's API, {found} and {wanted} what came and what the contract asks, {file} and {sha256} the
-# pinned packed file, {why} the fault.
+# of the service's API, {found} and {wanted} what came and what the contract asks, {files} the packed files
+# of the pin's range, {why} the fault.
 reach_failed = "the reach command ended {code}: {said}"
 # How the reach command ended where a signal ended it.
 signal = "by a signal"
@@ -384,7 +384,9 @@ reach_unread = "the reach command did not answer one JSON object naming address 
 status = "GET {path} answered {found} where the contract asks {wanted}"
 unanswered = "GET {path} was not answered: {why}"
 not_object = "GET {path} answered no JSON object: {why}"
-no_release = "the release tracks no file {file} holding the pinned bytes {sha256}, so the layer's reading cannot run; vendor the pinned release as it stands"
+no_release = "the release tracks none of the layer's packed files {files} holding the bytes the shared versions name for it, so the layer's reading cannot run; vendor one of those releases as it stands"
+# How the packed files of the pin's range are joined in that line.
+files_joiner = ", "
 reading_failed = "{why}"
 no_field = "the manifest's reading holds no {field}"
-layer_differs = "the manifest names the layer {found} where the shared versions pin {wanted}"
+layer_differs = "the manifest names the layer {found} where the release vendors the layer's release {wanted}"

@@ -335,6 +335,7 @@ pub struct ConsoleWords {
   pub unanswered: String,
   pub not_object: String,
   pub no_release: String,
+  pub files_joiner: String,
   pub reading_failed: String,
   pub no_field: String,
   pub layer_differs: String,

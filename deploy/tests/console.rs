@@ -1,15 +1,16 @@
 //! The console probe (docs/deploy.md, 「The console probe」), over a stand-in service and a stand-in for the
 //! layer's reading: a face keeping the contract holds every point and no credential is said; each way a face
 //! breaks it is refused at its point; share reads open the module with no role; a service holding no token of
-//! its own is asked with one the probe made; the layer is held to the
-//! pinned release where one is pinned and passed over, said, where none is; and the pinned release's packed
-//! file is found among the files a release tracks by its name and its bytes.
+//! its own is asked with one the probe made; the layer is held to the release of the pin's range the release
+//! vendors where one is pinned and passed over, said, where none is; and that release is found among the files
+//! a release tracks by its packed file's name and bytes, the pinned one first.
 
 use std::cell::RefCell;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use bmo_testbed_deploy::console::{
-  Answer, Answering, ConsoleHands, LayerPin, PinnedLayer, Refusal, pinned_layer_file, probe, read_reach,
+  Answer, Answering, ConsoleHands, LayerPin, LayerRelease, PinnedLayer, Refusal, VendoredLayer, probe,
+  read_reach, vendored_layer,
 };
 use serde_json::{Value, json};
 
@@ -19,6 +20,7 @@ const ADDRESS: &str = "http://service.test/api/";
 const CONSOLE: &str = "console-credential";
 const OWN: &str = "service-credential";
 const PINNED: &str = "1.0.0";
+const NEWER: &str = "1.1.0";
 
 /// A service's console face standing in for one, each way it may break the contract a switch.
 pub struct Face {
@@ -31,8 +33,8 @@ pub struct Face {
   pub takes_any_token: bool,
   pub words: String,
   pub reach: Result<String, String>,
-  /// The release tracks no copy of the pinned layer.
-  pub no_layer_file: bool,
+  /// The version of the layer's release the release vendors, none where it vendors none.
+  pub vendors: Option<&'static str>,
   pub refused_reading: Option<String>,
   pub asked: RefCell<Vec<String>>,
 }
@@ -57,7 +59,7 @@ impl Default for Face {
       reach: Ok(format!(
         "{{\"address\": \"{ADDRESS}\", \"consoleToken\": \"{CONSOLE}\", \"token\": \"{OWN}\"}}\n"
       )),
-      no_layer_file: false,
+      vendors: Some(PINNED),
       refused_reading: None,
       asked: RefCell::new(Vec::new()),
     }
@@ -118,12 +120,15 @@ impl ConsoleHands for Face {
     })
   }
 
-  fn layer_file(&self, release: &Path, pin: &LayerPin) -> Result<PathBuf, String> {
-    if self.no_layer_file {
-      Err(format!("no {}", pin.file))
-    } else {
-      Ok(release.join(&pin.file))
-    }
+  fn vendored_layer(&self, release: &Path, pin: &LayerPin) -> Result<VendoredLayer, String> {
+    pin
+      .releases()
+      .find(|layer| Some(layer.version.as_str()) == self.vendors)
+      .map(|layer| VendoredLayer {
+        release: layer.clone(),
+        path: release.join(&layer.file),
+      })
+      .ok_or_else(|| "no release of the range vendored".to_owned())
   }
 
   fn read(&self, manifest: &str, _: &Path) -> Result<Value, String> {
@@ -143,16 +148,27 @@ fn probed(face: &Face, pinned: &PinnedLayer) -> (Result<usize, Refusal>, Vec<Str
   (outcome, said.into_inner())
 }
 
-fn pin(version: &str) -> LayerPin {
-  LayerPin {
+fn layer(version: &str, sha256: &str) -> LayerRelease {
+  LayerRelease {
     version: version.to_owned(),
     file: format!("layer-{version}.tgz"),
-    sha256: "0".repeat(64),
+    sha256: sha256.to_owned(),
   }
 }
 
 fn pinned() -> PinnedLayer {
-  PinnedLayer::Pinned(pin(PINNED))
+  PinnedLayer::Pinned(LayerPin {
+    pinned: layer(PINNED, &"0".repeat(64)),
+    compatible: Vec::new(),
+  })
+}
+
+// The newer release pinned, the face's own listed compatible with it.
+fn ranged() -> PinnedLayer {
+  PinnedLayer::Pinned(LayerPin {
+    pinned: layer(NEWER, &"1".repeat(64)),
+    compatible: vec![layer(PINNED, &"0".repeat(64))],
+  })
 }
 
 fn refused_at(face: &Face, pinned: &PinnedLayer) -> Refusal {
@@ -238,14 +254,25 @@ fn a_service_holding_no_token_is_asked_with_a_credential_the_probe_made() {
   assert_eq!(refused_at(&face, &pinned()).point, "the manifest with a credential the probe made");
 }
 
-// "a layer other than the pinned release is refused, and with none pinned it is passed over and said"
+// "a release vendoring a compatible release of the pin's range holds with its layer that release, a layer
+// other than the vendored release is refused, and with none pinned it is passed over and said"
 #[test]
-fn the_layer_is_held_to_the_pinned_release_and_passed_over_where_none_is_pinned() {
+fn the_layer_is_held_to_the_vendored_release_of_the_range_and_passed_over_where_none_is_pinned() {
   let face = Face::default();
-  let refusal = refused_at(&face, &PinnedLayer::Pinned(pin("1.1.0")));
+
+  assert_eq!(probed(&face, &ranged()).0, Ok(13));
+
+  let moved = Face {
+    vendors: Some(NEWER),
+    ..Face::default()
+  };
+  let refusal = refused_at(&moved, &ranged());
 
   assert_eq!(refusal.point, "the layer");
-  assert_eq!(refusal.why, "the manifest names the layer 1.0.0 where the shared versions pin 1.1.0");
+  assert_eq!(
+    refusal.why,
+    "the manifest names the layer 1.0.0 where the release vendors the layer's release 1.1.0"
+  );
 
   let (outcome, said) = probed(&face, &PinnedLayer::Unpinned);
 
@@ -263,17 +290,17 @@ fn the_layer_is_held_to_the_pinned_release_and_passed_over_where_none_is_pinned(
   );
 
   let unvendored = Face {
-    no_layer_file: true,
+    vendors: None,
     ..Face::default()
   };
 
-  assert_eq!(refused_at(&unvendored, &pinned()).point, "the layer's release");
+  assert_eq!(refused_at(&unvendored, &ranged()).point, "the layer's release");
 }
 
-// "the pinned release's packed file is the tracked file of its name holding its bytes, a stale copy of the
-// name passed over, and none is named with what to vendor"
+// "the vendored release is the first of the range, the pinned one first, whose packed file the tree tracks
+// under its name with its bytes, a stale copy of the name passed over, and none is named with the range's files"
 #[test]
-fn the_pinned_packed_file_is_found_among_the_tracked_files_by_its_name_and_bytes() {
+fn the_vendored_release_is_found_among_the_tracked_files_by_its_name_and_bytes_pinned_first() {
   use sha2::{Digest, Sha256};
 
   let tree = tempfile::tempdir().unwrap();
@@ -283,32 +310,40 @@ fn the_pinned_packed_file_is_found_among_the_tracked_files_by_its_name_and_bytes
     std::fs::create_dir_all(at.parent().unwrap()).unwrap();
     std::fs::write(at, text).unwrap();
   };
+  let hashed =
+    |text: &str| -> String { Sha256::digest(text).iter().map(|byte| format!("{byte:02x}")).collect() };
 
   write("a/vendor/layer-1.0.0.tgz", "a stale build");
-  write("b/vendor/layer-1.0.0.tgz", "the release");
-  write("c/vendor/layer-1.0.0.tgz", "the release, untracked");
+  write("b/vendor/layer-1.0.0.tgz", "the compatible release");
+  write("c/vendor/layer-1.1.0.tgz", "the pinned release, untracked");
   must(&["init", "--quiet"], tree.path());
   must(&["add", "a", "b"], tree.path());
 
-  let release = LayerPin {
-    version: PINNED.to_owned(),
-    file: "layer-1.0.0.tgz".to_owned(),
-    sha256: Sha256::digest(b"the release").iter().map(|byte| format!("{byte:02x}")).collect(),
+  let mut pin = LayerPin {
+    pinned: layer(NEWER, &hashed("the pinned release, untracked")),
+    compatible: vec![layer(PINNED, &hashed("the compatible release"))],
   };
 
   assert_eq!(
-    pinned_layer_file(tree.path(), &release),
-    Ok(tree.path().join("b/vendor/layer-1.0.0.tgz"))
+    vendored_layer(tree.path(), &pin),
+    Ok(VendoredLayer {
+      release: pin.compatible[0].clone(),
+      path: tree.path().join("b/vendor/layer-1.0.0.tgz"),
+    })
   );
 
-  let elsewhere = LayerPin {
-    sha256: "f".repeat(64),
-    ..release
-  };
-  let missing = pinned_layer_file(tree.path(), &elsewhere).unwrap_err();
+  must(&["add", "c"], tree.path());
+
+  assert_eq!(vendored_layer(tree.path(), &pin).map(|found| found.release), Ok(pin.pinned.clone()));
+
+  pin.pinned.sha256 = "f".repeat(64);
+  pin.compatible[0].sha256 = "f".repeat(64);
+
+  let missing = vendored_layer(tree.path(), &pin).unwrap_err();
 
   assert!(
-    missing.starts_with("the release tracks no file layer-1.0.0.tgz holding the pinned bytes"),
+    missing
+      .starts_with("the release tracks none of the layer's packed files layer-1.1.0.tgz, layer-1.0.0.tgz"),
     "{missing}"
   );
 }

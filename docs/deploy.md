@@ -545,25 +545,31 @@ meets first, as a console asks them.
   holds a face to the same answer either way.
 - **The release the manifest is held to.** The shared versions the declaration names
   (`[check.shared_versions]`) pin the release of the console layer every console and bundle builds on, by
-  its version, its packed file and the file's sha256 (`docs/checks.md`, 「The quick checks」,
-  `shared-versions`). The probe holds the release to that pinned release itself, never to a compatible
-  release of the pin's range. Shared versions that do not read fail the probe. Where they pin none, or the
-  declaration names no shared versions, the manifest is taken as it was answered, its reading and its
-  layer's point are passed over, and the deployment says so on one line.
+  its version, its packed file and the file's sha256, and list the earlier releases it stays compatible
+  with the same way; the pinned release and the compatible ones are the pin's range (`docs/checks.md`,
+  「The quick checks」, `shared-versions`). A console attaches a bundle built on any release of the range,
+  so the probe holds the release being deployed to the one release of the range it vendors. Shared
+  versions that do not read fail the probe. Where they pin none, or the declaration names no shared
+  versions, the manifest is taken as it was answered, its reading and its layer's point are passed over,
+  and the deployment says so on one line.
+- **The vendored release.** A release of the range is vendored where the release being deployed tracks a
+  file under that release's file name whose bytes hash to that release's sha256, as every client vendors
+  it; every tracked copy of the name is tried, so a stale copy beside it does not hide it. The releases are
+  tried in turn, the pinned one first and then the compatible ones in the order the shared versions list
+  them, and the first vendored one is the release the manifest is held to. A release tracking no release
+  of the range fails the probe, naming the range's files.
 - **The manifest's reading is the layer's own.** The manifest is read by the layer's shared reading of it,
-  the module `console-manifest` of the pinned release, through bmo-chat's console face, which runs it by
-  Bun on the packed file (bmo-chat's `docs/console-face.md`). The packed file is the release's own copy: a
-  file the release being deployed tracks under the pinned file's name whose bytes hash to the pinned
-  sha256, as every client vendors it. A release tracking none fails the probe. The testbed carries no
-  reading of its own, and takes the contract's route and the headers a console sets from the same console
-  face, so a manifest the contract refuses is refused here as the layer words it.
+  the module `console-manifest` of the vendored release, through bmo-chat's console face, which runs it by
+  Bun on that release's packed file (bmo-chat's `docs/console-face.md`). The testbed carries no reading of
+  its own, and takes the contract's route and the headers a console sets from the same console face, so a
+  manifest the contract refuses is refused here as the layer words it.
 - **The points, in order.** The first that does not hold fails the probe:
 
 ```mermaid
 flowchart TD
   A[reach answers] --> B[manifest with the console's credential, no role: 200]
-  B --> C[read by the pinned release's reading]
-  C --> D[layer is the pinned release]
+  B --> C[read by the vendored release's reading]
+  C --> D[layer is the vendored release]
   D --> E[words, no role: 200 and a JSON object]
   E --> F[module and stylesheet, no role: 403]
   F --> G[module and stylesheet with the manifest's role: 200]
@@ -572,8 +578,9 @@ flowchart TD
 
   - the manifest at `/console-manifest`, asked with the console's credential and no owner key or role,
     answers 200;
-  - the release tracks the pinned packed file, and the manifest reads by the reading in it;
-  - its `layer` is the pinned release's version;
+  - the release vendors a release of the pin's range, and the manifest reads by the reading in its packed
+    file;
+  - its `layer` is the vendored release's version;
   - its words, asked the same way, answer 200 with a JSON object;
   - its module, and its stylesheet where it names one, asked with the console's credential and no role,
     answer 403; where the manifest names share reads they answer 200, since a reader with no sign-in

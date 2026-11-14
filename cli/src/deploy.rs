@@ -17,7 +17,7 @@ use bmo_testbed_core::policy::verbs::VERBS;
 use bmo_testbed_core::queue::{LockWait, now_ms, take_lock};
 use bmo_testbed_core::turn::{Env, FRONT_VARIABLE, NOT_RUN_EXIT_CODE, harness_pid, process_env};
 use bmo_testbed_core::verb::{REFUSED_EXIT_CODE, data_root};
-use bmo_testbed_deploy::console::{LayerPin, PinnedLayer};
+use bmo_testbed_deploy::console::{LayerPin, LayerRelease, PinnedLayer};
 use bmo_testbed_deploy::deployment::{
   BuildAsk, DeployAsk, DeployPlaces, Gate, GateAsk, GateFault, GateOutcome, GateStep, LaidUnits, Machine,
   Passed, SuitePassed, deploy as deploy_run,
@@ -452,16 +452,26 @@ fn refused(line: &str) -> u8 {
   REFUSED_EXIT_CODE
 }
 
-// The release of the console layer the shared versions of a repository pin, which the console probe reads a
-// manifest by and holds its layer to (docs/deploy.md, 「The console probe」); the deploy run asks it of the
-// repository the deployed commit's declaration names, where that commit brings a console screen.
+// The console layer the shared versions of a repository pin, its pinned release and the compatible ones, whose
+// vendored release the console probe reads a manifest by and holds its layer to (docs/deploy.md,
+// 「The console probe」); the deploy run asks it of the repository the deployed commit's declaration names,
+// where that commit brings a console screen.
 fn pinned_layer(repository: &str, env: &Env) -> PinnedLayer {
+  let layer_release = |version: &str, file: &str, sha256: &str| LayerRelease {
+    version: version.to_owned(),
+    file: file.to_owned(),
+    sha256: sha256.to_owned(),
+  };
+
   match find_shared(repository, env) {
     Ok(found) => match found.packages.get(&DEPLOY.console.layer_package) {
       Some(pin) => PinnedLayer::Pinned(LayerPin {
-        version: pin.version.clone(),
-        file: pin.file.clone(),
-        sha256: pin.sha256.clone(),
+        pinned: layer_release(&pin.version, &pin.file, &pin.sha256),
+        compatible: pin
+          .compatible
+          .iter()
+          .map(|release| layer_release(&release.version, &release.file, &release.sha256))
+          .collect(),
       }),
       None => PinnedLayer::Unpinned,
     },
