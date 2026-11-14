@@ -211,7 +211,6 @@ pub struct ExpansionWords {
   pub not_committed: String,
   pub no_repository: String,
   pub holds_checkout: String,
-  pub no_main: String,
   pub target_in_use: String,
 }
 

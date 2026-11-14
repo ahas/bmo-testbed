@@ -81,7 +81,28 @@ make their own databases names neither, and its tests are handed the server alon
 | `language_ledger` | path | none | The ledger of lines holding letters that are not English allowed per code file; required by `language`. `korean_ledger` names the same key, and a declaration naming both is refused |
 | `base_libraries` | list of strings | `[]` | The dependencies from other repositories the `dependencies` check allows beside registry ones |
 | `upstreams` | list of strings | `[]` | The same upstream repositories as the top level, for a declaration that keeps its dependency words here; both lists are read |
-| `main` | string | `main` | The main branch, the default base of a change, and in the repository holding the shared versions the branch the `shared-versions` check reads them from |
+| `main` | string | `main` | The main branch, the default base of a change, and in the repository holding the shared versions the branch the `shared-versions` check reads them from; its head is read as 「The main branch's head」 below says |
+
+### The main branch's head
+
+Wherever the testbed reads a repository at the head of the main branch `main` names, the committed trees
+a deployment lays (`docs/deploy.md`, 「The releases」), the tree the `full` verb runs in and the file the
+`shared-versions` check reads, it reads the one head this section defines.
+
+- **Main is the branch as the repository's remote holds it.** A job's close pushes its commits onto the
+  remote's main branch from whichever checkout the job stands in, and moves no checkout's own branch of
+  that name, so a checkout's local branch can stand behind main for as long as its checkout works on
+  another branch. The remote is the one the local branch's `remote` setting in git names, else `origin`,
+  and what the machine knows of the remote's main is its remote-tracking branch under that remote's name.
+- **Of the local branch and the remote-tracking branch, the one that holds the other is the head;** the
+  two at one commit are that commit, and where only one of them stands it is the head. Where neither
+  stands, the main branch does not stand.
+- **Two that have parted,** each holding commits the other lacks, give no head either: the main branch
+  does not stand, and the reader's refusal names both commits.
+- **A deployment and the `full` verb ask the remote first,** fetching its main branch into the
+  remote-tracking branch with no prompt for credentials, and a transfer that stalls for the policy's limit
+  is ended. A remote that cannot be asked leaves the remote-tracking branch as it was, and the head is read
+  from what the machine already knows. The `shared-versions` check, a quick check, asks no remote.
 
 ### `[check.shared_versions]`: the shared versions the manifests hold to
 

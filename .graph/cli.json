@@ -78,9 +78,10 @@
       "core/event-hook",
       "deploy/deploy-run",
       "core/lanes-and-turn",
-      "core/policy-loader"
+      "core/policy-loader",
+      "core/main-branch"
     ],
-    "base": "684d9102bf43c7e2ab34a3ece8305a70919404ee",
-    "changed": 1794545234234
+    "base": "2d06a03b2d7ea64819d32de670c8d0c21c2d0dc5",
+    "changed": 1794681897885
   }
 ]

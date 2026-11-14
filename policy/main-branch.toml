@@ -1,0 +1,13 @@
+# A repository's main branch and its head (docs/declaration.md, 「The main branch's head」): the remote it is
+# read from and what a reading of it is refused with. A harness reads the refusals, so they are English. Each
+# `{name}` is filled in with what it names.
+
+# The remote the main branch follows where git names none for it.
+remote = "origin"
+# How long a fetch of the remote's main branch may move less than a byte a second before git ends it.
+stall_seconds = 30
+
+# The refusals; {main} is the branch, {tracking} its remote-tracking branch, {local} and {remote} the commits
+# the two stand at.
+absent = "its repository has no branch {main}"
+parted = "its branch {main} at {local} and {tracking} at {remote} have parted, each holding commits the other lacks"

@@ -188,8 +188,9 @@
     (`docs/suite.md`, 「The dependents of a major change」) as the checkout whose declaration gives that name,
     so a worker's copy and a scratch clone read the same file as the primary checkout. A registry that does
     not read, no checkout or two declaring the name, and a file that does not read are the check's one fault.
-  - **The file as that repository's main branch holds it:** the check reads the file from the commit the
-    branch that checkout's own declaration names as `[check] main` points at, through git, never from the
+  - **The file as that repository's main branch holds it:** the check reads the file from the head of the
+    branch that checkout's own declaration names as `[check] main`, as `docs/declaration.md`, 「The main
+    branch's head」, reads it without asking the remote, through git, never from the
     checkout's working tree. A shared version is one every consumer is held to only once it is on the
     shared repository's main; a checkout of that repository standing on a release branch or a job's branch,
     or holding the file changed and not committed, is work under way, so whatever it holds there leaves the

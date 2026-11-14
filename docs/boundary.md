@@ -763,7 +763,8 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   names resolves there as it does here and the quick checks find what they read. For a run it copies
   each tree as it stands, the same way as the open files. For a deployment it lays no working tree: the
   repository holding each tree is made ready at its place as the bench is, from its own reachable
-  remote, pushed the head of the main branch its declaration names as `bmo-bench`, checked out detached
+  remote, pushed the head of the main branch its declaration names (`docs/declaration.md`, 「The main branch's
+  head」) as `bmo-bench`, checked out detached
   and its untracked files taken away, since a deployment builds committed trees only (`docs/deploy.md`,
   「The releases」); a tree no repository holds, or whose main branch does not stand, fails the step. The copy of
   the checkout holding the shared versions leaves their file out, and the caller writes it there instead

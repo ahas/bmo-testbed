@@ -275,7 +275,8 @@
     `testbed/`, one file per run, the repository named as its declaration names it.
   - One run at a time per repository: a run holds the repository's lock under the data root's locks,
     and a second meeting it is refused.
-  - The main branch is the one the declaration's `[check] main` names.
+  - The main branch is the one the declaration's `[check] main` names, its head read as
+    `docs/declaration.md`, 「The main branch's head」, says, the remote asked first.
 - **Where it runs:** never in its caller's process. Called from anywhere but its own unit, it starts a
   transient unit, `bmo-full-suite-<stamp>` in `bmo-suite.slice`, and ends.
 - **When:** whenever the consumer's scheduler starts it. A run writes its start time into `started`

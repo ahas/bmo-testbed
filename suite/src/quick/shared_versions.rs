@@ -16,6 +16,7 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 
 use bmo_testbed_core::declaration::{Repository, SharedException};
+use bmo_testbed_core::main_branch::MainBranch;
 use bmo_testbed_core::placement::PLACED_VARIABLE;
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::quick_checks::{QUICK_CHECKS, SharedVersionsWords};
@@ -143,8 +144,9 @@ pub fn shared_checkout(repository: &str, env: &Env) -> Result<Repository, String
   }
 }
 
-/// The shared versions' file as the main branch the checkout's own declaration names holds it, read through
-/// git and never from the working tree, or why it does not read there.
+/// The shared versions' file as the head of the main branch the checkout's own declaration names holds it
+/// (docs/declaration.md, 「The main branch's head」), no remote asked, read through git and never from the
+/// working tree, or why it does not read there.
 pub fn main_shared_text(checkout: &Repository) -> Result<String, String> {
   let file = &words().file;
   let main = &checkout.declaration.check.main;
@@ -152,6 +154,7 @@ pub fn main_shared_text(checkout: &Repository) -> Result<String, String> {
   let unread = |why: &str| {
     fill_marks(&words().not_on_main, &[("path", &path.to_string_lossy()), ("main", main), ("why", why)])
   };
+  let head = MainBranch::new(&checkout.root, main).head().map_err(|why| unread(&why))?;
   let mut command = Command::new("git");
 
   for variable in GIT_PLACE_VARIABLES {
@@ -159,7 +162,7 @@ pub fn main_shared_text(checkout: &Repository) -> Result<String, String> {
   }
 
   let done = command
-    .args(["show", &format!("refs/heads/{main}:./{file}")])
+    .args(["show", &format!("{head}:./{file}")])
     .current_dir(&checkout.root)
     .stdin(Stdio::null())
     .output()

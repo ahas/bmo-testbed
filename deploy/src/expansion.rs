@@ -6,6 +6,7 @@
 use std::path::{Component, Path, PathBuf};
 
 use bmo_testbed_core::declaration::{Repository, root_of};
+use bmo_testbed_core::main_branch::MainBranch;
 use bmo_testbed_core::policy::deploy::DEPLOY;
 use bmo_testbed_core::policy::fill_shown;
 use bmo_testbed_core::queue::process_alive;
@@ -334,9 +335,10 @@ impl CommittedTree {
 }
 
 /// The committed tree a deployment reads in place of `tree`, a tree outside the checkout: the repository
-/// holding it at the head of the main branch its declaration names, read through git and never from the
-/// working tree. A tree no repository holds, one whose repository holds the checkout as well, and one whose
-/// repository's main branch does not stand refuse it, naming the tree and why.
+/// holding it at the head of the main branch its declaration names (docs/declaration.md, 「The main branch's
+/// head」), its remote asked first, read through git and never from the working tree. A tree no repository
+/// holds, one whose repository holds the checkout as well, and one whose repository's main branch does not
+/// stand refuse it, naming the tree and why.
 pub fn committed_tree(tree: &Path, checkout: &Path) -> Result<CommittedTree, String> {
   let refused =
     |why: &str| fill_shown(&DEPLOY.expansion.not_committed, &[("tree", &tree.display()), ("why", &why)]);
@@ -350,18 +352,10 @@ pub fn committed_tree(tree: &Path, checkout: &Path) -> Result<CommittedTree, Str
   }
 
   let repository = Repository::read(&top).map_err(|refusal| refused(&refusal.0))?;
-  let main = &repository.declaration.check.main;
-  let no_main = || fill_shown(&DEPLOY.expansion.no_main, &[("main", main)]);
-  let mut line = words(["git", "rev-parse", "--verify", "--quiet"]);
-
-  line.push(format!("refs/heads/{main}^{{commit}}"));
-
-  let read = command(&line, Some(&top)).output().map_err(|why| refused(&why.to_string()))?;
-  let head = String::from_utf8_lossy(&read.stdout).trim().to_owned();
-
-  if !read.status.success() || head.is_empty() {
-    return Err(refused(&no_main()));
-  }
+  let main = MainBranch::new(&top, &repository.declaration.check.main);
+  // A remote that cannot be asked leaves the head to what this machine already knows of it.
+  let _ = main.fetch();
+  let head = main.head().map_err(|why| refused(&why))?;
 
   Ok(CommittedTree {
     inside: target.strip_prefix(&top).map(Path::to_path_buf).unwrap_or_default(),

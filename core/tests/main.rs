@@ -4,6 +4,7 @@ mod close_line;
 mod declaration;
 mod events;
 mod languages;
+mod main_branch;
 mod memory;
 mod placement;
 mod policy;

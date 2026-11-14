@@ -112,10 +112,11 @@
       "deploy/console-probe",
       "suite/quick-checks",
       "core/silence-watch",
-      "suite/cargo-verb-and-prune"
+      "suite/cargo-verb-and-prune",
+      "core/main-branch"
     ],
-    "base": "2a0f1c8059ecc8e92b9287df6c2f3f352d044203",
-    "changed": 1794668429392
+    "base": "2d06a03b2d7ea64819d32de670c8d0c21c2d0dc5",
+    "changed": 1794681897879
   },
   {
     "id": "deploy/hosted-deploy-tool",

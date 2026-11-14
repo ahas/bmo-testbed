@@ -141,6 +141,37 @@ fn a_tree_named_outside_the_workspace_is_laid_where_its_path_points() {
   assert!(reads(&tree));
 }
 
+// "a tree whose checkout works on a job's branch is laid at the main its close pushed, not at the local main
+// left behind"
+#[test]
+fn a_tree_is_laid_at_the_main_its_remote_holds_where_the_local_branch_stands_behind() {
+  let root = tempfile::tempdir().unwrap();
+  let base = root.path().join("workspace/base/text");
+  let remote = root.path().join("remote.git");
+  let checkout = root.path().join("workspace/services/app");
+  let tree = root.path().join("run/deploy-expand");
+  let laid = Laid::under(root.path());
+
+  package(&base, "bmo-text");
+  let behind = committed(&base);
+  git_in(root.path(), &["init", "-q", "--bare", "-b", "main", "remote.git"]);
+  git_in(&base, &["remote", "add", "origin", &remote.to_string_lossy()]);
+  git_in(&base, &["push", "-q", "-u", "origin", "main"]);
+  git_in(&base, &["checkout", "-q", "-b", "work"]);
+  let closed = committed(&base);
+  git_in(&base, &["push", "-q", "origin", "HEAD:main"]);
+  app(&checkout, "../../base/text");
+  app(&tree, "../../base/text");
+
+  laid.lay(&tree, &checkout).unwrap();
+
+  let target = laid.committed_for(&base, &checkout);
+
+  assert_ne!(behind, closed);
+  assert_eq!(git_in(&base, &["rev-parse", "main"]), behind, "the local main stays behind");
+  assert_eq!(git_in(&target, &["rev-parse", "HEAD"]), closed);
+}
+
 // "the trees outside a workspace are read from the checkout, since the tree reads none until they stand"
 #[test]
 fn a_workspace_reads_its_outside_trees_from_the_checkout_before_they_stand() {

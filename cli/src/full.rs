@@ -13,6 +13,7 @@ use std::process::Stdio;
 
 use bmo_testbed_core::declaration::Repository;
 use bmo_testbed_core::events::{Event, Hook};
+use bmo_testbed_core::main_branch::MainBranch;
 use bmo_testbed_core::policy::daily::DAILY;
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::queue::{LockWait, now_ms, take_lock};
@@ -89,7 +90,8 @@ pub enum FullOutcome {
 
 /// Everything a run reaches, so a test holds each path.
 pub trait FullHands {
-  /// The main branch's head, which the run checks; none where it could not be read.
+  /// The main branch's head (docs/declaration.md, 「The main branch's head」), which the run checks; none where
+  /// it could not be read.
   fn head(&self) -> Option<String>;
   /// The run's own tree put on the commit and set up.
   fn prepare(&self, commit: &str) -> Result<(), String>;
@@ -321,12 +323,12 @@ impl Machine {
 
 impl FullHands for Machine {
   fn head(&self) -> Option<String> {
-    let read = run_quiet(
-      &words(["git", "rev-parse", "--verify", &format!("refs/heads/{}^{{commit}}", self.main)]),
-      Some(&self.source),
-    );
+    let main = MainBranch::new(&self.source, &self.main);
 
-    (read.ok && !read.out.is_empty()).then_some(read.out)
+    // A remote that cannot be asked leaves the head to what this machine already knows of it.
+    let _ = main.fetch();
+
+    main.head().inspect_err(|why| self.append(&format!("{why}\n"))).ok()
   }
 
   fn prepare(&self, commit: &str) -> Result<(), String> {

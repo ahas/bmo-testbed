@@ -197,10 +197,11 @@
       "suite/change-selection",
       "core/answer-ceiling",
       "core/policy-loader",
-      "calls/bmo-text"
+      "calls/bmo-text",
+      "core/main-branch"
     ],
-    "base": "180b2b9181faadca65de1e7c47ee0898e09be39e",
-    "changed": 1794639006889
+    "base": "2d06a03b2d7ea64819d32de670c8d0c21c2d0dc5",
+    "changed": 1794681897891
   },
   {
     "id": "suite/static-check",

@@ -114,6 +114,27 @@
     "changed": 1794545339294
   },
   {
+    "id": "core/main-branch",
+    "title": "Main branch head",
+    "what": "The head of a repository's main branch as its remote holds it: the remote's main fetched where a reader asks, then of the local branch and the remote-tracking branch the one holding the other, refused where neither stands or they parted. In core's main_branch module.",
+    "files": [
+      "core/src/main_branch.rs",
+      "core/src/policy/main_branch.rs",
+      "policy/main-branch.toml",
+      "core/tests/main_branch.rs",
+      "docs/declaration.md"
+    ],
+    "symbols": [
+      "MainBranch"
+    ],
+    "aliases": [],
+    "needs": [
+      "core/policy-loader"
+    ],
+    "base": "2d06a03b2d7ea64819d32de670c8d0c21c2d0dc5",
+    "changed": 1794681897872
+  },
+  {
     "id": "core/placement",
     "title": "Placement",
     "what": "Where a run goes: here by default or where its environment names a variable as this machine's, else over ssh to another machine whose testbed must be this release, which a deployment brings there first; that machine is also laid units, read for free disk by drive and handed the release.",

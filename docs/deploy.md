@@ -55,8 +55,9 @@
   `bin/built-from` names that same commit.
 - **A deployment builds committed trees only.** The repository is read at the commit deployed, and
   every tree it names outside itself at the head of the main branch its own repository declares
-  (`check.main`, `docs/declaration.md`), as that repository's git holds the branch; never a
-  checkout's working tree. A checkout is where a job edits, and the base libraries' and the sibling
+  (`check.main`), read as `docs/declaration.md`, 「The main branch's head」, says, the remote asked
+  first, so a checkout working on another branch with its own main branch left behind lays main as
+  the remote holds it; never a checkout's working tree. A checkout is where a job edits, and the base libraries' and the sibling
   repositories' checkouts are shared by every repository built on them: a build reading a working
   tree compiles whatever another job has half written there, fails for a reason that is not in the
   repository it deploys, or puts that unfinished work live. The gate run on this machine, the release
