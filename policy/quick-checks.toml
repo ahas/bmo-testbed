@@ -81,6 +81,11 @@ snapshot = "snapshot"
 # The table pinning the packages vendored as one release's file, each by its version, its file and the
 # file's sha256.
 packages = "packages"
+# The table naming, for a pinned package, the earlier releases its pinned release stays compatible with, each
+# by its version, its file and the file's sha256; and why such a table does not read, {name} the package it
+# names that the file pins none of.
+compatible = "compatible"
+compatible_unpinned = "compatible releases of {name}, a package the file pins none of"
 # A package manifest, the lists in it naming packages, and the start of an entry naming a file.
 package_manifest = "package.json"
 package_lists = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies", "overrides", "resolutions"]
@@ -104,7 +109,8 @@ not_package_manifest = "{path} does not read as a package manifest: {why}"
 not_object = "it is no JSON object"
 # A package manifest's entry for a pinned package: {manifest}, the {list} it stands in, the package {name},
 # the entry {found} as it reads, and {why}: what to write, with the pinned {version} and {file}, the {path}
-# an entry's file stands at, the sha256 {found} it hashes to and the {wanted} one.
+# an entry's file stands at, the sha256 {found} it hashes to, and the {file} and {wanted} sha256 of the
+# release it names.
 package = "{manifest}: {list} {name} = {found}; {why}"
 package_version = "write {version}, or file: naming the release {file}"
 package_other_file = "vendor the release {file} as it stands and name it, the version {version}"

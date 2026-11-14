@@ -408,6 +408,52 @@ fn each_way_an_entry_differs_from_the_pinned_release_is_named_with_what_to_write
   );
 }
 
+// The bytes of an earlier release the pinned one stays compatible with, and the shared versions naming it.
+const EARLIER: &str = "an earlier packed release";
+
+fn pinning_with_compatible() -> String {
+  format!(
+    "{}\n[[compatible.pkg]]\nversion = \"0.9.0\"\nfile = \"pkg-0.9.0.tgz\"\nsha256 = \"{}\"\n",
+    pinning(),
+    sha256_of(EARLIER)
+  )
+}
+
+// "an entry naming a release the pinned one stays compatible with passes by its version or its file, a file
+// of it that is missing or hashes otherwise is named against that release, and compatible releases of a
+// package the file does not pin do not read"
+#[test]
+fn an_entry_naming_a_compatible_release_passes_and_its_file_is_held_to_that_release() {
+  let dir = checkout(&[
+    (
+      "client/package.json",
+      "{\"dependencies\": {\"pkg\": \"file:vendor/pkg-0.9.0.tgz\"}, \"peerDependencies\": {\"pkg\": \"0.9.0\"}, \"optionalDependencies\": {\"pkg\": \"file:gone/pkg-0.9.0.tgz\"}, \"overrides\": {\"pkg\": \"file:other/pkg-0.9.0.tgz\"}}",
+    ),
+    ("client/vendor/pkg-0.9.0.tgz", EARLIER),
+    ("client/other/pkg-0.9.0.tgz", RELEASE),
+  ]);
+  let shared = read_shared(&pinning_with_compatible()).unwrap();
+  let held = hold(dir.path(), &shared, &BTreeMap::new(), &[]);
+  let (pin, earlier) = (sha256_of(RELEASE), sha256_of(EARLIER));
+
+  assert_eq!(shared.packages["pkg"].compatible[0].version, "0.9.0");
+  assert_eq!(held.entries, 4);
+  assert_eq!(
+    said(&held),
+    [
+      "client/package.json: optionalDependencies pkg = file:gone/pkg-0.9.0.tgz; client/gone/pkg-0.9.0.tgz does not stand; vendor the release pkg-0.9.0.tgz there as it stands".to_owned(),
+      format!(
+        "client/package.json: overrides pkg = file:other/pkg-0.9.0.tgz; client/other/pkg-0.9.0.tgz hashes to {pin} where the release pkg-0.9.0.tgz hashes to {earlier}; vendor the release as it stands"
+      ),
+    ]
+  );
+  assert_eq!(
+    read_shared("[[compatible.pkg]]\nversion = \"0.9.0\"\nfile = \"pkg-0.9.0.tgz\"\nsha256 = \"00\"\n")
+      .err(),
+    Some("compatible releases of pkg, a package the file pins none of".to_owned())
+  );
+}
+
 // "the report names, beside the pin, what each checkout writes for a pinned package, clean or not"
 #[test]
 fn the_report_names_what_each_checkout_writes_for_a_pinned_package_beside_the_pin() {

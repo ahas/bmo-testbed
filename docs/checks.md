@@ -214,11 +214,16 @@
   - **The packages:** every `package.json` the checkout tracks or holds new, outside a `node_modules/` or a
     `fixtures/` folder, in each of its lists naming packages: `dependencies`, `devDependencies`,
     `peerDependencies`, `optionalDependencies`, `overrides` and `resolutions`. An entry naming a package the
-    file pins under `[packages]`, by its version, its file and the file's sha256, is the pinned release's:
-    - an entry naming a file, `file:` and a path from the manifest's folder, names the pinned file, and the
-      bytes standing at that path hash to the pinned sha256. A path naming another file, a file not
-      standing there, and bytes that hash otherwise each fail, the last naming both hashes;
-    - any other entry is the pinned version as it is written, so a range, a tag or another version fails.
+    file pins under `[packages]`, by its version, its file and the file's sha256, is the pinned release's or
+    one of the earlier releases the file's `[compatible]` table lists for that package, each by its version,
+    its file and the file's sha256:
+    - an entry naming a file, `file:` and a path from the manifest's folder, names one of those releases'
+      files, and the bytes standing at that path hash to that release's sha256. A path naming any other
+      file, a file not standing there, and bytes that hash otherwise each fail, the last naming both hashes;
+    - any other entry is one of those releases' versions as it is written, so a range, a tag or another
+      version fails.
+
+    Compatible releases listed for a package the file does not pin leave the file unread.
 
     A fault names the manifest, the list, the package, the entry as it reads and what to write instead. The
     file names no unit, so a package pinned there holds every checkout alike; a file pinning no package

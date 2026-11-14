@@ -1,7 +1,8 @@
 //! The packages the shared versions pin (docs/checks.md, 「The quick checks」, `shared-versions`): every entry
-//! of a checkout's package manifests naming a pinned package is the pinned release's. An entry naming a file
-//! names the pinned file, and the bytes standing there hash to the pinned sha256; any other entry is the
-//! pinned version as it is written.
+//! of a checkout's package manifests naming a pinned package is the pinned release's or one of the earlier
+//! releases the file names it compatible with. An entry naming a file names one of those releases' files, and
+//! the bytes standing there hash to that release's sha256; any other entry is one of their versions as it is
+//! written.
 //!
 //! The pins are read by the TOML reader, a manifest by the JSON reader and a file's bytes hashed by SHA-256.
 
@@ -20,25 +21,64 @@ fn words() -> &'static SharedVersionsWords {
   &QUICK_CHECKS.shared_versions
 }
 
-/// A package the shared versions pin: the version a package manifest writes, the file its release is packed
-/// in and that file's sha256.
+/// One release of a package: the version a package manifest writes, the file it is packed in and that
+/// file's sha256.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Release {
+  pub version: String,
+  pub file: String,
+  pub sha256: String,
+}
+
+/// A package the shared versions pin: the release a consumer moves onto, by its version, file and sha256, and
+/// the earlier releases it stays compatible with, which a consumer that has not moved may still vendor.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PackagePin {
   pub version: String,
   pub file: String,
   pub sha256: String,
+  #[serde(skip)]
+  pub compatible: Vec<Release>,
 }
 
-/// The packages the shared versions' text pins, by name; none where it holds no such table, or why the table
-/// does not read.
+impl PackagePin {
+  // The pinned release, then each compatible one.
+  fn releases(&self) -> impl Iterator<Item = Release> + '_ {
+    let pinned = Release {
+      version: self.version.clone(),
+      file: self.file.clone(),
+      sha256: self.sha256.clone(),
+    };
+
+    std::iter::once(pinned).chain(self.compatible.iter().cloned())
+  }
+}
+
+/// The packages the shared versions' text pins, by name, each with the compatible releases the file names for
+/// it; none where it holds no such table, or why a table does not read.
 pub fn read_pins(text: &str) -> Result<BTreeMap<String, PackagePin>, String> {
   let table: toml::Table = text.parse().map_err(|why: toml::de::Error| why.to_string())?;
+  let words = words();
+  let mut pins: BTreeMap<String, PackagePin> = match table.get(&words.packages) {
+    Some(packages) => packages.clone().try_into().map_err(|why: toml::de::Error| why.to_string())?,
+    None => BTreeMap::new(),
+  };
+  let compatible: BTreeMap<String, Vec<Release>> = match table.get(&words.compatible) {
+    Some(compatible) => compatible.clone().try_into().map_err(|why: toml::de::Error| why.to_string())?,
+    None => BTreeMap::new(),
+  };
 
-  match table.get(&words().packages) {
-    Some(packages) => packages.clone().try_into().map_err(|why: toml::de::Error| why.to_string()),
-    None => Ok(BTreeMap::new()),
+  for (name, releases) in compatible {
+    let Some(pin) = pins.get_mut(&name) else {
+      return Err(fill_marks(&words.compatible_unpinned, &[("name", &name)]));
+    };
+
+    pin.compatible = releases;
   }
+
+  Ok(pins)
 }
 
 /// How an entry naming a pinned package differs from the pinned release.
@@ -48,10 +88,10 @@ pub enum Off {
   Version,
   /// A file other than the pinned one.
   OtherFile,
-  /// The file it names does not stand at its path.
-  Missing(String),
-  /// The file it names hashes otherwise: its path and its sha256.
-  OtherBytes(String, String),
+  /// The file it names does not stand at its path: the path and the release whose file it names.
+  Missing(String, Release),
+  /// The file it names hashes otherwise: its path, its sha256 and the release whose file it names.
+  OtherBytes(String, String, Release),
   /// A value that reads as neither a version nor a file.
   Unread,
 }
@@ -74,13 +114,13 @@ impl PackageEntry {
     let line = match self.off.as_ref()? {
       Off::Version | Off::Unread => &words.package_version,
       Off::OtherFile => &words.package_other_file,
-      Off::Missing(path) => {
-        return Some(fill_marks(&words.package_missing, &[("path", path), ("file", &pin.file)]));
+      Off::Missing(path, release) => {
+        return Some(fill_marks(&words.package_missing, &[("path", path), ("file", &release.file)]));
       }
-      Off::OtherBytes(path, found) => {
+      Off::OtherBytes(path, found, release) => {
         return Some(fill_marks(
           &words.package_other_bytes,
-          &[("path", path), ("found", found), ("file", &pin.file), ("wanted", &pin.sha256)],
+          &[("path", path), ("found", found), ("file", &release.file), ("wanted", &release.sha256)],
         ));
       }
     };
@@ -93,7 +133,7 @@ impl PackageEntry {
     let words = words();
 
     match &self.off {
-      Some(Off::Missing(_)) => fill_marks(&words.report_missing_file, &[("entry", &self.found)]),
+      Some(Off::Missing(..)) => fill_marks(&words.report_missing_file, &[("entry", &self.found)]),
       Some(Off::OtherBytes(..)) => fill_marks(&words.report_other_bytes, &[("entry", &self.found)]),
       _ => self.found.clone(),
     }
@@ -112,19 +152,19 @@ fn off(folder: &Path, folder_shown: &str, value: &Value, pin: &PackagePin) -> Op
     return Some(Off::Unread);
   };
   let Some(path) = written.strip_prefix(&words().file_prefix) else {
-    return (written != pin.version).then_some(Off::Version);
+    return (!pin.releases().any(|release| release.version == written)).then_some(Off::Version);
   };
   let named = Path::new(path);
-
-  if named.file_name().and_then(|name| name.to_str()) != Some(pin.file.as_str()) {
+  let file_name = named.file_name().and_then(|name| name.to_str());
+  let Some(release) = pin.releases().find(|release| Some(release.file.as_str()) == file_name) else {
     return Some(Off::OtherFile);
-  }
+  };
 
   let shown = Path::new(folder_shown).join(named).to_string_lossy().into_owned();
 
   match sha256_of(&folder.join(named)) {
-    None => Some(Off::Missing(shown)),
-    Some(found) if found != pin.sha256 => Some(Off::OtherBytes(shown, found)),
+    None => Some(Off::Missing(shown, release)),
+    Some(found) if found != release.sha256 => Some(Off::OtherBytes(shown, found, release)),
     Some(_) => None,
   }
 }

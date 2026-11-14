@@ -90,6 +90,8 @@ pub struct SharedVersionsWords {
   pub lines: String,
   pub snapshot: String,
   pub packages: String,
+  pub compatible: String,
+  pub compatible_unpinned: String,
   pub package_manifest: String,
   pub package_lists: Vec<String>,
   pub file_prefix: String,
