@@ -225,8 +225,10 @@
 
     Compatible releases listed for a package the file does not pin leave the file unread.
 
-    A fault names the manifest, the list, the package, the entry as it reads and what to write instead. The
-    file names no unit, so a package pinned there holds every checkout alike; a file pinning no package
+    The pinned release and the compatible ones are the pin's range. A fault names the manifest, the list,
+    the package, the entry as it reads and what to write instead: an entry standing on no release of the
+    range is named with the range's versions in version order and the pinned release as the one to vendor.
+    The file names no unit, so a package pinned there holds every checkout alike; a file pinning no package
     holds no package manifest.
   - **An exception** the declaration names for a crate (`docs/declaration.md`) holds the crate's entries to
     the exception's line instead of the file's, and lets the lock hold the versions it names. One for a
@@ -236,8 +238,8 @@
     the exceptions and the files left out its own declaration names, whether or not it enables the check,
     and changes nothing: a line per checkout naming the crates whose entries differ, the lock's versions
     that differ, and for each pinned package the checkout names, the entries it writes for it beside the
-    pinned version; a line for each checkout whose declaration does not read; and a last line counting the
-    checkouts that differ. It ends 1 where any checkout differs.
+    pinned version and the pin's range; a line for each checkout whose declaration does not read; and a
+    last line counting the checkouts that differ. It ends 1 where any checkout differs.
 - **`quick` runs every enabled one** and prints a line for each, ending non-zero where any failed.
 
 ## The change check

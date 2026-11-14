@@ -112,6 +112,7 @@ pub struct SharedVersionsWords {
   pub package_other_file: String,
   pub package_missing: String,
   pub package_other_bytes: String,
+  pub range_joiner: String,
   pub line: String,
   pub inherited: String,
   pub inherit: String,

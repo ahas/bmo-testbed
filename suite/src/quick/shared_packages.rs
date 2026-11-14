@@ -11,6 +11,7 @@ use std::path::Path;
 
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::quick_checks::{QUICK_CHECKS, SharedVersionsWords};
+use semver::Version;
 use serde::Deserialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -53,6 +54,17 @@ impl PackagePin {
     };
 
     std::iter::once(pinned).chain(self.compatible.iter().cloned())
+  }
+
+  /// The pin's range as a fault and the report name it: the versions of the pinned release and the compatible
+  /// ones in version order, a version that does not read as one after them in the order of its text.
+  pub fn range(&self) -> String {
+    let mut versions: Vec<String> = self.releases().map(|release| release.version).collect();
+
+    versions.sort_by_cached_key(|version| {
+      (Version::parse(version).map_err(|_| version.clone()), version.clone())
+    });
+    versions.join(&words().range_joiner)
   }
 }
 
@@ -125,7 +137,10 @@ impl PackageEntry {
       }
     };
 
-    Some(fill_marks(line, &[("version", &pin.version), ("file", &pin.file)]))
+    Some(fill_marks(
+      line,
+      &[("range", &pin.range()), ("version", &pin.version), ("file", &pin.file)],
+    ))
   }
 
   /// The entry as the report names it: as written, marked where its file is missing or differs.

@@ -546,7 +546,8 @@ meets first, as a console asks them.
 - **The release the manifest is held to.** The shared versions the declaration names
   (`[check.shared_versions]`) pin the release of the console layer every console and bundle builds on, by
   its version, its packed file and the file's sha256 (`docs/checks.md`, 「The quick checks」,
-  `shared-versions`). Shared versions that do not read fail the probe. Where they pin none, or the
+  `shared-versions`). The probe holds the release to that pinned release itself, never to a compatible
+  release of the pin's range. Shared versions that do not read fail the probe. Where they pin none, or the
   declaration names no shared versions, the manifest is taken as it was answered, its reading and its
   layer's point are passed over, and the deployment says so on one line.
 - **The manifest's reading is the layer's own.** The manifest is read by the layer's shared reading of it,

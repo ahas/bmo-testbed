@@ -344,7 +344,8 @@ fn pinning() -> String {
   )
 }
 
-// "the shared versions read each pinned package's version, file and sha256, and refuse a pin missing one"
+// "the shared versions read each pinned package's version, file and sha256, a pin naming no compatible
+// release reading as its own release alone, and refuse a pin missing one"
 #[test]
 fn the_shared_versions_read_each_pinned_package_and_refuse_a_pin_missing_a_key() {
   let shared = read_shared(&pinning()).unwrap();
@@ -352,6 +353,8 @@ fn the_shared_versions_read_each_pinned_package_and_refuse_a_pin_missing_a_key()
   assert_eq!(shared.packages["pkg"].version, "1.0.0");
   assert_eq!(shared.packages["pkg"].file, "pkg-1.0.0.tgz");
   assert_eq!(shared.packages["pkg"].sha256, sha256_of(RELEASE));
+  assert_eq!(shared.packages["pkg"].compatible, []);
+  assert_eq!(shared.packages["pkg"].range(), "1.0.0");
   assert!(read_shared("[packages.pkg]\nversion = \"1.0.0\"\nfile = \"pkg-1.0.0.tgz\"\n").is_err());
 }
 
@@ -395,14 +398,14 @@ fn each_way_an_entry_differs_from_the_pinned_release_is_named_with_what_to_write
     lines,
     [
       "broken/package.json does not read as a package manifest: it is no JSON object".to_owned(),
-      "client/package.json: dependencies pkg = ^1.0.0; write 1.0.0, or file: naming the release pkg-1.0.0.tgz"
+      "client/package.json: dependencies pkg = ^1.0.0; write a version of the range 1.0.0, or file: naming its release's file; the pinned release is 1.0.0, its file pkg-1.0.0.tgz"
         .to_owned(),
-      "client/package.json: devDependencies pkg = file:vendor/pkg-0.9.0.tgz; vendor the release pkg-1.0.0.tgz as it stands and name it, the version 1.0.0".to_owned(),
+      "client/package.json: devDependencies pkg = file:vendor/pkg-0.9.0.tgz; the file is of no release of the range 1.0.0; vendor the pinned release pkg-1.0.0.tgz as it stands and name it, the version 1.0.0".to_owned(),
       "client/package.json: optionalDependencies pkg = file:gone/pkg-1.0.0.tgz; client/gone/pkg-1.0.0.tgz does not stand; vendor the release pkg-1.0.0.tgz there as it stands".to_owned(),
       format!(
         "client/package.json: overrides pkg = file:other/pkg-1.0.0.tgz; client/other/pkg-1.0.0.tgz hashes to {other} where the release pkg-1.0.0.tgz hashes to {pin}; vendor the release as it stands"
       ),
-      "client/package.json: resolutions pkg = {\".\":\"1.0.0\"}; write 1.0.0, or file: naming the release pkg-1.0.0.tgz"
+      "client/package.json: resolutions pkg = {\".\":\"1.0.0\"}; write a version of the range 1.0.0, or file: naming its release's file; the pinned release is 1.0.0, its file pkg-1.0.0.tgz"
         .to_owned(),
     ]
   );
@@ -454,6 +457,30 @@ fn an_entry_naming_a_compatible_release_passes_and_its_file_is_held_to_that_rele
   );
 }
 
+// "under a pin with compatible releases, an entry on the pinned release passes, and an entry on no release of
+// the range is named with the range's versions in version order and the pinned release to vendor"
+#[test]
+fn an_entry_outside_the_pins_range_is_named_with_the_range() {
+  let dir = checkout(&[
+    (
+      "client/package.json",
+      "{\"devDependencies\": {\"pkg\": \"file:vendor/pkg-1.0.0.tgz\"}, \"dependencies\": {\"pkg\": \"0.8.0\"}, \"overrides\": {\"pkg\": \"file:vendor/pkg-0.8.0.tgz\"}}",
+    ),
+    ("client/vendor/pkg-1.0.0.tgz", RELEASE),
+    ("client/vendor/pkg-0.8.0.tgz", "an older packed release"),
+  ]);
+  let held = hold(dir.path(), &read_shared(&pinning_with_compatible()).unwrap(), &BTreeMap::new(), &[]);
+
+  assert_eq!(held.entries, 3);
+  assert_eq!(
+    said(&held),
+    [
+      "client/package.json: dependencies pkg = 0.8.0; write a version of the range 0.9.0, 1.0.0, or file: naming its release's file; the pinned release is 1.0.0, its file pkg-1.0.0.tgz",
+      "client/package.json: overrides pkg = file:vendor/pkg-0.8.0.tgz; the file is of no release of the range 0.9.0, 1.0.0; vendor the pinned release pkg-1.0.0.tgz as it stands and name it, the version 1.0.0",
+    ]
+  );
+}
+
 // "the report names, beside the pin, what each checkout writes for a pinned package, clean or not"
 #[test]
 fn the_report_names_what_each_checkout_writes_for_a_pinned_package_beside_the_pin() {
@@ -484,8 +511,8 @@ fn the_report_names_what_each_checkout_writes_for_a_pinned_package_beside_the_pi
     report.rows,
     [
       "shared-base: holds to the shared versions (0 entries)",
-      "kept: holds to the shared versions (1 entries); pkg file:vendor/pkg-1.0.0.tgz beside the pin 1.0.0",
-      "behind: 2 to fix: pkg 0.9.0, file:vendor/pkg-1.0.0.tgz (other bytes) beside the pin 1.0.0",
+      "kept: holds to the shared versions (1 entries); pkg file:vendor/pkg-1.0.0.tgz beside the pin 1.0.0 of the range 1.0.0",
+      "behind: 2 to fix: pkg 0.9.0, file:vendor/pkg-1.0.0.tgz (other bytes) beside the pin 1.0.0 of the range 1.0.0",
     ]
   );
 }

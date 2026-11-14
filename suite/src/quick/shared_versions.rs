@@ -598,7 +598,8 @@ pub struct Report {
   pub all: usize,
 }
 
-// Each pinned package the checkout names, with what it writes for it beside the pinned version.
+// Each pinned package the checkout names, with what it writes for it beside the pinned version and the pin's
+// range.
 fn report_packages(held: &Held, shared: &Shared) -> Vec<String> {
   let words = words();
 
@@ -615,6 +616,7 @@ fn report_packages(held: &Held, shared: &Shared) -> Vec<String> {
           ("name", name),
           ("entries", &entries.join(&words.report_list_joiner)),
           ("wanted", &pin.version),
+          ("range", &pin.range()),
         ],
       ))
     })
