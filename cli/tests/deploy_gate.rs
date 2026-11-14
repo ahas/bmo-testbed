@@ -1,6 +1,6 @@
-//! The tree a deployment's gate reads (docs/deploy.md, 「What the deploy run does, in order」): the
-//! declared setup runs there before the static check and the suite, so a fresh checkout whose check needs
-//! installed packages passes, and a check that fails for its own reason still blocks the deployment; and
+//! The tree a deployment's gate reads (docs/deploy.md, 「What the deploy run does, in order」): the build tree
+//! at the commit, never the checkout, the declared setup run there before the static check and the suite, so
+//! a fresh tree whose check needs installed packages passes, and a check that fails for its own reason still blocks the deployment; and
 //! the suite a passed run of the whole suite on the commit already stands for is left out. A release carrying
 //! the testbed binary, once live, brings the placed machine's testbed to it over that machine's `ssh`, and a
 //! machine out of reach leaves the deployment live with a warning naming it and what it answered.
@@ -163,18 +163,18 @@ data_root = "{runtime}"
   }
 }
 
-// "a fresh checkout is set up before the gate: a check that needs its installed packages passes and the
-// commit goes live"
+// "On this machine it runs in the build tree, put at the commit ... and never in the checkout"; "a fresh tree is
+// set up before the gate: a check that needs its installed packages passes and the commit goes live"
 #[test]
 fn the_gate_reads_a_tree_its_declared_setup_has_set_up() {
   let scene = Scene::new(PASSING);
-
-  assert!(!scene.repo.join("node_modules").exists());
+  let build_tree = scene.dir.path().join("live/deploy-expand");
 
   let done = scene.run();
 
   assert_eq!(done.code, 0, "{}\n{}", done.out, done.err);
-  assert!(scene.repo.join("node_modules/.bin/dep-check").exists(), "{}", done.err);
+  assert!(build_tree.join("node_modules/.bin/dep-check").exists(), "{}", done.err);
+  assert!(!scene.repo.join("node_modules").exists(), "the checkout is neither set up nor read");
   assert!(scene.deployed(), "{}", done.err);
 }
 

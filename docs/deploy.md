@@ -13,8 +13,8 @@
   carrying none runs by every default. The checkout's own declaration answers only what the deployment
   needs before it has picked a commit, and what reads the checkout as it stands: the repository's name,
   where the deployment stands (its deploy root, with the deploy tree, the record, the log and the
-  progress under it, and its data root), the event hook, and the gate run on this machine, which judges
-  the checkout. A commit whose declaration does not read, names the repository otherwise, places the
+  progress under it, and its data root), the event hook, and the steps of the gate run on this machine,
+  which judges the commit's committed trees (「The releases」). A commit whose declaration does not read, names the repository otherwise, places the
   deploy root, the deploy tree or the data root elsewhere, or deploys nothing is refused with nothing
   changed; such a commit is deployed from a checkout brought to it.
 - **The hosted deploy tool** puts a commit live for a session the verb refuses, through the tool host
@@ -30,7 +30,8 @@
 |---|---|
 | Deploy tree | A symbolic link to the live release: the one stable path every unit, every link and every caller names, moved from one release to the next by a single rename |
 | Releases | `deploy-releases/` beside the link, one release per deployed commit, named by its first twelve hex digits |
-| Build tree | `deploy-expand` beside the link, a detached worktree moved to each commit, where the release build runs, its target directory kept warm between deployments until the prune takes it (「The releases」) |
+| Build tree | `deploy-expand` beside the link, a detached worktree moved to each commit, where the gate run on this machine and the release build run, its target directory kept warm between deployments until the prune takes it (「The releases」) |
+| Committed trees | `deploy-trees/` beside the link, one detached worktree for each repository holding a tree the workspace names outside the repository, moved to the head of that repository's main branch, which the release and the build tree read such a tree from (「The releases」) |
 | Data root | The repository's runtime data, inside no checkout and inside no release |
 | Deployment record | `deployed.json` under the deploy root, naming the commit that runs, its subject, the reason it was deployed, the release's version, when it was laid down and the backup behind it |
 | Deployment log | `deployed.log` under the deploy root, one line per deployment |
@@ -52,20 +53,41 @@
   checkout of it is: its submodules brought to the commits it pins, then the declared setup steps, then
   the declared env links. Its `bin/` holds the binaries built for that commit, and its
   `bin/built-from` names that same commit.
+- **A deployment builds committed trees only.** The repository is read at the commit deployed, and
+  every tree it names outside itself at the head of the main branch its own repository declares
+  (`check.main`, `docs/declaration.md`), as that repository's git holds the branch; never a
+  checkout's working tree. A checkout is where a job edits, and the base libraries' and the sibling
+  repositories' checkouts are shared by every repository built on them: a build reading a working
+  tree compiles whatever another job has half written there, fails for a reason that is not in the
+  repository it deploys, or puts that unfinished work live. The gate run on this machine, the release
+  and the build tree all read these committed trees, and so does the bench on the placed machine
+  (「Where a deployment runs」).
 - **The trees the workspace names by a path outside the repository — the base libraries and the
   sibling repositories' crates a release build reads — are laid where each manifest names them, as
-  links to the checkout's own trees.** A worktree of the repository alone carries nothing beside it,
-  so the release and the build tree read such a tree from the workspace the checkout stands in; the
+  links into the committed trees.** A worktree of the repository alone carries nothing beside it,
+  so the release and the build tree read such a tree through a link laid where the path points; the
   build tree's declared path reaches the deploy root's parent, where the repositories of one
   workspace share one. A tree that is a member of another Cargo workspace — one Cargo, asked from the
   checkout's copy of it, places under a workspace root above it — reads its inherited fields from
   that root, so the link is laid at the root instead, and the named path resolves through it; every
   tree named inside one workspace shares that one link. A standalone package is linked by itself. The
-  list of trees is read from the checkout's workspace, since a worktree reads no manifest until the
-  trees its manifests name stand where they point. A tree the checkout does not carry refuses the
-  deployment before anything is built. Where a link is to be laid, a link already on the checkout's
-  tree is left as it is, a link pointing elsewhere is moved onto it, and a folder holding nothing but folders and links, as an earlier laying
-  leaves, is replaced; any other tree standing there is left as it is.
+  list of trees, and where each one's link goes, is read from the checkout's workspace, since a
+  worktree reads no manifest until the trees its manifests name stand where they point; what a link
+  reaches is the committed tree alone. Where a link is to be laid, a link already on its committed
+  tree is left as it is, a link pointing elsewhere, onto a checkout's working tree among them, is
+  moved onto it, and a folder holding nothing but folders and links, as an earlier laying leaves, is
+  replaced; any other tree standing there is left as it is.
+- **The committed trees stand in `deploy-trees/`,** one detached worktree for each repository holding
+  a tree the workspace names, named after that repository's folder with a short digest of its path, a
+  tree inside the repository reached at its own path within the worktree. Each is put at its
+  repository's main head the way the build tree is put at the commit (below): made where it is not
+  there yet, moved by a checkout where it is, every path the head moved stamped, its submodules brought
+  to their pins, and made again where it stands as a worktree of another repository. A tree the
+  checkout does not carry, a tree no git repository holds, one whose repository holds the checkout
+  itself, and one whose repository's main branch does not stand refuse the deployment before anything
+  is built, the line naming the tree and why. Each laying reads the main head at that moment, so a
+  dependency merged while a deployment runs reaches its build at its new committed head, never at its
+  working tree.
 - **A release is finished before anything serves from it.** Prepared and built while the live release
   goes on serving; the deploy tree's link is then moved onto it by a new link written beside the old
   one and renamed over it, so every reader sees one release or the other and never a tree half moved.
@@ -195,7 +217,8 @@
   variable.
 - **The gate and the Cargo release build go to the placed machine** where the machine's settings name
   one (`docs/boundary.md`, 「Placement」, 「The placed machine」). The deployment benches the commit
-  there, the checkout's outside trees as they stand with it, in a bench of the repository's own that no
+  there, each repository holding an outside tree with it at its main head (「The releases」), pushed
+  and checked out as the bench itself is, never copied from a working tree, in a bench of the repository's own that no
   run and no other repository's deployment copies into, as the build tree stands apart here
   (`docs/boundary.md`, 「A deployment's bench stands apart」), and sets the bench up with the declared
   setup steps; the static check (`check static`, no test among it) and the suite then run there, each as
@@ -422,8 +445,13 @@ flowchart TD
      begun before the limit; a run whose commit, tree or wholeness the record does not hold. The record
      is asked where the run would have been written (「Where a deployment runs」). The suites a major
      change runs are never left out.
+   - **The gate reads the commit's committed trees.** On this machine it runs in the build tree, put at
+     the commit with the trees outside the repository laid at their committed heads (「The releases」)
+     before the static check begins, and never in the checkout, whose working tree may stand anywhere; on
+     the placed machine it runs in the bench, made ready the same way. A build tree or a tree outside
+     the repository that cannot be laid stops the deployment in the check stage with nothing changed.
    - **The tree the gate reads is set up first.** The `[test].setup` steps the checkout declares run
-     there, in order, before the static check and the suite, so a fresh checkout holds the packages its
+     there, in order, before the static check and the suite, so a fresh tree holds the packages its
      check needs (`docs/declaration.md`). A step that fails stops the deployment in the check stage with
      nothing changed. The gate is left out by `--no-check` or the checkout's `gate = false`, and the setup
      with it. A release prepared later is set up again in its own tree, by the steps its commit declares
@@ -432,17 +460,16 @@ flowchart TD
      repository's own packages, the members of its Cargo workspace standing inside its root, and never
      a package outside it: neither a sibling repository's crate the workspace names by a path, nor the
      other members of the workspace that crate belongs to. A sibling is read only where the repository's
-     own crates compile against it, as it stands in its checkout, since a path dependency is read from
-     where its manifest names it and the testbed has no committed copy of it to put there; its warnings
-     are shown and never denied. A sibling's uncommitted formatting or lints therefore never fail a
-     deployment, while every file of the repository's own is judged in full (`docs/checks.md`,
+     own crates compile against it, at its committed head; its warnings are shown and never denied. A
+     sibling's formatting or lints therefore never fail a deployment, and its uncommitted changes are
+     never read, while every file of the repository's own is judged in full (`docs/checks.md`,
      「The static check」). A declared step that only repeats these formatting and lints, such as a
-     `cargo fmt --all --check` that would follow a path dependency into a sibling's checkout, is left
+     `cargo fmt --all --check` that would follow a path dependency into a sibling's tree, is left
      out for them. A sibling whose version has moved past the one the repository's lock names fails
      nothing, since the lock's path packages are brought to their manifests before the lints and the
-     build (「The Cargo build directory」). A sibling whose tree as it stands does not compile still fails the gate,
-     since the repository's crates that depend on it cannot be checked, and the release build, which
-     reads the same tree (「The releases」), would fail on it as well.
+     build (「The Cargo build directory」). A sibling whose committed head does not compile still fails
+     the gate, since the repository's crates that depend on it cannot be checked, and the release build,
+     which reads the same committed tree (「The releases」), would fail on it as well.
    - **A major change runs its consumer's suites as well.** The major of the commit's `VERSION` is
      compared with the version in the deployment record of the release live before it; where they
      differ, the deployment runs `dependents --run` (`docs/suite.md`, 「The dependents of a major

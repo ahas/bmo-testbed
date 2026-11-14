@@ -208,6 +208,10 @@ pub struct ExpansionWords {
   pub trees_unread: String,
   pub tree_absent: String,
   pub tree_unlinked: String,
+  pub not_committed: String,
+  pub no_repository: String,
+  pub holds_checkout: String,
+  pub no_main: String,
   pub target_in_use: String,
 }
 

@@ -22,6 +22,7 @@ use bmo_testbed_core::silence::{Heard, Silence, pass_on};
 use bmo_testbed_core::turn::{
   FRONT_VARIABLE, Lane, NEXT_VARIABLE, NOT_RUN_EXIT_CODE, process_env, stands_at_front, stands_next,
 };
+use bmo_testbed_deploy::expansion::committed_tree;
 use bmo_testbed_deploy::release::built_from;
 use bmo_testbed_deploy::tree::{BUILT_FROM, short};
 use bmo_testbed_suite::crates::checkout_target_name;
@@ -159,17 +160,41 @@ fn succeeded(output: &std::io::Result<Output>) -> bool {
 }
 
 /// A checkout the bench is made from: its root, its reachable remote, the commit the bench is put at, whether
-/// its open files go over, the outside trees copied to their own places under the bench root, and the files
-/// laid over those copies.
+/// its open files go over, the outside trees laid at their own places under the bench root, and the files
+/// laid over those trees.
 pub struct BenchSource<'a> {
   pub checkout: &'a Path,
   pub remote: &'a str,
   pub commit: &'a str,
   pub open_files: bool,
-  /// Each outside tree, and where it stands under the bench root.
-  pub trees: Vec<(PathBuf, String)>,
-  /// Each file written over a copied tree once every tree is copied: its place there, and its text.
+  /// Each outside tree, as it is laid under the bench root.
+  pub trees: Vec<BenchTree>,
+  /// Each file written over a laid tree once every tree is laid: its place there, and its text.
   pub laid: Vec<(String, String)>,
+}
+
+/// A tree laid beside the bench at its place under the bench root.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum BenchTree {
+  /// A tree copied as it stands in its checkout, open files and all: what a run reads.
+  AsItStands { tree: PathBuf, place: String },
+  /// A repository put at a commit the way the bench is, its untracked files taken away: what a deployment
+  /// reads, since it builds committed trees only (docs/deploy.md, 「The releases」).
+  Committed {
+    repository: PathBuf,
+    remote: String,
+    commit: String,
+    place: String,
+  },
+}
+
+impl BenchTree {
+  /// Where the tree stands under the bench root.
+  pub fn place(&self) -> &str {
+    match self {
+      Self::AsItStands { place, .. } | Self::Committed { place, .. } => place,
+    }
+  }
 }
 
 // A path on the placed machine as its shell reads it: `~` opening it is that machine's home, left for the
@@ -230,13 +255,72 @@ fn rsync_over(ssh_command: &str, from: &Path, to: &str, kept: &[String]) -> std:
     .output()
 }
 
-/// The bench made ready from a checkout: made where it holds no repository, from the checkout's remote, or
-/// empty where it has none or the clone fails there, handed the commit and checked out at it, the checkout's
-/// open files copied over it where asked, and each outside tree copied to its place. The line saying what
+/// A repository put at a commit there: where its place holds none, cloned from its remote, or made empty where
+/// it has none or the clone fails there, handed the commit and checked out at it detached, its untracked
+/// files taken away where asked.
+struct AtCommit<'a> {
+  repository: &'a Path,
+  remote: &'a str,
+  commit: &'a str,
+  place: &'a str,
+  clean: bool,
+}
+
+// The repository put at its commit at its place there, through `ssh`; the line saying what failed where a
+// step did.
+fn put_at_commit(
+  bench: &Bench,
+  ssh: &dyn Fn(String) -> std::io::Result<Output>,
+  ssh_command: &str,
+  at: &AtCommit<'_>,
+) -> Result<(), String> {
+  let said_of = &LANES.placed;
+  let failed = |line: &str, output: &std::io::Result<Output>| fill_marks(line, &[("said", &said(output))]);
+  let path = far_path(at.place);
+  let empty = format!("git init -q {path}");
+  // A remote the machine there cannot read, or asks it for credentials it has none for, leaves the bench
+  // empty, and the push carries the history it lacks.
+  let make = if at.remote.is_empty() {
+    empty
+  } else {
+    format!("GIT_TERMINAL_PROMPT=0 git clone -q {} {path} || {empty}", quoted(at.remote))
+  };
+  // A folder an earlier run copied there as another checkout's outside tree is made a repository in place; the
+  // push then carries what it lacks.
+  let made = ssh(format!("test -d {path}/.git || {{ test -d {path} && git init -q {path}; }} || {make}"));
+
+  if !succeeded(&made) {
+    return Err(failed(&said_of.failed, &made));
+  }
+
+  let pushed = Command::new("git")
+    .args(["push", "-q", "--force"])
+    .arg(format!("{}:{}", bench.destination, at.place))
+    .arg(format!("{}:refs/heads/{BENCH_BRANCH}", at.commit))
+    .current_dir(at.repository)
+    .env("GIT_SSH_COMMAND", ssh_command)
+    .stdin(Stdio::null())
+    .output();
+
+  if !succeeded(&pushed) {
+    return Err(failed(&said_of.unpushed, &pushed));
+  }
+
+  let clean = if at.clean { " && git clean -qfd" } else { "" };
+  let checked_out = ssh(format!("cd {path} && git checkout -q --force --detach {BENCH_BRANCH}{clean}"));
+
+  if !succeeded(&checked_out) {
+    return Err(failed(&said_of.failed, &checked_out));
+  }
+
+  Ok(())
+}
+
+/// The bench made ready from a checkout: put at the commit the way any repository there is, the checkout's
+/// open files copied over it where asked, and each outside tree laid at its place. The line saying what
 /// failed where a step did.
 pub fn ready_bench(bench: &Bench, source: &BenchSource<'_>) -> Result<(), String> {
   let checkout = source.checkout;
-  let remote = source.remote;
   let said_of = &LANES.placed;
   let failed = |line: &str, output: &std::io::Result<Output>| fill_marks(line, &[("said", &said(output))]);
   let Some((program, options)) = bench.ssh.split_first() else {
@@ -251,43 +335,20 @@ pub fn ready_bench(bench: &Bench, source: &BenchSource<'_>) -> Result<(), String
       .stdin(Stdio::null())
       .output()
   };
-  let path = far_path(&bench.path);
-  let empty = format!("git init -q {path}");
-  // A remote the machine there cannot read, or asks it for credentials it has none for, leaves the bench
-  // empty, and the push carries the history it lacks.
-  let make = if remote.is_empty() {
-    empty
-  } else {
-    format!("GIT_TERMINAL_PROMPT=0 git clone -q {} {path} || {empty}", quoted(remote))
-  };
-  // A folder an earlier run copied there as another checkout's outside tree is made a repository in place; the
-  // push then carries what it lacks.
-  let made = ssh(format!("test -d {path}/.git || {{ test -d {path} && git init -q {path}; }} || {make}"));
-
-  if !succeeded(&made) {
-    return Err(failed(&said_of.failed, &made));
-  }
-
-  let pushed = Command::new("git")
-    .args(["push", "-q", "--force"])
-    .arg(format!("{}:{}", bench.destination, bench.path))
-    .arg(format!("{}:refs/heads/{BENCH_BRANCH}", source.commit))
-    .current_dir(checkout)
-    .env("GIT_SSH_COMMAND", &ssh_command)
-    .stdin(Stdio::null())
-    .output();
-
-  if !succeeded(&pushed) {
-    return Err(failed(&said_of.unpushed, &pushed));
-  }
 
   // A bench for a deployment is the commit alone: whatever an earlier run's open files left standing goes.
-  let clean = if source.open_files { "" } else { " && git clean -qfd" };
-  let checked_out = ssh(format!("cd {path} && git checkout -q --force --detach {BENCH_BRANCH}{clean}"));
-
-  if !succeeded(&checked_out) {
-    return Err(failed(&said_of.failed, &checked_out));
-  }
+  put_at_commit(
+    bench,
+    &ssh,
+    &ssh_command,
+    &AtCommit {
+      repository: checkout,
+      remote: source.remote,
+      commit: source.commit,
+      place: &bench.path,
+      clean: !source.open_files,
+    },
+  )?;
 
   if source.open_files {
     let copied = rsync_over(&ssh_command, checkout, &format!("{}:{}", bench.destination, bench.path), &[]);
@@ -297,7 +358,30 @@ pub fn ready_bench(bench: &Bench, source: &BenchSource<'_>) -> Result<(), String
     }
   }
 
-  for (tree, place) in &source.trees {
+  for laid_tree in &source.trees {
+    let (tree, place) = match laid_tree {
+      BenchTree::AsItStands { tree, place } => (tree, place),
+      BenchTree::Committed {
+        repository,
+        remote,
+        commit,
+        place,
+      } => {
+        put_at_commit(
+          bench,
+          &ssh,
+          &ssh_command,
+          &AtCommit {
+            repository,
+            remote,
+            commit,
+            place,
+            clean: true,
+          },
+        )?;
+        continue;
+      }
+    };
     let made = ssh(format!("mkdir -p {}", far_path(place)));
 
     if !succeeded(&made) {
@@ -652,6 +736,34 @@ impl BenchFor<'_> {
   /// Whether the checkout's open files go over the commit.
   pub fn open_files(self) -> bool {
     matches!(self, Self::Run)
+  }
+
+  /// How a tree the checkout's workspace names outside it is laid beside the bench: for a run, copied as it
+  /// stands; for a deployment, the repository holding it at the head of its main branch, since a deployment
+  /// builds committed trees only (docs/deploy.md, 「The releases」). Why a tree has no committed tree to lay.
+  pub fn tree(
+    self,
+    tree: &Path,
+    checkout: &Path,
+    settings: &MachineSettings,
+    home: &Path,
+  ) -> Result<BenchTree, String> {
+    match self {
+      Self::Run => Ok(BenchTree::AsItStands {
+        tree: tree.to_path_buf(),
+        place: settings.place_of(self, tree, home),
+      }),
+      Self::Deployment(_) => {
+        let committed = committed_tree(tree, checkout)?;
+
+        Ok(BenchTree::Committed {
+          remote: reachable_remote(&committed.repository),
+          place: settings.place_of(self, &committed.repository, home),
+          repository: committed.repository,
+          commit: committed.head,
+        })
+      }
+    }
   }
 }
 
@@ -1019,17 +1131,19 @@ impl MachinePlacement {
     trees.sort();
     trees.dedup();
 
-    let trees: Vec<(PathBuf, String)> = trees
-      .into_iter()
-      .map(|tree| {
-        let place = self.settings.place_of(purpose, &tree, &self.home);
+    let mut trees = trees
+      .iter()
+      .map(|tree| purpose.tree(tree, checkout, &self.settings, &self.home))
+      .collect::<Result<Vec<BenchTree>, String>>()?;
 
-        (tree, place)
-      })
-      .collect();
+    // Two trees of one repository are that repository laid once.
+    let mut seen = std::collections::HashSet::new();
+
+    trees.retain(|tree| seen.insert(tree.place().to_owned()));
+
     let path = self.settings.place_of(purpose, checkout, &self.home);
     let checkouts = std::iter::once(path.clone())
-      .chain(trees.iter().map(|(_, place)| place.clone()))
+      .chain(trees.iter().map(|tree| tree.place().to_owned()))
       .collect();
     let source = BenchSource {
       checkout,

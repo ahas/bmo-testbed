@@ -61,7 +61,7 @@
   {
     "id": "deploy/deploy-run",
     "title": "Deploy run",
-    "what": "A deploy run in its own unit, by its commit's declaration: the deployment line held from gate to build, placed gate and build tried again where the connection breaks, backup, release, quiet, flip, restarts watched, console probed, rolled back where either fails.",
+    "what": "A deploy run in its own unit, by its commit's declaration, reading committed trees only: the line held from gate to build, placed gate and build tried again where the connection breaks, backup, release, quiet, flip, restarts watched, console probed, rolled back where either fails.",
     "files": [
       "deploy/src/deployment.rs",
       "deploy/src/line.rs",
@@ -85,7 +85,10 @@
     "symbols": [
       "DeployLine",
       "GateFault",
-      "PlacedGate"
+      "PlacedGate",
+      "CommittedTree",
+      "committed_tree",
+      "TreeStore"
     ],
     "aliases": [
       "빌드 트리",
@@ -93,7 +96,8 @@
       "배포가 배포하는 커밋의 선언",
       "로그 분류 슬라이스",
       "배치 기계의 testbed도 같은 릴리스로 자동으로 맞추기",
-      "배포 17건을 한꺼번에 걸면"
+      "배포 17건을 한꺼번에 걸면",
+      "커밋된 트리"
     ],
     "needs": [
       "core/declaration",
@@ -110,8 +114,8 @@
       "core/silence-watch",
       "suite/cargo-verb-and-prune"
     ],
-    "base": "5f358e4cd41339d6274e4cfe714c529cd7cb32f8",
-    "changed": 1794639843533
+    "base": "2a0f1c8059ecc8e92b9287df6c2f3f352d044203",
+    "changed": 1794668429392
   },
   {
     "id": "deploy/hosted-deploy-tool",

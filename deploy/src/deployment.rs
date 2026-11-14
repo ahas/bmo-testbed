@@ -39,7 +39,8 @@ use crate::boot::{
 };
 use crate::console::{ConsoleHands, MachineConsole, PinnedLayer, probe};
 use crate::expansion::{
-  BuildTree, bring_submodules, build_target, expansion_tree, lay_outside_trees, put_build_tree,
+  BuildTree, TreeStore, bring_submodules, build_target, committed_trees, expansion_tree, lay_outside_trees,
+  put_build_tree,
 };
 use crate::line::DeployLine;
 use crate::progress::{DeployRun, DeployStart, Outcome, Part, Stage, begin_deploy, deploy_progress_path};
@@ -163,7 +164,11 @@ pub struct DeployAsk {
 /// What the gate is asked: the commit, in the checkout it is taken from, over the range from what was live,
 /// and whether its suite runs: not where a passed run of the whole suite on the commit stands already.
 pub struct GateAsk<'a> {
+  /// The checkout the commit is taken from, which a gate on another machine makes its bench from.
   pub root: &'a Path,
+  /// The build tree at the commit, its outside trees laid at their committed heads, which a gate on this
+  /// machine reads in place of the checkout's working tree (docs/deploy.md, 「The releases」).
+  pub tree: &'a Path,
   pub commit: &'a str,
   pub since: Option<&'a str>,
   pub suite: bool,
@@ -878,7 +883,7 @@ impl<'a> Laying<'a> {
     let run = |line: &[String], cwd: &Path| self.hands.run(line, cwd);
 
     bring_submodules(release, &self.places.data_root, &run)?;
-    lay_outside_trees(release, &self.places.source)?;
+    self.lay_committed_trees(release)?;
     self.set_up_test_tree(&self.repo.declaration.test.setup, release)?;
 
     for link in &self.repo.declaration.deploy.env_links {
@@ -894,13 +899,28 @@ impl<'a> Laying<'a> {
     Ok(())
   }
 
-  // The release built in the build tree at the commit: the Cargo release build where the commit has a Cargo
-  // workspace, the declared build steps, the binaries placed, and `bin/built-from` written last. The
-  // binaries whose bytes differ from the live release's; the line saying what failed where a step did.
-  fn build(&self, release: &Path, live: Option<&Path>) -> Result<Vec<String>, String> {
-    let said = &DEPLOY.run;
+  // The trees the workspace names outside the repository laid beside `tree` as links into their committed
+  // trees, each repository put at its main head in the committed trees' folder (docs/deploy.md, 「The
+  // releases」).
+  fn lay_committed_trees(&self, tree: &Path) -> Result<(), String> {
+    let run = |line: &[String], cwd: &Path| self.hands.run(line, cwd);
+    let store = committed_trees(&self.places.deploy_dir);
+
+    lay_outside_trees(
+      tree,
+      &self.places.source,
+      &TreeStore {
+        store: &store,
+        data_root: &self.places.data_root,
+      },
+      &run,
+    )
+  }
+
+  // The build tree put at the commit with its outside trees laid at their committed heads, which the gate on
+  // this machine and the release build read: its path.
+  fn put_commit_tree(&self) -> Result<PathBuf, String> {
     let places = &self.places;
-    let build = &self.repo.declaration.build;
     let tree = expansion_tree(&places.deploy_dir);
     let run = |line: &[String], cwd: &Path| self.hands.run(line, cwd);
 
@@ -913,7 +933,19 @@ impl<'a> Laying<'a> {
       },
       &run,
     )?;
-    lay_outside_trees(&tree, &places.source)?;
+    self.lay_committed_trees(&tree)?;
+
+    Ok(tree)
+  }
+
+  // The release built in the build tree at the commit: the Cargo release build where the commit has a Cargo
+  // workspace, the declared build steps, the binaries placed, and `bin/built-from` written last. The
+  // binaries whose bytes differ from the live release's; the line saying what failed where a step did.
+  fn build(&self, release: &Path, live: Option<&Path>) -> Result<Vec<String>, String> {
+    let said = &DEPLOY.run;
+    let places = &self.places;
+    let build = &self.repo.declaration.build;
+    let tree = self.put_commit_tree()?;
 
     let profile = &build.cargo_profile;
     let target = build_target(&places.deploy_dir);
@@ -1530,15 +1562,23 @@ pub async fn deploy(
   if ask.no_check || !checkout.declaration.deploy.gate {
     run.say(&said.gate_left_out);
   } else {
-    // The gate reads the checkout, so the declared setup runs there before it, and a fresh checkout holds
-    // the packages its check needs (docs/deploy.md, 「What the deploy run does, in order」).
-    if let Err(why) = run.set_up_test_tree(&checkout.declaration.test.setup, source) {
-      return run.failed(
-        Stage::Check,
-        fill_marks(&said.gate_failed, &[("commit", &shown), ("reason", &why)]),
-        Outcome::Stopped,
-      );
-    }
+    // The gate on this machine reads the commit's committed trees, never the checkout's working tree: the
+    // build tree put at the commit with its outside trees laid at their committed heads, set up by the
+    // declared steps so a fresh tree holds the packages its check needs (docs/deploy.md, 「What the deploy run
+    // does, in order」).
+    let tree = run
+      .put_commit_tree()
+      .and_then(|tree| run.set_up_test_tree(&checkout.declaration.test.setup, &tree).map(|()| tree));
+    let tree = match tree {
+      Ok(tree) => tree,
+      Err(why) => {
+        return run.failed(
+          Stage::Check,
+          fill_marks(&said.gate_failed, &[("commit", &shown), ("reason", &why)]),
+          Outcome::Stopped,
+        );
+      }
+    };
 
     let since = run.previous.as_ref().map(|previous| previous.commit.clone());
     // A passed run of the whole suite on the commit, in this machine's own record, leaves the gate's suite
@@ -1561,6 +1601,7 @@ pub async fn deploy(
       || {
         let passed = gate.pass(&GateAsk {
           root: source,
+          tree: &tree,
           commit: &commit,
           since: since.as_deref(),
           suite: passed_here.is_none(),
@@ -1612,6 +1653,7 @@ pub async fn deploy(
 
     let passed = gate.dependents(&GateAsk {
       root: source,
+      tree: &expansion_tree(&places.deploy_dir),
       commit: &commit,
       since: run.previous.as_ref().map(|previous| previous.commit.as_str()),
       suite: true,

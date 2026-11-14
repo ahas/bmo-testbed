@@ -130,6 +130,7 @@
       "MachinePlacement",
       "HttpPlacement",
       "BenchFor",
+      "BenchTree",
       "FarEnd",
       "FarDisk"
     ],
@@ -144,8 +145,8 @@
       "deploy/releases-and-rollback",
       "core/silence-watch"
     ],
-    "base": "ea04ae81a1de0d809154b74d33913442f9ed2125",
-    "changed": 1794577640135
+    "base": "2a0f1c8059ecc8e92b9287df6c2f3f352d044203",
+    "changed": 1794668429386
   },
   {
     "id": "core/policy-loader",

@@ -741,6 +741,76 @@ fn a_deployments_bench_stands_apart_from_a_run_copying_the_same_tree() {
   assert_eq!(std::fs::read_to_string(copied.join("src/lib.rs")).unwrap(), "pub fn moved() {}\n");
 }
 
+// "For a deployment it lays no working tree: the repository holding each tree is ... pushed the head of the
+// main branch its declaration names ... checked out detached and its untracked files taken away": a base
+// library's checkout mid-work, on a job's branch with an edit half written over it, reaches a deployment's
+// bench at its main head alone, while a run's bench copies it as it stands.
+#[test]
+fn a_deployments_bench_lays_each_dependency_at_its_main_head_never_its_working_tree() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let base = dir.join("base");
+  let consumer = dir.join("consumer");
+
+  package_checkout(&base, "base", None);
+  std::fs::write(base.join("src/lib.rs"), "pub fn committed() {}\n").unwrap();
+  git(&base, &["commit", "-q", "-am", "on main"]);
+  package_checkout(&consumer, "consumer", Some("../base"));
+
+  let main = git(&base, &["rev-parse", "main"]);
+
+  git(&base, &["checkout", "-q", "-b", "job"]);
+  std::fs::write(base.join("src/lib.rs"), "pub fn on_the_branch() {}\n").unwrap();
+  git(&base, &["commit", "-q", "-am", "on the job's branch"]);
+  std::fs::write(base.join("src/lib.rs"), "pub fn half_written(\n").unwrap();
+  std::fs::write(base.join("untracked.rs"), "left by the job\n").unwrap();
+
+  let machine = released(&dir, None, None);
+  let deployed = git(&consumer, &["rev-parse", "HEAD"]);
+  let bench = machine.ready(&consumer, &deployed, BenchFor::Deployment("consumer")).unwrap();
+  let laid = dir.join("deploy-bench/consumer/base");
+
+  assert!(bench.checkouts.contains(&laid.to_string_lossy().into_owned()), "{:?}", bench.checkouts);
+  assert_eq!(git(&laid, &["rev-parse", "HEAD"]), main);
+  assert_eq!(std::fs::read_to_string(laid.join("src/lib.rs")).unwrap(), "pub fn committed() {}\n");
+  assert!(!laid.join("untracked.rs").exists());
+  assert_eq!(git(&laid, &["status", "--porcelain"]), "");
+
+  // A file an earlier laying or run left there goes with the next deployment's bench.
+  std::fs::write(laid.join("stray.rs"), "an earlier copy").unwrap();
+  machine.ready(&consumer, &deployed, BenchFor::Deployment("consumer")).unwrap();
+
+  assert!(!laid.join("stray.rs").exists());
+
+  let ran = machine.ready(&consumer, &deployed, BenchFor::Run).unwrap();
+  let copied = dir.join("bench/base");
+
+  assert!(ran.checkouts.contains(&copied.to_string_lossy().into_owned()), "{:?}", ran.checkouts);
+  assert_eq!(std::fs::read_to_string(copied.join("src/lib.rs")).unwrap(), "pub fn half_written(\n");
+}
+
+// "a tree no repository holds ... fails the step"
+#[test]
+fn a_deployments_bench_refuses_a_dependency_no_repository_holds() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let base = dir.join("base");
+  let consumer = dir.join("consumer");
+
+  package_checkout(&base, "base", None);
+  package_checkout(&consumer, "consumer", Some("../base"));
+  std::fs::remove_dir_all(base.join(".git")).unwrap();
+
+  let machine = released(&dir, None, None);
+  let deployed = git(&consumer, &["rev-parse", "HEAD"]);
+  let why = machine
+    .ready(&consumer, &deployed, BenchFor::Deployment("consumer"))
+    .map(|bench| bench.path)
+    .unwrap_err();
+
+  assert!(why.contains("no git repository holds it"), "{why}");
+}
+
 // "where they differ, a run, a suite, a change check or a Cargo verb runs here instead"
 #[test]
 fn a_run_meeting_a_testbed_there_of_another_release_is_kept_here_and_no_bench_is_made() {
@@ -1184,6 +1254,7 @@ fn passed_at(gate: &PlacedGate<'_>, dir: &Path) -> bmo_testbed_deploy::deploymen
 
   gate.pass(&GateAsk {
     root: &repo,
+    tree: &repo,
     commit: &commit,
     since: None,
     suite: false,

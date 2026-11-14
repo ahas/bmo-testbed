@@ -756,22 +756,27 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   checkout — it makes the repository in that folder; it pushes the commit there as the branch `bmo-bench` and checks it out detached;
   for a run it copies its open files over with `rsync`, the files git ignores and the `.git` directory
   left out, and for a deployment it copies none and takes every untracked file away, since the release is
-  the commit alone; and it copies
+  the commit alone; and it lays
   every tree the checkout's workspace names outside the repository, the base libraries and the
   sibling crates among them, and the checkout holding the shared versions the declaration names, found
-  through this machine's registry, each to its own place under the bench root the same way, so a path a
-  manifest names resolves there as it does here and the quick checks find what they read. The copy of
+  through this machine's registry, each at its own place under the bench root, so a path a manifest
+  names resolves there as it does here and the quick checks find what they read. For a run it copies
+  each tree as it stands, the same way as the open files. For a deployment it lays no working tree: the
+  repository holding each tree is made ready at its place as the bench is, from its own reachable
+  remote, pushed the head of the main branch its declaration names as `bmo-bench`, checked out detached
+  and its untracked files taken away, since a deployment builds committed trees only (`docs/deploy.md`,
+  「The releases」); a tree no repository holds, or whose main branch does not stand, fails the step. The copy of
   the checkout holding the shared versions leaves their file out, and the caller writes it there instead
   as that checkout's main branch holds it, whole or not at all, so no copy, its own or another run's
   copying the same tree, puts the working tree's file there; a placed run reads it as it stands
   (`docs/checks.md`, 「The quick checks」, `shared-versions`). The bench and
-  every tree copied are the checkouts the run there knows (「`placed`」). A step that fails ends the run as
+  every tree laid beside it are the checkouts the run there knows (「`placed`」). A step that fails ends the run as
   not run, exit code 75, with a line naming the step and what it said.
 - **A deployment's bench stands apart** from every run's and from every other repository's deployment:
-  its checkout and each tree copied beside it stand under the folder of the deployed repository's name
+  its checkout and each tree laid beside it stand under the folder of the deployed repository's name
   in `deploy_bench`, at the paths they have under this machine's home, made ready the same way. A run
   copies a sibling repository's tree as it stands into its own place under `bench`, and a deployment of
-  another repository into its own folder, so nothing another run copies is written into a tree a
+  another repository lays its committed trees into its own folder, so nothing another run copies is written into a tree a
   deployment's gate or Cargo release build reads while it reads it, and the commit a deployment checks
   out in its bench, with the untracked files it takes away, never reaches a tree a run reads. Each
   repository's deployments keep one bench there, at one path, so the Cargo build directory that

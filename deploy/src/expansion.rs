@@ -5,10 +5,12 @@
 
 use std::path::{Component, Path, PathBuf};
 
+use bmo_testbed_core::declaration::{Repository, root_of};
 use bmo_testbed_core::policy::deploy::DEPLOY;
 use bmo_testbed_core::policy::fill_shown;
 use bmo_testbed_core::queue::process_alive;
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 
 use crate::deployment::DeployPlaces;
 use crate::progress::read_deploy_progress;
@@ -292,10 +294,90 @@ pub fn outside_roots(tree: &Path, checkout: &Path) -> Result<Vec<PathBuf>, Strin
   Ok(kept)
 }
 
+/// The committed trees beside the deploy tree: one detached worktree for each repository holding a tree
+/// the workspace names outside the repository, which the release and the build tree read such a tree from.
+pub fn committed_trees(deploy_dir: &Path) -> PathBuf {
+  beside(deploy_dir, "-trees")
+}
+
+/// A tree outside the repository as a deployment reads it: the repository holding it, the head of the main
+/// branch that repository's declaration names, and the tree's path inside the repository.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CommittedTree {
+  pub repository: PathBuf,
+  pub head: String,
+  pub inside: PathBuf,
+}
+
+impl CommittedTree {
+  /// The worktree under `store` this tree's repository stands in: its folder's name with a short digest of
+  /// its path, so two repositories of one name stand apart.
+  pub fn worktree(&self, store: &Path) -> PathBuf {
+    let digest = Sha256::digest(self.repository.as_os_str().as_encoded_bytes());
+    let hex: String = digest.iter().take(4).map(|byte| format!("{byte:02x}")).collect();
+    let name = self
+      .repository
+      .file_name()
+      .map(|name| name.to_string_lossy().into_owned())
+      .unwrap_or_default();
+
+    store.join(format!("{name}-{hex}"))
+  }
+}
+
+/// The committed tree a deployment reads in place of `tree`, a tree outside the checkout: the repository
+/// holding it at the head of the main branch its declaration names, read through git and never from the
+/// working tree. A tree no repository holds, one whose repository holds the checkout as well, and one whose
+/// repository's main branch does not stand refuse it, naming the tree and why.
+pub fn committed_tree(tree: &Path, checkout: &Path) -> Result<CommittedTree, String> {
+  let refused =
+    |why: &str| fill_shown(&DEPLOY.expansion.not_committed, &[("tree", &tree.display()), ("why", &why)]);
+  let target = std::fs::canonicalize(tree).map_err(|why| refused(&why.to_string()))?;
+  let top = root_of(&target).ok_or_else(|| refused(&DEPLOY.expansion.no_repository))?;
+  let top = std::fs::canonicalize(&top).unwrap_or(top);
+  let checkout = std::fs::canonicalize(checkout).unwrap_or_else(|_| checkout.to_path_buf());
+
+  if checkout.starts_with(&top) {
+    return Err(refused(&DEPLOY.expansion.holds_checkout));
+  }
+
+  let repository = Repository::read(&top).map_err(|refusal| refused(&refusal.0))?;
+  let main = &repository.declaration.check.main;
+  let no_main = || fill_shown(&DEPLOY.expansion.no_main, &[("main", main)]);
+  let mut line = words(["git", "rev-parse", "--verify", "--quiet"]);
+
+  line.push(format!("refs/heads/{main}^{{commit}}"));
+
+  let read = command(&line, Some(&top)).output().map_err(|why| refused(&why.to_string()))?;
+  let head = String::from_utf8_lossy(&read.stdout).trim().to_owned();
+
+  if !read.status.success() || head.is_empty() {
+    return Err(refused(&no_main()));
+  }
+
+  Ok(CommittedTree {
+    inside: target.strip_prefix(&top).map(Path::to_path_buf).unwrap_or_default(),
+    repository: top,
+    head,
+  })
+}
+
+/// Where a laying puts the committed trees and what it may take away: the committed trees' folder, and the
+/// runtime data root, which nothing taken away may hold.
+pub struct TreeStore<'a> {
+  pub store: &'a Path,
+  pub data_root: &'a Path,
+}
+
 /// The trees outside the repository that its manifests name by a path — the base libraries and the
 /// sibling repositories' crates a release build reads — laid beside `tree` where those paths point, out
-/// of the checkout at the same place. A worktree of the repository carries nothing beside it, so a
-/// release built in one reads such a tree from a path only the workspace around the checkout makes.
+/// of the checkout at the same place, each as a link into its repository's committed tree. A worktree of
+/// the repository carries nothing beside it, so a release built in one reads such a tree from a path only
+/// a link laid there makes.
+///
+/// A deployment builds committed trees only (docs/deploy.md, 「The releases」): each repository holding such
+/// a tree is put in the store at the head of its main branch, and the link reaches into that worktree, never
+/// into the checkout's working tree, where another job may be half way through an edit.
 ///
 /// A tree that is a member of another Cargo workspace is laid at that workspace's root, through which
 /// the named path resolves and the member finds the root it inherits from; the trees named inside one
@@ -303,18 +385,31 @@ pub fn outside_roots(tree: &Path, checkout: &Path) -> Result<Vec<PathBuf>, Strin
 ///
 /// The list comes from the checkout's own workspace: a release or a build tree reads no manifest until
 /// the trees its manifests name stand, and the checkout is the one place they do.
-pub fn lay_outside_trees(tree: &Path, checkout: &Path) -> Result<(), String> {
+pub fn lay_outside_trees(
+  tree: &Path,
+  checkout: &Path,
+  store: &TreeStore<'_>,
+  run: CommandRun<'_>,
+) -> Result<(), String> {
   for source in outside_roots(tree, checkout)? {
     let Some(relative) = upward(checkout, &source) else {
       continue;
     };
     let place = normalize(&tree.join(relative));
-    let target = std::fs::canonicalize(&source).map_err(|why| {
-      fill_shown(
-        &DEPLOY.expansion.tree_absent,
-        &[("at", &source.display()), ("tree", &tree.display()), ("why", &why.to_string())],
-      )
-    })?;
+    let committed = committed_tree(&source, checkout)?;
+    let worktree = committed.worktree(store.store);
+
+    put_build_tree(
+      &BuildTree {
+        source: &committed.repository,
+        tree: worktree.clone(),
+        head: &committed.head,
+        data_root: store.data_root,
+      },
+      run,
+    )?;
+
+    let target = worktree.join(&committed.inside);
 
     if let Some(parent) = place.parent() {
       std::fs::create_dir_all(parent).map_err(|why| {

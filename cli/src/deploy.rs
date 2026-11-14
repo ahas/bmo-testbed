@@ -50,10 +50,16 @@ pub struct SuiteGate<'a> {
 
 impl Gate for SuiteGate<'_> {
   fn pass(&self, ask: &GateAsk<'_>) -> GateOutcome {
+    // The gate judges the commit's committed trees, by the checkout's declaration (docs/deploy.md, 「What the
+    // deploy run does, in order」).
+    let repo = &Repository {
+      root: ask.tree.to_path_buf(),
+      declaration: self.repo.declaration.clone(),
+    };
     let mut steps = Vec::new();
     let failed = run_static_check(
-      &self.repo.root,
-      &check_steps(self.repo, ask.since),
+      &repo.root,
+      &check_steps(repo, ask.since),
       &mut |text| eprint!("{text}"),
       &spawn_step,
       &mut |done| {
@@ -95,10 +101,10 @@ impl Gate for SuiteGate<'_> {
       .collect::<Vec<_>>()
       .join(" ");
     let judged = SuiteAsk {
-      record: Some(suite_record(&data_root(), self.repo, command)),
-      ..ask_of(&words, &self.repo.declaration.test)
+      record: Some(suite_record(&data_root(), repo, command)),
+      ..ask_of(&words, &repo.declaration.test)
     };
-    let (ended, flaky) = run_judged(self.repo, &judged, &data_root(), self.hook);
+    let (ended, flaky) = run_judged(repo, &judged, &data_root(), self.hook);
     let code = ended.code;
 
     steps.push(GateStep {

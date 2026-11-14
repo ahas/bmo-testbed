@@ -1,12 +1,14 @@
 //! The build tree (docs/deploy.md, 「The releases」): the trees a workspace names by a path outside the
-//! repository, laid beside a release and the build tree from the checkout that carries them; and its target
-//! directory, which outlives the last deployment by its span unless a deployment is running.
+//! repository, laid beside a release and the build tree as links into their repositories' committed trees,
+//! never into a checkout's working tree; and its target directory, which outlives the last deployment by its
+//! span unless a deployment is running.
 
 use std::path::{Path, PathBuf};
 
 use bmo_testbed_deploy::deployment::DeployPlaces;
 use bmo_testbed_deploy::expansion::{
-  build_target, idle_build_target, last_deployed_ms, lay_outside_trees, remove_build_target,
+  TreeStore, build_target, committed_tree, idle_build_target, last_deployed_ms, lay_outside_trees,
+  remove_build_target,
 };
 
 // A package standing in a folder, its library empty.
@@ -58,28 +60,87 @@ fn symlink(at: &Path) -> Option<std::path::PathBuf> {
     .and_then(|_| std::fs::read_link(at).ok())
 }
 
-// "the trees a workspace names outside it are laid beside the tree from the checkout"
+// Git run in a folder as the deployment runs it, its output trimmed; the run must pass.
+fn git_in(dir: &Path, args: &[&str]) -> String {
+  let line: Vec<String> = std::iter::once("git").chain(args.iter().copied()).map(str::to_owned).collect();
+  let ran = runner()(&line, dir);
+
+  assert!(ran.ok, "git {args:?} in {}: {}", dir.display(), ran.out);
+  ran.out.trim().to_owned()
+}
+
+// The folder made a repository whose main branch holds everything in it: the commit.
+fn committed(dir: &Path) -> String {
+  if !dir.join(".git").exists() {
+    git_in(dir, &["init", "-q", "-b", "main"]);
+  }
+
+  git_in(dir, &["add", "-A"]);
+  git_in(dir, &["commit", "-q", "--allow-empty", "-m", "commit"]);
+  git_in(dir, &["rev-parse", "HEAD"])
+}
+
+// The places a test lays its trees with, under the folder given: the committed trees' folder and the data root.
+struct Laid {
+  store: PathBuf,
+  data_root: PathBuf,
+}
+
+impl Laid {
+  fn under(root: &Path) -> Self {
+    Self {
+      store: root.join("run/deploy-trees"),
+      data_root: root.join("data"),
+    }
+  }
+
+  fn lay(&self, tree: &Path, checkout: &Path) -> Result<(), String> {
+    lay_outside_trees(
+      tree,
+      checkout,
+      &TreeStore {
+        store: &self.store,
+        data_root: &self.data_root,
+      },
+      &runner(),
+    )
+  }
+
+  // The committed tree `named` is read from: its repository's worktree in the store, at its path there.
+  fn committed_for(&self, named: &Path, checkout: &Path) -> PathBuf {
+    let committed = committed_tree(named, checkout).unwrap();
+
+    committed.worktree(&self.store).join(&committed.inside)
+  }
+}
+
+// "the trees a workspace names outside it are laid beside the build tree as links into their committed trees"
 #[test]
 fn a_tree_named_outside_the_workspace_is_laid_where_its_path_points() {
   let root = tempfile::tempdir().unwrap();
   let base = root.path().join("workspace/base/text");
   let checkout = root.path().join("workspace/services/app");
   let tree = root.path().join("run/deploy-expand");
+  let laid = Laid::under(root.path());
 
   package(&base, "bmo-text");
+  let head = committed(&base);
   app(&checkout, "../../base/text");
   app(&tree, "../../base/text");
 
-  lay_outside_trees(&tree, &checkout).unwrap();
+  laid.lay(&tree, &checkout).unwrap();
 
   let link = root.path().join("base/text");
+  let target = laid.committed_for(&base, &checkout);
 
   assert_eq!(
-    symlink(&link).as_deref(),
-    Some(std::fs::canonicalize(&base).unwrap().as_path()),
-    "the tree named beside the build tree stands as a link from the checkout"
+    symlink(&link),
+    Some(target.clone()),
+    "the tree named beside the build tree is a link into its committed tree"
   );
-  assert_eq!(std::fs::canonicalize(&link).unwrap(), std::fs::canonicalize(&base).unwrap());
+  assert!(target.starts_with(&laid.store));
+  assert_eq!(git_in(&target, &["rev-parse", "HEAD"]), head);
+  assert!(reads(&tree));
 }
 
 // "the trees outside a workspace are read from the checkout, since the tree reads none until they stand"
@@ -89,29 +150,23 @@ fn a_workspace_reads_its_outside_trees_from_the_checkout_before_they_stand() {
   let base = root.path().join("workspace/base/text");
   let checkout = root.path().join("workspace/services/app");
   let tree = root.path().join("run/deploy-expand");
+  let laid = Laid::under(root.path());
 
   package(&base, "bmo-text");
+  committed(&base);
   workspace_with(&checkout, "../../base/text");
   workspace_with(&tree, "../../base/text");
 
-  // The build tree resolves nothing until the tree it names stands where its path points.
-  let read = std::process::Command::new("cargo")
-    .args(["metadata", "--no-deps", "--offline", "--format-version", "1"])
-    .current_dir(&tree)
-    .output()
-    .unwrap();
+  assert!(!reads(&tree), "no manifest of the build tree reads before its tree stands");
 
-  assert!(!read.status.success(), "no manifest of the build tree reads before its tree stands");
-
-  lay_outside_trees(&tree, &checkout).unwrap();
-
-  let link = root.path().join("base/text");
+  laid.lay(&tree, &checkout).unwrap();
 
   assert_eq!(
-    symlink(&link).as_deref(),
-    Some(std::fs::canonicalize(&base).unwrap().as_path()),
-    "the tree the checkout carries stands beside the build tree, though it stood nowhere there before"
+    symlink(&root.path().join("base/text")),
+    Some(laid.committed_for(&base, &checkout)),
+    "the tree the checkout's workspace names stands beside the build tree, though it stood nowhere there before"
   );
+  assert!(reads(&tree));
 }
 
 // "a tree the checkout does not carry refuses the laying, naming it"
@@ -124,10 +179,41 @@ fn a_tree_the_checkout_does_not_carry_refuses_the_laying() {
   app(&checkout, "../../base/text");
   app(&tree, "../../base/text");
 
-  let why = lay_outside_trees(&tree, &checkout).unwrap_err();
+  let why = Laid::under(root.path()).lay(&tree, &checkout).unwrap_err();
 
   assert!(why.contains("base/text"), "{why}");
   assert!(!root.path().join("base/text").exists());
+}
+
+// "a tree no git repository holds, and one whose repository's main branch does not stand, refuse the
+// deployment, the line naming the tree and why"
+#[test]
+fn a_tree_with_no_committed_tree_refuses_the_laying() {
+  let root = tempfile::tempdir().unwrap();
+  let base = root.path().join("workspace/base/text");
+  let checkout = root.path().join("workspace/services/app");
+  let tree = root.path().join("run/deploy-expand");
+  let laid = Laid::under(root.path());
+
+  package(&base, "bmo-text");
+  app(&checkout, "../../base/text");
+  app(&tree, "../../base/text");
+
+  let unheld = laid.lay(&tree, &checkout).unwrap_err();
+
+  assert!(
+    unheld.contains("base/text") && unheld.contains("no git repository holds it"),
+    "{unheld}"
+  );
+
+  git_in(&base, &["init", "-q", "-b", "trunk"]);
+  git_in(&base, &["add", "-A"]);
+  git_in(&base, &["commit", "-q", "-m", "on another branch"]);
+
+  let no_main = laid.lay(&tree, &checkout).unwrap_err();
+
+  assert!(no_main.contains("base/text") && no_main.contains("no branch main"), "{no_main}");
+  assert!(symlink(&root.path().join("base/text")).is_none());
 }
 
 // "a dependency inside the tree is no tree outside it, and no workspace at all is left alone"
@@ -136,20 +222,22 @@ fn a_dependency_inside_the_tree_and_a_tree_with_no_workspace_are_left_alone() {
   let root = tempfile::tempdir().unwrap();
   let checkout = root.path().join("workspace/services/app");
   let tree = root.path().join("run/deploy-expand");
+  let laid = Laid::under(root.path());
 
   package(&checkout.join("support"), "support");
   package(&tree.join("support"), "support");
   app(&checkout, "support");
   app(&tree, "support");
 
-  lay_outside_trees(&tree, &checkout).unwrap();
+  laid.lay(&tree, &checkout).unwrap();
 
   assert!(symlink(&tree.join("support")).is_none());
+  assert!(!laid.store.exists(), "nothing outside the tree, nothing committed laid");
 
   let plain = root.path().join("plain");
 
   std::fs::create_dir_all(&plain).unwrap();
-  lay_outside_trees(&plain, &checkout).unwrap();
+  laid.lay(&plain, &checkout).unwrap();
 }
 
 // A package whose dependencies are the trees at the paths the manifest names, one name to a path.
@@ -170,7 +258,8 @@ fn app_on(dir: &Path, dependencies: &[(&str, &str)]) {
   std::fs::write(dir.join("src/main.rs"), "fn main() {}\n").unwrap();
 }
 
-// A sibling repository's workspace whose member crates inherit their version and edition from its root.
+// A sibling repository's workspace whose member crates inherit their version and edition from its root,
+// committed on its main branch.
 fn sibling_workspace(dir: &Path, members: &[&str]) {
   let listed: Vec<String> = members.iter().map(|member| format!("\"crates/{member}\"")).collect();
 
@@ -195,6 +284,8 @@ fn sibling_workspace(dir: &Path, members: &[&str]) {
     .unwrap();
     std::fs::write(crate_dir.join("src/lib.rs"), "").unwrap();
   }
+
+  committed(dir);
 }
 
 // Whether a tree's manifests all read, the trees they name included.
@@ -226,16 +317,17 @@ fn a_member_crate_of_a_sibling_workspace_lays_the_siblings_root() {
   let sibling = root.path().join("workspace/services/sibling");
   let checkout = root.path().join("workspace/services/app");
   let tree = root.path().join("run/deploy-expand");
+  let laid = Laid::under(root.path());
 
   sibling_workspace(&sibling, &["client"]);
   app_on(&checkout, &[("client", "../sibling/crates/client")]);
   app_on(&tree, &[("client", "../sibling/crates/client")]);
 
-  lay_outside_trees(&tree, &checkout).unwrap();
+  laid.lay(&tree, &checkout).unwrap();
 
   assert_eq!(
-    symlink(&root.path().join("run/sibling")).as_deref(),
-    Some(std::fs::canonicalize(&sibling).unwrap().as_path()),
+    symlink(&root.path().join("run/sibling")),
+    Some(laid.committed_for(&sibling, &checkout)),
     "the sibling's workspace root stands as one link"
   );
   assert!(reads(&tree), "the member finds the root it inherits from through the link");
@@ -249,19 +341,22 @@ fn two_members_of_one_sibling_workspace_lay_one_link() {
   let checkout = root.path().join("workspace/services/app");
   let tree = root.path().join("run/deploy-expand");
   let named = [("client", "../sibling/crates/client"), ("plugin", "../sibling/crates/plugin")];
+  let laid = Laid::under(root.path());
 
   sibling_workspace(&sibling, &["client", "plugin"]);
   app_on(&checkout, &named);
   app_on(&tree, &named);
 
-  lay_outside_trees(&tree, &checkout).unwrap();
+  laid.lay(&tree, &checkout).unwrap();
 
-  assert_eq!(names(&root.path().join("run")), ["deploy-expand", "sibling"]);
+  assert_eq!(names(&root.path().join("run")), ["deploy-expand", "deploy-trees", "sibling"]);
+  assert_eq!(names(&laid.store).len(), 1, "one repository, one committed tree");
   assert!(symlink(&root.path().join("run/sibling")).is_some());
   assert!(reads(&tree));
 }
 
-// "a standalone package is linked by itself"
+// "a standalone package is linked by itself"; "a tree inside the repository reached at its own path within
+// the worktree"
 #[test]
 fn a_standalone_package_beside_a_sibling_member_is_laid_by_itself() {
   let root = tempfile::tempdir().unwrap();
@@ -270,27 +365,33 @@ fn a_standalone_package_beside_a_sibling_member_is_laid_by_itself() {
   let checkout = root.path().join("workspace/services/app");
   let tree = root.path().join("run/deploy-expand");
   let named = [("bmo-text", "../../base/text"), ("client", "../sibling/crates/client")];
+  let laid = Laid::under(root.path());
 
+  // The standalone package stands inside a repository of its own folder's parent.
   package(&base, "bmo-text");
+  committed(&root.path().join("workspace/base"));
   sibling_workspace(&sibling, &["client"]);
   app_on(&checkout, &named);
   app_on(&tree, &named);
 
-  lay_outside_trees(&tree, &checkout).unwrap();
+  laid.lay(&tree, &checkout).unwrap();
+
+  let target = laid.committed_for(&base, &checkout);
 
   assert_eq!(
-    symlink(&root.path().join("base/text")).as_deref(),
-    Some(std::fs::canonicalize(&base).unwrap().as_path()),
+    symlink(&root.path().join("base/text")),
+    Some(target.clone()),
     "the standalone package stands as a link of its own, its folder not linked"
   );
+  assert!(target.ends_with("text") && target.parent().unwrap().starts_with(&laid.store));
   assert!(symlink(&root.path().join("base")).is_none());
   assert!(symlink(&root.path().join("run/sibling")).is_some());
   assert!(reads(&tree));
 }
 
-// "a link already on the checkout's tree is left as it is"
+// "a link already on its committed tree is left as it is"
 #[test]
-fn a_link_already_on_the_checkouts_tree_is_left_alone() {
+fn a_link_already_on_the_committed_tree_is_left_alone() {
   use std::os::unix::fs::MetadataExt;
 
   let root = tempfile::tempdir().unwrap();
@@ -298,49 +399,130 @@ fn a_link_already_on_the_checkouts_tree_is_left_alone() {
   let checkout = root.path().join("workspace/services/app");
   let tree = root.path().join("run/deploy-expand");
   let link = root.path().join("run/sibling");
+  let laid = Laid::under(root.path());
 
   sibling_workspace(&sibling, &["client"]);
   app_on(&checkout, &[("client", "../sibling/crates/client")]);
   app_on(&tree, &[("client", "../sibling/crates/client")]);
 
-  lay_outside_trees(&tree, &checkout).unwrap();
+  laid.lay(&tree, &checkout).unwrap();
 
   let before = std::fs::symlink_metadata(&link).unwrap().ino();
 
-  lay_outside_trees(&tree, &checkout).unwrap();
+  laid.lay(&tree, &checkout).unwrap();
 
   assert_eq!(std::fs::symlink_metadata(&link).unwrap().ino(), before, "the same link, not a new one");
-  assert_eq!(symlink(&link).as_deref(), Some(std::fs::canonicalize(&sibling).unwrap().as_path()));
+  assert_eq!(symlink(&link), Some(laid.committed_for(&sibling, &checkout)));
 }
 
-// "a folder holding nothing but folders and links, as an earlier laying leaves, is replaced; any other
-// tree standing there is left as it is"
+// "a link pointing elsewhere, onto a checkout's working tree among them, is moved onto it, and a folder
+// holding nothing but folders and links, as an earlier laying leaves, is replaced; any other tree standing
+// there is left as it is"
 #[test]
-fn an_earlier_layings_folder_of_links_is_replaced_and_any_other_tree_is_kept() {
+fn a_link_onto_the_working_tree_or_a_folder_of_links_is_replaced_and_any_other_tree_is_kept() {
   let root = tempfile::tempdir().unwrap();
   let sibling = root.path().join("workspace/services/sibling");
   let checkout = root.path().join("workspace/services/app");
   let tree = root.path().join("run/deploy-expand");
   let link = root.path().join("run/sibling");
+  let laid = Laid::under(root.path());
 
   sibling_workspace(&sibling, &["client"]);
   app_on(&checkout, &[("client", "../sibling/crates/client")]);
   app_on(&tree, &[("client", "../sibling/crates/client")]);
+  std::os::unix::fs::symlink(&sibling, &link).unwrap();
+
+  laid.lay(&tree, &checkout).unwrap();
+
+  assert_eq!(
+    symlink(&link),
+    Some(laid.committed_for(&sibling, &checkout)),
+    "a link onto the checkout's working tree is moved"
+  );
+
+  std::fs::remove_file(&link).unwrap();
   std::fs::create_dir_all(link.join("crates")).unwrap();
   std::os::unix::fs::symlink(sibling.join("crates/client"), link.join("crates/client")).unwrap();
 
-  lay_outside_trees(&tree, &checkout).unwrap();
+  laid.lay(&tree, &checkout).unwrap();
 
-  assert_eq!(symlink(&link).as_deref(), Some(std::fs::canonicalize(&sibling).unwrap().as_path()));
+  assert_eq!(symlink(&link), Some(laid.committed_for(&sibling, &checkout)));
 
   std::fs::remove_file(&link).unwrap();
   std::fs::create_dir_all(link.join("crates")).unwrap();
   std::fs::write(link.join("Cargo.toml"), "").unwrap();
 
-  lay_outside_trees(&tree, &checkout).unwrap();
+  laid.lay(&tree, &checkout).unwrap();
 
   assert!(symlink(&link).is_none(), "a tree holding a file of its own is nobody's to replace");
   assert!(link.join("Cargo.toml").exists());
+}
+
+// "A deployment builds committed trees only": a dependency's checkout mid-work, on a job's branch with a
+// commit main does not hold and an uncommitted half-written edit over it, changes nothing the build tree
+// compiles; its main moving on is what moves the committed tree, every path it moved stamped.
+#[test]
+fn a_dependencys_uncommitted_edit_changes_nothing_the_build_tree_compiles() {
+  let root = tempfile::tempdir().unwrap();
+  let base = root.path().join("workspace/base/text");
+  let checkout = root.path().join("workspace/services/app");
+  let tree = root.path().join("run/deploy-expand");
+  let laid = Laid::under(root.path());
+  let lib = |text: &str| std::fs::write(base.join("src/lib.rs"), text).unwrap();
+
+  package(&base, "bmo-text");
+  lib("pub fn greeting() -> &'static str {\n  \"committed\"\n}\n");
+  let first = committed(&base);
+  app(&checkout, "../../base/text");
+  app(&tree, "../../base/text");
+  std::fs::write(tree.join("src/main.rs"), "fn main() {\n  println!(\"{}\", bmo_text::greeting());\n}\n")
+    .unwrap();
+
+  // Another job works in the dependency's checkout: a commit on its own branch, and an edit half written.
+  git_in(&base, &["checkout", "-q", "-b", "job"]);
+  lib("pub fn greeting() -> &'static str {\n  \"on the job's branch\"\n}\n");
+  committed(&base);
+  lib("pub fn greeting( -> \n");
+
+  laid.lay(&tree, &checkout).unwrap();
+
+  let target = laid.committed_for(&base, &checkout);
+  let built = |dir: &Path| {
+    std::process::Command::new("cargo")
+      .args(["run", "--quiet", "--offline"])
+      .env("CARGO_TARGET_DIR", root.path().join("target"))
+      .current_dir(dir)
+      .output()
+      .unwrap()
+  };
+  let ran = built(&tree);
+
+  assert_eq!(git_in(&target, &["rev-parse", "HEAD"]), first);
+  assert!(ran.status.success(), "{}", String::from_utf8_lossy(&ran.stderr));
+  assert_eq!(
+    String::from_utf8_lossy(&ran.stdout),
+    "committed\n",
+    "the build reads main's committed tree alone"
+  );
+  assert_eq!(git_in(&target, &["status", "--porcelain"]), "");
+
+  // The job lands on main; the next laying builds its committed head, still none of the working tree.
+  git_in(&base, &["checkout", "-q", "--", "src/lib.rs"]);
+  git_in(&base, &["checkout", "-q", "main"]);
+  git_in(&base, &["merge", "-q", "--ff-only", "job"]);
+  lib("an edit no commit holds\n");
+
+  laid.lay(&tree, &checkout).unwrap();
+
+  let ran = built(&tree);
+
+  assert_eq!(git_in(&target, &["rev-parse", "HEAD"]), git_in(&base, &["rev-parse", "main"]));
+  assert!(ran.status.success(), "{}", String::from_utf8_lossy(&ran.stderr));
+  assert_eq!(
+    String::from_utf8_lossy(&ran.stdout),
+    "on the job's branch\n",
+    "the moved file was stamped and built again"
+  );
 }
 
 // A command run in a folder, its output both streams, as the deployment runs one.

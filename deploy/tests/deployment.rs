@@ -21,6 +21,7 @@ use bmo_testbed_deploy::deployment::{
   Machine, StepAsk, StepRan, SuitePassed, deploy, major_change, release_build, version_major,
   workspace_binaries,
 };
+use bmo_testbed_deploy::expansion::committed_tree;
 use bmo_testbed_deploy::line::DeployLine;
 use bmo_testbed_deploy::progress::{Outcome, read_deploy_progress};
 use bmo_testbed_deploy::release::{LiveProcess, release_dir};
@@ -315,8 +316,8 @@ phase = "after-health"
     );
   }
 
-  // A repository whose one Cargo workspace names a base library outside it, the checkout carrying the
-  // library and nothing under the deploy root standing where either tree will read it.
+  // A repository whose one Cargo workspace names a base library outside it, the library a repository of its
+  // own whose main branch holds it, and nothing under the deploy root standing where either tree will read it.
   fn over_an_outside_tree() -> Self {
     let scene = Self::empty();
 
@@ -360,6 +361,9 @@ health = "true"
     )
     .unwrap();
     std::fs::write(base.join("src/lib.rs"), "").unwrap();
+    must(&["init", "-q", "-b", "main"], &base);
+    must(&["add", "."], &base);
+    must(&["commit", "-q", "-m", "library"], &base);
 
     let lock = std::process::Command::new("cargo")
       .args(["generate-lockfile", "--offline"])
@@ -634,27 +638,38 @@ fn the_message_overrides_the_subject_and_the_version_file_is_recorded() {
   assert_eq!(events.last().unwrap()["detail"]["message"], "hotfix for the placement bug");
 }
 
-// "a first deployment lays the base-library tree beside the release and the build tree, from the checkout"
+// "a first deployment lays the base-library tree beside the release and the build tree" as links into its
+// committed tree; "A deployment builds committed trees only": the library's checkout holding an edit half
+// written changes nothing the release or the build tree reads
 #[test]
-fn a_first_deployment_lays_the_trees_outside_the_workspace_from_the_checkout() {
+fn a_first_deployment_lays_the_trees_outside_the_workspace_at_their_committed_heads() {
   let scene = Scene::over_an_outside_tree();
+  let library = scene.at("base/text");
+  let main = must(&["rev-parse", "main"], &library).trim().to_owned();
+
+  std::fs::write(library.join("src/lib.rs"), "pub fn half_written(\n").unwrap();
+
   let hands = Hands::default();
   let code = scene.run(&hands);
-  let library = std::fs::canonicalize(scene.at("base/text")).unwrap();
+  let committed = committed_tree(&library, &scene.source)
+    .unwrap()
+    .worktree(&scene.at("live/deploy-trees"));
 
   assert_eq!(code, 0, "{}", said(&hands));
   assert_eq!(
     symlink(&scene.at("live/deploy-releases/base/text")),
-    Some(library.clone()),
-    "the tree the release names outside it stands as a link from the checkout: {}",
+    Some(committed.clone()),
+    "the tree the release names outside it stands as a link into its committed tree: {}",
     said(&hands)
   );
   assert_eq!(
     symlink(&scene.at("live/base/text")),
-    Some(library),
-    "the tree the build tree names outside it stands as a link from the checkout: {}",
+    Some(committed.clone()),
+    "the tree the build tree names outside it stands as a link into its committed tree: {}",
     said(&hands)
   );
+  assert_eq!(must(&["rev-parse", "HEAD"], &committed).trim(), main);
+  assert_eq!(std::fs::read_to_string(committed.join("src/lib.rs")).unwrap(), "");
   assert!(scene.at("live/deploy/bin/app").exists(), "{}", said(&hands));
 }
 

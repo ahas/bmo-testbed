@@ -245,7 +245,7 @@ fell = "{unit} answered and was not running: {why}"
 # What making a fresh build tree and bringing its submodules says: {tree} and {at} places, {commit} a
 # short commit, {what} the step, {said} and {why} what a command or a call came to.
 [expansion]
-not_placed = "the build tree {tree} could not be put at {commit}: {said}"
+not_placed = "{tree} could not be put at {commit}: {said}"
 not_discarded = "the build tree {tree}, made from another checkout, could not be removed: {why}"
 not_emptied = "could not empty {at} for its submodule: {why}"
 # A git step that failed, followed by what it said.
@@ -255,6 +255,12 @@ not_pinned = "could not bring the submodules of {tree} to their pins"
 trees_unread = "the trees {tree} names outside it could not be read: {said}"
 tree_absent = "{at}, which {tree} names outside it, stands nowhere beside the checkout: {why}"
 tree_unlinked = "{at} could not be laid beside {tree}: {why}"
+# A tree outside the repository whose committed tree a deployment cannot read, {why} one of the three below
+# or what a command came to; {main} the main branch the tree's repository declares.
+not_committed = "{tree}, named outside the repository, has no committed tree to deploy from: {why}"
+no_repository = "no git repository holds it"
+holds_checkout = "the repository holding it holds the checkout too"
+no_main = "its repository has no branch {main}"
 # The prune's removal of a build tree's target directory meeting a deployment begun since it was found idle.
 target_in_use = "a deployment began since it was found idle"
 
