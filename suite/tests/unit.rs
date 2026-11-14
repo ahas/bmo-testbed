@@ -72,6 +72,7 @@ fn a_unit_that_writes_nothing_for_the_limit_is_ended_as_hung() {
       ("command", "sh -c echo once; sleep 30"),
       ("output", &LANES.silence.piped),
       ("seconds", "0.4"),
+      ("standing", &fill_marks(&LANES.silence.standing, &[("processes", "sleep 30")])),
     ],
   );
 

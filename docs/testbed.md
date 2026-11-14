@@ -202,6 +202,13 @@ flowchart TD
 - **The silence limit is ten minutes,** or the seconds a repository's declaration names in `[test]
   silence_seconds` (`docs/declaration.md`): every watch over a command run for that repository, in its
   checkout or a bench copy of it, keeps to the declared number.
+- **A slow command is not a silent one, and the limit is never stretched for a slow one.** A static check
+  or a deployment's gate gets no longer limit than any other command, and a check needs no warm build
+  directory to stay under it: Cargo reports every unit it compiles or checks as it starts it, so a cold
+  build keeps writing for as long as it runs, however long that is. A command that writes nothing for ten
+  minutes is waiting on something, a lock, the network or a process that will not end, and that wait is
+  the hang the limit is there to end. A repository whose own work is silent for longer by its nature, and
+  not because it waits, names its `silence_seconds`.
 - **The holder watches where its command's output goes,** every three seconds: the log of a `run`, the
   files a check step's output is taken into, the pipes a suite's unit, a deployment's heavy step or a placed
   run's command is read through, and the files the Cargo verb's own standard output and error stand in.
@@ -223,8 +230,10 @@ flowchart TD
   heard only by the watches on that machine.
 - **A hung command is ended whole:** its process group where it heads one, and every process under it, are
   sent a TERM, and whatever still stands ten seconds later a KILL.
-- **It says so in one line,** `testbed:` first, naming the command, where its output went and the limit,
-  and ends as failed with exit code 124, never as passed: a `run` on that code, a check's step and a suite's
+- **It says so in one line,** `testbed:` first, naming the command, where its output went, the limit and
+  what still stood under it as it was found silent: each process of its tree that had started nothing
+  further, by its command line, four at most, since the process at the end of a chain is the one that waits
+  and the command the watch started is only where the chain begins. It ends as failed with exit code 124, never as passed: a `run` on that code, a check's step and a suite's
   unit as failed with it.
 - **A person's command whose output is a terminal or a pipe is not watched:** the Cargo verb whose
   standard output or error is a screen, another program or anything but a file runs until it ends, since

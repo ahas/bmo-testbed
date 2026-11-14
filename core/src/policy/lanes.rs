@@ -24,6 +24,8 @@ pub struct Numbers {
   pub silence_seconds: u64,
   pub silence_grace_seconds: u64,
   pub silence_look_seconds: u64,
+  pub hung_named_processes: usize,
+  pub hung_process_chars: usize,
 }
 
 #[derive(Debug, Deserialize)]
@@ -107,6 +109,7 @@ pub struct TimesWords {
 #[serde(deny_unknown_fields)]
 pub struct SilenceWords {
   pub hung: String,
+  pub standing: String,
   pub piped: String,
 }
 

@@ -108,9 +108,7 @@ impl Laid {
 
   // The committed tree `named` is read from: its repository's worktree in the store, at its path there.
   fn committed_for(&self, named: &Path, checkout: &Path) -> PathBuf {
-    let committed = committed_tree(named, checkout).unwrap();
-
-    committed.worktree(&self.store).join(&committed.inside)
+    committed_tree(named, checkout).unwrap().within(&self.store)
   }
 }
 

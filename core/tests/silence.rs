@@ -46,7 +46,8 @@ fn written_pid(file: &Path) -> i64 {
 }
 
 // "a command that writes nothing for the limit is ended as hung": it said one thing and went quiet; it ends with
-// the hung code and the line naming it, its group and what it started gone with it, long before its sleep.
+// the hung code and the line naming it and what still stood under it, the sleep its shell waited on, its group and
+// what it started gone with it, long before its sleep.
 #[test]
 fn a_command_that_writes_nothing_for_the_limit_is_ended_as_hung_with_everything_under_it() {
   let dir = tempfile::tempdir().unwrap();
@@ -69,6 +70,7 @@ fn a_command_that_writes_nothing_for_the_limit_is_ended_as_hung_with_everything_
           ("command", "the stuck command"),
           ("output", &std::fs::canonicalize(&out).unwrap().to_string_lossy()),
           ("seconds", "0.4"),
+          ("standing", &fill_marks(&LANES.silence.standing, &[("processes", "sleep 30")])),
         ],
       )
       .as_str()

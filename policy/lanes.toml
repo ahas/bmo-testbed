@@ -30,6 +30,10 @@ seat_free_gigabytes = 4
 silence_seconds = 600
 silence_grace_seconds = 10
 silence_look_seconds = 3
+# How many of the processes still standing under a command ended as hung its line names, and how much of each
+# one's command line.
+hung_named_processes = 4
+hung_process_chars = 200
 
 # How a command killed for want of memory is run again (docs/testbed.md, 「Memory」): how long it waits
 # before it looks at the memory at all, how many gigabytes have to be available, how often it looks, and
@@ -138,10 +142,12 @@ turn_came = "testbed: placed run's turn came"
 line = "waited {waited}s, ran {ran}s"
 
 # A command holding a turn ended for writing nothing (docs/testbed.md, 「A holder whose command falls silent
-# lets go」): {command} the command, {output} where its output went, the files it went to or `piped`, and
-# {seconds} the silence limit.
+# lets go」): {command} the command, {output} where its output went, the files it went to or `piped`,
+# {seconds} the silence limit, and {standing} the `standing` words where any process still stood under it,
+# nothing otherwise; {processes} those processes' command lines.
 [silence]
-hung = "testbed: {command} ended as hung: nothing written to {output} for {seconds}s"
+hung = "testbed: {command} ended as hung: nothing written to {output} for {seconds}s{standing}"
+standing = "; still standing under it: {processes}"
 piped = "its output"
 
 # The one result a run ends on (docs/testbed.md, 「The result」).

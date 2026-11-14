@@ -323,6 +323,14 @@ impl CommittedTree {
 
     store.join(format!("{name}-{hex}"))
   }
+
+  /// Where the tree itself stands in its repository's worktree under `store`: the worktree where the tree is
+  /// the repository's top, the path inside it otherwise.
+  pub fn within(&self, store: &Path) -> PathBuf {
+    let worktree = self.worktree(store);
+
+    if self.inside.as_os_str().is_empty() { worktree } else { worktree.join(&self.inside) }
+  }
 }
 
 /// The committed tree a deployment reads in place of `tree`, a tree outside the checkout: the repository
@@ -409,7 +417,7 @@ pub fn lay_outside_trees(
       run,
     )?;
 
-    let target = worktree.join(&committed.inside);
+    let target = committed.within(store.store);
 
     if let Some(parent) = place.parent() {
       std::fs::create_dir_all(parent).map_err(|why| {

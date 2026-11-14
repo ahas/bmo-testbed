@@ -221,11 +221,11 @@ impl Watch {
 
       drop(ended);
 
-      let hung = watcher.join().unwrap_or(false);
+      let hung = watcher.join().unwrap_or(None);
 
       Waited {
         status,
-        hung: hung.then(|| self.hung_line(what)),
+        hung: hung.map(|waiting| self.hung_line(what, &waiting)),
       }
     })
   }
@@ -236,8 +236,9 @@ impl Watch {
   }
 
   // Looks at the command every so often until it ends, and ends it whole once nothing of it has moved for the
-  // limit; whether it was ended so. While it moves, the holder above is told so in turn.
-  fn watch(&self, leader: u32, ending: &Receiver<()>) -> bool {
+  // limit; what still stood under it then where it was ended so. While it moves, the holder above is told so
+  // in turn.
+  fn watch(&self, leader: u32, ending: &Receiver<()>) -> Option<Vec<String>> {
     let mut last = self.heard();
     let mut moved = Instant::now();
 
@@ -245,7 +246,7 @@ impl Watch {
       let left = self.silence.limit.saturating_sub(moved.elapsed());
 
       if !matches!(ending.recv_timeout(self.silence.look.min(left)), Err(RecvTimeoutError::Timeout)) {
-        return false;
+        return None;
       }
 
       let now = self.heard();
@@ -255,9 +256,11 @@ impl Watch {
         moved = Instant::now();
         speak_for_holder();
       } else if moved.elapsed() >= self.silence.limit {
+        let waiting = waiting_under(leader);
+
         self.end_whole(leader);
 
-        return true;
+        return Some(waiting);
       }
     }
   }
@@ -305,16 +308,54 @@ impl Watch {
     signal(&tree, libc::SIGKILL);
   }
 
-  fn hung_line(&self, what: &str) -> String {
+  fn hung_line(&self, what: &str, waiting: &[String]) -> String {
+    let standing = if waiting.is_empty() {
+      String::new()
+    } else {
+      fill_marks(&LANES.silence.standing, &[("processes", &waiting.join("; "))])
+    };
+
     fill_marks(
       &LANES.silence.hung,
       &[
         ("command", what),
         ("output", &self.output.words()),
         ("seconds", &self.silence.limit.as_secs_f64().to_string()),
+        ("standing", &standing),
       ],
     )
   }
+}
+
+// What still stood under a command found silent: each process of its tree that had started nothing further, by
+// its command line, the policy's number of them at most. The process at the end of a chain is the one that
+// waits; the command the watch started is only where the chain begins.
+fn waiting_under(leader: u32) -> Vec<String> {
+  let numbers = &LANES.numbers;
+  let leader = i64::from(leader);
+  let mut tree = descendants_of(leader);
+
+  tree.push(leader);
+  tree
+    .into_iter()
+    .filter(|pid| descendants_of(*pid).is_empty())
+    .filter_map(command_line)
+    .take(numbers.hung_named_processes)
+    .map(|line| line.chars().take(numbers.hung_process_chars).collect())
+    .collect()
+}
+
+// A process's command line as the kernel keeps it, its words joined by spaces; none where it has gone or holds
+// none. The kernel keeps the words one after another, each ended by a NUL byte.
+fn command_line(pid: i64) -> Option<String> {
+  let bytes = std::fs::read(format!("/proc/{pid}/cmdline")).ok()?;
+  let words: Vec<String> = bytes
+    .split(|byte| *byte == 0)
+    .filter(|word| !word.is_empty())
+    .map(|word| String::from_utf8_lossy(word).into_owned())
+    .collect();
+
+  (!words.is_empty()).then(|| words.join(" "))
 }
 
 /// A command's output read through this process: every byte read counted into `count`, and the holder above

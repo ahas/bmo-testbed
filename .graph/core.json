@@ -229,7 +229,7 @@
   {
     "id": "core/silence-watch",
     "title": "Silence watch",
-    "what": "The watch that ends a command holding a turn once its output and the BMO_TESTBED_HEARD file stay still for the silence limit, the policy's or the repository's declared one, in core/src/silence.rs; it also passes a placed run's output on through counted pipes.",
+    "what": "The watch that ends a command holding a turn once its output and the BMO_TESTBED_HEARD file stay still for the silence limit, naming the processes still standing under it, in core/src/silence.rs; it also passes a placed run's output on through counted pipes.",
     "files": [
       "core/src/silence.rs",
       "core/tests/silence.rs",
@@ -242,7 +242,7 @@
       "core/lanes-and-turn",
       "core/policy-loader"
     ],
-    "base": "93e631758d9e668b2cd9cc007838e3a62eedca56",
-    "changed": 1794545338521
+    "base": "e47d19d776982f1bd05f8a996627592d0a4766cf",
+    "changed": 1794670453956
   }
 ]

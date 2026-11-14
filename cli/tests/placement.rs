@@ -950,6 +950,7 @@ fn the_placed_verb_ends_a_command_silent_for_the_declared_limit_whole() {
       ("command", &format!("sh -c {line}")),
       ("output", &LANES.silence.piped),
       ("seconds", "1"),
+      ("standing", &fill_marks(&LANES.silence.standing, &[("processes", "sleep 30")])),
     ],
   );
   let pid: i64 = std::fs::read_to_string(&left).unwrap().trim().parse().unwrap();
