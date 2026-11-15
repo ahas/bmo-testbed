@@ -349,6 +349,10 @@ no_commit = "passed: {named} names no commit of this checkout"
 # What `prune` says (docs/deploy.md, 「The Cargo build directory」): {root} the build directory, {what}
 # what it takes, {verb} whether it was removed, the counts of what it took, {checkouts} the checkouts'
 # target directories, the disk's {before} and {after}, and the directory against its ceiling.
+# The ceiling and its enforcement: {ceiling} the ceiling, {set} the setting, {fits} what the filesystem leaves
+# the directory with {room} free, {held} and {after} what it holds before and after, {over} how far over it
+# stands, {rule} a rule of the enforcement with the {count} it removed, {named} the removals it names and their
+# {size}, and {holders} what holds what is left, each {path} held {by} with its {size}.
 [prune]
 gone = "prune: {root} does not exist, so there is nothing to remove"
 noatime = "prune: the disk {root} stands on keeps no access times (noatime), so what no build read cannot be told"
@@ -365,9 +369,26 @@ named = " ({names})"
 cleared = ", {count} other entries"
 bytes = "  about {size} of disk"
 free = "  disk free {before} → {after}"
-held = "  holds {held} of its ceiling {ceiling} ({checkouts} live checkouts)"
+held = "  holds {held} of its ceiling {ceiling}"
 gigabytes = "{size} GB"
-over = "The shared Cargo build directory {root} holds {held} after its prune, over its ceiling of {ceiling}: {shared} shared and {each} for each of its {checkouts} live checkouts."
+over = "The shared Cargo build directory {root} holds {held} after its prune, over its ceiling of {ceiling}, and what is left is held: {holders}."
+ceiling = "  ceiling {ceiling}: {set}{fits}"
+ceiling_named = "{set} as BMO_CARGO_TARGET_CEILING_GB names it"
+ceiling_policy = "the prune policy's {set}, BMO_CARGO_TARGET_CEILING_GB naming none"
+ceiling_within = ", within the {fits} its filesystem leaves it with {room} free"
+ceiling_lowered = ", lowered to the {fits} its filesystem leaves it with {room} free"
+enforce_heading = "prune: {over} over its ceiling, rebuildable output by least recent read until under, {verb}"
+enforced = "  {count} {rule}{named}, about {size}"
+enforced_held = "  holds {held} → {after} of its ceiling {ceiling}"
+still_over = "  still {over} over its ceiling, what is left held: {holders}"
+holder = "{path} by {by}, about {size}"
+no_holder = "nothing the enforcement may remove is left"
+shared_units = "shared units"
+checkout_units = "live checkouts' own units"
+checkout_dirs = "live checkouts' target directories emptied but their locks"
+by_build_lock = "a build's lock"
+by_deployment = "a running deployment"
+by_program = "a program built there running"
 # The deployments' build trees (docs/deploy.md, 「The releases」): {days} their span, {count} and {named} the
 # deploy roots whose target directories went, {target} one that did not and {why} what it came to.
 build_heading = "prune: deploy build trees' target/ directories, last deployed over {days} days ago with no deployment running, {verb}"

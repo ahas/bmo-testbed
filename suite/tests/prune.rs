@@ -11,8 +11,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use bmo_testbed_core::policy::prune::PRUNE;
 use bmo_testbed_suite::crates::{CHECKOUT_RECORD_NAME, checkout_target_name};
 use bmo_testbed_suite::prune::{
-  CARGO_LOCK_NAME, Ceiling, DAY_MS, HOUR_MS, PrunePlan, UnitFingerprint, ceiling, plan_clear,
-  read_fingerprint, take_prune_locks,
+  CARGO_LOCK_NAME, DAY_MS, HOUR_MS, PrunePlan, UnitFingerprint, plan_clear, read_fingerprint,
+  take_prune_locks,
 };
 use bmo_testbed_suite::superseded::{BUILT_UNITS_NAME, CARGO_BUILD_LOCK_NAME};
 
@@ -444,52 +444,6 @@ fn a_checkouts_own_unit_goes_once_no_record_names_it_however_lately_it_was_read_
 
   assert_eq!(gone, expected);
   assert_eq!(plan.stray_targets, vec![checkout.join("target")]);
-}
-
-#[test]
-fn the_ceiling_counts_the_live_checkouts_that_record_their_builds_and_no_other() {
-  let scratch = tempfile::tempdir().unwrap();
-  let now = now();
-  let root = scratch.path().join("ceiling");
-  let live = scratch.path().join("ceiling-live");
-  let unbuilt = scratch.path().join("ceiling-unbuilt");
-  let gone = scratch.path().join("ceiling-gone");
-
-  for checkout in [&live, &unbuilt] {
-    std::fs::create_dir_all(checkout).unwrap();
-  }
-
-  for (checkout, built) in [(&live, true), (&unbuilt, false), (&gone, true)] {
-    let dir = root.join("checkouts").join(checkout_target_name(checkout));
-
-    write(&dir.join(CHECKOUT_RECORD_NAME), &checkout.to_string_lossy(), now);
-
-    if built {
-      write(&dir.join(BUILT_UNITS_NAME), "{}", now);
-    }
-  }
-
-  // Target directories that record no checkout count while they were used within the policy's span.
-  let span = PRUNE.older_than_days * DAY_MS;
-
-  for (name, used) in [
-    ("used-0123456789ab", now - span + HOUR_MS),
-    ("unused-0123456789ab", now - span - HOUR_MS),
-  ] {
-    let dir = root.join("checkouts").join(name);
-
-    write(&dir.join(BUILT_UNITS_NAME), "{}", used);
-    date_dirs(&dir, used);
-  }
-
-  // The ceiling is the policy's: the shared part, and a checkout's part for each one counted.
-  assert_eq!(
-    ceiling(&root, now),
-    Ceiling {
-      bytes: PRUNE.shared_ceiling_bytes + 2 * PRUNE.checkout_ceiling_bytes,
-      checkouts: 2,
-    }
-  );
 }
 
 #[test]

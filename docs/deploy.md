@@ -820,18 +820,62 @@ flowchart TD
   - A dry run, a refused prune and a build root that does not exist trim nothing.
 - **A lock a build holds is waited for** until that build lets go, however long it takes, the prune saying
   every thirty seconds which profile directory it waits on.
-- **`--dry-run`** says what it would remove, the build trees' target directories with it, and trims
-  nothing; **`--all`** clears the whole directory but Cargo's lock files, run by hand only, and trims after
+- **`--dry-run`** says what it would remove, the build trees' target directories and what enforcing the
+  ceiling would take with it, and trims nothing; it plans as though it held every build lock it would wait
+  for; **`--all`** clears the whole directory but Cargo's lock files, run by hand only, and trims after
   it.
-- **Its ceiling is 120 GB, and 8 GB more for each live checkout that records its builds.** A timed prune
-  that leaves it over sends a `cargo-target-over-ceiling` event, each run it stays over.
+- **Its ceiling is a setting of the machine:** `BMO_CARGO_TARGET_CEILING_GB`, in gigabytes of a thousand
+  million bytes, and 200 where the environment names no positive whole number (the prune policy's). The
+  timed prune reads it from `env/testbed.env` as it reads the hook (below).
+  - **It is one size, not a share per checkout.** What fills the disk is every checkout's builds at once,
+    and a checkout is made for each piece of open work, so a ceiling that grows with the checkouts grows
+    with the work and bounds nothing on a disk of fixed size. The order of removal below keeps the
+    checkouts in use and takes the idle ones first.
+  - **It is never more than the filesystem can hold.** The ceiling is the lesser of the setting and what
+    the filesystem holding the build root leaves the directory with the prune policy's room, 50 GB, still
+    free: what the directory holds and the free space this account may write, less that room. On a disk
+    whose free space is below that room for other reasons, the ceiling falls with it, to nothing at worst,
+    and the prune then takes everything it may.
+- **The ceiling is enforced as the prune's last stage.** Once the rules above have removed what they
+  remove, while the directory still holds more than its ceiling, the prune removes build output Cargo
+  rebuilds when it is next wanted, by three rules in this order, each taking its own in order of least
+  recent read and the next rule beginning only where the one before it leaves the directory over:
+  1. **shared units:** a unit in a profile directory standing at the build root itself;
+  2. **live checkouts' own units:** a unit in a profile directory of a live checkout's directory, its
+     dependencies as much as its own crates, across every live checkout at once;
+  3. **live checkouts' target directories:** whatever else a live checkout's profile directories hold,
+     its incremental state and the binaries Cargo handed back among it, a checkout's directory at a time.
+  - **It stops as soon as the directory holds no more than its ceiling,** counting the disk each removal
+    frees: a file's allocated size once its last link goes.
+  - **Read is measured by the one reading the rules above judge "unread" by:** the newest access or
+    modification time of any file the unit or directory carries, a directory counted by its modification
+    time alone. It is read before the prune removes anything, so no removal of its own makes a directory
+    look used, and the prune's own reads leave access times where they were. A dry run therefore orders
+    the removals as the run would.
+  - **A removal that frees nothing is passed over,** such as a shared unit whose every file a live
+    checkout's directory still links: its disk goes only with that link, and the unit on a later prune.
+  - **It never removes** Cargo's lock files and their queues; anything in a profile directory whose build
+    lock the prune does not hold, such as one a build began in after the prune took its locks; the
+    directory of the checkout or the build tree of a deployment of the machine's registry that is running,
+    whose release build's own target directory stands outside the build root under its own span;
+    the directory of a checkout a program built there is running from; and nothing outside the profile
+    directories, so each live checkout keeps its directory, its records and its locks.
+  - **The placed machine keeps no record of the deployments whose builds it carries,** so there a
+    deployment's build is kept by its lock while it builds and while a program built there runs; between
+    the build's end and its read back it stands as the output read last, which every rule takes last.
+- **A timed prune that leaves the directory over its ceiling** sends a `cargo-target-over-ceiling` event,
+  each run it stays over, naming what holds what is left: a profile directory a build's lock holds, a
+  checkout's directory a running deployment builds in, or one a program built there runs from, each with
+  about how much disk it holds. A dry run sends nothing.
 - **The placed machine runs the same prune on the same timer** over its own build root, the settings'
   `cargo_target` (`docs/boundary.md`, 「The placed machine」), where its builds, its benches' checks and
   the deployments' release builds land. `bmo-cargo-prune.timer`, its service and `bmo-upkeep.slice`
   carry the placed mark beside their deploy mark, so every deployment of the testbed lays them on the
   placed machine and starts the timer there (「The unit links」); the service runs the testbed binary at
   its deploy tree's path under that machine's home, which is where that machine's settings' `testbed`
-  stands by default. Its events, `cargo-target-over-ceiling` among them, go to that machine's own hook,
+  stands by default. Its ceiling is that machine's own, the `BMO_CARGO_TARGET_CEILING_GB` its own
+  `env/testbed.env` names, held to the filesystem there, as its build root is its own. Its events,
+  `cargo-target-over-ceiling` among them, go to that machine's own hook,
   or its own journal where it has none.
 - **The placed machine's free disk is read here after every prune** where the settings name a placed
   machine. Through one `ssh` command, `findmnt` reads the filesystem holding that machine's build root and
@@ -857,7 +901,9 @@ flowchart TD
   one line, and its disk is not read. A dry run reads and says the free space and sends nothing.
 - **What it says:** how many units, incremental directories, loose files, checkout target directories and
   stray checkout `target/` directories it removed, about how much disk they held, the disk's free space
-  before and after, and what the directory holds against its ceiling; then the build trees' target
+  before and after; then the ceiling and how it was computed, what the directory holds against it, and
+  where it is over, how far, what each rule of the enforcement removed and about how much disk, what the
+  directory holds after, and where it stays over, what holds the rest; then the build trees' target
   directories it removed, by their deploy roots, about how much disk they held, and each one it could not
   remove with why; then what the trim said, or why it did not run; then, where the settings name a placed
   machine, the free space of each path read there, with the drive holding it, against the floor.

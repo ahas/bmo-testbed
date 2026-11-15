@@ -76,13 +76,7 @@ impl PrunePlan {
   /// The plan carried out; a path already gone or one that cannot be removed is passed over.
   pub fn apply(&self) {
     for path in self.paths() {
-      let removed = match std::fs::symlink_metadata(path) {
-        Ok(held) if held.is_dir() => std::fs::remove_dir_all(path),
-        Ok(_) => std::fs::remove_file(path),
-        Err(_) => Ok(()),
-      };
-
-      drop(removed);
+      remove_path(path);
     }
   }
 
@@ -104,27 +98,53 @@ impl PrunePlan {
   }
 }
 
-fn entries_of(dir: &Path) -> Vec<DirEntry> {
+/// The file or directory at `path` removed, a directory with everything under it; one already gone or that
+/// cannot be removed is passed over.
+pub(crate) fn remove_path(path: &Path) {
+  let removed = match std::fs::symlink_metadata(path) {
+    Ok(held) if held.is_dir() => std::fs::remove_dir_all(path),
+    Ok(_) => std::fs::remove_file(path),
+    Err(_) => Ok(()),
+  };
+
+  drop(removed);
+}
+
+pub(crate) fn entries_of(dir: &Path) -> Vec<DirEntry> {
   std::fs::read_dir(dir).map(|read| read.flatten().collect()).unwrap_or_default()
 }
 
-fn is_dir(entry: &DirEntry) -> bool {
+pub(crate) fn is_dir(entry: &DirEntry) -> bool {
   entry.file_type().is_ok_and(|kind| kind.is_dir())
 }
 
-fn name_of(entry: &DirEntry) -> String {
+pub(crate) fn name_of(entry: &DirEntry) -> String {
   entry.file_name().to_string_lossy().into_owned()
 }
 
 // Every path at and under `path`, with what lstat says of it; a link is never followed.
-fn walk(path: &Path, visit: &mut dyn FnMut(&Path, &Metadata)) {
+pub(crate) fn walk(path: &Path, visit: &mut dyn FnMut(&Path, &Metadata)) {
+  walk_where(path, &|_| true, visit);
+}
+
+/// Every path at and under `path` that `keep` lets in, with what lstat says of it, nothing under a path it
+/// leaves out; a link is never followed.
+pub(crate) fn walk_where(
+  path: &Path,
+  keep: &dyn Fn(&Path) -> bool,
+  visit: &mut dyn FnMut(&Path, &Metadata),
+) {
+  if !keep(path) {
+    return;
+  }
+
   let Ok(held) = std::fs::symlink_metadata(path) else { return };
 
   visit(path, &held);
 
   if held.is_dir() {
     for entry in entries_of(path) {
-      walk(&entry.path(), visit);
+      walk_where(&entry.path(), keep, visit);
     }
   }
 }
@@ -137,18 +157,18 @@ fn accessed_ms(held: &Metadata) -> i64 {
   held.atime() * 1000 + held.atime_nsec() / 1_000_000
 }
 
-/// When anything at or under `path` was last read or changed, in milliseconds since the epoch. A directory
-/// counts by its change time alone, since the listing a prune reads it by moves its access time.
+/// When one file was last read or changed, in milliseconds since the epoch, a directory by its change time
+/// alone, since the listing a prune reads it by moves its access time. This is the one reading of "read" the
+/// prune knows: the span of its rules and the order its ceiling is enforced in are both judged by it.
+pub(crate) fn used_at(held: &Metadata) -> i64 {
+  if held.is_dir() { modified_ms(held) } else { modified_ms(held).max(accessed_ms(held)) }
+}
+
+/// When anything at or under `path` was last read or changed, by [`used_at`].
 pub fn last_use(path: &Path) -> i64 {
   let mut newest = i64::MIN;
 
-  walk(path, &mut |_, held| {
-    newest = newest.max(modified_ms(held));
-
-    if !held.is_dir() {
-      newest = newest.max(accessed_ms(held));
-    }
-  });
+  walk(path, &mut |_, held| newest = newest.max(used_at(held)));
 
   newest
 }
@@ -276,34 +296,52 @@ fn stray_target(checkout_root: &Path, shared: &Path) -> Option<PathBuf> {
   (!cargo_running_in(checkout_root)).then_some(target)
 }
 
+/// A process as `/proc` shows it to this account: the name of the program it was started as, its working
+/// directory and its executable, each where it reads.
+pub(crate) struct Process {
+  pub program: String,
+  pub cwd: Option<PathBuf>,
+  pub exe: Option<PathBuf>,
+}
+
+/// Every process `/proc` shows but this one.
+pub(crate) fn processes() -> Vec<Process> {
+  let own = std::process::id().to_string();
+  let Ok(procs) = std::fs::read_dir("/proc") else {
+    return Vec::new();
+  };
+
+  procs
+    .flatten()
+    .filter_map(|entry| {
+      let name = entry.file_name();
+      let pid = name
+        .to_str()
+        .filter(|pid| pid.bytes().all(|byte| byte.is_ascii_digit()) && *pid != own)?;
+      let base = Path::new("/proc").join(pid);
+      let first = std::fs::read(base.join("cmdline")).unwrap_or_default();
+      let program = first.split(|byte| *byte == 0).next().unwrap_or_default();
+
+      Some(Process {
+        program: Path::new(&*String::from_utf8_lossy(program))
+          .file_name()
+          .map(|program| program.to_string_lossy().into_owned())
+          .unwrap_or_default(),
+        cwd: std::fs::read_link(base.join("cwd")).ok(),
+        exe: std::fs::read_link(base.join("exe")).ok(),
+      })
+    })
+    .collect()
+}
+
 /// Whether a Cargo process is working in the checkout at `root`, so its `target/` is left alone: a process
 /// the program `cargo` runs whose working directory is at or under the checkout, as `/proc` says of it.
 fn cargo_running_in(root: &Path) -> bool {
   let root = resolved(root);
-  let Ok(procs) = std::fs::read_dir("/proc") else {
-    return false;
-  };
 
-  for entry in procs.flatten() {
-    let name = entry.file_name();
-    let Some(pid) = name.to_str().filter(|pid| pid.bytes().all(|byte| byte.is_ascii_digit())) else {
-      continue;
-    };
-    let base = Path::new("/proc").join(pid);
-    let first = std::fs::read(base.join("cmdline")).unwrap_or_default();
-    let program = first.split(|byte| *byte == 0).next().unwrap_or_default();
-    let is_cargo = Path::new(&*String::from_utf8_lossy(program))
-      .file_name()
-      .is_some_and(|program| program.to_string_lossy() == "cargo");
-
-    if is_cargo
-      && std::fs::read_link(base.join("cwd")).is_ok_and(|cwd| cwd == root || cwd.starts_with(&root))
-    {
-      return true;
-    }
-  }
-
-  false
+  processes().iter().any(|process| {
+    process.program == "cargo" && process.cwd.as_ref().is_some_and(|cwd| cwd.starts_with(&root))
+  })
 }
 
 /// The `target/` directories of the live checkouts recorded under `root`, each a stray the prune removes
@@ -337,6 +375,46 @@ pub fn profile_dirs(root: &Path) -> Vec<PathBuf> {
 
   dirs.sort();
   dirs
+}
+
+/// One path of a profile directory Cargo names by a unit hash.
+pub(crate) struct UnitEntry {
+  pub hash: String,
+  /// The unit directory it stands in, or `""` for the profile directory itself.
+  pub dir: &'static str,
+  pub entry: DirEntry,
+}
+
+/// Every path in the profile directory Cargo names by a unit hash: those of its unit directories, and the files
+/// a build handed back into the profile directory itself under one.
+pub(crate) fn unit_entries(profile: &Path) -> Vec<UnitEntry> {
+  let mut found = Vec::new();
+  let mut push = |dir: &'static str, entry: DirEntry| {
+    if let Some(hash) = unit_hash(&name_of(&entry)).map(str::to_owned) {
+      found.push(UnitEntry { hash, dir, entry });
+    }
+  };
+
+  for dir in UNIT_DIRS {
+    for entry in entries_of(&profile.join(dir)) {
+      push(dir, entry);
+    }
+  }
+
+  for entry in entries_of(profile) {
+    if !is_dir(&entry) && !name_of(&entry).starts_with('.') {
+      push("", entry);
+    }
+  }
+
+  found
+}
+
+// A file a build handed back into a profile directory under no unit hash.
+fn is_loose(entry: &DirEntry) -> bool {
+  let name = name_of(entry);
+
+  !is_dir(entry) && !name.starts_with('.') && unit_hash(&name).is_none()
 }
 
 struct UnitFiles {
@@ -382,31 +460,20 @@ fn plan_profile(
     unit.paths.push(path);
   };
 
-  for dir in UNIT_DIRS {
-    for entry in entries_of(&profile.join(dir)) {
-      let name = name_of(&entry);
-      let Some(hash) = unit_hash(&name) else { continue };
+  for found in unit_entries(profile) {
+    add(&found.hash, found.entry.path());
 
-      add(hash, entry.path());
+    if found.dir == ".fingerprint" && is_dir(&found.entry) {
+      let name = name_of(&found.entry);
 
-      if dir == ".fingerprint" && is_dir(&entry) {
-        fingerprints.insert(hash.to_owned(), read_fingerprint(&entry.path()));
-        packages.insert(hash.to_owned(), name[..name.len() - hash.len() - 1].to_owned());
-      }
+      fingerprints.insert(found.hash.clone(), read_fingerprint(&found.entry.path()));
+      packages.insert(found.hash.clone(), name[..name.len() - found.hash.len() - 1].to_owned());
     }
   }
 
   for entry in entries_of(profile) {
-    let name = name_of(&entry);
-
-    if is_dir(&entry) || name.starts_with('.') {
-      continue;
-    }
-
-    match unit_hash(&name) {
-      Some(hash) => add(hash, entry.path()),
-      None if last_use(&entry.path()) < cutoff => plan.loose.push(entry.path()),
-      None => {}
+    if is_loose(&entry) && last_use(&entry.path()) < cutoff {
+      plan.loose.push(entry.path());
     }
   }
 
@@ -562,9 +629,9 @@ pub fn plan_prune(root: &Path, older_than_ms: i64, now: i64, incremental_older_t
   plan.measured()
 }
 
-// The lock files Cargo keeps in a profile directory, which a clear leaves standing so a build waiting on one
-// meets the same file once the clear lets it go.
-fn is_cargo_lock(name: &str) -> bool {
+/// The lock files Cargo keeps in a profile directory and their queues, which a clear and the ceiling's
+/// enforcement leave standing so a build waiting on one meets the same file once the prune lets it go.
+pub(crate) fn is_cargo_lock(name: &str) -> bool {
   name.strip_prefix(".cargo-").is_some_and(|rest| rest.contains("lock"))
 }
 
@@ -614,33 +681,6 @@ pub fn keeps_access_times(root: &Path) -> bool {
       .split(',')
       .any(|option| option == "noatime"),
     _ => true,
-  }
-}
-
-/// The build directory's ceiling: what it holds in its normal standing, with the checkouts whose records say
-/// they build here.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Ceiling {
-  pub bytes: u64,
-  pub checkouts: u64,
-}
-
-/// The ceiling of the build directory at `root`, for the live checkouts that keep a record of their builds.
-pub fn ceiling(root: &Path, now: i64) -> Ceiling {
-  let checkouts = entries_of(&root.join("checkouts"))
-    .iter()
-    .filter(|entry| {
-      let dir = entry.path();
-
-      is_dir(entry)
-        && dir.join(BUILT_UNITS_NAME).exists()
-        && !checkout_gone(&dir, now - PRUNE.older_than_days * DAY_MS)
-    })
-    .count() as u64;
-
-  Ceiling {
-    bytes: PRUNE.shared_ceiling_bytes + PRUNE.checkout_ceiling_bytes * checkouts,
-    checkouts,
   }
 }
 

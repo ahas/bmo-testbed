@@ -3,6 +3,7 @@
 //! in a process of its own under a guard of its own, inside the machine's turn and a fence of its own.
 
 pub mod cargo;
+pub mod ceiling;
 pub mod check;
 pub mod count;
 pub mod crates;

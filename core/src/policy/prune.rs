@@ -11,8 +11,8 @@ pub struct Prune {
   pub incremental_hours: i64,
   pub own_grace_hours: i64,
   pub deploy_build_days: i64,
-  pub shared_ceiling_bytes: u64,
-  pub checkout_ceiling_bytes: u64,
+  pub ceiling_gigabytes: u64,
+  pub ceiling_room_gigabytes: u64,
   pub trim_command: Vec<String>,
   pub placed_disk_free_gigabytes: f64,
 }

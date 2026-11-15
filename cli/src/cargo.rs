@@ -1,12 +1,12 @@
 //! `cargo` and `prune` (docs/deploy.md, 「The Cargo build directory」): Cargo run over the shared build
 //! directory the way every verb of the testbed runs it, and what no build reads any more removed from that
 //! directory, holding Cargo's own build lock in every profile directory, at the front of each lock's line and
-//! never in the testbed's; then the target directories of the deployments' build trees that outlived their
-//! span; then the filesystem holding the build directory trimmed, so its freed blocks go back to the drive it
-//! stands on. The invocation, the plan, the removal and the locks are the suite crate's; this is the verbs'
-//! side of them.
+//! never in the testbed's, and its ceiling enforced; then the target directories of the deployments' build trees
+//! that outlived their span; then the filesystem holding the build directory trimmed, so its freed blocks go back
+//! to the drive it stands on. The invocation, the plan, the removal, the enforcement and the locks are the suite
+//! crate's; this is the verbs' side of them.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use bmo_testbed_core::declaration::{Repository, root_of};
@@ -21,13 +21,16 @@ use bmo_testbed_core::queue::now_ms;
 use bmo_testbed_core::turn::{Env, Lane, process_env};
 use bmo_testbed_core::verb::{REFUSED_EXIT_CODE, data_root};
 use bmo_testbed_deploy::deployment::DeployPlaces;
-use bmo_testbed_deploy::expansion::{idle_build_target, remove_build_target};
+use bmo_testbed_deploy::expansion::{
+  deployment_running, expansion_tree, idle_build_target, remove_build_target,
+};
 use bmo_testbed_suite::cargo::run_cargo;
+use bmo_testbed_suite::ceiling::{Ceiling, CeilingPlan, CeilingSetting, Enforcement, Keepers};
 use bmo_testbed_suite::crates::cargo_target_root;
 use bmo_testbed_suite::dependents::{read_registry, registry_path};
 use bmo_testbed_suite::prune::{
-  DAY_MS, HOUR_MS, PrunePlan, ceiling, directory_bytes, disk_free_bytes, keeps_access_times, plan_clear,
-  plan_prune, take_prune_locks,
+  DAY_MS, HOUR_MS, PrunePlan, directory_bytes, disk_free_bytes, keeps_access_times, plan_clear, plan_prune,
+  take_prune_locks,
 };
 use serde_json::json;
 
@@ -120,47 +123,146 @@ fn said_of(
   ]
 }
 
-// What the build directory holds after a prune, against its ceiling, sent to the hook where it is over:
-// something then builds outside one generation per checkout.
-fn hold_to_ceiling(root: &Path, hook: &Hook, answer: &mut Said) {
+// What the holders of what the enforcement left say, each with about how much disk it holds.
+fn holders_said(enforcement: &Enforcement) -> String {
   let said = &VERBS.prune;
-  let held = directory_bytes(root);
-  let ceiling = ceiling(root, now_ms());
-  let checkouts = ceiling.checkouts.to_string();
 
-  answer.out.push(fill_marks(
-    &said.held,
+  if enforcement.holders.is_empty() {
+    return said.no_holder.clone();
+  }
+
+  enforcement
+    .holders
+    .iter()
+    .map(|holder| {
+      fill_marks(
+        &said.holder,
+        &[
+          ("path", &holder.path.to_string_lossy()),
+          ("by", holder.by.words()),
+          ("size", &gigabytes(holder.bytes)),
+        ],
+      )
+    })
+    .collect::<Vec<_>>()
+    .join("; ")
+}
+
+// What the enforcement of the ceiling says: the ceiling and how it was computed, what the directory held
+// against it, and where it was over, what each rule removed, or would, and what holds what is left.
+fn said_of_ceiling(enforcement: &Enforcement, verb: &str) -> Vec<String> {
+  let said = &VERBS.prune;
+  let ceiling = &enforcement.ceiling;
+  let shown = gigabytes(ceiling.bytes);
+  let set = fill_marks(
+    if ceiling.setting.named { &said.ceiling_named } else { &said.ceiling_policy },
+    &[("set", &gigabytes(ceiling.setting.bytes))],
+  );
+  let fits = fill_marks(
+    if ceiling.setting.bytes <= ceiling.fits {
+      &said.ceiling_within
+    } else {
+      &said.ceiling_lowered
+    },
+    &[("fits", &gigabytes(ceiling.fits)), ("room", &gigabytes(ceiling.room))],
+  );
+  let mut lines = vec![
+    fill_marks(&said.ceiling, &[("ceiling", &shown), ("set", &set), ("fits", &fits)]),
+    fill_marks(&said.held, &[("held", &gigabytes(enforcement.before)), ("ceiling", &shown)]),
+  ];
+
+  if enforcement.rules.is_empty() {
+    return lines;
+  }
+
+  lines.push(fill_marks(
+    &said.enforce_heading,
+    &[("over", &gigabytes(enforcement.before.saturating_sub(ceiling.bytes))), ("verb", verb)],
+  ));
+
+  for rule in &enforcement.rules {
+    let named = if rule.names.is_empty() {
+      String::new()
+    } else {
+      fill_marks(&said.named, &[("names", &rule.names.join(", "))])
+    };
+
+    lines.push(fill_marks(
+      &said.enforced,
+      &[
+        ("count", &rule.count.to_string()),
+        ("rule", rule.words),
+        ("named", &named),
+        ("size", &gigabytes(rule.bytes)),
+      ],
+    ));
+  }
+
+  lines.push(fill_marks(
+    &said.enforced_held,
     &[
-      ("held", &gigabytes(held)),
-      ("ceiling", &gigabytes(ceiling.bytes)),
-      ("checkouts", &checkouts),
+      ("held", &gigabytes(enforcement.before)),
+      ("after", &gigabytes(enforcement.after)),
+      ("ceiling", &shown),
     ],
   ));
 
-  if held <= ceiling.bytes {
+  if enforcement.over() {
+    lines.push(fill_marks(
+      &said.still_over,
+      &[
+        ("over", &gigabytes(enforcement.after - ceiling.bytes)),
+        ("holders", &holders_said(enforcement)),
+      ],
+    ));
+  }
+
+  lines
+}
+
+// `cargo-target-over-ceiling` sent to the hook where the enforcement left the directory at `root` over its
+// ceiling, naming what holds what is left.
+fn send_over(root: &Path, enforcement: &Enforcement, hook: &Hook) {
+  if !enforcement.over() {
     return;
   }
+
+  let ceiling = enforcement.ceiling.bytes;
 
   hook.send(&Event {
     name: "cargo-target-over-ceiling",
     commit: None,
     summary: fill_marks(
-      &said.over,
+      &VERBS.prune.over,
       &[
         ("root", &root.to_string_lossy()),
-        ("held", &gigabytes(held)),
-        ("ceiling", &gigabytes(ceiling.bytes)),
-        ("shared", &gigabytes(PRUNE.shared_ceiling_bytes)),
-        ("each", &gigabytes(PRUNE.checkout_ceiling_bytes)),
-        ("checkouts", &checkouts),
+        ("held", &gigabytes(enforcement.after)),
+        ("ceiling", &gigabytes(ceiling)),
+        ("holders", &holders_said(enforcement)),
       ],
     ),
-    detail: json!({ "bytes": held, "ceiling_bytes": ceiling.bytes, "checkouts": ceiling.checkouts }),
+    detail: json!({
+      "bytes": enforcement.after,
+      "ceiling_bytes": ceiling,
+      "holders": enforcement
+        .holders
+        .iter()
+        .map(|holder| json!({ "path": holder.path, "by": holder.by.code(), "bytes": holder.bytes }))
+        .collect::<Vec<_>>(),
+    }),
   });
 }
 
-// The shared build directory pruned at `root`: what it says, a refusal where its disk keeps no access times.
-fn prune_shared(args: &PruneArgs, root: &Path, days: f64, hours: f64, hook: &Hook) -> Said {
+// The shared build directory pruned at `root` and, unless it is cleared whole, its ceiling enforced: what it
+// says, a refusal where its disk keeps no access times.
+fn prune_shared(
+  args: &PruneArgs,
+  root: &Path,
+  (days, hours): (f64, f64),
+  setting: CeilingSetting,
+  deployments: &Deployments,
+  hook: &Hook,
+) -> Said {
   let said = &VERBS.prune;
   let shown = root.to_string_lossy();
 
@@ -187,9 +289,28 @@ fn prune_shared(args: &PruneArgs, root: &Path, days: f64, hours: f64, hook: &Hoo
     }
   };
 
+  // What the enforcement of the ceiling may remove once the plan is carried out, read before anything is: the
+  // directory's holding then is what it holds now less what the plan takes, and its filesystem's room the same.
+  let ceiling_plan = |planned: &PrunePlan| {
+    let held = directory_bytes(root).saturating_sub(planned.bytes);
+    let free = disk_free_bytes(root).saturating_add(planned.bytes);
+
+    CeilingPlan::of(root, &planned.paths(), Ceiling::of(setting, held, free), held)
+  };
+
   if args.dry_run {
+    let planned = plan_now();
+    let mut out = said_of(root, args, days, hours, &planned, &said.dry);
+
+    // The enforcement plans as though it held every build lock the prune would wait for.
+    if !args.all {
+      let keepers = Keepers::read(root, None, &deployments.building());
+
+      out.extend(said_of_ceiling(&ceiling_plan(&planned).enforce(&keepers, false), &said.dry));
+    }
+
     return Said {
-      out: said_of(root, args, days, hours, &plan_now(), &said.dry),
+      out,
       ..Said::default()
     };
   }
@@ -199,8 +320,14 @@ fn prune_shared(args: &PruneArgs, root: &Path, days: f64, hours: f64, hook: &Hoo
   });
   let before = disk_free_bytes(root);
   let planned = plan_now();
+  let enforcing = (!args.all).then(|| ceiling_plan(&planned));
 
   planned.apply();
+
+  let enforcement = enforcing
+    .map(|enforcing| enforcing.enforce(&Keepers::read(root, Some(&locks), &deployments.building()), true));
+
+  drop(locks);
 
   let mut answer = Said {
     out: said_of(root, args, days, hours, &planned, &said.removed),
@@ -212,11 +339,11 @@ fn prune_shared(args: &PruneArgs, root: &Path, days: f64, hours: f64, hook: &Hoo
     &[("before", &gigabytes(before)), ("after", &gigabytes(disk_free_bytes(root)))],
   ));
 
-  if !args.all {
-    hold_to_ceiling(root, hook, &mut answer);
+  if let Some(enforcement) = enforcement {
+    answer.out.extend(said_of_ceiling(&enforcement, &said.removed));
+    send_over(root, &enforcement, hook);
   }
 
-  drop(locks);
   answer
 }
 
@@ -258,6 +385,16 @@ impl Deployments {
       places,
       unread: None,
     }
+  }
+
+  /// The checkouts and build trees the deployments that are running build in.
+  pub fn building(&self) -> Vec<PathBuf> {
+    self
+      .places
+      .iter()
+      .filter(|places| deployment_running(&places.progress))
+      .flat_map(|places| [places.source.clone(), expansion_tree(&places.deploy_dir)])
+      .collect()
   }
 }
 
@@ -345,13 +482,15 @@ pub fn trim_filesystem(root: &Path, trim: &[String], hook: &Hook) -> Option<Stri
   Some(fill_marks(&said.trim_failed, &[("path", &shown), ("said", &failure)]))
 }
 
-/// `prune` over the build directory at `root` and the build trees of `deployments`, then, unless it was a dry run,
-/// the filesystem holding `root` trimmed with the command `trim`: what it says and the code it ends with.
+/// `prune` over the build directory at `root`, its ceiling set to `ceiling`, and the build trees of `deployments`,
+/// then, unless it was a dry run, the filesystem holding `root` trimmed with the command `trim`: what it says and
+/// the code it ends with.
 pub fn prune_in(
   args: &PruneArgs,
   root: &Path,
   deployments: &Deployments,
   trim: &[String],
+  ceiling: CeilingSetting,
   hook: &Hook,
 ) -> Said {
   let said = &VERBS.prune;
@@ -371,7 +510,7 @@ pub fn prune_in(
     return refused(fill_marks(&said.too_short, &[("days", &PRUNE.relatime_days.to_string())]));
   }
 
-  let mut answer = prune_shared(args, root, days, hours, hook);
+  let mut answer = prune_shared(args, root, (days, hours), ceiling, deployments, hook);
 
   if answer.code == REFUSED_EXIT_CODE {
     return answer;
@@ -465,7 +604,14 @@ pub fn prune(args: &PruneArgs) -> u8 {
   let repo = Repository::read(&std::env::current_dir().unwrap_or_default()).ok();
   let deployments = Deployments::of_registry(&registry_path(&data_root(), &env), &env);
   let hook = Hook::of(repo.as_ref(), &env);
-  let mut answer = prune_in(args, &cargo_target_root(), &deployments, &PRUNE.trim_command, &hook);
+  let mut answer = prune_in(
+    args,
+    &cargo_target_root(),
+    &deployments,
+    &PRUNE.trim_command,
+    CeilingSetting::of(&env),
+    &hook,
+  );
 
   if !args.all
     && let Some(machine) = MachinePlacement::named(&data_root(), &home_of(&env))

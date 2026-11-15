@@ -1,6 +1,7 @@
 //! The suite crate's tests, one module to an area, built as one test binary.
 
 mod cargo;
+mod ceiling;
 mod check;
 mod count;
 mod crates;

@@ -191,7 +191,15 @@ pub struct LockWait<'a> {
 /// away.
 pub struct HeldLock {
   _file: File,
+  path: PathBuf,
   ticket: PathBuf,
+}
+
+impl HeldLock {
+  /// The lock file held.
+  pub fn path(&self) -> &Path {
+    &self.path
+  }
 }
 
 impl Drop for HeldLock {
@@ -233,6 +241,7 @@ pub fn take_lock(path: &Path, wait_seconds: f64, mut wait: LockWait<'_>) -> Opti
     {
       return Some(HeldLock {
         _file: file,
+        path: path.to_path_buf(),
         ticket: ticket_path,
       });
     }
