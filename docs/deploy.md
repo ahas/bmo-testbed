@@ -774,7 +774,9 @@ flowchart TD
   checkout holding uncommitted changes a check left (「What it refuses」). A lock that already matches
   its manifests is left untouched, and so is the lock of a command naming its manifest by
   `--manifest-path`. The release build does the same in the build tree around its run (「The
-  releases」), so a sibling's new version fails no gate, no check and no release build.
+  releases」), and a run of the suite that tests a crate does it once around the whole run, since its
+  crates' tests run Cargo outside the verb (`docs/suite.md`, 「Heavy units run in a lane of one」), so a
+  sibling's new version fails no gate, no check, no suite and no release build.
 - **Removing what a build superseded.** After a build, check, lint, test, bench or run the Cargo verb
   carried has passed, the units of the checkout's own crates that its earlier builds left and this one
   replaced go. What a build stands on is Cargo's own word, its JSON messages. A record in the

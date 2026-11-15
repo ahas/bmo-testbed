@@ -22,7 +22,7 @@ use bmo_testbed_core::silence::Silence;
 use bmo_testbed_core::turn::{self, Lane, NOT_RUN_EXIT_CODE, TestbedTurn, TurnAsk};
 use bmo_testbed_core::witness::{RunBegun, RunEnded, RunVerdict, RunWitness};
 
-use crate::cargo::cargo_verb_line;
+use crate::cargo::{HeldLock, cargo_verb_line};
 use crate::crates::{
   CrateDeclaration, cargo_environment, cargo_program, crate_build_args, crate_library_test_args,
   crate_test_args, set_by_cargo, workspace_crates,
@@ -614,6 +614,16 @@ fn run_held(
         && !tool_units.contains_key(*word)
     })
     .collect();
+
+  // Where the run tests a crate, the workspace's lock with its path packages brought to their manifests from
+  // before the first build to the run's end: a crate's tests run Cargo holding its lock outside the Cargo
+  // verb, which aligns the lock around its own command alone (docs/deploy.md, 「The Cargo build directory」).
+  // It is put back as it was found once the run ends.
+  let held_lock = crates.first().and_then(|one| HeldLock::aligned(root, &crate_test_args(&one.name)));
+
+  if let Some(held) = &held_lock {
+    say(&held.said());
+  }
 
   // What the run's Rust stands on, built once before any guard is counted, each crate by itself in the very
   // words its run or the testkit uses, through the repository's Cargo verb, which removes what the build

@@ -12,7 +12,7 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-use bmo_testbed_core::cargo_lock::align_path_packages;
+use bmo_testbed_core::cargo_lock::{Aligned, align_path_packages};
 use bmo_testbed_core::languages::{Cargo, Language as _, cargo_compiles as compiles};
 use bmo_testbed_core::memory::{MachineHands, MemoryLimits, RunEnd, run_in_turn};
 use bmo_testbed_core::policy::fill_shown;
@@ -129,6 +129,37 @@ pub fn cargo_invocation(root: &Path, args: &[String]) -> CargoInvocation {
       .chain(args[1..split].iter().cloned())
       .collect(),
     env,
+  }
+}
+
+/// The lock of the checkout's workspace with its path packages brought to their manifests, held so for as long
+/// as the value lives and put back as it was found once it goes, unless something else has written it since:
+/// for a run whose Cargo commands holding the lock do not all go through the verb.
+pub struct HeldLock(Aligned);
+
+impl HeldLock {
+  /// The lock at `root` aligned for the Cargo command `args` and held until the value goes; none where the
+  /// checkout holds no workspace manifest of its own, the command does not hold its lock, or the lock needed
+  /// nothing or could not be aligned (`align_path_packages`).
+  pub fn aligned(root: &Path, args: &[String]) -> Option<Self> {
+    if !root.join("Cargo.toml").is_file() {
+      return None;
+    }
+
+    let invocation = cargo_invocation(root, args);
+
+    align_path_packages(root, args, &|| invocation.program()).map(Self)
+  }
+
+  /// The one line that says which path packages moved.
+  pub fn said(&self) -> String {
+    self.0.said()
+  }
+}
+
+impl Drop for HeldLock {
+  fn drop(&mut self) {
+    self.0.put_back();
   }
 }
 

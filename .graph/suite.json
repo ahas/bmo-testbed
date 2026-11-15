@@ -17,7 +17,12 @@
       "suite/tests/superseded.rs",
       "core/tests/cargo_lock.rs"
     ],
-    "symbols": [],
+    "symbols": [
+      "run_cargo",
+      "cargo_invocation",
+      "HeldLock",
+      "align_path_packages"
+    ],
     "aliases": [
       "cargo prune 타이머",
       "디스크 여유 경고",
@@ -33,8 +38,8 @@
       "core/silence-watch",
       "core/placement"
     ],
-    "base": "ea04ae81a1de0d809154b74d33913442f9ed2125",
-    "changed": 1794577640124
+    "base": "3dd281e07ef4399530874f7ea309b86b5b4c06d4",
+    "changed": 1794768727571
   },
   {
     "id": "suite/change-check",
@@ -244,7 +249,12 @@
       "suite/tests/once_more.rs",
       "cli/tests/suite_verb.rs"
     ],
-    "symbols": [],
+    "symbols": [
+      "run",
+      "run_saying",
+      "SuiteAsk",
+      "SuiteEnded"
+    ],
     "aliases": [
       "팀즈 아바타 테스트가 스위트에서 실제로 돌게"
     ],
@@ -260,8 +270,8 @@
       "core/run-verb-and-status",
       "core/silence-watch"
     ],
-    "base": "6dabc83764d4656ee0b33e707f39ef8853b817db",
-    "changed": 1794688073920
+    "base": "3dd281e07ef4399530874f7ea309b86b5b4c06d4",
+    "changed": 1794768727578
   },
   {
     "id": "suite/test-count",

@@ -66,6 +66,12 @@
   run will use, so no unit compiles inside the sweep. A crate with a library builds its
   library's own tests first, alone, then the whole crate, so the two heaviest compiles never run side
   by side. A build that fails fails each unit again, by name.
+- **The lock's path packages follow their manifests for the whole run.** A run that tests a crate
+  brings the workspace lock's path packages to their manifests before its first build, as the Cargo
+  verb does around a command holding its lock, says on one line which moved, and keeps the lock so until
+  its last unit has ended, when it is put back as it was found (`docs/deploy.md`, 「The Cargo build
+  directory」). The crates' builds ahead go through the Cargo verb, but each crate's tests run Cargo
+  holding its lock as a unit of the sweep, outside the verb, so a sibling's new version fails neither.
 - **Cargo is handed as many jobs as the fence's memory holds** at a gigabyte and a half each, never
   more than the run's width nor fewer than one; a caller that named fewer keeps its own. The run says
   the number under its first line.
