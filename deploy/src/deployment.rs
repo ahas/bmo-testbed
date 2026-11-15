@@ -34,8 +34,8 @@ use serde_json::{Value, json};
 use crate::adopt::{Adopting, adopt, prune_retired};
 use crate::backup::{BackupPlan, BackupTaken, take_backup};
 use crate::boot::{
-  HealthWatch, StayUp, boot_report, boot_scene, stands_up, stay_report, unit_gave_up, unit_status,
-  wait_for_health,
+  HealthEnd, HealthWatch, StayUp, boot_report, boot_scene, stands_up, stay_report, unit_gave_up,
+  unit_status, wait_for_health,
 };
 use crate::console::{ConsoleHands, MachineConsole, PinnedLayer, probe};
 use crate::expansion::{
@@ -1088,8 +1088,9 @@ impl<'a> Laying<'a> {
     })
   }
 
-  // Whether the `bot` service came up: the declared health answered before the unit gave up starting, where
-  // one is declared, and the unit is read running; why not where it did not, said with what was read of it.
+  // Whether the `bot` service came up: the declared health answered before the unit gave up starting and
+  // before the declared bound passed, where one is declared, and the unit is read running; why not where it
+  // did not, said with what was read of it.
   async fn came_up(&self, bot: &str) -> Option<BootFailure> {
     let said = &DEPLOY.run;
     let deploy = &self.repo.declaration.deploy;
@@ -1097,20 +1098,25 @@ impl<'a> Laying<'a> {
     let status = || unit_status(&run, bot);
 
     if let Some(health) = &deploy.health {
-      let mut watch = HealthWatch::new(health, &self.places.deploy_dir);
+      let mut watch = HealthWatch::new(health, &self.places.deploy_dir, deploy.health_wait_seconds);
       let first = status();
 
       self.say(&fill_marks(&said.waiting, &[("health", health)]));
       watch.gave_up = Some(Box::new(move || unit_gave_up(first.as_ref(), status().as_ref())));
 
       let wait = wait_for_health(&watch).await;
+      let failure = match wait.end {
+        HealthEnd::Answered => None,
+        HealthEnd::GaveUp => Some(BootFailure::NotAnswering),
+        HealthEnd::RanOut => Some(BootFailure::RanOut),
+      };
 
-      if !wait.answered {
+      if let Some(failure) = failure {
         for line in boot_report(&boot_scene(&run, bot, self.restarted_at.get(), wait)) {
           self.say(&line);
         }
 
-        return Some(BootFailure::NotAnswering);
+        return Some(failure);
       }
     }
 

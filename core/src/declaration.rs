@@ -399,9 +399,10 @@ pub struct Deploy {
   /// Where the unit files stand; none is every tracked service and timer.
   pub units: Option<Vec<String>>,
   pub health: Option<String>,
-  /// Read and given no effect: nothing the testbed runs has a span it must end within.
-  #[serde(default)]
-  pub health_wait_seconds: Option<u64>,
+  /// How long the wait for the health may last before the deployment rolls back; the policy's where none
+  /// is declared.
+  #[serde(default = "Deploy::health_wait_seconds")]
+  pub health_wait_seconds: u64,
   /// Read and given no effect: nothing the testbed runs has a span it must end within.
   #[serde(default)]
   pub stay_up_seconds: Option<u64>,
@@ -424,6 +425,10 @@ pub struct Deploy {
 impl Deploy {
   fn link() -> String {
     DECLARATION.defaults.deploy.link.clone()
+  }
+
+  fn health_wait_seconds() -> u64 {
+    DECLARATION.defaults.deploy.health_wait_seconds
   }
 }
 

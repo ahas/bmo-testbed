@@ -26,7 +26,7 @@ use bmo_testbed_deploy::line::DeployLine;
 use bmo_testbed_deploy::progress::{Outcome, read_deploy_progress};
 use bmo_testbed_deploy::release::{LiveProcess, release_dir};
 use bmo_testbed_deploy::run::{Ran, run_quiet};
-use bmo_testbed_deploy::tree::read_deploy_record;
+use bmo_testbed_deploy::tree::{read_deploy_record, short};
 use bmo_testbed_record::{Record, TestRunEnd};
 use serde_json::Value;
 
@@ -1027,6 +1027,52 @@ fn a_service_that_does_not_come_up_is_rolled_back() {
     progress.stages.last().map(|at| at.stage),
     Some(bmo_testbed_deploy::progress::Stage::Rollback)
   );
+}
+
+// "a service that stays running and never answers its health is rolled back once the wait's bound passes"
+#[test]
+fn a_service_that_runs_and_never_answers_its_health_is_rolled_back_once_the_bound_passes() {
+  let scene = Scene::new();
+  let first = must(&["rev-parse", "HEAD"], &scene.source);
+
+  assert_eq!(scene.run(&Hands::default()), 0);
+
+  scene.declare("v2", "false");
+
+  let declared = std::fs::read_to_string(scene.source.join("testbed.toml")).unwrap();
+
+  scene.write(
+    "testbed.toml",
+    &declared.replace("health = \"false\"\n", "health = \"false\"\nhealth_wait_seconds = 30\n"),
+  );
+
+  let second = scene.push("second");
+  // Its health never answers and systemd holds the service running: only the declared bound, on a clock that
+  // moves only while the deployment waits, ends the wait, after the restart and again after the rollback's.
+  let hands = Hands::default();
+
+  assert_eq!(scene.run_paused(&DeployAsk::default(), &hands), 1, "{}", said(&hands));
+  assert_eq!(
+    std::fs::canonicalize(scene.deploy_dir()).unwrap(),
+    std::fs::canonicalize(release_dir(&scene.deploy_dir(), &first)).unwrap()
+  );
+  assert_eq!(read_deploy_record(&scene.at("live/deployed.json")).unwrap().commit, first);
+  assert_eq!(scene.names()[1..], ["deploy-rolled-back", "deploy-failed"]);
+
+  let told = said(&hands);
+  let bound = fill_marks(&DEPLOY.boot.ran_out, &[("bound", "30")]);
+
+  assert!(
+    told.contains(&fill_marks(&DEPLOY.rollback.ran_out, &[("commit", &short(&second))])),
+    "{told}"
+  );
+  assert_eq!(told.matches(&bound).count(), 2, "{told}");
+
+  let progress =
+    read_deploy_progress(std::fs::read_to_string(scene.at("live/deploy-progress.json")).ok().as_deref())
+      .unwrap();
+
+  assert_eq!(progress.ending.unwrap().outcome, Outcome::RolledBack);
 }
 
 // "a release whose console face the probe refuses is rolled back, the point named in its events"

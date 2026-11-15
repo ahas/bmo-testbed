@@ -7,6 +7,7 @@
 [rollback]
 restart_refused = "deployment failed: the service could not be restarted on {commit}."
 not_answering = "deployment failed: the service on {commit} gave up starting before its health answered."
+ran_out = "deployment failed: the health of the service on {commit} had not answered when the wait's bound passed."
 died_after_start = "deployment failed: the service on {commit} answered and was not running when it was read."
 # {step} is the declared step's id.
 step_failed = "deployment failed: the step {step} after the health failed on {commit}."
@@ -16,6 +17,9 @@ silent = "Rolled back to the earlier release {to}, but the service still does no
 first = "No release was live before, so nothing was rolled back."
 before_start = "A deployment with --before-start is not rolled back by itself; a rollback by hand is an ordinary deployment of the older commit (docs/deploy.md, 「Rollback」)."
 tree = "The deploy tree could not be rolled back: {detail}"
+# A later deployment has taken the tree and the service: {detail} names the commit the record names now. No
+# line follows it, since the service is that deployment's.
+overtaken = "A later deployment has taken the deploy tree since, so nothing was rolled back and the service is left to it: {detail}."
 bot_down = "The service is down."
 # Where the cause is read: {cause} is the journal command of the unit that did not come up.
 cause = "Cause: {cause}"
@@ -232,8 +236,13 @@ unit_is = "the unit is {active}/{sub}"
 strain = "load {load}, stalled on I/O {io} and on memory {memory} of the last minute"
 unknown = "unknown"
 # The lines the deploy output keeps of a service that did not come up or stay up.
-waited = "waited {waited}s for the health `{command}`: {asks} asks, the last heard {last}{gave_up}"
+# {end} is `gave_up` or `ran_out`, as the wait ended.
+waited = "waited {waited}s for the health `{command}`: {asks} asks, the last heard {last}{end}"
 gave_up = "; {unit} gave up starting"
+# {bound} is the wait's bound in seconds.
+ran_out = "; the bound of {bound}s on the wait passed"
+# What the last ask heard where it was still running when the bound passed.
+cut = "nothing: the ask was still running and was ended with every process it started"
 unit_unasked = "{unit}: systemd could not be asked"
 unit = "{unit}: {active}/{sub}, main process {pid}{process}, {restarts} automatic restarts, last exit status {status}"
 process = " ({process})"
@@ -269,6 +278,8 @@ target_in_use = "a deployment began since it was found idle"
 # Why nothing was rolled back, as the account's detail.
 before_start = "the command run before the start may have reshaped the data for the new code"
 first = "no commit was live before this one"
+# {commit} is the short commit the deployment record names now.
+overtaken = "the deployment record names {commit} now"
 back_to = "rolling back to {commit}, which was live before"
 would_not_stop = "the service that did not come up would not stop; the rollback goes on and restarts it"
 # {links} is `links_one` or `links_many`, as many units as {names} holds.

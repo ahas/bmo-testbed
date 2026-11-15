@@ -11,15 +11,18 @@ use bmo_testbed_core::policy::{fill_marks, fill_shown};
 use serde_json::{Value, json};
 
 use crate::release::{GitRun, flip, release_dir, stands_built};
-use crate::tree::{DeployRecord, relink_units, short, unit_link_plan, unit_links, write_deploy_record};
+use crate::tree::{
+  DeployRecord, read_deploy_record, relink_units, short, unit_link_plan, unit_links, write_deploy_record,
+};
 
 /// Why the deployment failed: a unit refused its restart, the unit gave up starting before the health
-/// answered, the service answered and was not read running, the console probe refused it, or a step after the
-/// health failed.
+/// answered, the health had not answered when the wait's bound passed, the service answered and was not read
+/// running, the console probe refused it, or a step after the health failed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BootFailure {
   RestartRefused,
   NotAnswering,
+  RanOut,
   DiedAfterStart,
   ConsoleRefused,
   StepFailed,
@@ -51,6 +54,8 @@ pub trait TreeHands {
   fn relink(&mut self, commit: &str) -> Vec<String>;
   /// Writes the record back as what is live, with a log line saying it is a rollback of `of`.
   fn record(&mut self, record: &DeployRecord, of: &str);
+  /// The commit the deployment record names now; none where it does not read.
+  fn recorded(&self) -> Option<String>;
 }
 
 /// The services, on the user's service manager.
@@ -73,6 +78,8 @@ pub enum NotRolled {
   First,
   BeforeStart,
   Tree,
+  /// A later deployment has recorded its own commit since, so the tree and the service are its own.
+  Overtaken,
 }
 
 /// What the rollback came to.
@@ -84,12 +91,21 @@ pub enum Rollback {
 
 /// Rolls the service back to the release that was live before, where that can be done. Only the code
 /// moves: the data stays as the failed release left it, and the backup the deployment took stays for the
-/// case where that is not tolerable.
+/// case where that is not tolerable. A deployment a later one has overtaken touches nothing.
 pub async fn roll_back(
   failed: &FailedDeploy,
   tree: &mut impl TreeHands,
   services: &impl ServiceHands,
 ) -> Rollback {
+  if let Some(now) = tree.recorded()
+    && now != failed.commit
+  {
+    return Rollback::NotRolled {
+      why: NotRolled::Overtaken,
+      detail: fill_shown(&DEPLOY.rolling.overtaken, &[("commit", &short(&now))]),
+    };
+  }
+
   if failed.before_start {
     return Rollback::NotRolled {
       why: NotRolled::BeforeStart,
@@ -180,6 +196,7 @@ pub fn failure_line(failed: &FailedDeploy) -> String {
   match failed.failure {
     BootFailure::RestartRefused => fill_marks(&words.restart_refused, &[("commit", &commit)]),
     BootFailure::NotAnswering => fill_marks(&words.not_answering, &[("commit", &commit)]),
+    BootFailure::RanOut => fill_marks(&words.ran_out, &[("commit", &commit)]),
     BootFailure::DiedAfterStart => fill_marks(&words.died_after_start, &[("commit", &commit)]),
     BootFailure::StepFailed => fill_marks(
       &words.step_failed,
@@ -205,13 +222,15 @@ pub fn deploy_failure_notice(failed: &FailedDeploy, outcome: &Rollback) -> Strin
       lines.push(fill_marks(line, &[("to", &short(to))]));
     }
     Rollback::NotRolled { why, detail } => {
-      let why = match why {
-        NotRolled::First => words.first.clone(),
-        NotRolled::BeforeStart => words.before_start.clone(),
-        NotRolled::Tree => fill_marks(&words.tree, &[("detail", detail)]),
-      };
+      let down = |why: &str| format!("{why} {}", words.bot_down);
 
-      lines.push(format!("{why} {}", words.bot_down));
+      // The service an overtaken deployment leaves is the later deployment's, so it is not said to be down.
+      lines.push(match why {
+        NotRolled::First => down(&words.first),
+        NotRolled::BeforeStart => down(&words.before_start),
+        NotRolled::Tree => down(&fill_marks(&words.tree, &[("detail", detail)])),
+        NotRolled::Overtaken => fill_marks(&words.overtaken, &[("detail", detail)]),
+      });
     }
   }
 
@@ -306,6 +325,10 @@ impl TreeHands for DeployTree<'_> {
     }
 
     relink_units(&self.unit_dir, &deploy_dir, &relinks).unwrap_or_default()
+  }
+
+  fn recorded(&self) -> Option<String> {
+    read_deploy_record(&self.record_path).map(|record| record.commit)
   }
 
   fn record(&mut self, record: &DeployRecord, of: &str) {

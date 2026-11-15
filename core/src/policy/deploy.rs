@@ -8,6 +8,7 @@ use serde::Deserialize;
 pub struct RollbackWords {
   pub restart_refused: String,
   pub not_answering: String,
+  pub ran_out: String,
   pub died_after_start: String,
   pub step_failed: String,
   pub answers: String,
@@ -15,6 +16,7 @@ pub struct RollbackWords {
   pub first: String,
   pub before_start: String,
   pub tree: String,
+  pub overtaken: String,
   pub bot_down: String,
   pub cause: String,
   pub reason: String,
@@ -187,6 +189,8 @@ pub struct BootWords {
   pub unknown: String,
   pub waited: String,
   pub gave_up: String,
+  pub ran_out: String,
+  pub cut: String,
   pub unit_unasked: String,
   pub unit: String,
   pub process: String,
@@ -219,6 +223,7 @@ pub struct ExpansionWords {
 pub struct RollingWords {
   pub before_start: String,
   pub first: String,
+  pub overtaken: String,
   pub back_to: String,
   pub would_not_stop: String,
   pub dangling: String,

@@ -167,8 +167,8 @@ step that fails stops the deployment with every service untouched.
 | `data_root` | path | required with `root` | The repository's runtime data, inside no checkout |
 | `env_links` | list of tables | `[]` | Each with `link`, a path inside a release, and `target`, a file under the data root; every target must exist |
 | `units` | list of globs | every tracked `*.service`, `*.timer` and `*.slice` | Where the commit's unit files stand |
-| `health` | command | none | Answers 0 once the `bot` service is healthy; asked until it does or the unit gives up starting (`docs/deploy.md`, 「What the deploy run does, in order」), each ask waited for until it ends |
-| `health_wait_seconds` | integer | none | Read and given no effect |
+| `health` | command | none | Answers 0 once the `bot` service is healthy; asked until it does, the unit gives up starting or `health_wait_seconds` pass (`docs/deploy.md`, 「What the deploy run does, in order」), each ask waited for until it ends or the bound passes |
+| `health_wait_seconds` | integer | the testbed's policy, 600 | How long the wait for the `health` may last, after a restart and again after a rollback's; where it passes before the health answers, the deployment rolls back and fails |
 | `stay_up_seconds` | integer | none | Read and given no effect: the `bot` service is up once its health answers and it is read running |
 | `quiet` | command | none | Run from the release just before the record and the flip: answers 0 where no work stands under way that a restart would cut and 1 where some does, its output naming it, asked again until it answers 0, however long that takes; any other answer is a quiet that could not tell, which fails the deployment with nothing changed once it repeats the policy's number of asks running (`docs/deploy.md`, 「What the deploy run does, in order」) |
 | `quiet_wait_seconds` | integer | none | Read and given no effect |

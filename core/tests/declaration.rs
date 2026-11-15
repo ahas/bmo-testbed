@@ -6,6 +6,7 @@ use std::process::{Command, Stdio};
 use std::time::Duration;
 
 use bmo_testbed_core::declaration::{Declaration, Phase, QuickCheck, Repository, own_major};
+use bmo_testbed_core::policy::declaration::DECLARATION;
 use bmo_testbed_core::silence::Silence;
 use bmo_testbed_core::turn::{Env, Lane};
 
@@ -81,7 +82,7 @@ fn a_checkout_with_no_declaration_has_every_default_and_its_directorys_name() {
   assert_eq!(declaration.deploy.link, "deploy");
   assert_eq!(
     (declaration.deploy.health_wait_seconds, declaration.deploy.stay_up_seconds),
-    (None, None)
+    (DECLARATION.defaults.deploy.health_wait_seconds, None)
   );
   assert!(declaration.deploy.gate);
   assert!(declaration.deploy.backup.is_none());
@@ -275,6 +276,7 @@ timeout_seconds = 5
   assert_eq!(declaration.build.steps[0].id, "site");
   assert_eq!(declaration.deploy.env_links[0].target, PathBuf::from("env/.env"));
   assert!(!declaration.deploy.gate);
+  assert_eq!(declaration.deploy.health_wait_seconds, 60);
   assert_eq!(
     declaration
       .deploy

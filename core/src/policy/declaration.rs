@@ -45,6 +45,7 @@ pub struct BuildDefaults {
 #[serde(deny_unknown_fields)]
 pub struct DeployDefaults {
   pub link: String,
+  pub health_wait_seconds: u64,
 }
 
 #[derive(Debug, Deserialize)]

@@ -1,10 +1,13 @@
 //! Watching the `bot` service come up after a restart, and saying what came of it where it did not
-//! (docs/deploy.md, 「What the deploy run does, in order」, step 10, and 「Rollback」). A unit that gave up
-//! starting is the one moment the failing service can still be looked at — the rollback stops it next — so
-//! what was waited for, what systemd and the kernel hold of it and the tail of its journal are read here, into
-//! lines the deploy output keeps.
+//! (docs/deploy.md, 「What the deploy run does, in order」, step 11, and 「Rollback」). A unit that gave up
+//! starting, or whose health had not answered when the wait's bound passed, is the one moment the failing
+//! service can still be looked at — the rollback stops it next — so what was waited for, what systemd and the
+//! kernel hold of it and the tail of its journal are read here, into lines the deploy output keeps.
 
+use std::future::Future;
+use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
 use std::time::Duration;
 
 use bmo_testbed_core::policy::deploy::DEPLOY;
@@ -14,60 +17,121 @@ use tokio::time::Instant;
 use crate::run::{Ran, command, shell_words, words};
 use crate::unit::first_chars;
 
+/// How a wait for the declared health ended.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HealthEnd {
+  /// The health answered 0.
+  Answered,
+  /// The unit gave up starting before the health answered.
+  GaveUp,
+  /// The wait's bound passed before the health answered.
+  RanOut,
+}
+
 /// What one wait for the declared health came to.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HealthWait {
   /// The health command, as the declaration writes it.
   pub command: String,
-  pub answered: bool,
+  pub end: HealthEnd,
   pub waited_ms: u64,
+  /// The bound the wait was held to.
+  pub bound_ms: u64,
   pub asks: u32,
   /// What the last ask heard: its exit and the start of what it printed, or why nothing came.
   pub last: String,
-  /// The unit gave up starting before the health answered, which ended the wait at once.
-  pub gave_up: bool,
+}
+
+impl HealthWait {
+  pub fn answered(&self) -> bool {
+    self.end == HealthEnd::Answered
+  }
 }
 
 /// Whether the unit has given up starting.
 pub type GaveUp<'a> = Box<dyn Fn() -> bool + 'a>;
 
-/// What a wait asks and how often.
+/// One ask of the health: whether it answered 0, and what it said of itself. A wait drops an ask still
+/// running when its bound passes, and the ask ends whatever it started as it is dropped.
+pub type HealthAsk<'a> = Box<dyn Fn() -> Pin<Box<dyn Future<Output = (bool, String)> + 'a>> + 'a>;
+
+/// What a wait asks, how often and for how long.
 pub struct HealthWatch<'a> {
-  /// The declared health command, run by the shell in `cwd`; it answers 0 once the service is healthy.
+  /// The declared health command, as the deploy output names it.
   pub command: String,
-  pub cwd: PathBuf,
+  /// One ask of it; the command run by the shell in the deploy tree, where the watch is made for one.
+  pub ask: HealthAsk<'a>,
   /// Whether the unit has given up starting; asked between asks, at most every `check_every_ms`.
   pub gave_up: Option<GaveUp<'a>>,
+  /// How long the wait may last, counted from its start.
+  pub bound: Duration,
   pub poll_ms: u64,
   pub check_every_ms: u64,
 }
 
 impl<'a> HealthWatch<'a> {
-  /// A wait for a health command, asking and checking the unit as the policy says, until it answers or the
-  /// unit gives up starting.
-  pub fn new(command: &str, cwd: &Path) -> Self {
+  /// A wait for a health command run in `cwd`, asking and checking the unit as the policy says, until it
+  /// answers, the unit gives up starting or `bound_seconds` pass.
+  pub fn new(command: &str, cwd: &Path, bound_seconds: u64) -> Self {
     let numbers = &DEPLOY.numbers;
+    let line = command.to_owned();
+    let cwd = cwd.to_path_buf();
 
     Self {
       command: command.to_owned(),
-      cwd: cwd.to_path_buf(),
+      ask: Box::new(move || Box::pin(ask_health(line.clone(), cwd.clone()))),
       gave_up: None,
+      bound: Duration::from_secs(bound_seconds),
       poll_ms: numbers.health_poll_ms,
       check_every_ms: numbers.unit_check_ms,
     }
   }
 }
 
-// One ask of the health command: whether it answered 0, and what it said of itself.
-async fn ask_health(watch: &HealthWatch<'_>) -> (bool, String) {
-  let mut ask = tokio::process::Command::from(command(&shell_words(&watch.command), Some(&watch.cwd)));
+// Ends a process group where it is dropped while armed: an ask dropped before its command ended takes
+// down every process the command started, not the shell alone.
+struct GroupEnd(Option<i32>);
 
-  ask.kill_on_drop(true);
+impl Drop for GroupEnd {
+  fn drop(&mut self) {
+    if let Some(group) = self.0 {
+      // SAFETY: killpg takes a group id and a signal and touches no memory; a group already gone answers
+      // an error that is of no account here.
+      unsafe {
+        libc::killpg(group, libc::SIGKILL);
+      }
+    }
+  }
+}
 
-  // One ask is waited for until the command ends.
-  match ask.output().await {
+/// One ask of the health command, run by the shell in `cwd` in a process group of its own: whether it
+/// answered 0, and what it said of itself. The ask is waited for until the command ends; dropped before
+/// that, it ends the command's whole group.
+pub async fn ask_health(line: String, cwd: PathBuf) -> (bool, String) {
+  let mut ask = command(&shell_words(&line), Some(&cwd));
+
+  ask
+    .stdout(std::process::Stdio::piped())
+    .stderr(std::process::Stdio::piped())
+    .process_group(0);
+
+  let child = match ask.spawn() {
+    Ok(child) => child,
+    Err(why) => return (false, fill_shown(&DEPLOY.boot.not_run, &[("why", &why)])),
+  };
+  let mut group = GroupEnd(i32::try_from(child.id()).ok());
+  // The command is waited for on a thread of its own, which the runtime counts as work under way: a clock
+  // paused under a test moves on only once the command has ended, never past one still running. Where the
+  // ask is dropped first, the group's end ends the command and the thread with it.
+  let done = tokio::task::spawn_blocking(move || child.wait_with_output()).await;
+
+  // The command ended and nothing holds its output any more, so nothing of its group is left to end.
+  group.0 = None;
+
+  match done {
     Err(why) => (false, fill_shown(&DEPLOY.boot.not_run, &[("why", &why)])),
-    Ok(done) => {
+    Ok(Err(why)) => (false, fill_shown(&DEPLOY.boot.not_run, &[("why", &why)])),
+    Ok(Ok(done)) => {
       let code = done.status.code().map_or_else(|| DEPLOY.boot.a_signal.clone(), |code| code.to_string());
       let said =
         format!("{}{}", String::from_utf8_lossy(&done.stdout), String::from_utf8_lossy(&done.stderr));
@@ -86,27 +150,31 @@ async fn ask_health(watch: &HealthWatch<'_>) -> (bool, String) {
   }
 }
 
-/// The health asked until it answers 0 or the unit gives up starting, however long that takes.
+/// The health asked until it answers 0, the unit gives up starting or the watch's bound passes, whichever
+/// comes first. An ask still running when the bound passes is dropped there.
 pub async fn wait_for_health(watch: &HealthWatch<'_>) -> HealthWait {
   let started = Instant::now();
+  let deadline = started + watch.bound;
   let mut checked = started;
   let mut asks = 0;
-  let ended = |answered: bool, gave_up: bool, asks: u32, last: String| HealthWait {
+  let ended = |end: HealthEnd, asks: u32, last: String| HealthWait {
     command: watch.command.clone(),
-    answered,
+    end,
     waited_ms: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
+    bound_ms: u64::try_from(watch.bound.as_millis()).unwrap_or(u64::MAX),
     asks,
     last,
-    gave_up,
   };
 
   loop {
     asks += 1;
 
-    let (answered, last) = ask_health(watch).await;
+    let Ok((answered, last)) = tokio::time::timeout_at(deadline, (watch.ask)()).await else {
+      return ended(HealthEnd::RanOut, asks, DEPLOY.boot.cut.clone());
+    };
 
     if answered {
-      return ended(true, false, asks, last);
+      return ended(HealthEnd::Answered, asks, last);
     }
 
     if let Some(gave_up) = &watch.gave_up
@@ -115,8 +183,12 @@ pub async fn wait_for_health(watch: &HealthWatch<'_>) -> HealthWait {
       checked = Instant::now();
 
       if gave_up() {
-        return ended(false, true, asks, last);
+        return ended(HealthEnd::GaveUp, asks, last);
       }
+    }
+
+    if Instant::now() >= deadline {
+      return ended(HealthEnd::RanOut, asks, last);
     }
 
     tokio::time::sleep(Duration::from_millis(watch.poll_ms)).await;
@@ -359,11 +431,11 @@ pub fn boot_report(scene: &BootScene) -> Vec<String> {
         ("asks", &wait.asks),
         ("last", &wait.last),
         (
-          "gave_up",
-          &if wait.gave_up {
-            fill_shown(&DEPLOY.boot.gave_up, &[("unit", &scene.unit)])
-          } else {
-            String::new()
+          "end",
+          &match wait.end {
+            HealthEnd::Answered => String::new(),
+            HealthEnd::GaveUp => fill_shown(&DEPLOY.boot.gave_up, &[("unit", &scene.unit)]),
+            HealthEnd::RanOut => fill_shown(&DEPLOY.boot.ran_out, &[("bound", &seconds(wait.bound_ms))]),
           },
         ),
       ],

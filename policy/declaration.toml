@@ -27,6 +27,9 @@ cargo_profile = "release"
 
 [defaults.deploy]
 link = "deploy"
+# How long a deployment waits for the declared health after a restart before it rolls back, in seconds
+# (docs/deploy.md, 「What the deploy run does, in order」).
+health_wait_seconds = 600
 
 [defaults.backup]
 keep = 5

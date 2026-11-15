@@ -6,13 +6,13 @@ use std::cell::{Cell, RefCell};
 use std::path::{Path, PathBuf};
 
 use bmo_testbed_core::policy::deploy::DEPLOY;
-use bmo_testbed_core::policy::fill_shown;
+use bmo_testbed_core::policy::{fill_marks, fill_shown};
 use bmo_testbed_deploy::release::{flip, release_dir};
 use bmo_testbed_deploy::rollback::{
   BootFailure, DeployTree, FailedDeploy, NotRolled, Rollback, ServiceHands, deploy_failure_notice,
   journal_command, roll_back, rolled_back_detail,
 };
-use bmo_testbed_deploy::tree::{DeployRecord, read_deploy_record, short};
+use bmo_testbed_deploy::tree::{DeployRecord, read_deploy_record, short, write_deploy_record};
 
 use crate::stand::{git, mark_built, must};
 
@@ -311,6 +311,51 @@ async fn a_deployment_with_a_command_before_the_start_is_never_rolled_back_by_it
   let notice = deploy_failure_notice(&failed, &outcome);
 
   assert!(notice.lines().nth(1).unwrap().ends_with("The service is down."), "{notice}");
+  assert_eq!(rolled_back_detail(&failed, &outcome), None);
+}
+
+// Two deployments of one repository wait for their services side by side: the later one has flipped the tree
+// and recorded its commit while the earlier one waited, so the earlier one's failure leaves both to it.
+#[tokio::test]
+async fn a_deployment_a_later_one_has_overtaken_touches_nothing() {
+  let at = stand();
+  let later = "c0ffee0000000000000000000000000000000000";
+
+  write_deploy_record(
+    &at.record(),
+    &DeployRecord {
+      commit: later.to_owned(),
+      ..failure(&at.live, &at.failed).written
+    },
+  )
+  .unwrap();
+
+  let services = Services::new();
+  let failed = FailedDeploy {
+    failure: BootFailure::RanOut,
+    ..failure(&at.live, &at.failed)
+  };
+  let outcome = roll_back(&failed, &mut at.tree(&quiet), &services).await;
+  let detail = fill_shown(&DEPLOY.rolling.overtaken, &[("commit", &short(later))]);
+
+  assert_eq!(
+    outcome,
+    Rollback::NotRolled {
+      why: NotRolled::Overtaken,
+      detail: detail.clone(),
+    }
+  );
+  assert!(services.steps.borrow().is_empty());
+  assert_eq!(services.asked.get(), 0);
+  assert_eq!(at.linked(), Path::new("deploy-releases").join(short(&at.failed)));
+  assert_eq!(read_deploy_record(&at.record()).unwrap().commit, later);
+
+  let notice = deploy_failure_notice(&failed, &outcome);
+  let lines: Vec<&str> = notice.lines().collect();
+
+  assert_eq!(lines[0], fill_marks(&DEPLOY.rollback.ran_out, &[("commit", &short(&at.failed))]));
+  assert_eq!(lines[1], fill_marks(&DEPLOY.rollback.overtaken, &[("detail", &detail)]));
+  assert_eq!(lines.len(), 3);
   assert_eq!(rolled_back_detail(&failed, &outcome), None);
 }
 

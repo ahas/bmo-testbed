@@ -61,7 +61,7 @@
   {
     "id": "deploy/deploy-run",
     "title": "Deploy run",
-    "what": "A deploy run in its own unit, by its commit's declaration, reading committed trees only: the line held from gate to build, placed gate and build tried again where the connection breaks, backup, release, quiet, flip, restarts watched, console probed, rolled back where either fails.",
+    "what": "A deploy run in its own unit, by its commit's declaration, reading committed trees only: the line held from gate to build, placed gate and build tried again where the connection breaks, backup, release, quiet, flip, health waited within its bound, console probed, rolled back where either fails.",
     "files": [
       "deploy/src/deployment.rs",
       "deploy/src/line.rs",
@@ -97,7 +97,8 @@
       "로그 분류 슬라이스",
       "배치 기계의 testbed도 같은 릴리스로 자동으로 맞추기",
       "배포 17건을 한꺼번에 걸면",
-      "커밋된 트리"
+      "커밋된 트리",
+      "health 대기"
     ],
     "needs": [
       "core/declaration",
@@ -116,7 +117,7 @@
       "core/main-branch"
     ],
     "base": "2d06a03b2d7ea64819d32de670c8d0c21c2d0dc5",
-    "changed": 1794681897879
+    "changed": 1794775341627
   },
   {
     "id": "deploy/hosted-deploy-tool",
@@ -159,7 +160,7 @@
   {
     "id": "deploy/releases-and-rollback",
     "title": "Releases and rollback",
-    "what": "The deploy tree as a link to a release worktree, flipped by one rename; adoption of a plain directory, unit links by their deploy marks and the units marked for the placed machine, retired trees, guarded removal, the deploy record, and rolling back to the release before.",
+    "what": "The deploy tree as a link to a release worktree, flipped by one rename; adoption of a plain directory, unit links by their deploy marks and the units marked for the placed machine, retired trees, guarded removal, the deploy record, and rolling back to the release before where no later run took it.",
     "files": [
       "deploy/src/release.rs",
       "deploy/src/tree.rs",
@@ -181,6 +182,6 @@
       "core/policy-loader"
     ],
     "base": "2a697e7005d23d4201403e8c2b1af370614661c3",
-    "changed": 1794550648007
+    "changed": 1794775341621
   }
 ]

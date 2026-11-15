@@ -524,12 +524,19 @@ flowchart TD
       quiet's 0 and the stop is drained like any other. A unit's drain is its own repository's; the
       deployment sends the stop through the service manager and waits for the unit to end.
     - With `--before-start <command>`, stop the `bot` service, run the command, then start it.
-    - Wait until the declared health answers, however long that takes, or until the `bot` service gives
-      up starting: systemd holds it failed or inactive, or has restarted it since the wait began, which
-      says the process the restart started has ended. Then read the unit once: up is active and running.
-      A `bot` service with no health declared is up where that reading finds it running.
-    - A unit that will not restart, one that gives up starting before its health answers, or one not
-      read running once it came up is rolled back (「Rollback」).
+    - Wait until the declared health answers 0, until the `bot` service gives up starting, or until the
+      wait's bound passes, whichever comes first. The service gives up starting where systemd holds it
+      failed or inactive, or has restarted it since the wait began, which says the process the restart
+      started has ended. The bound is the declaration's `health_wait_seconds`, else the testbed's policy,
+      ten minutes, counted from the start of the wait: a service that stays running and never says it is
+      ready, such as one waiting on a credential nobody has given it, is held to it like one that does not
+      start. An ask of the health is waited for until it ends, and one still running when the bound passes
+      is ended there with every process it started. Then read the unit once: up is active and running. A
+      `bot` service with no health declared is up where that reading finds it running.
+    - A unit that will not restart, one that gives up starting before its health answers, one whose health
+      has not answered when the bound passes, or one not read running once it came up is rolled back
+      (「Rollback」). The deploy output says which of them it was, how long it waited and what the last
+      ask heard.
     - Then the `retire` units go.
 12. **Probe the console face,** where the declaration brings a console screen (`docs/declaration.md`,
     `[deploy.console]`): the probe asks the service as a console would, point by point, and the first
@@ -663,9 +670,10 @@ flowchart TD
 ## Rollback
 
 - **When:** a unit cannot be started or restarted, the `bot` service gives up starting before its health
-  answers, it is not read running once it came up, the console probe refuses it, or a step after the health
-  fails. A repository with no `bot` service has nothing to restart, so a probe or a step after the health
-  that fails there fails the deployment with the tree left on the new release, and the output says so.
+  answers, its health has not answered when the wait's bound passes, it is not read running once it came
+  up, the console probe refuses it, or a step after the health fails. A repository with no `bot` service
+  has nothing to restart, so a probe or a step after the health that fails there fails the deployment with
+  the tree left on the new release, and the output says so.
 - **What the deploy output says first,** so the reason survives the rollback: what was waited for and
   what the last ask heard; the unit as systemd holds it, its state, its main process, its restarts and
   last exit status; the machine's load and its pressure stalls; the tail of the service's journal since
@@ -677,13 +685,18 @@ flowchart TD
   3. writes that commit back as the deployment record, with a line in the log saying it was a rollback;
   4. reloads the units and restarts the service, with the `binary` units whose binaries differ between
      the two releases;
-  5. waits for the health again and reads the unit the same way.
+  5. waits for the health again, under the same bound, and reads the unit the same way.
 - **The release tree and the service manager are reached through two hands,** one for the tree and one
   for the services, so a test drives a rollback with stand-ins for both.
 - **It moves the code alone.** Data the failed release wrote stays; the backup the deployment took
   before anything changed stays for the case where that is not tolerable.
 - **What is not rolled back:** a first deployment, a deployment with `--before-start`, and a release
   that no longer stands or a flip that fails, where the service is left down and the event says so.
+- **Nor a deployment a later one has overtaken.** Deployments of one repository pass the line one after
+  the other but wait for their services side by side, so a later one can flip the tree, write its record
+  and restart the service while an earlier one still waits. Where the deployment record no longer names
+  the commit that failed, the tree and the service are the later deployment's: the earlier one fails,
+  saying which commit the record names now, and leaves them untouched, stopping nothing.
 - **It sends a `deploy-rolled-back` event** naming the commit that failed, why, the commit rolled back
   to, whether the service answers now and the journal to read, and the deployment still fails with a
   `deploy-failed` event.
