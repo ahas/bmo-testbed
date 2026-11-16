@@ -1,7 +1,7 @@
 //! The machine's turn (docs/testbed.md, 「The turn」): the queue hands a lock out in the order its takers
 //! asked, the front ahead of everyone and the next behind the front, a waiter waiting until the lock is let
 //! go, and a command inside a turn its caller holds running at once; a lane's seats handed out from its one
-//! queue, a taker of every seat holding them all, and a seat beside a held one only while memory is spare.
+//! queue, a deployment's own seat beside them, and a seat beside a held one only while memory is spare.
 
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -264,7 +264,8 @@ fn seat_wait<'a>(holder: &str, wait_on: Option<WaitOn<'a>>) -> SeatWait<'a> {
       poll: Some(Duration::from_millis(5)),
       ..LockWait::default()
     },
-    every: false,
+    deployment_seat: None,
+    front: false,
     spare: &spare,
   }
 }
@@ -314,10 +315,18 @@ fn a_seated_ticket_stands_ahead_of_nobody_and_the_unseated_ones_keep_their_order
   assert!(third.join().unwrap().is_some() && fourth.join().unwrap().is_some());
 }
 
-// "a deployment takes one seat, as any command does: standing first it takes the next seat that frees, ahead
-// of everyone"
+// A wide lane of `seats` seats, as `seated` names it, for a caller at the front.
+fn at_front(seats: usize, free: u64) -> Env {
+  let mut env = seated(seats, free);
+
+  env.insert(FRONT_VARIABLE.to_owned(), "1".to_owned());
+  env
+}
+
+// "it takes the lane's deployment's seat first, which no other caller takes ... Where another deployment holds
+// it, it takes the next of the lane's own seats that frees, ahead of everyone"
 #[test]
-fn a_taker_at_the_front_takes_the_next_seat_ahead_of_everyone_and_runs_beside_the_others() {
+fn a_deployment_runs_at_once_in_its_own_seat_and_a_second_takes_the_next_seat_ahead_of_everyone() {
   let dir = tempfile::tempdir().unwrap();
   let lock = lock_in(dir.path());
   let first = take_turn(&ask(&lock, seated(2, 0)));
@@ -326,30 +335,71 @@ fn a_taker_at_the_front_takes_the_next_seat_ahead_of_everyone_and_runs_beside_th
 
   until("the ordinary ticket", || queue_tickets(&lock).len() == 3);
 
-  let mut at_front = seated(2, 0);
+  let deployment = take_turn(&ask(&lock, at_front(2, 0)));
 
-  at_front.insert(FRONT_VARIABLE.to_owned(), "1".to_owned());
+  assert!(deployment.had(), "every seat of the lane held and a ticket waiting, it runs at once");
+  assert_eq!(deployment.width(24), 12, "one seat's share");
+  assert_eq!(read_queue(&lock).holders.len(), 3, "beside both seats' holders");
 
-  let front = aside(&lock, at_front);
+  let other = aside(&lock, at_front(2, 0));
 
-  until("the front ticket", || queue_tickets(&lock).iter().any(|one| one.front));
+  until("the second deployment's ticket", || {
+    queue_tickets(&lock).iter().filter(|one| one.front).count() == 2
+  });
   a_while();
-  assert!(!front.is_finished() && !behind.is_finished());
+  assert!(
+    !other.is_finished() && !behind.is_finished(),
+    "its seat held, the second waits for a lane's seat"
+  );
 
   drop(first);
 
-  let front = front.join().unwrap();
+  let other = other.join().unwrap();
 
-  assert!(front.had());
-  assert_eq!(front.width(24), 12, "one seat's share");
-  assert_eq!(read_queue(&lock).holders.len(), 2, "beside the other seat's holder");
+  assert!(other.had());
   a_while();
   assert!(!behind.is_finished(), "the ordinary ticket asked first still waits behind the front");
 
   drop(second);
 
   assert!(behind.join().unwrap().had());
-  drop(front);
+  drop((deployment, other));
+}
+
+// "a command that finds that number holding any seat of its lane takes the turn as its own": the deployment's
+// seat among them, so a deployment's step runs its builds inside the seat it took
+#[test]
+fn a_command_under_a_deployment_s_seat_runs_inside_it() {
+  let dir = tempfile::tempdir().unwrap();
+  let lock = lock_in(dir.path());
+  let deployment = take_turn(&ask(&lock, at_front(2, 0)));
+  let (_, pid) = deployment.held_variable().unwrap();
+  let mut under = seated(2, 0);
+
+  under.insert(HELD_VARIABLE.to_owned(), pid);
+
+  assert!(matches!(
+    take_turn(&ask(&lock, under)),
+    TestbedTurn::Inside {
+      seats: Seats { held: 1, of: 2 }
+    }
+  ));
+}
+
+// "the memory gate holds for its seat as for any other"
+#[test]
+fn short_of_memory_a_deployment_waits_for_a_held_seat_to_free() {
+  let dir = tempfile::tempdir().unwrap();
+  let lock = lock_in(dir.path());
+  let lone = take_turn(&ask(&lock, seated(2, 1_000_000)));
+  let deployment = aside(&lock, at_front(2, 1_000_000));
+
+  a_while();
+  assert!(!deployment.is_finished());
+
+  drop(lone);
+
+  assert!(deployment.join().unwrap().had());
 }
 
 // "a seat beside a held one is taken only while the machine has memory to spare ... or where no seat of the
@@ -374,17 +424,13 @@ fn short_of_memory_a_seat_is_taken_only_where_no_seat_is_held() {
 }
 
 // "a command that finds that number holding any seat of its lane takes the turn as its own, in the holder's
-// seats", however full the line is: here a taker at the front waits for the lane's one seat it holds
+// seats", however full the line is: here a taker waits for the lane's one seat it holds
 #[test]
 fn a_command_inside_a_held_seat_runs_at_once_on_its_holder_s_share() {
   let dir = tempfile::tempdir().unwrap();
   let lock = lock_in(dir.path());
   let holder = take_turn(&ask(&lock, seated(1, 0)));
-  let mut at_front = seated(1, 0);
-
-  at_front.insert(FRONT_VARIABLE.to_owned(), "1".to_owned());
-
-  let waiter = aside(&lock, at_front);
+  let waiter = aside(&lock, seated(1, 0));
 
   until("the waiter's ticket", || queue_tickets(&lock).len() == 2);
 

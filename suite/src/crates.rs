@@ -4,6 +4,7 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
+use bmo_testbed_core::turn::{Env, process_env, stands_at_front};
 use serde_json::Value;
 
 /// The paths at a checkout's root that every crate stands on: the workspace's manifest, its lockfile and
@@ -140,6 +141,10 @@ pub fn cargo_target_root() -> PathBuf {
 /// The file in a checkout's own target directory naming the checkout's path, which the prune reads.
 pub const CHECKOUT_RECORD_NAME: &str = "checkout-root";
 
+/// The mark in a checkout's directory under the build root saying a deployment has built there, which the
+/// ceiling's enforcement takes last (docs/deploy.md, 「The Cargo build directory」).
+pub const DEPLOYMENT_MARK_NAME: &str = "deployment-checkout";
+
 /// The name of the checkout's own target directory: the checkout's directory and a hash of its whole path,
 /// so two checkouts with one directory name stay apart.
 pub fn checkout_target_name(root: &Path) -> String {
@@ -181,6 +186,16 @@ pub(crate) fn on_path(name: &str) -> Option<PathBuf> {
   })
 }
 
+/// The deployment's mark written into a checkout's directory under the build root, where `env` stands its
+/// caller at the front: a deployment builds there.
+pub fn mark_deployment_checkout(target: &Path, env: &Env) {
+  let mark = target.join(DEPLOYMENT_MARK_NAME);
+
+  if stands_at_front(env) && !mark.exists() {
+    put_in_place(&mark, |made| std::fs::write(made, ""));
+  }
+}
+
 /// The checkout's workspace wrapper: a link to `env`, which Cargo mixes into the workspace crates' output
 /// names so each checkout's crates stay apart while the dependencies are shared. It is the link committed
 /// beside the checkout's Cargo configuration, by the path Cargo reads it by in a build typed by hand —
@@ -207,7 +222,8 @@ fn compiler_wrapper(root: &Path, target: &Path) -> PathBuf {
 
 /// The environment Cargo builds in for the checkout at `root`: the checkout's own directory under the build root
 /// as its build and target directory at once, its workspace wrapper, and the toolchain's homes. The checkout's
-/// path is written into its directory, which the prune reads.
+/// path is written into its directory, which the prune reads, and so is the deployment's mark where this process
+/// stands at the front.
 pub fn cargo_environment(root: &Path) -> Vec<(String, String)> {
   let target = checkout_target_dir(root);
   let checkout = resolved(root).to_string_lossy().into_owned();
@@ -216,6 +232,8 @@ pub fn cargo_environment(root: &Path) -> Vec<(String, String)> {
   if std::fs::read_to_string(&record).ok().as_deref() != Some(checkout.as_str()) {
     put_in_place(&record, |made| std::fs::write(made, &checkout));
   }
+
+  mark_deployment_checkout(&target, &process_env());
 
   let wrapper = compiler_wrapper(root, &target);
 
@@ -384,13 +402,44 @@ pub fn crate_test_args(name: &str) -> Vec<String> {
   ["test", "--locked", "-p", name].map(str::to_owned).to_vec()
 }
 
-/// A crate's library's own tests alone, in the words of its whole tests and so with their features, which
-/// a build of the whole after them finds built (docs/suite.md, 「Heavy units run in a lane of one」).
-pub fn crate_library_test_args(name: &str) -> Vec<String> {
-  let mut args = crate_test_args(name);
+// The words naming each of the crates `names`, so one Cargo command selects them all.
+fn selecting(names: &[&str]) -> impl Iterator<Item = String> {
+  names.iter().flat_map(|name| ["-p".to_owned(), (*name).to_owned()])
+}
 
-  args.push("--lib".to_owned());
-  args
+/// The tests of every crate `names` built by one command and not run, Cargo reporting what it built as JSON on
+/// its standard output, so each dependency compiles once with the features the crates ask for together
+/// (docs/suite.md, 「Heavy units run in a lane of one」).
+pub fn crates_build_args(names: &[&str]) -> Vec<String> {
+  ["test", "--locked", "--no-run", "--message-format=json-render-diagnostics"]
+    .map(str::to_owned)
+    .into_iter()
+    .chain(selecting(names))
+    .collect()
+}
+
+/// The doc tests of every crate `names`, selected as their build selected them, so they stand on what it built.
+pub fn crates_doc_test_args(names: &[&str]) -> Vec<String> {
+  ["test", "--locked", "--doc"]
+    .map(str::to_owned)
+    .into_iter()
+    .chain(selecting(names))
+    .collect()
+}
+
+/// What Cargo hands a test program it runs, handed by a unit running the program itself: the Cargo program, and
+/// the folder, manifest and name of the package the program is for.
+pub fn crate_program_environment(cargo: &str, folder: &Path, name: &str) -> Vec<(String, String)> {
+  let manifest = folder.join("Cargo.toml");
+
+  [
+    ("CARGO", cargo.to_owned()),
+    ("CARGO_MANIFEST_DIR", folder.to_string_lossy().into_owned()),
+    ("CARGO_MANIFEST_PATH", manifest.to_string_lossy().into_owned()),
+    ("CARGO_PKG_NAME", name.to_owned()),
+  ]
+  .map(|(variable, value)| (variable.to_owned(), value))
+  .to_vec()
 }
 
 /// A crate's binaries as the testkit builds them: that crate alone, for the same reason as its tests.

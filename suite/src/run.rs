@@ -24,8 +24,8 @@ use bmo_testbed_core::witness::{RunBegun, RunEnded, RunVerdict, RunWitness};
 
 use crate::cargo::{HeldLock, cargo_verb_line};
 use crate::crates::{
-  CrateDeclaration, cargo_environment, cargo_program, crate_build_args, crate_library_test_args,
-  crate_test_args, set_by_cargo, workspace_crates,
+  CrateDeclaration, cargo_environment, cargo_program, crate_build_args, crate_program_environment,
+  crate_test_args, crates_build_args, crates_doc_test_args, set_by_cargo, workspace_crates,
 };
 use crate::fence::{LiveClear, LiveFence, clear_fence, fence_limits, fence_suite, fenced_build_jobs};
 use crate::log::tally_of;
@@ -34,6 +34,7 @@ use crate::selection::{
   Layout, Selection, changed_paths, glob_matches, select_packages, selected_tests, selection_lines,
 };
 use crate::sweep::{SweepPlan, largest_first, sweep};
+use crate::test_programs::TestPrograms;
 use crate::test_server::{template_name, test_postgres, test_server_up};
 use crate::tool_checks::{CheckedTool, package_check};
 use crate::unit::{PerTest, UnitCommand, UnitRun, run_unit};
@@ -531,19 +532,24 @@ fn run_held(
       Vec::new()
     }
   };
-  let crates: Vec<CrateDeclaration> = match &selected {
-    Some((layout, chosen)) => picked_units(
-      &layout
-        .crates
-        .iter()
-        .filter(|one| chosen.crates.contains_key(&one.name))
-        .cloned()
-        .collect::<Vec<_>>(),
-      |one| one.dir.as_str(),
-      &ask.picked,
-    ),
-    None => picked_units(&all_crates(), |one| one.dir.as_str(), &ask.picked),
+  let run_crates: Vec<CrateDeclaration> = match &selected {
+    Some((layout, chosen)) => layout
+      .crates
+      .iter()
+      .filter(|one| chosen.crates.contains_key(&one.name))
+      .cloned()
+      .collect(),
+    None => all_crates(),
   };
+  let crates = picked_units(&run_crates, |one| one.dir.as_str(), &ask.picked);
+  // The crates' doc tests run where the run's crates hold a library, over the crates picked, or over every crate
+  // of the run where the doc tests are picked by their own name.
+  let doc_tests_picked = ask.picked.contains(&SUITE.lines.doc_tests);
+  let built_crates: &[CrateDeclaration] = if doc_tests_picked { &run_crates } else { &crates };
+  let doc_tests = (ask.picked.is_empty() || doc_tests_picked)
+    .then(|| built_crates.iter().any(|one| one.library))
+    .filter(|has_library| *has_library)
+    .map(|_| SUITE.lines.doc_tests.clone());
   // Every project of its own the checkout holds, which keeps a nested project's files out of the one holding
   // it; and the ones the run checks.
   let every_project: Vec<OwnProject> = match &selected {
@@ -610,25 +616,28 @@ fn run_held(
     .iter()
     .filter(|word| {
       !crate_units.contains_key(*word)
+        && **word != SUITE.lines.doc_tests
         && !project_units.contains_key(*word)
         && !tool_units.contains_key(*word)
     })
     .collect();
 
   // Where the run tests a crate, the workspace's lock with its path packages brought to their manifests from
-  // before the first build to the run's end: a crate's tests run Cargo holding its lock outside the Cargo
-  // verb, which aligns the lock around its own command alone (docs/deploy.md, 「The Cargo build directory」).
+  // before the first build to the run's end: the doc tests, and a crate whose build made no test program, run
+  // Cargo holding its lock outside the Cargo verb, which aligns the lock around its own command alone
+  // (docs/deploy.md, 「The Cargo build directory」).
   // It is put back as it was found once the run ends.
-  let held_lock = crates.first().and_then(|one| HeldLock::aligned(root, &crate_test_args(&one.name)));
+  let held_lock = built_crates
+    .first()
+    .and_then(|one| HeldLock::aligned(root, &crate_test_args(&one.name)));
 
   if let Some(held) = &held_lock {
     say(&held.said());
   }
 
-  // What the run's Rust stands on, built once before any guard is counted, each crate by itself in the very
-  // words its run or the testkit uses, through the repository's Cargo verb, which removes what the build
-  // superseded.
-  let prebuild = |what: &str, crate_name: &str, args: Vec<String>| {
+  // What the run's Rust stands on, built once before any guard is counted, through the repository's Cargo verb,
+  // which removes what the build superseded: what it reported on its standard output where it passed.
+  let prebuild = |what: &str, crate_name: &str, args: Vec<String>| -> Option<String> {
     let line = cargo_verb_line(&args);
     let built = Command::new(&line[0])
       .args(&line[1..])
@@ -636,9 +645,13 @@ fn run_held(
       .envs(handed.iter().map(|(name, value)| (name, value)))
       .stdin(Stdio::null())
       .output();
-    let (code, said) = match built {
-      Ok(done) => (done.status.code().unwrap_or(1), String::from_utf8_lossy(&done.stderr).into_owned()),
-      Err(why) => (127, why.to_string()),
+    let (code, said, reported) = match built {
+      Ok(done) => (
+        done.status.code().unwrap_or(1),
+        String::from_utf8_lossy(&done.stderr).into_owned(),
+        done.status.success().then(|| String::from_utf8_lossy(&done.stdout).into_owned()),
+      ),
+      Err(why) => (127, why.to_string(), None),
     };
 
     say(&format!(
@@ -648,22 +661,21 @@ fn run_held(
         &[("what", what), ("crate", crate_name), ("code", &code.to_string())]
       )
     ));
+
+    reported
   };
 
-  // A library and its own tests compile the same source twice, a crate's two heaviest compiles, which Cargo
-  // would start side by side; the library's tests go first and alone, so the two never meet in the fence.
-  let no_run = |mut args: Vec<String>| {
-    args.push("--no-run".to_owned());
-    args
+  // Every crate tested built by one command, so each dependency compiles once with the features the crates ask
+  // for together, and its report read for each crate's test programs; none where it failed, which leaves each
+  // crate's unit to Cargo's own test of it.
+  let names: Vec<&str> = built_crates.iter().map(|one| one.name.as_str()).collect();
+  let programs = if names.is_empty() {
+    TestPrograms::default()
+  } else {
+    prebuild(&SUITE.lines.tests, &names.join(&SUITE.lines.between_crates), crates_build_args(&names))
+      .map(|reported| TestPrograms::reported(&reported))
+      .unwrap_or_default()
   };
-
-  for one in &crates {
-    if one.library {
-      prebuild(&SUITE.lines.library_tests, &one.name, no_run(crate_library_test_args(&one.name)));
-    }
-
-    prebuild(&SUITE.lines.tests, &one.name, no_run(crate_test_args(&one.name)));
-  }
 
   // The browser test files each project of its own the run checks declares for itself, each with the unit of
   // its project: they run in the browser lane once the project's own check, which readies the project, has
@@ -730,6 +742,7 @@ fn run_held(
   let mut crate_files: Vec<String> = crates.iter().map(|one| unit_of(&one.dir)).collect();
 
   files.append(&mut crate_files);
+  files.extend(doc_tests.iter().cloned());
   files.extend(project_browser.iter().map(|(file, _)| file.clone()));
   files.extend(largest_first(in_scope, |file| {
     std::fs::metadata(root.join(file)).map_or(0, |held| held.len())
@@ -802,14 +815,56 @@ fn run_held(
       env.extend(cargo_env.iter().cloned());
       env.push(("HOME".to_owned(), home.to_string_lossy().into_owned()));
 
+      let folder = root.join(&one.dir);
+      let its_programs = programs.of(&folder);
+      // Its test programs as the build made them, run as Cargo runs them; Cargo's own test of the crate where the
+      // build made none, so a build that failed fails the unit with the crate's own errors.
+      let (program, args, cwd) = if its_programs.is_empty() {
+        (cargo.clone(), crate_test_args(&one.name), root.to_path_buf())
+      } else {
+        env.extend(crate_program_environment(&cargo, &folder, &one.name));
+
+        (
+          "sh".to_owned(),
+          ["-c", &SUITE.lines.crate_programs, "sh"]
+            .into_iter()
+            .map(str::to_owned)
+            .chain(its_programs.iter().map(|program| program.to_string_lossy().into_owned()))
+            .collect(),
+          folder,
+        )
+      };
+
       return UnitCommand {
-        program: cargo.clone(),
-        args: crate_test_args(&one.name),
-        cwd: root.to_path_buf(),
+        program,
+        args,
+        cwd,
         env,
         home: Some(home),
         silence: Silence::default(),
         // Rust's test harness keeps no per-test limit, so the run keeps it over the crate's tests.
+        per_test: Some(PerTest {
+          language: &Cargo,
+          limit: Duration::from_secs(per_test_seconds),
+        }),
+      };
+    }
+
+    if doc_tests.as_ref() == Some(file) {
+      let home = std::env::temp_dir().join(format!("bmo-testbed-doc-tests-home-{}", std::process::id()));
+      let _ = std::fs::create_dir_all(&home);
+      let mut env = base;
+
+      env.extend(cargo_env.iter().cloned());
+      env.push(("HOME".to_owned(), home.to_string_lossy().into_owned()));
+
+      return UnitCommand {
+        program: cargo.clone(),
+        args: crates_doc_test_args(&names),
+        cwd: root.to_path_buf(),
+        env,
+        home: Some(home),
+        silence: Silence::default(),
         per_test: Some(PerTest {
           language: &Cargo,
           limit: Duration::from_secs(per_test_seconds),
@@ -875,6 +930,7 @@ fn run_held(
     } else if project_units.contains_key(file)
       || tool_units.contains_key(file)
       || crate_units.contains_key(file)
+      || doc_tests.as_ref() == Some(file)
     {
       Some("heavy".to_owned())
     } else {

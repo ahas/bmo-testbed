@@ -7,14 +7,16 @@
   tests, checks or builds, a browser run.
 - **Two lanes** (「The lanes」): the wide lane, a few seats sharing the machine's width, and the
   narrow lane beside it, one seat on a quarter of it. A command takes one seat and runs on its share
-  of the lane's width; a deployment stands ahead of every other command and takes one seat as they do. A further
-  seat is taken only while the machine has memory to spare (「Memory」), so commands side by side never
-  run it out of memory and into swap, where a sound change fails its check for a run it never saw.
+  of the lane's width; a deployment stands ahead of every other command and has a seat of its own in
+  each lane besides. A further seat is taken only while the machine has memory to spare (「Memory」), so
+  commands side by side never run it out of memory and into swap, where a sound change fails its check
+  for a run it never saw.
 - **A seat's holder runs on its share of the threads.** Each language's runner is handed the share
   (「The width」), so commands that use a few threads each run side by side instead of one after the
   other.
-- **A deployment stands at the front** (「The front of the line」), so its wait is the rest of what
-  each lane's holders are running, never the line behind it.
+- **A deployment stands at the front, in a seat of its own** (「The front of the line」), so it never
+  waits behind the line, and waits for a running command only where memory is short or another
+  deployment holds its seat.
 - **The close holding its repository's close line stands next** (「Next after the front」), behind a
   deployment and ahead of every other caller.
 - **Only what needs the machine stands in line.** A light command runs where it stands, beside any
@@ -37,7 +39,7 @@ flowchart TD
   FT --> W{turn come?}
   NT --> W
   OT --> W
-  W -- yes --> H[holds a seat, or every seat for a deployment]
+  W -- yes --> H[holds a seat, a deployment its own first]
   H --> R
   W -- harness gone --> K[ends: not run]
   W -- not yet --> W
@@ -68,8 +70,7 @@ flowchart TD
   saves.
 - **A close holds a seat of the wide lane through each part of its check.** It stands in its
   repository's close line (「The close line」), and inside it holds one seat through its static check
-  and again through its suite, standing next after the front; a deployment waiting at the front goes
-  in between the two parts.
+  and again through its suite, standing next after the front.
 
 ## A shell hook sends a harness's heavy command to it
 
@@ -87,8 +88,11 @@ flowchart TD
 
 - **The wide lane** is the machine's whole width, shared by its seats: `seats` in the lane policy,
   three, and `BMO_TESTBED_SEATS` names another number for a machine or a test. A command takes one
-  seat, a deployment among them; a check held whole takes every seat.
+  seat.
 - **The narrow lane** runs beside it on a quarter of the width, one seat, one command at a time.
+- **Each lane has a deployment's seat besides,** which only a caller at the front takes (「The front of
+  the line」). It is not counted among the lane's seats: not in the share of the width a holder runs
+  on, and not where a lane is asked whether every seat is held.
 - **Why seats:** most heavy commands are a check or a build of one repository that keeps one or two
   threads busy for seconds, so holding the whole machine for each leaves most threads idle while a
   line of the same waits for minutes. A few seats side by side keep the threads busy; the memory gate
@@ -102,15 +106,15 @@ flowchart TD
 
 - **A seat is one lock in the machine's temporary directory.** The wide lane's first seat is
   `bmo-testbed.lock`, its further seats `bmo-testbed-seat2.lock` and on beside it, and the narrow
-  lane's one seat `bmo-testbed-narrow.lock`. `BMO_TESTBED_LOCK` names another first wide seat, the
+  lane's one seat `bmo-testbed-narrow.lock`. A lane's deployment's seat stands beside its first seat
+  with `-front` before `.lock`: `bmo-testbed-front.lock` and `bmo-testbed-narrow-front.lock`.
+  `BMO_TESTBED_LOCK` names another first wide seat, the
   rest beside it, which is how a test holds a turn of its own. A taker of the first seat's lock alone,
   outside the seats, never marks its ticket seated, so everyone behind it waits until it lets go.
 - **The lane's one queue hands its seats out in the order asked.** Only the first ticket not yet
   seated may take a seat: a ticket that has taken its seat is marked seated and stands ahead of
-  nobody. The first unseated ticket takes any free seat, where the memory gate lets it (「Memory」).
-- **A taker of every seat** (「A check held whole」) standing first takes the
-  seats as they free and keeps them until it holds all, then runs. Everyone behind it waits, so it is
-  never starved.
+  nobody. The first unseated ticket takes any free seat open to it, where the memory gate lets it
+  (「Memory」).
 - **Each waiter's ticket says who it is:** the caller's opaque scope where `BMO_TESTBED_SCOPE` names
   one, its checkout, the command, its process and when it asked.
 - **The holder writes a record beside each seat it holds** naming itself, its process and when the
@@ -124,11 +128,16 @@ flowchart TD
 ## The front of the line
 
 - **A deployment stands at the front of every lane,** it and everything it starts. Its ticket stands
-  ahead of every other ticket, so it takes the lane the moment its holders let go; deployments among
-  themselves keep the order they asked in.
-- **It takes one seat, as any command does:** standing first it takes the next seat that frees, ahead of
-  everyone, and the commands in the other seats run on beside it, so no seat stands idle while it waits.
-- **The holders are never cut.** Standing at the front waits for each seat all the same.
+  ahead of every other ticket; deployments among themselves keep the order they asked in.
+- **It takes the lane's deployment's seat first,** which no other caller takes, so the commands holding
+  the lane's seats never stand in its way: each heavy command of a deployment, its static check's steps
+  and its suite among them, finds that seat free and runs at once. Where another deployment holds it, it
+  takes the next of the lane's own seats that frees, ahead of everyone.
+- **It waits for a running command only where memory is short:** the memory gate holds for its seat
+  as for any other (「Memory」), so a deployment waits at most for what is already running to free
+  enough memory, never for a command queued behind it.
+- **The holders are never cut.** A deployment runs beside them, on one seat's share of the width
+  (「The width」).
 - **A deployment says so through `BMO_TESTBED_FRONT`,** set by the deployment's verbs for themselves;
   a caller inside a harness's call is never stood at the front, whatever it sets.
 
@@ -158,21 +167,12 @@ flowchart TD
   (`docs/deploy.md`, 「What the deploy run does, in order」, step 3), so the suite runs once per commit.
 - **A close waits its turn out** while its harness lives, and leaves the line once its harness is gone.
 - **It holds a seat of the wide lane through each part of its check** while it holds the line, and
-  lets the seat go while it rebases, lands and writes down. Between the two parts a deployment waiting
-  at the front goes first.
+  lets the seat go while it rebases, lands and writes down. Between the two parts a deployment still
+  waiting at the front, its own seat held by another deployment, goes first.
 - **While it waits it says where it stands** every thirty seconds: how many closes stand ahead and
   which one holds the line.
 - What a close does inside its turn is its consumer's; the testbed supplies the line, the hold on the
   wide lane and the status.
-
-## A check held whole
-
-- **A deployment's check takes every lane once and holds them to its end:** from its static check's
-  first step to the end of its suite, or of the static check where its suite is left out, so no other
-  heavy command comes in between its steps. A taker of every lane together takes every seat of each.
-- **Where its suite is placed on another machine, it lets the lanes go first,** since that machine's
-  own testbed has the turn there.
-- **A check that fails lets them go at once.**
 
 ## Waiting never fails a command
 
@@ -255,7 +255,7 @@ flowchart TD
   unseated ticket takes a free seat where the memory available, as the kernel's `MemAvailable` says
   it, is at least `seat_free_gigabytes` in the lane policy, four, or where no seat of the lane is held
   at all, so a lone command always runs. `BMO_TESTBED_SEAT_FREE_GB` names another amount for a machine
-  or a test. A taker of every seat runs alone once it holds them, so the gate does not stand in its way.
+  or a test. A deployment's seat is a seat beside the held ones like any other.
 - **A command the kernel killed for want of memory runs again,** at most four runs in all: before each
   further run the testbed waits at least thirty seconds, then until six gigabytes are free, however long
   that takes, saying every ten minutes that it still waits. The Cargo
@@ -274,7 +274,7 @@ flowchart TD
   anything that is not a positive whole number means the default.
 - **The narrow lane's width is a quarter of it,** and never less than one.
 - **A holder runs on its share of the lane's width:** the width divided by the lane's seats, never
-  less than one, for each seat it holds, and the whole width where it holds every seat. A command
+  less than one, for each seat it holds, a deployment's seat counted as one of them. A command
   inside a held turn runs on its holder's share.
 - **Each language hands the share to its runner its own way** (「Languages」): a `bun test` worker
   count, Cargo's jobs, Node's test concurrency, Vitest's and Jest's workers. A command that already

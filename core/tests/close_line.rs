@@ -14,7 +14,9 @@ use bmo_testbed_core::close_line::{
 use bmo_testbed_core::policy::close_line::CLOSE_LINE;
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::queue::{now_ms, queue_tickets};
-use bmo_testbed_core::turn::{Env, FRONT_VARIABLE, Lane, NEXT_VARIABLE, TurnAsk, read_queue, take_turn};
+use bmo_testbed_core::turn::{
+  Env, FRONT_VARIABLE, Lane, NEXT_VARIABLE, SEATS_VARIABLE, TurnAsk, read_queue, take_turn,
+};
 use serde_json::{Value, json};
 
 const ROLE: &str = "BMO_CLOSE_LINE_ROLE";
@@ -237,14 +239,15 @@ fn standing(line: &Path, closes: &mut [Child]) -> usize {
   queue_tickets(line).len() + closes.iter_mut().filter_map(|close| close.try_wait().ok().flatten()).count()
 }
 
-// "holds the wide lane through a part of the check, and lets a deployment waiting at the front in before
-// the next"
+// "holds the wide lane through a part of the check, and lets a deployment still waiting at the front, its own
+// seat held by another deployment, in before the next": in a lane of one seat
 #[test]
 fn holds_the_wide_lane_and_lets_a_deployment_at_the_front_in_before_the_next() {
   let dir = tempfile::tempdir().unwrap();
   let lock = dir.path().join("testbed.lock");
   let env = Env::from([
     ("BMO_TESTBED_LOCK".to_owned(), lock.to_string_lossy().into_owned()),
+    (SEATS_VARIABLE.to_owned(), "1".to_owned()),
     (NEXT_VARIABLE.to_owned(), "1".to_owned()),
   ]);
   let said = std::sync::Mutex::new(Vec::<String>::new());
@@ -260,8 +263,21 @@ fn holds_the_wide_lane_and_lets_a_deployment_at_the_front_in_before_the_next() {
   let order = std::sync::Mutex::new(Vec::<&str>::new());
   let front = Env::from([
     ("BMO_TESTBED_LOCK".to_owned(), lock.to_string_lossy().into_owned()),
+    (SEATS_VARIABLE.to_owned(), "1".to_owned()),
     (FRONT_VARIABLE.to_owned(), "1".to_owned()),
   ]);
+  let in_its_seat = take_turn(&TurnAsk {
+    command: "another deployment's check".to_owned(),
+    lane: Lane::Wide,
+    say: &quiet,
+    path: Some(lock.clone()),
+    env: front.clone(),
+    checkout: String::new(),
+    poll: Some(POLL),
+    notice_seconds: None,
+  });
+
+  assert!(in_its_seat.had());
 
   std::thread::scope(|scope| {
     let deployment = scope.spawn(|| {
@@ -281,7 +297,7 @@ fn holds_the_wide_lane_and_lets_a_deployment_at_the_front_in_before_the_next() {
       drop(turn);
     });
 
-    until(|| queue_tickets(&lock).iter().any(|one| one.front));
+    until(|| queue_tickets(&lock).iter().any(|one| one.front && !one.seated));
     assert!(stretch.ready());
     order.lock().unwrap().push("close");
     deployment.join().unwrap();
@@ -291,6 +307,7 @@ fn holds_the_wide_lane_and_lets_a_deployment_at_the_front_in_before_the_next() {
   assert!(said.lock().unwrap().contains(&CLOSE_LINE.stretch.front_first));
 
   stretch.release();
+  drop(in_its_seat);
   assert_eq!(read_queue(&lock).holder(), None);
   assert!(queue_tickets(&lock).is_empty());
 }

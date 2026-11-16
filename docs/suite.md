@@ -20,9 +20,9 @@
 - **Every test file runs in its own runner process,** until it ends, as many at once as the sweep is
   wide.
 - **Width:** the run's share of the testbed's wide lane (`docs/testbed.md`, 「The width」): the
-  machine's thread count divided by the lane's seats for a run holding one seat, as a close's does, and
-  the whole of it for a run holding every seat, as a deployment's does. The commands in the lane's
-  other seats share the machine with it, as does the narrow lane's one command of a few threads.
+  machine's thread count divided by the lane's seats for the one seat a run holds, a close's in one of
+  the lane's seats and a deployment's in its own. The commands in the lane's other seats share the
+  machine with it, as does the narrow lane's one command of a few threads.
 - **The largest files start first.** A file's size says roughly how many tests it holds, so the long
   runs start while the rest can still fill the places around them.
 - **A file's process takes its descendants with it.** Each file runs as the head of a process group of
@@ -58,20 +58,32 @@
   sweep, as the head of a process group of its own, in a second lane of one
   beside the browser lane. A project standing inside another is an entry of its own, its check run in
   its own folder beside the outer one's. Each spends the machine's threads on its own, so two never
-  run side by side; the projects go down the lane first, then the crates.
+  run side by side; the projects go down the lane first, then the crates, then the crates' doc tests.
 - **Their verdicts stand in the log as a file's do,** and the totals count Cargo's result lines with
   the runner's, ignored tests as skipped.
-- **Crates are built once, before the units start.** Every crate to be tested is built once the run
-  has its turn and before its seconds are counted, by one Cargo command per crate with the words its
-  run will use, so no unit compiles inside the sweep. A crate with a library builds its
-  library's own tests first, alone, then the whole crate, so the two heaviest compiles never run side
-  by side. A build that fails fails each unit again, by name.
+- **Crates are built once, together, before the units start.** Every crate to be tested is built once
+  the run has its turn and before its seconds are counted, by one Cargo command naming every one of
+  them, building their tests without running them. One command compiles each dependency once, with the
+  features every tested crate together asks for, and spreads the compiles over the jobs the run hands
+  Cargo; a command per crate would compile again every dependency whose features that crate alone
+  selects differently, one crate after another.
+- **A crate's unit runs the test programs that build made for it,** each in turn and every one to its
+  end, from the crate's own folder, as Cargo would run them, so no unit compiles inside the sweep. The
+  unit fails where any of them fails. Its programs are read from what Cargo reported of the build: each
+  test program of the crate's package.
+- **Where the build failed, or reported no test program of a crate,** that crate's unit runs Cargo's
+  own test of that crate alone instead, so a build that fails fails each unit again, by name, with its
+  own errors.
+- **The crates' doc tests run as one unit of their own,** named in the suite policy, after the crates,
+  where any crate tested has a library: one Cargo test of the doc tests naming the same crates as the
+  build, so it compiles the doc tests alone and nothing the build made.
 - **The lock's path packages follow their manifests for the whole run.** A run that tests a crate
   brings the workspace lock's path packages to their manifests before its first build, as the Cargo
   verb does around a command holding its lock, says on one line which moved, and keeps the lock so until
   its last unit has ended, when it is put back as it was found (`docs/deploy.md`, 「The Cargo build
-  directory」). The crates' builds ahead go through the Cargo verb, but each crate's tests run Cargo
-  holding its lock as a unit of the sweep, outside the verb, so a sibling's new version fails neither.
+  directory」). The crates' build ahead goes through the Cargo verb, but the doc tests and a crate run
+  by Cargo's own test run Cargo holding its lock as a unit of the sweep, outside the verb, so a
+  sibling's new version fails neither.
 - **Cargo is handed as many jobs as the fence's memory holds** at a gigabyte and a half each, never
   more than the run's width nor fewer than one; a caller that named fewer keeps its own. The run says
   the number under its first line.
@@ -193,7 +205,10 @@
   and are removed from every unit's environment — a project's check script, a tool's check and a crate's
   tests alike — so a test reads its own environment and never the deployment's.
 - **What the suite names for a unit itself is handed after that list is taken away:** the turn it holds, the
-  test server and its template, and the Cargo jobs and target the build reads.
+  test server and its template, and the Cargo jobs and target the build reads. A crate's unit running its
+  test programs is handed, besides, what Cargo hands a test it runs: the Cargo program as `CARGO`, and the
+  package's folder, manifest and name as `CARGO_MANIFEST_DIR`, `CARGO_MANIFEST_PATH` and
+  `CARGO_PKG_NAME`.
 
 ## The test database
 

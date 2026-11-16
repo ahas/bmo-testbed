@@ -97,7 +97,7 @@ pub struct Queue {
   /// The lane's whole width in threads, which a holder of every seat runs on; a holder of one seat runs on
   /// its share.
   pub width: i64,
-  /// Each seat's holder, one for each seat held, in the seats' order.
+  /// Each seat's holder, one for each seat held, in the seats' order, the lane's deployment's seat last.
   #[serde(default)]
   pub holders: Vec<QueueEntry>,
   /// The first of `holders`, or null where no seat is held.

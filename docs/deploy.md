@@ -429,7 +429,8 @@ flowchart TD
    stand in the deployment line until its turn comes or its bound passes, and read the deployment record
    again (「The deployment line」). Adopt a deploy tree that is still a directory.
 3. **Pass the gate:** the declared static check and the suite over the range from the deployed commit,
-   holding every lane at the front (`docs/testbed.md`), with what failed run once more, on the placed
+   each heavy command at the front in its lane's deployment's seat (`docs/testbed.md`, 「The front of the
+   line」), with what failed run once more, on the placed
    machine where the settings name one (「Where a deployment runs」). `--no-check`
    leaves it out where the caller already ran it, and so does a declaration with `gate = false`. The
    deployment asks the gate through a hand of its own, which the binary answers with the suite's
@@ -851,13 +852,22 @@ flowchart TD
     and the prune then takes everything it may.
 - **The ceiling is enforced as the prune's last stage.** Once the rules above have removed what they
   remove, while the directory still holds more than its ceiling, the prune removes build output Cargo
-  rebuilds when it is next wanted, by three rules in this order, each taking its own in order of least
+  rebuilds when it is next wanted, by five rules in this order, each taking its own in order of least
   recent read and the next rule beginning only where the one before it leaves the directory over:
   1. **shared units:** a unit in a profile directory standing at the build root itself;
-  2. **live checkouts' own units:** a unit in a profile directory of a live checkout's directory, its
-     dependencies as much as its own crates, across every live checkout at once;
-  3. **live checkouts' target directories:** whatever else a live checkout's profile directories hold,
-     its incremental state and the binaries Cargo handed back among it, a checkout's directory at a time.
+  2. **live checkouts' own units:** a unit in a profile directory of a live checkout's directory that is
+     no deployment's, its dependencies as much as its own crates, across every such checkout at once;
+  3. **live checkouts' target directories:** whatever else such a checkout's profile directories hold,
+     its incremental state and the binaries Cargo handed back among it, a checkout's directory at a time;
+  4. **deployments' checkouts' own units:** as rule 2, for the directories of deployments' checkouts;
+  5. **deployments' checkouts' target directories:** as rule 3, for the same.
+  - **A deployment's checkout is one a deployment has built in:** the Cargo verb, run for a command
+    standing at the front (`docs/testbed.md`, 「The front of the line」), writes a mark into the
+    checkout's directory under the build root, and the mark stays. A deployment's bench on the placed
+    machine and the checkout a deployment checks here carry it. Such a directory is read only when its
+    repository deploys, so by least recent read alone its builds would be the first to go, and every
+    deployment after a prune over the ceiling would compile its dependencies from cold; it goes last
+    instead, once every working checkout's rebuildable output has gone.
   - **It stops as soon as the directory holds no more than its ceiling,** counting the disk each removal
     frees: a file's allocated size once its last link goes.
   - **Read is measured by the one reading the rules above judge "unread" by:** the newest access or

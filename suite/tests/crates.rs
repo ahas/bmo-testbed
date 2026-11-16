@@ -1,4 +1,7 @@
-use bmo_testbed_suite::crates::{cargo_environment, checkout_target_dir, set_by_cargo};
+use bmo_testbed_core::turn::{Env, FRONT_VARIABLE};
+use bmo_testbed_suite::crates::{
+  DEPLOYMENT_MARK_NAME, cargo_environment, checkout_target_dir, mark_deployment_checkout, set_by_cargo,
+};
 
 #[test]
 fn what_cargo_sets_for_a_package_is_told_apart_from_what_names_cargo_s_own_places() {
@@ -37,4 +40,19 @@ fn a_checkout_builds_in_a_directory_of_its_own_so_builds_of_two_checkouts_take_n
     built_in(first.path(), "CARGO_BUILD_BUILD_DIR"),
     built_in(second.path(), "CARGO_BUILD_BUILD_DIR")
   );
+}
+
+// "the Cargo verb, run for a command standing at the front ..., writes a mark into the checkout's directory under
+// the build root": a deployment's caller marks it, any other caller leaves it unmarked
+#[test]
+fn a_build_standing_at_the_front_marks_its_checkout_s_directory_as_a_deployment_s() {
+  let dir = tempfile::tempdir().unwrap();
+  let working = dir.path().join("working");
+  let deployment = dir.path().join("deployment");
+
+  mark_deployment_checkout(&working, &Env::new());
+  mark_deployment_checkout(&deployment, &Env::from([(FRONT_VARIABLE.to_owned(), "1".to_owned())]));
+
+  assert!(!working.join(DEPLOYMENT_MARK_NAME).exists());
+  assert!(deployment.join(DEPLOYMENT_MARK_NAME).exists());
 }

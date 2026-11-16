@@ -579,7 +579,8 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   workspace's). It is not ready while the record cannot be opened.
 - **Queue:** `name` (`wide` or `narrow`), `width` (integer, the lane's whole width, which a holder of
   every seat runs on), `holders` (a list of queue entries, one for each seat held, in the seats'
-  order, so a holder of several seats stands in it once for each), `holder` (the first of `holders`,
+  order, the lane's deployment's seat last, so a holder of several seats stands in it once for each),
+  `holder` (the first of `holders`,
   or null where no seat is held), `waiting` (a list of queue entries, in the order they will be
   served), `placed` (a list of queue entries, one for each run of this lane this machine placed on
   another machine and has not seen end, in the order they were placed; 「A run placed elsewhere stands

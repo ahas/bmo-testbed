@@ -12,7 +12,7 @@ use bmo_testbed_core::policy::prune::PRUNE;
 use bmo_testbed_suite::ceiling::{
   CEILING_VARIABLE, Ceiling, CeilingPlan, CeilingSetting, Enforcement, HeldBy, Holder, Keepers,
 };
-use bmo_testbed_suite::crates::CHECKOUT_RECORD_NAME;
+use bmo_testbed_suite::crates::{CHECKOUT_RECORD_NAME, DEPLOYMENT_MARK_NAME};
 use bmo_testbed_suite::prune::{HOUR_MS, directory_bytes, disk_free_bytes, take_prune_locks};
 use bmo_testbed_suite::superseded::CARGO_BUILD_LOCK_NAME;
 
@@ -268,7 +268,7 @@ fn last_the_checkouts_profile_directories_are_emptied_oldest_first_but_their_loc
   let enforcement = enforce(&built.root, 0, &Keepers::default(), true);
   let last = &enforcement.rules[2];
 
-  assert_eq!(enforcement.rules.len(), 3);
+  assert_eq!(enforcement.rules.len(), 5);
   assert_eq!(last.names, ["a-0123456789ab", "b-0123456789ab"]);
   assert!(none_exist(&built.a_unit) && none_exist(&built.b_unit));
   assert!(none_exist(&built.a_rest) && none_exist(&built.b_rest));
@@ -278,6 +278,27 @@ fn last_the_checkouts_profile_directories_are_emptied_oldest_first_but_their_loc
   // nothing holds what is left, which is that unit alone.
   assert!(all_exist(&built.shared_linked));
   assert!(enforcement.over() && enforcement.holders.is_empty());
+}
+
+// "deployments' checkouts' own units: as rule 2, for the directories of deployments' checkouts": checkout `a`,
+// marked as a deployment's, keeps its unit though it was read before checkout `b`'s, which goes instead
+#[test]
+fn a_deployment_s_checkout_keeps_its_units_while_a_working_checkout_s_later_read_ones_go() {
+  let scratch = tempfile::tempdir().unwrap();
+  let built = built(scratch.path());
+  let a = built.root.join("checkouts").join("a-0123456789ab");
+
+  write(&a.join(DEPLOYMENT_MARK_NAME), 0, now());
+
+  let held = directory_bytes(&built.root);
+  let shared = bytes_of(&built.shared_old) + bytes_of(&built.shared_new);
+  let enforcement =
+    enforce(&built.root, held - shared - bytes_of(&built.b_unit), &Keepers::default(), true);
+
+  assert!(!enforcement.over(), "{enforcement:?}");
+  assert!(none_exist(&built.b_unit));
+  assert!(all_exist(&built.a_unit) && all_exist(&built.a_rest));
+  assert_eq!(enforcement.rules.len(), 2);
 }
 
 // "It never removes ... anything in a profile directory whose build lock the prune does not hold"; the event

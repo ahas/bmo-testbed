@@ -270,26 +270,27 @@ pub fn take_lock(path: &Path, wait_seconds: f64, mut wait: LockWait<'_>) -> Opti
 pub struct SeatWait<'a> {
   /// The name it stands under, how it waits, its rank and how often it looks, as for one lock.
   pub lock: LockWait<'a>,
-  /// Every seat of the lane rather than one.
-  pub every: bool,
+  /// The lane's deployment's seat, which counts as held or free for the memory gate whoever takes, and none for a
+  /// lane that keeps none.
+  pub deployment_seat: Option<&'a Path>,
+  /// Whether the taker stands at the front, so it tries the deployment's seat before the lane's own.
+  pub front: bool,
   /// Asked before one seat is taken while another may be held: whether the machine can take one more.
   pub spare: &'a dyn Fn() -> bool,
 }
 
-/// A lane's seats as their taker holds them, let go when this is dropped: the ticket taken away and each
-/// seat's descriptor closed.
+/// A lane's seat as its taker holds it, let go when this is dropped: the ticket taken away and the seat's
+/// descriptor closed.
 pub struct HeldSeats {
-  files: Vec<(usize, File)>,
+  seat: PathBuf,
+  _file: File,
   ticket: PathBuf,
 }
 
 impl HeldSeats {
-  /// The seats held, by their place among the lane's, in order.
-  pub fn seats(&self) -> Vec<usize> {
-    let mut seats: Vec<usize> = self.files.iter().map(|(at, _)| *at).collect();
-
-    seats.sort_unstable();
-    seats
+  /// The seat held, by its lock's path.
+  pub fn seat(&self) -> &Path {
+    &self.seat
   }
 }
 
@@ -299,16 +300,27 @@ impl Drop for HeldSeats {
   }
 }
 
-// One free seat for the first unseated taker: any where the machine can take one more, and otherwise one only
-// where no seat of the lane is held at all, which every seat taken at once shows.
-fn take_one_seat(seats: &[PathBuf], spare: &dyn Fn() -> bool) -> Option<(usize, File)> {
+// One free seat for the first unseated taker, among `open` in their order: any where the machine can take one
+// more, and otherwise the first only where no seat of the lane is held at all, which every seat of it taken at
+// once shows.
+fn take_one_seat(open: &[&Path], every: &[&Path], spare: &dyn Fn() -> bool) -> Option<(PathBuf, File)> {
   if spare() {
-    return seats.iter().enumerate().find_map(|(at, seat)| try_flock(seat).map(|file| (at, file)));
+    return open.iter().find_map(|seat| try_flock(seat).map(|file| (seat.to_path_buf(), file)));
   }
 
-  let mut every: Vec<File> = seats.iter().map_while(|seat| try_flock(seat)).collect();
+  let held: Vec<(&Path, File)> =
+    every.iter().map_while(|seat| try_flock(seat).map(|file| (*seat, file))).collect();
 
-  (every.len() == seats.len()).then(|| (0, every.swap_remove(0)))
+  if held.len() < every.len() {
+    return None;
+  }
+
+  let first = open.first()?;
+
+  held
+    .into_iter()
+    .find(|(seat, _)| seat == first)
+    .map(|(seat, file)| (seat.to_path_buf(), file))
 }
 
 // The ticket marked seated, a line under its name, so the takers behind it no longer wait on it.
@@ -318,11 +330,16 @@ fn mark_seated(ticket: &Path) {
     file.and_then(|mut file| std::io::Write::write_all(&mut file, format!("\n{SEATED_MARK}").as_bytes()));
 }
 
-/// A lane's seats, the first of them the lane's queue's lock: one, or every one, or none where they could not
-/// be had within the wait. Only the first unseated ticket takes a seat; a taker of every seat keeps each seat
-/// it takes until it holds them all, and stays unseated until then, so nobody behind it takes one meanwhile.
+/// One of a lane's seats, the first of them the lane's queue's lock, or none where none could be had within
+/// the wait: for a taker given the lane's deployment's seat, that seat first. Only the first unseated ticket
+/// takes a seat.
 pub fn take_seats(seats: &[PathBuf], wait_seconds: f64, mut wait: SeatWait<'_>) -> Option<HeldSeats> {
-  for seat in seats {
+  let own = seats.iter().map(PathBuf::as_path);
+  let open: Vec<&Path> =
+    wait.deployment_seat.filter(|_| wait.front).into_iter().chain(own.clone()).collect();
+  let every: Vec<&Path> = own.chain(wait.deployment_seat).collect();
+
+  for seat in &every {
     let _ = OpenOptions::new().append(true).create(true).open(seat);
   }
 
@@ -332,7 +349,6 @@ pub fn take_seats(seats: &[PathBuf], wait_seconds: f64, mut wait: SeatWait<'_>) 
   let ticket_path = queue.join(&ticket);
   let poll = wait.lock.poll.unwrap_or(Duration::from_millis(LANES.numbers.poll_milliseconds));
   let mut deadline = now_ms() + (wait_seconds.max(0.0) * 1000.0) as i64;
-  let mut held: Vec<(usize, File)> = Vec::new();
 
   let _ = std::fs::write(&ticket_path, &wait.lock.holder);
 
@@ -341,30 +357,16 @@ pub fn take_seats(seats: &[PathBuf], wait_seconds: f64, mut wait: SeatWait<'_>) 
   loop {
     let ahead = ticket_ahead(&queue, &ticket, true);
 
-    if ahead.is_none() {
-      if wait.every {
-        for (at, seat) in seats.iter().enumerate() {
-          if !held.iter().any(|(one, _)| *one == at)
-            && let Some(file) = try_flock(seat)
-          {
-            held.push((at, file));
-          }
-        }
-      } else if let Some(one) = take_one_seat(seats, wait.spare) {
-        held.push(one);
-      }
+    if ahead.is_none()
+      && let Some((seat, file)) = take_one_seat(&open, &every, wait.spare)
+    {
+      mark_seated(&ticket_path);
 
-      if held.len() == if wait.every { seats.len() } else { 1 } {
-        mark_seated(&ticket_path);
-
-        return Some(HeldSeats {
-          files: held,
-          ticket: ticket_path,
-        });
-      }
-    } else {
-      // A ticket stood ahead meanwhile, at the front, waits for the seats this one has gathered so far.
-      held.clear();
+      return Some(HeldSeats {
+        seat,
+        _file: file,
+        ticket: ticket_path,
+      });
     }
 
     if now_ms() >= deadline {

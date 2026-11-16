@@ -232,7 +232,7 @@ pub fn take_close_line(ask: &CloseLineAsk<'_>) -> Option<CloseTurn> {
 
 /// A seat of the testbed's wide lane held through a close's check, from its static check to the end of its
 /// suite, so its steps never wait behind the line between them. It is taken standing next, and before each part
-/// a deployment waiting at the front goes first.
+/// a deployment still waiting at the front, its own seat held by another deployment, goes first.
 pub struct WideStretch<'a> {
   env: Env,
   checkout: String,
@@ -266,9 +266,9 @@ impl<'a> WideStretch<'a> {
     self.path.clone().unwrap_or_else(|| turn::lock_path(&self.env, Lane::Wide))
   }
 
-  /// Held, a deployment waiting at the front let in first: false where the harness ended meanwhile.
+  /// Held, a deployment still waiting at the front let in first: false where the harness ended meanwhile.
   pub fn ready(&mut self) -> bool {
-    if self.held.is_some() && queue_tickets(&self.lock()).iter().any(|one| one.front) {
+    if self.held.is_some() && queue_tickets(&self.lock()).iter().any(|one| one.front && !one.seated) {
       (self.say)(&CLOSE_LINE.stretch.front_first);
       self.release();
     }

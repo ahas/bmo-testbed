@@ -97,8 +97,10 @@ pub struct LineWords {
   pub template_failed: String,
   pub building: String,
   pub tests: String,
-  pub library_tests: String,
   pub binaries: String,
+  pub between_crates: String,
+  pub doc_tests: String,
+  pub crate_programs: String,
   pub plan: String,
   pub no_browser: String,
 }

@@ -117,11 +117,17 @@ server_down = "database: the test server is not up: {why}"
 on_postgres = "database: the database tests run on PostgreSQL, each file on a clone of {template}"
 template_stands = "database: the template stands"
 template_failed = "database: the template could not be made: {why}"
-# A Cargo build ahead of the guards, of the {what} — `tests`, `library_tests` or `binaries` — of a {crate}.
+# A Cargo build ahead of the guards, of the {what} — `tests` or `binaries` — of {crate}, one crate or every
+# crate tested joined by `between_crates`.
 building = "building {what} of {crate}: exit {code}"
 tests = "the tests"
-library_tests = "the library's own tests"
 binaries = "the binaries"
+between_crates = ", "
+# The unit running the doc tests of the crates tested (docs/suite.md, 「Heavy units run in a lane of one」).
+doc_tests = "the crates' doc tests"
+# What a crate's unit runs through `sh`, handed the crate's test programs: each in turn, every one to its end,
+# its path said ahead of its output as Cargo says it, and the unit failing where any one failed.
+crate_programs = "status=0; for program do printf '\\n     Running %s\\n\\n' \"$program\"; \"$program\" || status=$?; done; exit \"$status\""
 # The plan, {browser} the declared browser globs or `no_browser`.
 plan = "{count} files, {width} at a time, the browser files ({browser}) one at a time beside them, and the projects of their own, the tools checked by their manifest and the crates one at a time in a lane of their own"
 no_browser = "none declared"
