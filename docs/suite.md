@@ -96,7 +96,8 @@
   `bmo-suite-<pid>.scope` in `bmo-suite.slice` (`docs/deploy.md`, 「The slices」), before it starts a
   file, so every file and everything a file starts is born inside it. Its line under the first names the scope and its ceilings.
 - **The ceilings:** eight gigabytes of memory, one of swap beyond it, and 8,192 tasks.
-  `BMO_SUITE_MEMORY_GB` sets the memory ceiling for a machine where eight is the wrong number.
+  `BMO_SUITE_MEMORY_GB` sets the memory ceiling for a machine where eight is the wrong number. Its open
+  files are the machine's ceiling, as for every verb (`docs/testbed.md`, 「Open files」).
 - **Why:** without a scope a run's processes count against whatever unit its caller stands in, and a
   runaway test fills the whole machine, where the kernel's out-of-memory killer takes the largest
   process, seldom the runaway's. Inside the scope the runaway meets the scope's own ceiling. The
@@ -110,14 +111,27 @@
   scope kills every other process still in it and names them on one line. A run standing where its
   caller stands kills nothing.
 
-## Every unit runs to its end
+## How long a unit and a test may run
 
-- **Nothing of the suite's cuts a unit or a test for its length.** A file, a crate's tests, a project's
-  check and a declared package check each run until they end, however long that takes, and every unit is
-  started.
-- **A runner's own per-test limit is lifted** where the runner keeps one by default: `bun test` is handed
-  `--timeout 0`. A caller that names a limit in its words keeps its own, and a limit a test sets for itself
-  is the test's.
+- **A unit is never cut for its length as a whole.** A file, a crate's tests, a project's check and a
+  declared package check each run until they end, however long that takes, and every unit is started.
+- **A single test is held to the per-test limit:** the declaration's `test_timeout_seconds`, else the
+  declaration policy's, 120 seconds. A test that waits on something that never comes, a stand-in nobody
+  answers or a lock nobody lets go, fails at that limit rather than holding its unit until the silence limit
+  below, which is five times as long and counts only from the unit's last word.
+- **Each language hands its runner the limit its own way** (`docs/testbed.md`, 「Languages」):
+  - `bun test` is handed the limit as its own `--timeout`, so the test fails there and the file runs on. A
+    caller that names a limit in its words keeps its own, and a limit a test sets for itself is the test's.
+    A browser file keeps no limit of bun's, since a browser's start alone can outlast a test's ordinary
+    length.
+  - A crate's tests have no limit in Rust's test harness. The harness says of each test still running after
+    a minute that it has been running that long, naming it; the run reads the unit's output as it comes, and
+    once a test so named has run for the limit without its result, it ends the unit's process group as a
+    hung unit is ended. The unit fails with exit code 124 and its output closes on a line naming the test
+    and the limit, so a deployment's gate says which test hung. A limit below the harness's minute takes
+    effect at that minute.
+  - A project's check and a declared package check run their own runners, whose own limits stand.
+- **What fails at the limit runs once more** as any failing unit does (「What failed runs once more」).
 - **A unit that writes nothing for the silence limit is ended as hung** (`docs/testbed.md`, 「A holder
   whose command falls silent lets go」): the run watches the pipes it reads the unit's output through, ends
   the unit's process group once they stay silent, and the unit fails with exit code 124, the line naming it
@@ -131,7 +145,7 @@
   leftover of the unit that ended. The run is no subreaper, so nothing a unit leaves behind is the run's
   own child.
 - **Keys read and given no effect:** `--guard`, `--file-guard` and `--turn-wait`, and a declaration's
-  `guard_seconds`, `file_guard_seconds` and `test_timeout_seconds`.
+  `guard_seconds` and `file_guard_seconds`.
 
 ## A skipped test is said
 

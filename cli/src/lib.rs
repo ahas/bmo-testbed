@@ -323,6 +323,8 @@ fn print_nouns() -> u8 {
 
 /// The binary over its words; the code it ends with.
 pub fn main(args: impl IntoIterator<Item = OsString>) -> u8 {
+  bmo_testbed_core::open_files::raise_open_files();
+
   let words = match words::read(args) {
     Ok(words) => words,
     Err(error) => {

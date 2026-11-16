@@ -30,15 +30,13 @@ fn words(given: &[&str]) -> Vec<String> {
 mod guards {
   use super::*;
 
-  // "nothing of the suite's cuts a unit or a test": a declaration that leaves the old keys out names none.
+  // "a unit is never cut for its length as a whole": a declaration that leaves the old keys out names no span
+  // a unit or a run must end within.
   #[test]
   fn a_declaration_names_no_span_a_unit_or_a_run_must_end_within() {
     let test = Test::default();
 
-    assert_eq!(
-      (test.test_timeout_seconds, test.file_guard_seconds, test.guard_seconds),
-      (None, None, None)
-    );
+    assert_eq!((test.file_guard_seconds, test.guard_seconds), (None, None));
   }
 
   // "is the machine's width for the one command holding it": a run holds the testbed's wide lane.

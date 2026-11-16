@@ -33,6 +33,16 @@ pub struct Widened {
   pub env: BTreeMap<String, String>,
 }
 
+/// What a line of a runner's output says of one test while the tests run (docs/suite.md, 「How long a unit
+/// and a test may run」).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TestProgress {
+  /// The test, by its name, is still running and has run for at least these seconds.
+  Running { test: String, seconds: u64 },
+  /// The test, by its name, has its result.
+  Ended { test: String },
+}
+
 /// One language the testbed runs.
 pub trait Language: Sync {
   /// The name the result line shows and `--adapter` forces.
@@ -61,6 +71,16 @@ pub trait Language: Sync {
   /// The command that runs these test files, each a path from the folder it runs in, handed the caller's
   /// words, with no per-test limit of the runner's own standing; none for a language that runs no test files.
   fn test_command(&self, _files: &[String], _words: &[String]) -> Option<Vec<String>> {
+    None
+  }
+  /// The words that hand its runner a per-test limit of `seconds`, laid after the caller's `words`; none where
+  /// the runner takes no such limit or the caller's words already name one.
+  fn per_test_limit(&self, _words: &[String], _seconds: u64) -> Vec<String> {
+    Vec::new()
+  }
+  /// One line of its runner's output read as a test still running or a test ended; none for any other line,
+  /// and for a language whose runner says neither.
+  fn test_progress(&self, _line: &str) -> Option<TestProgress> {
     None
   }
   /// The command that runs a project's package script; none for a language that runs no scripts.

@@ -8,6 +8,9 @@ file = "testbed.toml"
 # The defaults, one for each key whose default is a number or a word, under the table that key stands in.
 [defaults.test]
 memory_gb = 12
+# How long one test may run before it fails (docs/suite.md, "How long a unit and a test may run"): long
+# enough for the slowest ordinary test on a loaded machine, a fifth of the silence limit.
+test_timeout_seconds = 120
 
 [defaults.database]
 max_files = 10
@@ -54,6 +57,7 @@ needs_input = "the quick check {name} reads {input}, which the declaration does 
 needs_data_root = "a deploy root needs its data root"
 half_database = "the migrations and the migrate command are named together or not at all"
 no_silence = "a silence limit is at least one second"
+no_test_limit = "a per-test limit is at least one second"
 # {id} is the id two steps share.
 duplicate_step = "two steps are named {id}"
 # {name} is the crate an exception to the shared versions is for.

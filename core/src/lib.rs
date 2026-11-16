@@ -13,6 +13,7 @@ pub mod events;
 pub mod languages;
 pub mod main_branch;
 pub mod memory;
+pub mod open_files;
 pub mod placement;
 pub mod policy;
 pub mod queue;

@@ -1,15 +1,18 @@
-//! One unit in a process of its own (docs/suite.md, 「Every unit runs to its end」): what a unit left holding
-//! its output is found, and nothing the run started itself is taken for it; a unit that falls silent is ended.
+//! One unit in a process of its own (docs/suite.md, 「How long a unit and a test may run」): what a unit left
+//! holding its output is found, and nothing the run started itself is taken for it; a unit that falls silent is
+//! ended, and so is one whose test runs past the per-test limit.
 
 use std::io::{BufRead, BufReader};
 use std::os::fd::AsRawFd;
 use std::process::Command;
 use std::time::{Duration, Instant};
 
+use bmo_testbed_core::languages::Cargo;
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
+use bmo_testbed_core::policy::suite::SUITE;
 use bmo_testbed_core::silence::{HUNG_EXIT_CODE, Silence};
-use bmo_testbed_suite::unit::{UnitCommand, holders_of, run_unit};
+use bmo_testbed_suite::unit::{PerTest, UnitCommand, holders_of, run_unit};
 
 // "a process the run started itself is never taken for such a holder": of a process this one started and
 // one a unit left behind, both holding the pipe, only the one left behind is named.
@@ -81,12 +84,52 @@ fn a_unit_that_writes_nothing_for_the_limit_is_ended_as_hung() {
   assert_eq!(ran.output, format!("once\n{hung}\n"));
 }
 
-// "nothing of the suite's cuts a unit or a test for its length": a unit that keeps writing past the limit runs
-// to its end.
+// "a unit is never cut for its length as a whole": a unit that keeps writing past the limit runs to its end.
 #[test]
 fn a_unit_that_keeps_writing_past_the_limit_runs_to_its_end() {
   let ran = run_unit(&short_unit("for i in 1 2 3 4 5 6 7 8 9 10 11 12; do echo $i >&2; sleep 0.1; done"));
 
   assert_eq!(ran.code, 0, "{}", ran.output);
   assert!(ran.seconds > 0.4);
+}
+
+// A unit of a shell line read as a crate's tests are, its per-test limit a minute, which the harness's own line
+// for a test running over a minute meets at once.
+fn crate_unit(line: &str) -> UnitCommand {
+  let mut unit = short_unit(line);
+
+  unit.silence.limit = Duration::from_secs(30);
+  unit.per_test = Some(PerTest {
+    language: &Cargo,
+    limit: Duration::from_secs(60),
+  });
+  unit
+}
+
+// "once a test so named has run for the limit without its result, it ends the unit's process group": the unit
+// fails with the hung code, its output closing on the line naming the test and the limit, long before its
+// silence limit.
+#[test]
+fn a_crate_s_test_named_as_running_past_the_limit_ends_its_unit() {
+  let began = Instant::now();
+  let ran = run_unit(&crate_unit("echo 'test a::waits has been running for over 60 seconds'; sleep 30"));
+  let overran = fill_marks(&SUITE.file.test_overran, &[("test", "a::waits"), ("seconds", "60")]);
+
+  assert!(
+    began.elapsed() < Duration::from_secs(10),
+    "the unit was not ended at the per-test limit"
+  );
+  assert_eq!((ran.code, ran.signal), (i32::from(HUNG_EXIT_CODE), None));
+  assert_eq!(ran.output, format!("test a::waits has been running for over 60 seconds\n{overran}\n"));
+}
+
+// "without its result": a test named as running long whose result follows ends nothing, and the unit runs on.
+#[test]
+fn a_test_named_as_running_long_whose_result_follows_ends_nothing() {
+  let ran = run_unit(&crate_unit(
+    "echo 'test a::slow has been running for over 60 seconds'; echo 'test a::slow ... ok'; sleep 0.3; echo done",
+  ));
+
+  assert_eq!(ran.code, 0, "{}", ran.output);
+  assert!(ran.output.ends_with("done\n"), "{}", ran.output);
 }

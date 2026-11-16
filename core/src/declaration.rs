@@ -110,7 +110,7 @@ pub struct Test {
   /// Read and given no effect: nothing the testbed runs has a span it must end within.
   #[serde(default)]
   pub file_guard_seconds: Option<u64>,
-  /// Read and given no effect: nothing the testbed runs has a span it must end within.
+  /// How long one test may run before it fails; none leaves the declaration policy's limit.
   #[serde(default)]
   pub test_timeout_seconds: Option<u64>,
   /// How long a command run for the repository may write nothing before it is ended as hung; none leaves the
@@ -139,6 +139,12 @@ impl Test {
       limit: self.silence_seconds.map_or(policy.limit, Duration::from_secs),
       ..policy
     }
+  }
+
+  /// The seconds one test may run before it fails (docs/suite.md, 「How long a unit and a test may run」): the
+  /// declared limit, the declaration policy's where none is declared.
+  pub fn per_test_seconds(&self) -> u64 {
+    self.test_timeout_seconds.unwrap_or(DECLARATION.defaults.test.test_timeout_seconds)
   }
 
   /// The members the declared languages name, in the declaration's order.
@@ -616,6 +622,10 @@ impl Declaration {
 
     if self.test.silence_seconds == Some(0) {
       return Some(("test.silence_seconds", why.no_silence.clone()));
+    }
+
+    if self.test.test_timeout_seconds == Some(0) {
+      return Some(("test.test_timeout_seconds", why.no_test_limit.clone()));
     }
 
     for quick in &self.check.quick {

@@ -7,7 +7,7 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
-use super::{Language, Tally, Widened, names_option, pattern, sum_of};
+use super::{Language, Tally, TestProgress, Widened, names_option, pattern, sum_of};
 
 pub struct Cargo;
 
@@ -48,6 +48,10 @@ static FAIL: LazyLock<Regex> = LazyLock::new(|| pattern(r"^test result: \w+\. \d
 static SKIP: LazyLock<Regex> =
   LazyLock::new(|| pattern(r"^test result: \w+\. \d+ passed; \d+ failed; (\d+) ignored;"));
 static FAILED_TEST: LazyLock<Regex> = LazyLock::new(|| pattern(r"^test (\S+) \.\.\. FAILED$"));
+// Rust's test harness on a test it has waited on for its warning's span, and on a test's result.
+static RUNNING_LONG: LazyLock<Regex> =
+  LazyLock::new(|| pattern(r"^test (.+) has been running for over (\d+) seconds$"));
+static RESULT: LazyLock<Regex> = LazyLock::new(|| pattern(r"^test (.+) \.\.\. (?:ok|FAILED|ignored)"));
 static PLACE: LazyLock<Regex> = LazyLock::new(|| pattern(r"^\s+--> (.+)$"));
 static CODED_ERROR: LazyLock<Regex> = LazyLock::new(|| pattern(r"^error\[\w+\]: "));
 
@@ -76,6 +80,21 @@ impl Language for Cargo {
       pass,
       fail: sum_of(log, &FAIL).unwrap_or(0),
       skip: sum_of(log, &SKIP).unwrap_or(0),
+    })
+  }
+
+  fn test_progress(&self, line: &str) -> Option<TestProgress> {
+    let line = line.trim_end();
+
+    if let Some(found) = RUNNING_LONG.captures(line) {
+      return Some(TestProgress::Running {
+        test: found[1].to_owned(),
+        seconds: found[2].parse().unwrap_or(0),
+      });
+    }
+
+    RESULT.captures(line).map(|found| TestProgress::Ended {
+      test: found[1].to_owned(),
     })
   }
 

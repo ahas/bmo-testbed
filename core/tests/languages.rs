@@ -5,8 +5,8 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use bmo_testbed_core::languages::{
-  Browser, Bun, Cargo, LANGUAGES, Language, Node, PLAIN, Tally, cargo_placeable, failures_of_log,
-  language_for, program_words, run_folder, tally_of_log,
+  Browser, Bun, Cargo, LANGUAGES, Language, Node, PLAIN, Tally, TestProgress, cargo_placeable,
+  failures_of_log, language_for, program_words, run_folder, tally_of_log,
 };
 
 fn words(line: &[&str]) -> Vec<String> {
@@ -175,6 +175,41 @@ fn cargo_claims_what_compiles_and_nothing_that_only_reads() {
   assert!(!claims(&Cargo, "cargo", &["fmt", "--check"]));
   assert!(!claims(&Cargo, "cargo", &["metadata"]));
   assert!(!claims(&Cargo, "cargo", &["run"]));
+}
+
+// "it reads Rust's test harness saying a test has been running for over a number of seconds, and a test's
+// `ok`, `FAILED` or `ignored` result line"
+#[test]
+fn cargo_reads_a_test_still_running_and_a_test_s_result_out_of_the_harness_s_lines() {
+  assert_eq!(
+    Cargo.test_progress("test server::job_resume::retries has been running for over 60 seconds\n"),
+    Some(TestProgress::Running {
+      test: "server::job_resume::retries".to_owned(),
+      seconds: 60
+    })
+  );
+
+  for result in ["ok", "FAILED", "ignored", "ignored, needs a browser"] {
+    assert_eq!(
+      Cargo.test_progress(&format!("test server::job_resume::retries ... {result}")),
+      Some(TestProgress::Ended {
+        test: "server::job_resume::retries".to_owned()
+      })
+    );
+  }
+
+  assert_eq!(Cargo.test_progress("running 12 tests"), None);
+  assert_eq!(Bun.test_progress("test a has been running for over 60 seconds"), None);
+}
+
+// "it hands a per-test limit as `--timeout` in milliseconds", "a caller that names a limit in its words keeps
+// its own", "a browser file keeps no limit of bun's"
+#[test]
+fn bun_is_handed_the_per_test_limit_unless_the_words_name_one_and_a_browser_file_never() {
+  assert_eq!(Bun.per_test_limit(&words(&["--bail"]), 120), words(&["--timeout=120000"]));
+  assert!(Bun.per_test_limit(&words(&["--timeout", "5000"]), 120).is_empty());
+  assert!(Browser.per_test_limit(&[], 120).is_empty());
+  assert!(Cargo.per_test_limit(&[], 120).is_empty());
 }
 
 // "hands Cargo the width as its jobs, unless the command names its own"

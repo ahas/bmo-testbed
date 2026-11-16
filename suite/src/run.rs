@@ -10,10 +10,10 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use bmo_testbed_core::declaration::{Repository, Test};
-use bmo_testbed_core::languages::{Language, run_folder};
+use bmo_testbed_core::languages::{Cargo, Language, run_folder};
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::suite::SUITE;
 use bmo_testbed_core::queue::now_ms;
@@ -36,7 +36,7 @@ use crate::selection::{
 use crate::sweep::{SweepPlan, largest_first, sweep};
 use crate::test_server::{template_name, test_postgres, test_server_up};
 use crate::tool_checks::{CheckedTool, package_check};
-use crate::unit::{UnitCommand, UnitRun, run_unit};
+use crate::unit::{PerTest, UnitCommand, UnitRun, run_unit};
 use crate::workspace::{OwnProject, git_lines, own_projects, project_browser_files, repository_paths};
 
 fn stderr(line: &str) {
@@ -752,6 +752,7 @@ fn run_held(
       .map_or("", |(_, home)| home.as_str()),
   );
   let silence = test.silence();
+  let per_test_seconds = test.per_test_seconds();
   let unit_command = |file: &String| -> UnitCommand {
     // No unit inherits what a Cargo running this suite set for its own package: a unit that runs Cargo would
     // build as though for that package (docs/deploy.md, 「The Cargo build directory」). Nor does it inherit the
@@ -786,6 +787,7 @@ fn run_held(
         env,
         home: None,
         silence: Silence::default(),
+        per_test: None,
       };
     }
 
@@ -807,6 +809,11 @@ fn run_held(
         env,
         home: Some(home),
         silence: Silence::default(),
+        // Rust's test harness keeps no per-test limit, so the run keeps it over the crate's tests.
+        per_test: Some(PerTest {
+          language: &Cargo,
+          limit: Duration::from_secs(per_test_seconds),
+        }),
       };
     }
 
@@ -816,7 +823,11 @@ fn run_held(
       .into_iter()
       .next()
       .and_then(|group| {
-        let line = group.language.test_command(&group.files, &ask.extra)?;
+        let mut words = ask.extra.clone();
+
+        words.extend(group.language.per_test_limit(&ask.extra, per_test_seconds));
+
+        let line = group.language.test_command(&group.files, &words)?;
 
         Some((group.dir, line))
       })

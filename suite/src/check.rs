@@ -198,7 +198,9 @@ pub fn plan(repo: &Repository, ask: &CheckAsk) -> Result<CheckPlan, String> {
   let test = &repo.declaration.test;
 
   for group in file_groups(&repo.root, test, &touched.tests) {
-    if let Some(command) = group.language.test_command(&group.files, &[]) {
+    let limit = group.language.per_test_limit(&[], test.per_test_seconds());
+
+    if let Some(command) = group.language.test_command(&group.files, &limit) {
       let dir = if group.dir.as_os_str().is_empty() { Path::new(".") } else { group.dir.as_path() };
       let step = plain(&dir.to_string_lossy(), command, database.clone());
 

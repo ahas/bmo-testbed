@@ -137,6 +137,15 @@ impl Language for Bun {
     Some(command)
   }
 
+  // Bun takes its per-test limit in milliseconds.
+  fn per_test_limit(&self, words: &[String], seconds: u64) -> Vec<String> {
+    if names_flag(words, "--timeout") {
+      return Vec::new();
+    }
+
+    vec![format!("--timeout={}", seconds.saturating_mul(1000))]
+  }
+
   fn script_command(&self, script: &str) -> Option<Vec<String>> {
     Some(vec!["bun".to_owned(), "run".to_owned(), script.to_owned()])
   }

@@ -8,6 +8,7 @@ use serde::Deserialize;
 #[serde(deny_unknown_fields)]
 pub struct TestDefaults {
   pub memory_gb: u64,
+  pub test_timeout_seconds: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -75,6 +76,7 @@ pub struct WhyWords {
   pub needs_data_root: String,
   pub half_database: String,
   pub no_silence: String,
+  pub no_test_limit: String,
   pub duplicate_step: String,
   pub no_reason: String,
   pub empty_exception: String,

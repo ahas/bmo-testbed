@@ -241,6 +241,14 @@ flowchart TD
   above it is that watch.
 - The default limit, the pause before the KILL and how often the holder looks stand in the lane policy.
 
+## Open files
+
+- **Every verb raises its own limit on open files to the machine's ceiling** as it starts: the soft limit
+  is set to the hard one, so a run, a suite, a change check, a placed run and everything each starts
+  inherit it. A shell's own soft limit, a thousand files on a WSL machine, is far below what a suite of
+  servers and clients standing side by side holds open, and a test that meets it fails with "Too many open
+  files" for no fault of its commit. A limit that cannot be raised is left as it stands.
+
 ## Memory
 
 - **A seat beside a held one is taken only while the machine has memory to spare:** the first
@@ -361,6 +369,11 @@ flowchart TD
   - for a language that runs test files, its own naming of a test file, and the command that runs
     test files, handed the caller's words, with no per-test limit of its runner's own standing, and each
     file by its path from the folder the command runs in;
+  - for a language whose runner takes a per-test limit, the words that hand it one, which the suite and the
+    change check add to the caller's words unless those name a limit already (`docs/suite.md`, 「How long a
+    unit and a test may run」);
+  - for a language whose runner says, while a test runs, that the test has been running long, that line
+    read as the test and how long it had run, and its result line read as the test ended;
   - for a language whose runner reads a configuration file of its own from the folder it starts in,
     that file's name, which decides the folder its test files run from (`docs/suite.md`, 「Which
     files run」);
@@ -373,10 +386,12 @@ flowchart TD
   - `bun`: `bun test` over anything but one test file; its test files are named `*.test.ts`, run by
     `bun test` handed each file as a path from where it runs (a word that is not written as a path
     is a filter bun matches within every test file's path) and `--timeout 0`, which lifts bun's own
-    per-test limit unless the words name one, its configuration is `bunfig.toml`, and
+    per-test limit unless the words name one; it hands a per-test limit as `--timeout` in milliseconds, its
+    configuration is `bunfig.toml`, and
     it runs a project's script with `bun run`. Its root configuration is `package.json`, `bun.lock`,
     `bunfig.toml` and `tsconfig.json`, and its lockfile `bun.lock`;
-  - `cargo`: build, check, clippy, test, bench, doc and nextest;
+  - `cargo`: build, check, clippy, test, bench, doc and nextest; it reads Rust's test harness saying a test
+    has been running for over a number of seconds, and a test's `ok`, `FAILED` or `ignored` result line;
   - `node`: package scripts that test, check or build under npm, pnpm, yarn or bun; `node --test`;
     Vitest; Jest. Its test files are named `*.test.js`, `*.test.mjs` and `*.test.cjs`, run by
     `node --test`, and it runs a project's script with `npm run`. Its root configuration is

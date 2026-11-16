@@ -111,6 +111,7 @@ pub struct FileWords {
   pub heading: String,
   pub signalled: String,
   pub silent: String,
+  pub test_overran: String,
   pub no_check: String,
   pub no_runner: String,
   pub tests_step: String,

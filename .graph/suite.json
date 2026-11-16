@@ -234,7 +234,7 @@
   {
     "id": "suite/suite-run",
     "title": "Suite run",
-    "what": "The suite verb: every test file, crate, project and tool as one unit in a process of its own, a sweep's width at a time inside the machine's turn and a fence; browser files go down a lane of one, a project's after its check; the verdict names skipped tests and --again runs failures once more.",
+    "what": "The suite verb: every test file, crate, project and tool as one unit in a process of its own, a sweep wide inside the machine turn and a fence; each test held to the per-test limit; browser files in a lane of one; the verdict names skipped tests and --again runs failures once more.",
     "files": [
       "suite/src/run.rs",
       "suite/src/sweep.rs",
@@ -253,7 +253,8 @@
       "run",
       "run_saying",
       "SuiteAsk",
-      "SuiteEnded"
+      "SuiteEnded",
+      "PerTest"
     ],
     "aliases": [
       "팀즈 아바타 테스트가 스위트에서 실제로 돌게"
@@ -270,8 +271,8 @@
       "core/run-verb-and-status",
       "core/silence-watch"
     ],
-    "base": "3dd281e07ef4399530874f7ea309b86b5b4c06d4",
-    "changed": 1794768727578
+    "base": "98128f71e9350a1038e8e1f6cddf145282cd7f4c",
+    "changed": 1794823081800
   },
   {
     "id": "suite/test-count",

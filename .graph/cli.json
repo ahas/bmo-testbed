@@ -2,7 +2,7 @@
   {
     "id": "cli/binary-and-verbs",
     "title": "Binary and verbs",
-    "what": "The bmo-testbed binary: its words read by clap into each verb and the nouns bmo dispatches to it, the answers it prints, and a checkout of the testbed handing suite, check and template over to its own built binary.",
+    "what": "The bmo-testbed binary: its words read by clap into each verb and the nouns bmo dispatches to it, the open-file limit raised as it starts, the answers it prints, and a checkout of the testbed handing suite, check and template over to its own built binary.",
     "files": [
       "cli/src/lib.rs",
       "cli/src/words.rs",
@@ -14,7 +14,10 @@
       "cli/tests/own.rs",
       "cli/tests/nouns.rs",
       "cli/src/main.rs",
-      "suite/src/own_binary.rs"
+      "suite/src/own_binary.rs",
+      "core/src/open_files.rs",
+      "core/tests/open_files.rs",
+      "docs/testbed.md"
     ],
     "symbols": [],
     "aliases": [],
@@ -37,8 +40,8 @@
       "service/http-service",
       "plugin/harness-plugin"
     ],
-    "base": "93e631758d9e668b2cd9cc007838e3a62eedca56",
-    "changed": 1794545339053
+    "base": "98128f71e9350a1038e8e1f6cddf145282cd7f4c",
+    "changed": 1794823081807
   },
   {
     "id": "cli/classify",

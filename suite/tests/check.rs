@@ -148,7 +148,7 @@ fn a_change_read_since_the_commit_its_branch_was_made_from_selects_the_tests_tha
   assert_eq!(names(&named), [DeployStep::Quick.name(), "types", "bun test"]);
   assert_eq!(
     named.steps.iter().find(|step| step.tests).unwrap().step.command,
-    ["bun", "test", "--timeout", "0", "./packages/util/numbers.test.ts"]
+    ["bun", "test", "--timeout=120000", "./packages/util/numbers.test.ts"]
   );
 
   // Read since HEAD on the branch, nothing is changed and no test is owed.
@@ -159,7 +159,7 @@ fn a_change_read_since_the_commit_its_branch_was_made_from_selects_the_tests_tha
 }
 
 // "the touched test files are one step for each folder they run from, the folder of their runner's
-// configuration or else the root, each handed by its path from there"
+// configuration or else the root, each handed by its path from there", with the per-test limit
 #[test]
 fn touched_test_files_run_one_step_per_folder_of_their_configuration() {
   let (dir, _) = checkout();
@@ -184,7 +184,7 @@ fn touched_test_files_run_one_step_per_folder_of_their_configuration() {
     (
       name.to_owned(),
       dir.to_owned(),
-      ["bun", "test", "--timeout", "0", file].map(str::to_owned).to_vec(),
+      ["bun", "test", "--timeout=120000", file].map(str::to_owned).to_vec(),
     )
   };
 

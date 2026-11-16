@@ -549,6 +549,19 @@ fn the_shared_versions_and_their_exceptions_read_and_what_breaks_them_is_refused
   assert!(naming_nothing.contains("the exception for rt names neither"), "{naming_nothing}");
 }
 
+// "how long one test may run before it fails": the declaration policy's 120 seconds where none is declared,
+// the declared seconds otherwise, and no seconds refused naming the key
+#[test]
+fn the_per_test_limit_is_the_declared_one_else_the_policy_s_and_never_no_seconds() {
+  let unnamed = parse(&declared("[test]\n")).expect("the declaration reads");
+  let named = parse(&declared("[test]\ntest_timeout_seconds = 30\n")).expect("the declaration reads");
+  let refusal = refused(&declared("[test]\ntest_timeout_seconds = 0\n"));
+
+  assert_eq!((unnamed.test.per_test_seconds(), named.test.per_test_seconds()), (120, 30));
+  assert!(refusal.contains("test.test_timeout_seconds"), "{refusal}");
+  assert!(refusal.contains("at least one second"), "{refusal}");
+}
+
 // "a silence limit of no seconds" is refused naming the key
 #[test]
 fn a_silence_limit_of_no_seconds_is_refused_naming_the_key() {

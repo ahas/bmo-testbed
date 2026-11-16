@@ -135,6 +135,9 @@ heading = "{mark} {seconds}s  {file}"
 # that ended it, or the exit {code} of one that failed having said nothing.
 signalled = "its process was ended by signal {signal}"
 silent = "its process said nothing and ended with exit code {code}"
+# A unit ended because one of its tests, {test}, ran past the per-test limit of {seconds} seconds
+# (docs/suite.md, "How long a unit and a test may run").
+test_overran = "the test {test} ran past the per-test limit of {seconds} s, so its unit was ended"
 # A project whose manifest names no {script} script or whose script no declared language runs, and a
 # tool whose {manifest} names no {key}.
 no_check = "its manifest names no {script} script, so nothing of it could be checked"
