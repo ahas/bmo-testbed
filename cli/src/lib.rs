@@ -28,12 +28,12 @@ use std::process::{Command, Stdio};
 use bmo_testbed_core::close_line::close_line_path;
 use bmo_testbed_core::declaration::Repository;
 use bmo_testbed_core::languages::LANGUAGES;
-use bmo_testbed_core::placement::{KeptHere, Local, PLACED_VARIABLE, Placement, wide_lane_full};
+use bmo_testbed_core::placement::{KeptHere, Local, PLACED_VARIABLE, Placement, lane_full};
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::policy::verbs::VERBS;
 use bmo_testbed_core::silence::{Silence, run_passed_on};
-use bmo_testbed_core::turn::{Env, NOT_RUN_EXIT_CODE, process_env};
+use bmo_testbed_core::turn::{Env, Lane, NOT_RUN_EXIT_CODE, process_env};
 use bmo_testbed_core::verb::{self, REFUSED_EXIT_CODE, RunWords, VerbGround, data_root};
 use bmo_testbed_suite::crate_tests;
 use bmo_testbed_suite::dependents::CHECKOUTS_VARIABLE;
@@ -345,7 +345,11 @@ pub fn main(args: impl IntoIterator<Item = OsString>) -> u8 {
       } => crate_tests::record(&record, executable, args),
       CrateTestsWord::Run { record, package } => crate_tests::run(&record, &package),
     },
-    Verb::Status(args) if args.free => u8::from(wide_lane_full(&process_env())),
+    Verb::Status(args) if args.free => {
+      let lane = if args.narrow { Lane::Narrow } else { Lane::Wide };
+
+      u8::from(lane_full(&process_env(), lane))
+    }
     Verb::Status(args) => status(args.json),
     Verb::Classify(args) => classify(args),
     Verb::Suite(args) => suite::suite(args),

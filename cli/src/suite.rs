@@ -77,7 +77,6 @@ pub fn suite(args: SuiteArgs) -> u8 {
       lane: Lane::Wide,
       cwd: std::env::current_dir().unwrap_or_default(),
       env: &env,
-      to_free_seat: false,
     });
 
     if let Some(code) = placed {

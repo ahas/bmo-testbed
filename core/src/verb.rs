@@ -195,7 +195,6 @@ pub fn run(words: &RunWords, ground: &VerbGround<'_>) -> RunOutcome {
       lane: words.lane(),
       cwd: cwd.clone(),
       env: &env,
-      to_free_seat: false,
     };
 
     if let Some(code) = ground.place.place(&ask) {

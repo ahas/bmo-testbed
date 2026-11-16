@@ -7,7 +7,7 @@ use std::time::Instant;
 
 use bmo_testbed_core::answer::{Cut, cap_items};
 use bmo_testbed_core::declaration::{QuickCheck, Repository};
-use bmo_testbed_core::placement::{PlaceAsk, runs_here, wide_lane_full};
+use bmo_testbed_core::placement::{PlaceAsk, runs_here};
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::verbs::VERBS;
 use bmo_testbed_core::turn::{Env, Lane, process_env};
@@ -43,9 +43,8 @@ pub fn check(args: CheckArgs) -> u8 {
   }
 }
 
-// The change check placed whole where the machine's placement sends it elsewhere while every seat of this
-// machine's wide lane is taken (docs/testbed.md, 「A run on another machine」): the code it ended with there, or
-// none where it runs here.
+// The change check placed whole where the machine's placement sends it elsewhere (docs/testbed.md, 「A run on
+// another machine」): the code it ended with there, or none where it runs here.
 fn placed_change(
   since: Option<&str>,
   files: &[String],
@@ -53,7 +52,7 @@ fn placed_change(
   repo: &Repository,
   env: &Env,
 ) -> Option<u8> {
-  if runs_here(env) || !wide_lane_full(env) {
+  if runs_here(env) {
     return None;
   }
 
@@ -75,7 +74,6 @@ fn placed_change(
     lane: Lane::Wide,
     cwd: called_from(),
     env,
-    to_free_seat: true,
   })
 }
 

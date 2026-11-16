@@ -270,7 +270,6 @@ async fn a_run_placed_elsewhere_answers_in_its_lanes_placed_runs() {
       lane: Lane::Wide,
       cwd: "/checkout".into(),
       env: &env,
-      to_free_seat: true,
     },
     std::path::Path::new("/checkout"),
     "machine-2",

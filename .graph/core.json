@@ -143,7 +143,7 @@
   {
     "id": "core/placement",
     "title": "Placement",
-    "what": "Where a run goes: here by default or where its environment names a variable as this machine's, else over ssh to another machine whose testbed must be this release; there a deployment keeps one bench per repository, and that machine is laid units, read for free disk and handed the release.",
+    "what": "Where a run goes: kept here where its environment sets a variable named as this machine's, else to the first machine in the placement settings' order with a seat free, over ssh to a machine whose testbed must be this release; there a deployment keeps one bench per repository.",
     "files": [
       "core/src/placement.rs",
       "cli/src/placement.rs",
@@ -155,6 +155,9 @@
       "reachable_remote",
       "ready_bench",
       "MachinePlacement",
+      "MachineSettings",
+      "Ordered",
+      "lane_full",
       "HttpPlacement",
       "BenchFor",
       "BenchTree",
@@ -166,7 +169,8 @@
       "배치 규칙",
       "다른 머신에 배치된 실행",
       "배치 기계",
-      "벤치를 저장소 하나에 하나로"
+      "벤치를 저장소 하나에 하나로",
+      "jake바쁠때 샐러리맨으로"
     ],
     "needs": [
       "core/lanes-and-turn",
@@ -174,8 +178,8 @@
       "deploy/releases-and-rollback",
       "core/silence-watch"
     ],
-    "base": "9863c967ccaa495e3399e6c128107b31aafabdb9",
-    "changed": 1794830058446
+    "base": "89329fb43f8a4c30dce444d9f086e592aa57970c",
+    "changed": 1794833371900
   },
   {
     "id": "core/policy-loader",

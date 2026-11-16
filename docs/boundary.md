@@ -118,7 +118,7 @@ bmo-testbed crate-tests run <record> <package>
 ### `status`
 
 ```
-bmo-testbed status [--json | --free]
+bmo-testbed status [--json | --free [--narrow]]
 ```
 
 - Prints each lane, its width, a `holding it:` line for each seat held, naming its holder, or one
@@ -132,8 +132,9 @@ bmo-testbed status [--json | --free]
     list of close entries, in the order they will be served), or null outside a repository.
 - **A close entry** carries `scope`, `checkout`, `askedAt`, `heldAt` and `pid` as a queue entry does.
 - **`--free`** prints nothing and exits 0 where a seat of this machine's wide lane is free now with nobody
-  waiting for one, else 1. A machine that places a run because it is full asks the placed machine this
-  before the run goes (「The placed machine」).
+  waiting for one, else 1; with `--narrow`, the same of the narrow lane. A machine that places a run on a
+  machine its order does not name last asks that machine this, of the run's lane, before the run goes
+  (「Placement」).
 
 ### `classify`
 
@@ -270,9 +271,9 @@ bmo-testbed check dashes <file…> [--write]
 - With no part named, the change check (`docs/checks.md`, 「The change check」): exits 1 where any step
   failed, 2 where the change could not be read. **`--json`** prints its lines on standard error
   instead, and on standard output one command run (「Members」) once the check has ended: its log, the
-  waits of its steps added up, and its whole time. Started while every seat of this machine's wide lane is
-  held or waited for, outside a held turn, a deployment's or a whole run's unit and a placed machine, it is
-  placed first where the machine's placement sends it elsewhere (「Placement」) and runs there as that testbed's change check with the same `--since`, `--json` and
+  waits of its steps added up, and its whole time. Started outside a held turn, a deployment's or a whole
+  run's unit and a placed machine, it is placed first where the machine's placement sends it elsewhere
+  (「Placement」) and runs there as that testbed's change check with the same `--since`, `--json` and
   files; `--log` then names nothing here, and the log is that machine's.
 - **`static`** is the static check a deployment's gate passes, alone (`docs/checks.md`, 「The static check」):
   the quick checks, the declared steps the change since the commit reaches, then the workspace's formatting
@@ -314,9 +315,8 @@ bmo-testbed cargo <cargo arguments…>
   which path packages moved, and puts the lock back as it found it once Cargo ends (`docs/deploy.md`,
   「The Cargo build directory」).
 - Placed first where the machine's placement sends it elsewhere (「Placement」) when its subcommand is
-  `test`, `check` or `clippy`, it holds no `--no-run` and no word names an absolute path, every seat of
-  this machine's wide lane is held or waited for, and it was started outside a held turn, a deployment's
-  or a whole run's unit and a placed machine: it then runs as
+  `test`, `check` or `clippy`, it holds no `--no-run` and no word names an absolute path, and it was
+  started outside a held turn, a deployment's or a whole run's unit and a placed machine: it then runs as
   the `cargo` verb of the testbed there, and its output and exit code are that run's.
 
 ### `prune`
@@ -751,15 +751,22 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   machine's loopback address among them, only this machine reaches. The variables a repository's runs
   read are that repository's to name, so the platform's own addresses every session carries keep
   nothing here.
-- **A run placed because this machine is full goes only to a free seat there.** The ask says so; the placed
-  machine is asked its `status --free` before the bench is made ready, and where every seat there is held
-  or waited for, or no answer says otherwise, the run waits for a seat here, said on a line. A run that is
-  placed whatever this machine holds, a `run` or a suite, goes and waits in that machine's line. The
-  placement endpoint chooses for itself and is told nothing of it.
+- **The runs that can be placed** are a `run`, a `suite`, the change check and the Cargo verb's `test`,
+  `check` and `clippy` (`docs/testbed.md`, 「A run on another machine」, which also names the runs that
+  stay here and why).
+- **The placed machine's settings put the machines in order** (「The placed machine」, `order`): the
+  placed machine and this machine, `local`. A run goes to the first in the order with a seat of its lane
+  free now and nobody waiting for one, and falls to the next only where every seat there is held or
+  waited for. This machine's seats are read from its lanes; the placed machine is asked its `status
+  --free`, of the run's lane, before its bench is made ready, and no answer saying a seat is free counts as
+  full. The last machine in the order takes the run whatever it holds, and the run waits in its line. A
+  placed machine that cannot be reached, or whose testbed is another release than this one's, is passed
+  over to the next in the order, and where it is the last, the run stays here; each is said on a line. The
+  placement endpoint chooses for itself and is told nothing of the order.
 - **In the crates the placement is a trait** in `core` with one method, asked with the run's words and
-  whether it goes only to a free seat, and answering here or elsewhere with an exit code; the local placement, always here, is the default, the
-  placement kept here by a variable says so and answers here, and the placed machine and the HTTP
-  placement in `cli` are members of it.
+  lane and answering here or elsewhere with an exit code; the local placement, always here, is the
+  default, the placement kept here by a variable says so and answers here, and the placed machine, which
+  walks its order, and the HTTP placement in `cli` are members of it.
 
 ### The placed machine
 
@@ -776,6 +783,7 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   | `cargo_target` | string | `~/.local/share/bmo/cargo-target` | That machine's shared Cargo build directory; a deployment's build is read back from the bench's own directory under it, the one that machine's Cargo verb builds in (`docs/deploy.md`, 「The Cargo build directory」) |
   | `disk_free_gigabytes` | number | 50, the prune policy's | The free space, in gigabytes of a thousand million bytes, below which a disk of that machine sends `placed-disk-low` from this machine's prune (`docs/deploy.md`, 「The Cargo build directory」). Not negative |
   | `disk_paths` | list of strings | none | Paths on that machine whose disks' free space the prune reads beside `cargo_target`'s. A machine on a virtual disk names the mount of the host drive the disk file stands on, `/mnt/c` for a WSL machine whose disk file is on `C:`, since the virtual disk's own free space says nothing of that drive |
+  | `order` | list of strings | the placed machine, then `local` | The machines a run that can be placed goes to, first choice first (「Placement」): the placed machine by its label, `machine` or else `destination`, and this machine as `local`. Each at most once and none other; an empty list does not read. A deployment's gate and release build go to the placed machine whatever it says |
 
   A `~` opening a path there is that machine's home. A file that does not read is no placement, said
   on a line.
@@ -786,8 +794,9 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   brings it to a release it puts live (below), with this testbed's release as the source, and fails its
   stage only where that does not take or the caller sets `BMO_TESTBED_PLACEMENT` empty, naming both
   commits and what the machine answered. A `run`, a suite, a change check or a Cargo verb copies
-  nothing and runs here instead, on a line naming the machine and both commits, since the same command
-  would meet that machine the same way until its testbed is brought to this release. A testbed running from
+  nothing and goes on to the next machine in the order, or stays here where that machine is the last, on
+  a line naming the machine and both commits, since the same command would meet that machine the same way
+  until its testbed is brought to this release. A testbed running from
   no release, such as a checkout's own build, compares nothing.
 - **The testbed's own deployment brings that machine's testbed to its release.** Once the release is
   live and nothing can roll it back any more, after the steps after the health, the releases' prune
@@ -854,12 +863,13 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   the line saying the run's turn there came (「A run placed elsewhere stands here too」), touching the file
   its own holder handed it in `BMO_TESTBED_HEARD` while they do; ending a silent command is the `placed`
   verb's there.
-- **A connection that cannot be made is local:** the caller says so on a line and runs here. A
+- **A connection that cannot be made passes the machine over:** the caller says so on a line and goes on
+  to the next machine in the order, or runs here where the machine is the last. A
   connection that breaks once the run has begun ends the run as not run, exit code 75.
 
 ### The placement endpoint
 
-- **Before asking for its turn, a `run` or a `suite` posts one JSON object to the endpoint:**
+- **Before asking for its turn, a run that can be placed posts one JSON object to the endpoint:**
 
   | Field | Type | Meaning |
   |---|---|---|
@@ -910,8 +920,8 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   `testbed: placed run's turn came`; the placing machine reads that line off the run's output, `ssh`'s
   standard error or the stream's `output` events, and does not pass it on. A run whose far side writes
   no such line stands waiting until it ends.
-- **It takes no seat here:** whether a seat here is free, for `status --free` and for a run that may
-  be placed because this machine is full, is read from the lane's seats and line alone.
+- **It takes no seat here:** whether a seat here is free, for `status --free` and for a run walking the
+  order (「Placement」), is read from the lane's seats and line alone.
 - **A deployment's gate and release build on the placed machine stand as the deployment's stages**
   (「The record」), never in a lane's `placed` list.
 - **The entries stand beside the lane's lock,** one file for each run in a directory named for the lock

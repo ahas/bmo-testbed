@@ -13,7 +13,7 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
 
 use bmo_testbed_core::declaration::Repository;
-use bmo_testbed_core::placement::{PlaceAsk, PlacedRun, Placement};
+use bmo_testbed_core::placement::{PlaceAsk, PlacedRun, Placement, lane_full};
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::policy::prune::PRUNE;
@@ -582,6 +582,17 @@ pub struct MachineSettings {
   /// The paths there whose disks' free space is read beside the build directory's.
   #[serde(default)]
   pub disk_paths: Vec<String>,
+  /// The machines a run that can be placed goes to, first choice first, by name; the placed machine, then this
+  /// one, where none is named (docs/boundary.md, 「Placement」).
+  #[serde(default)]
+  pub order: Option<Vec<String>>,
+}
+
+/// A machine of the placement order: this one, or the placed machine the settings name.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Ordered {
+  Here,
+  Placed,
 }
 
 /// The filesystem holding a disk path of the placed machine: its source, which for a WSL drive mount is the
@@ -663,8 +674,47 @@ impl MachineSettings {
         .and_then(|settings| match settings.disk_free_gigabytes {
           Some(floor) if !floor.is_finite() || floor < 0.0 => Err(unsettled(&LANES.placed.negative_floor)),
           _ => Ok(settings),
+        })
+        .and_then(|settings| match settings.order() {
+          Ok(_) => Ok(settings),
+          Err(why) => Err(unsettled(&why)),
         }),
     )
+  }
+
+  /// The placement order, first choice first: the machines the settings' `order` names, each by the placed
+  /// machine's label or this machine's name, or the placed machine then this one where it names none. Why it
+  /// does not read where it is empty, names a machine twice or names one that is neither.
+  pub fn order(&self) -> Result<Vec<Ordered>, String> {
+    let words = &LANES.placed;
+    let Some(names) = &self.order else { return Ok(vec![Ordered::Placed, Ordered::Here]) };
+
+    if names.is_empty() {
+      return Err(words.order_empty.clone());
+    }
+
+    let mut order = Vec::with_capacity(names.len());
+
+    for name in names {
+      let ordered = if *name == words.here {
+        Ordered::Here
+      } else if name == self.label() {
+        Ordered::Placed
+      } else {
+        return Err(fill_marks(
+          &words.order_unknown,
+          &[("name", name), ("machine", self.label()), ("here", &words.here)],
+        ));
+      };
+
+      if order.contains(&ordered) {
+        return Err(fill_marks(&words.order_twice, &[("name", name)]));
+      }
+
+      order.push(ordered);
+    }
+
+    Ok(order)
   }
 
   /// The free space below which a disk there sends `placed-disk-low`, in bytes.
@@ -837,15 +887,6 @@ pub fn own_release() -> Option<OwnRelease> {
   })
 }
 
-/// What a run on the placed machine came to: it ran there, with its code; or it did not go, said on a line,
-/// and the run is the caller's: the machine unreached or its testbed another release than this one's, or, for
-/// a run that goes only to a free seat, every seat there held or waited for.
-pub enum Placed {
-  Ran(u8),
-  Here,
-  Full,
-}
-
 /// What words run on the placed machine came to: the code they ended with there, or the connection broken
 /// under them, `ssh`'s own 255 or no code at all.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -960,10 +1001,11 @@ impl MachinePlacement {
     )
   }
 
-  /// Whether a seat of the wide lane there is free now with nobody waiting for one, as that machine's
-  /// `status --free` answers; the `full` line where it is not, or where the answer does not come.
-  pub fn seat_free(&self) -> bool {
-    let asked = self.ssh().arg(format!("{} status --free", self.settings.testbed)).output();
+  /// Whether a seat of the lane there is free now with nobody waiting for one, as that machine's `status
+  /// --free` answers; the `full` line where it is not, or where the answer does not come.
+  pub fn seat_free(&self, lane: Lane) -> bool {
+    let narrow = if lane == Lane::Narrow { " --narrow" } else { "" };
+    let asked = self.ssh().arg(format!("{} status --free{narrow}", self.settings.testbed)).output();
 
     if succeeded(&asked) {
       return true;
@@ -1427,10 +1469,13 @@ impl MachinePlacement {
   }
 
   /// A run placed on the machine: the bench made ready at the checkout's `HEAD` with its open files, and
-  /// the words run there as the testbed's own `run`.
-  fn placed(&self, ask: &PlaceAsk<'_>) -> Placed {
+  /// the words run there as the testbed's own `run`; the code it ended with there. None where it did not go,
+  /// said on a line: the machine unreached, its testbed another release than this one's, or, for a run that
+  /// goes there only to a seat free now since another machine follows it in the order, every seat of its
+  /// lane there held or waited for.
+  fn placed(&self, ask: &PlaceAsk<'_>, to_free_seat: bool) -> Option<u8> {
     if !self.reached() {
-      return Placed::Here;
+      return None;
     }
 
     // A testbed there of another release would meet the same command the same way until it is brought to this
@@ -1440,11 +1485,11 @@ impl MachinePlacement {
 
       eprintln!("{}", fill_marks(&LANES.placed.other_release, &[("machine", machine), ("said", &said)]));
 
-      return Placed::Here;
+      return None;
     }
 
-    if ask.to_free_seat && !self.seat_free() {
-      return Placed::Full;
+    if to_free_seat && !self.seat_free(ask.lane) {
+      return None;
     }
 
     let found = git(&ask.cwd, &["rev-parse", "--show-toplevel"]);
@@ -1453,7 +1498,7 @@ impl MachinePlacement {
     let commit = git(&checkout, &["rev-parse", "HEAD"]);
     let bench = match self.made_ready(&checkout, &commit, BenchFor::Run) {
       Ok(bench) => bench,
-      Err(said) => return Placed::Ran(dropped(self.settings.label(), &said)),
+      Err(said) => return Some(dropped(self.settings.label(), &said)),
     };
     let mut words = vec![self.settings.testbed.clone()];
 
@@ -1476,15 +1521,35 @@ impl MachinePlacement {
       words.extend(ask.command.iter().cloned());
     }
 
-    Placed::Ran(self.run(&bench, &words, true, Some(&placed)))
+    Some(self.run(&bench, &words, true, Some(&placed)))
   }
 }
 
 impl Placement for MachinePlacement {
+  /// The run walks the order: it goes to the first machine with a seat of its lane free now, and the last
+  /// takes it whatever it holds. A placed machine that does not take it passes it on to the next, and a run
+  /// no machine took stays here.
   fn place(&self, ask: &PlaceAsk<'_>) -> Option<u8> {
-    match self.placed(ask) {
-      Placed::Ran(code) => Some(code),
-      Placed::Here | Placed::Full => None,
+    let order = self.settings.order().unwrap_or_default();
+    let last = order.len().saturating_sub(1);
+
+    for (at, ordered) in order.into_iter().enumerate() {
+      let to_free_seat = at < last;
+
+      match ordered {
+        Ordered::Here => {
+          if !to_free_seat || !lane_full(ask.env, ask.lane) {
+            return None;
+          }
+        }
+        Ordered::Placed => {
+          if let Some(code) = self.placed(ask, to_free_seat) {
+            return Some(code);
+          }
+        }
+      }
     }
+
+    None
   }
 }

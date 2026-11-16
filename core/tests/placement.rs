@@ -14,7 +14,6 @@ fn ask<'a>(command: &'a [String], env: &'a Env) -> PlaceAsk<'a> {
     lane: Lane::Narrow,
     cwd: "/checkout/sub".into(),
     env,
-    to_free_seat: false,
   }
 }
 

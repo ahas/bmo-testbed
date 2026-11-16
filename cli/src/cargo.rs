@@ -12,7 +12,7 @@ use std::process::{Command, Stdio};
 use bmo_testbed_core::declaration::{Repository, root_of};
 use bmo_testbed_core::events::{Event, Hook};
 use bmo_testbed_core::languages::cargo_placeable;
-use bmo_testbed_core::placement::{PlaceAsk, runs_here, wide_lane_full};
+use bmo_testbed_core::placement::{PlaceAsk, runs_here};
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::policy::prune::PRUNE;
@@ -39,16 +39,15 @@ use crate::said::Said;
 use crate::words::{BINARY, PruneArgs};
 use crate::{home_of, placement_of};
 
-/// `cargo`: Cargo's own code, 75 where the turn did not come. A command that tests, checks or lints, started
-/// while every seat of this machine's wide lane is taken, is placed first where the machine's placement sends it
-/// elsewhere (docs/testbed.md, 「A run on another machine」), and runs there as this same verb of that machine's
-/// testbed.
+/// `cargo`: Cargo's own code, 75 where the turn did not come. A command that tests, checks or lints is placed
+/// first where the machine's placement sends it elsewhere (docs/testbed.md, 「A run on another machine」), and
+/// runs there as this same verb of that machine's testbed.
 pub fn cargo(words: &[String]) -> u8 {
   let here = std::env::current_dir().unwrap_or_default();
   let root = root_of(&here).unwrap_or(here);
   let env = process_env();
 
-  if cargo_placeable(words) && !runs_here(&env) && wide_lane_full(&env) {
+  if cargo_placeable(words) && !runs_here(&env) {
     let command: Vec<String> = [BINARY.to_owned(), "cargo".to_owned()]
       .into_iter()
       .chain(words.iter().cloned())
@@ -59,7 +58,6 @@ pub fn cargo(words: &[String]) -> u8 {
       lane: Lane::Wide,
       cwd: root.clone(),
       env: &env,
-      to_free_seat: true,
     };
 
     if let Some(code) = placement_of(&env, &root).place(&ask) {

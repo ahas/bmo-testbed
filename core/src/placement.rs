@@ -22,7 +22,7 @@ pub const DEPLOY_UNIT_VARIABLE: &str = "BMO_DEPLOY_UNIT";
 /// The variable the `placed` verb marks the run it starts with: a run on a placed machine, never placed again.
 pub const PLACED_VARIABLE: &str = "BMO_TESTBED_PLACED";
 
-/// A run asked about before its turn: its words and where its caller stands.
+/// A run asked about before its turn: its words, its lane and where its caller stands.
 pub struct PlaceAsk<'a> {
   pub command: &'a [String],
   /// The language the caller named to read the command, where it named one.
@@ -31,9 +31,6 @@ pub struct PlaceAsk<'a> {
   /// The directory the run was started in.
   pub cwd: PathBuf,
   pub env: &'a Env,
-  /// Whether it goes only to a seat free there now: a run placed because this machine is full, which would
-  /// otherwise wait in that machine's line while this one's frees, waits in this one's instead.
-  pub to_free_seat: bool,
 }
 
 /// Where a run goes.
@@ -85,13 +82,13 @@ pub fn runs_here(env: &Env) -> bool {
     .any(|name| env.get(*name).is_some_and(|value| !value.is_empty()))
 }
 
-/// Whether this machine's wide lane has no seat for a run now: every one of its own seats held, or someone
-/// already waiting for one. A run that may go either way goes elsewhere only then, so this machine's own seats
-/// are used first; the deployment's seat is never one such a run could take.
-pub fn wide_lane_full(env: &Env) -> bool {
-  let lock = lock_path(env, Lane::Wide);
+/// Whether a lane of this machine has no seat for a run now: every one of its own seats held, or someone
+/// already waiting for one. A run walking a placement order passes this machine over then; the deployment's
+/// seat is never one such a run could take.
+pub fn lane_full(env: &Env, lane: Lane) -> bool {
+  let lock = lock_path(env, lane);
 
-  lane_seats_held(&lock) >= Lane::Wide.seats(env) || !read_queue(&lock).waiting.is_empty()
+  lane_seats_held(&lock) >= lane.seats(env) || !read_queue(&lock).waiting.is_empty()
 }
 
 static PLACED_RUNS: AtomicU64 = AtomicU64::new(0);

@@ -11,7 +11,9 @@
 //! and not passed on, and the `placed` verb there passing its command's output on, telling its own holder
 //! while it comes and ending it whole once it falls silent for the declared limit. The units a release marks
 //! for the machine laid in its user units and their timers started there, and the prune's reading of its free
-//! disk against the settings' floor, sending `placed-disk-low` for each disk below it. The testbed there brought to
+//! disk against the settings' floor, sending `placed-disk-low` for each disk below it. The settings' order read
+//! by name, and a run going to the first machine in it with a seat of its lane free, falling to the next when
+//! that one is full. The testbed there brought to
 //! a live release carrying one and read back at its commit, unless the caller keeps it as it stands.
 
 use std::cell::Cell;
@@ -25,7 +27,7 @@ use axum::routing::{get, post};
 use bmo_testbed_cli::cargo::placed_disk;
 use bmo_testbed_cli::deploy::{PlacedGate, brings_testbed};
 use bmo_testbed_cli::placement::{
-  BenchFor, MachinePlacement, MachineSettings, OwnRelease, ReadyBench, reachable_remote,
+  BenchFor, MachinePlacement, MachineSettings, Ordered, OwnRelease, ReadyBench, reachable_remote,
 };
 use bmo_testbed_core::events::Hook;
 use bmo_testbed_core::placement::{PlaceAsk, PlacedRun, Placement, read_placed};
@@ -34,7 +36,7 @@ use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::policy::prune::PRUNE;
 use bmo_testbed_core::policy::verbs::VERBS;
 use bmo_testbed_core::queue::process_alive;
-use bmo_testbed_core::turn::{Env, Lane, NOT_RUN_EXIT_CODE, lock_path};
+use bmo_testbed_core::turn::{Env, Lane, NOT_RUN_EXIT_CODE, TestbedTurn, TurnAsk, lock_path, take_turn};
 use bmo_testbed_deploy::deployment::{BuildAsk, Gate, GateAsk, GateFault, Passed, none_earlier};
 use serde_json::{Value, json};
 
@@ -503,6 +505,7 @@ fn released(dir: &Path, far: Option<&str>, own: Option<&str>) -> MachinePlacemen
       cargo_target: dir.join("cargo-target").to_string_lossy().into_owned(),
       disk_free_gigabytes: None,
       disk_paths: Vec::new(),
+      order: None,
     },
     home: dir.to_path_buf(),
     release: own.map(|commit| OwnRelease {
@@ -861,7 +864,6 @@ fn a_run_meeting_a_testbed_there_of_another_release_is_kept_here_and_no_bench_is
     lane: Lane::Wide,
     cwd: repo.clone(),
     env: &env,
-    to_free_seat: false,
   };
 
   assert_eq!(released(&dir, Some(FAR), Some(OWN)).place(&ask), None);
@@ -941,7 +943,6 @@ fn the_placed_run_is_running_once_the_far_side_says_its_turn_came() {
       lane: Lane::Wide,
       cwd: dir.clone(),
       env: &env,
-      to_free_seat: false,
     },
     &dir,
     "machine-2",
@@ -1102,6 +1103,123 @@ fn the_disk_floor_is_the_policy_s_unless_the_settings_name_one_and_a_negative_on
       .unwrap_err()
       .contains(&LANES.placed.negative_floor)
   );
+}
+
+// "the settings put the machines in order, the placed machine by its label and this machine as `local`; none
+// named is the placed machine, then this one; an empty order, a machine named twice or one that is neither does
+// not read"
+#[test]
+fn the_order_reads_by_name_and_refuses_an_empty_a_repeated_or_an_unknown_machine() {
+  let dir = tempfile::tempdir().unwrap();
+  let settings = |order: &str| {
+    std::fs::create_dir_all(dir.path().join("env")).unwrap();
+    std::fs::write(
+      dir.path().join("env/placement.toml"),
+      format!("machine = \"machine-2\"\ndestination = \"stand\"\n{order}"),
+    )
+    .unwrap();
+    MachineSettings::read(dir.path()).unwrap().map(|settings| settings.order().unwrap())
+  };
+  let here = &LANES.placed.here;
+
+  assert_eq!(settings("").unwrap(), [Ordered::Placed, Ordered::Here]);
+  assert_eq!(
+    settings(&format!("order = [\"{here}\", \"machine-2\"]\n")).unwrap(),
+    [Ordered::Here, Ordered::Placed]
+  );
+  assert_eq!(settings("order = [\"machine-2\"]\n").unwrap(), [Ordered::Placed]);
+  assert!(settings("order = []\n").unwrap_err().contains(&LANES.placed.order_empty));
+  assert!(
+    settings(&format!("order = [\"{here}\", \"{here}\"]\n"))
+      .unwrap_err()
+      .contains(&fill_marks(&LANES.placed.order_twice, &[("name", here)]))
+  );
+  assert!(settings("order = [\"stand\"]\n").unwrap_err().contains(&fill_marks(
+    &LANES.placed.order_unknown,
+    &[("name", "stand"), ("machine", "machine-2"), ("here", here)]
+  )));
+}
+
+// A turn held in one lane of the seats a lock names, in a machine of one wide seat.
+fn holding(lock: &Path, lane: Lane) -> TestbedTurn {
+  take_turn(&TurnAsk {
+    command: "a holder".to_owned(),
+    lane,
+    say: &|_| {},
+    path: None,
+    env: Env::from([
+      ("BMO_TESTBED_LOCK".to_owned(), lock.to_string_lossy().into_owned()),
+      ("BMO_TESTBED_SEATS".to_owned(), "1".to_owned()),
+    ]),
+    checkout: "/checkout".to_owned(),
+    poll: None,
+    notice_seconds: None,
+  })
+}
+
+// "a run goes to the first machine in the order with a seat of its lane free now, and falls to the next only
+// where every seat there is held or waited for; the last takes it whatever it holds": the placed machine, whose
+// lanes stand apart from this one's, first, then this machine first.
+#[test]
+fn a_run_goes_to_the_first_machine_in_the_order_with_a_seat_free_and_falls_to_the_next_when_it_is_full() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let repo = dir.join("repo");
+  let ssh = dir.join("ssh");
+  let far_lock = dir.join("far.lock");
+  let order = |names: &str| {
+    settle(&dir, &ssh, "stand");
+    let file = dir.join("env/placement.toml");
+    let text = std::fs::read_to_string(&file).unwrap();
+
+    std::fs::write(&file, format!("{text}order = {names}\n")).unwrap();
+  };
+  let run = |narrow: bool| {
+    let mut args = vec!["run"];
+
+    if narrow {
+      args.push("--narrow");
+    }
+
+    args.extend(["--adapter", "plain", "--", "sh", "-c", "exit 7"]);
+    ran(testbed(&repo, &dir, &args).env("HOME", &dir).env("BMO_TESTBED_SEATS", "1"))
+  };
+  let bench = dir.join("bench/repo");
+  let running =
+    fill_marks(&LANES.placed.running, &[("machine", "machine-2"), ("bench", &bench.to_string_lossy())]);
+  let full = fill_marks(&LANES.placed.full, &[("machine", "machine-2")]);
+
+  // The far side's turns stand at a lock of their own, as another machine's do.
+  install(
+    &SSH.replace("exec sh -c", &format!("export BMO_TESTBED_LOCK={}; exec sh -c", far_lock.display())),
+    &ssh,
+  );
+  checkout(&repo, "testbed = 0\n");
+
+  order(&format!("[\"machine-2\", \"{}\"]", LANES.placed.here));
+
+  let far_narrow = holding(&far_lock, Lane::Narrow);
+  let there = run(false);
+  let fell = run(true);
+
+  drop(far_narrow);
+  assert_eq!(there.code, 7, "{}\n{}", there.out, there.err);
+  assert!(there.err.contains(&running), "{}", there.err);
+  assert_eq!(fell.code, 7, "{}\n{}", fell.out, fell.err);
+  assert!(fell.err.contains(&full), "{}", fell.err);
+  assert!(!fell.err.contains(&running), "{}", fell.err);
+
+  order(&format!("[\"{}\", \"machine-2\"]", LANES.placed.here));
+
+  let here = run(false);
+  let local_wide = holding(&dir.join("testbed.lock"), Lane::Wide);
+  let placed = run(false);
+
+  drop(local_wide);
+  assert_eq!(here.code, 7, "{}\n{}", here.out, here.err);
+  assert!(!here.err.contains(&running), "{}", here.err);
+  assert_eq!(placed.code, 7, "{}\n{}", placed.out, placed.err);
+  assert!(placed.err.contains(&running), "{}", placed.err);
 }
 
 // A hook that writes down the name and the payload of each event it is handed.

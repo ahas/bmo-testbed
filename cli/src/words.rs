@@ -198,6 +198,9 @@ pub struct StatusArgs {
   /// Print nothing and exit 0 where a seat of the wide lane is free now with nobody waiting for one, else 1.
   #[arg(long, conflicts_with = "json")]
   pub free: bool,
+  /// With `--free`, ask the narrow lane instead.
+  #[arg(long, requires = "free")]
+  pub narrow: bool,
 }
 
 #[derive(Debug, Args)]

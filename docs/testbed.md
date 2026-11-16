@@ -299,30 +299,41 @@ flowchart TD
 
 ## A run on another machine
 
-- **A heavy run may be placed on another machine** before it asks for its turn, unless it was started
-  inside a turn already held or inside a whole run's unit. Where it goes is the machine's placement
-  (`docs/boundary.md`, 「Placement」): the placed machine its settings name, reached over `ssh`, or the
-  placement endpoint's answer; with neither, or one that does not answer, the run stays on the machine
-  it was started on.
-- **A run that reads what only this machine reaches stays here:** one whose environment sets a variable
-  the checkout's declaration names as such, the address of a console standing on this machine's
-  loopback among them, since a placed run carries none of the caller's environment.
-- **A placed machine whose testbed is another release than this one's runs nothing,** so the run stays
-  here, said on a line naming both commits; a deployment's gate and build fail their stage instead
-  (`docs/deploy.md`, 「Where a deployment runs」).
-- **A Cargo verb that tests, checks or lints is such a run while this machine is full:** `test`, `check`
-  and `clippy` through `bmo-testbed cargo`, started while every seat of this machine's wide lane is held
-  or someone already waits for one, are placed the same way and run there as the same verb of that
-  machine's testbed; with a seat free here they run here, so this machine's seats are used first and the
-  placed machine takes what would otherwise wait. They go only to a seat free there now: where every seat
-  of that machine is held or waited for, they wait in this machine's line instead, never in that machine's
-  line while seats here free.
-  One that must stand here stays: a build, a run or any other subcommand whose output this machine
-  reads afterwards, a `--no-run`, and words naming an absolute path, which would point elsewhere there.
-- **So is the change check, on the same condition:** `bmo-testbed check` with no part named is placed
-  whole and runs there as that machine's own change check over the same commit and open files, its steps
-  in that machine's turn.
-  Its log stays on that machine, named in the lines that come back.
+- **A heavy run that can be placed may run on another machine** before it asks for its turn. Where it
+  goes is the machine's placement (`docs/boundary.md`, 「Placement」): the placed machine its settings
+  name, reached over `ssh`, or the placement endpoint's answer; with neither, or one that does not
+  answer, the run stays on the machine it was started on.
+- **The settings put the machines in order,** this machine among them (`docs/boundary.md`, 「The placed
+  machine」, `order`). A run that can be placed goes to the first machine in the order with a seat of its
+  lane free now and nobody waiting for one, and falls to the next only where every seat there is held or
+  waited for. The last machine in the order takes it whatever it holds, and the run waits in that
+  machine's line. A machine that cannot be reached, or whose testbed is another release than this one's,
+  is passed over the same way, said on a line. So the order alone says which machine's seats are used
+  first, and which machine a run waits on once every machine is full.
+- **What can be placed:** a `run` of a heavy command, in either lane, a Bun test, a type check, a
+  package script or a browser test among them; a whole run of the suite; `test`, `check` and `clippy`
+  through `bmo-testbed cargo`, which run there as the same verb of that machine's testbed; and the change
+  check, `bmo-testbed check` with no part named, which is placed whole and runs there as that machine's
+  own change check over the same commit and open files, its steps in that machine's turn, its log staying
+  on that machine and named in the lines that come back.
+- **What stays here, whatever the order says:**
+  - a run started inside a turn already held, since its holder's seat is here and it stands in it;
+  - a run inside a deployment's or a whole run's unit, since those hold their own place in this
+    machine's line, and a deployment's own heavy work goes to the placed machine by its own rule
+    (below);
+  - a run started on a placed machine, which is never placed again;
+  - a run whose environment sets a variable the checkout's declaration names as reaching what only this
+    machine reaches, the address of a console standing on this machine's loopback among them, since a
+    placed run carries none of the caller's environment;
+  - a Cargo verb whose output this machine reads afterwards: a build, a run or any other subcommand that
+    is not `test`, `check` or `clippy`, a `--no-run`, and words naming an absolute path, which would
+    point elsewhere there;
+  - a change check with a part named: the quick checks are light, and the static check alone is the part
+    a deployment's gate runs in its own bench;
+  - the light commands no lane takes, which cost less where they stand than the copy a placed run makes.
+- **A placed machine whose testbed is another release than this one's runs nothing,** so the run goes on
+  to the next machine in the order, said on a line naming both commits; a deployment's gate and build fail
+  their stage instead (`docs/deploy.md`, 「Where a deployment runs」).
 - **There it runs in a bench copy of the caller's checkout under that machine's own testbed:** the
   caller pushes its commit into a clone of the checkout's remote in the bench, the remote a support
   checkout's main checkout names where the support checkout's own is a path on this machine, copies its open files
@@ -330,9 +341,9 @@ flowchart TD
   repository to its own place under the bench root; the checkout's setup then runs there, and the
   command in that machine's own turn, on its own seats and its own memory gate. Its output and its
   one result line come back to the caller.
-- **A deployment's gate and its Cargo release build go to the placed machine** the settings name
-  (`docs/deploy.md`, 「Where a deployment runs」), so the machine that serves is not the machine that
-  checks and builds.
+- **A deployment's gate and its Cargo release build go to the placed machine** the settings name,
+  whatever the order says (`docs/deploy.md`, 「Where a deployment runs」), so the machine that serves is
+  not the machine that checks and builds.
 - **A caller keeps its place in the line there:** one standing at the front (「The front of the line」) or
   next (「Next after the front」) here stands the same on the placed machine, the line run there carrying
   `BMO_TESTBED_FRONT` or `BMO_TESTBED_NEXT` as it stands here. A deployment's gate and release build

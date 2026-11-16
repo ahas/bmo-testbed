@@ -91,10 +91,17 @@ running = "testbed: running on {machine} in {bench}"
 # connection that broke once the run had begun.
 unsettled = "testbed: the placement settings {file} do not read ({why}); running here"
 negative_floor = "disk_free_gigabytes takes a number of gigabytes of 0 or more"
+# The settings' `order` (docs/boundary.md, 「The placed machine」): the name it gives this machine, and why an
+# order does not read: it names no machine, names {name} more than once, or names {name}, which is neither the
+# placed machine's label {machine} nor this machine's name {here}.
+here = "local"
+order_empty = "order names no machine"
+order_twice = "order names {name} more than once"
+order_unknown = "order names {name}, which is neither the placed machine {machine} nor {here}"
 unreached = "testbed: the placed machine {machine} cannot be reached ({said}); running here"
-# A run placed because this machine is full finds every seat on the placed machine held or waited for, or no
-# answer saying otherwise; it waits for a seat here instead.
-full = "testbed: every seat on {machine} is held or waited for; waiting here"
+# A run the order sends to the placed machine before another finds every seat of its lane there held or waited
+# for, or no answer saying otherwise; it goes on to this machine, the next in the order.
+full = "testbed: every seat on {machine} is held or waited for; running here"
 tree_uncopied = "the tree {tree} could not be copied: {said}"
 file_unlaid = "the file {file} could not be laid there: {said}"
 unfetched = "the binaries could not be read back from {machine}: {said}"
