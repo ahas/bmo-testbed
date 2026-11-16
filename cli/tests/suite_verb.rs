@@ -12,9 +12,7 @@ use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::policy::suite::SUITE;
 use bmo_testbed_core::queue::{LockWait, take_lock};
-use bmo_testbed_core::turn::{
-  Env, FRONT_VARIABLE, Lane, NOT_RUN_EXIT_CODE, SEATS_VARIABLE, TurnAsk, take_turn,
-};
+use bmo_testbed_core::turn::{Env, Lane, NOT_RUN_EXIT_CODE, SEATS_VARIABLE, TurnAsk, take_turn};
 use bmo_testbed_record::Record;
 
 use crate::stand::{Ran, checkout, finished, git, testbed, until};
@@ -181,7 +179,6 @@ fn a_run_whose_turn_does_not_come_runs_nothing() {
     path: Some(lock.clone()),
     env: Env::from([
       ("BMO_TESTBED_SCOPE".to_owned(), "place-3".to_owned()),
-      (FRONT_VARIABLE.to_owned(), "1".to_owned()),
       // A lane of one seat, which the holder fills.
       ("BMO_TESTBED_SEATS".to_owned(), "1".to_owned()),
     ]),

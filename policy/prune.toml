@@ -32,6 +32,11 @@ ceiling_gigabytes = 200
 # them.
 ceiling_room_gigabytes = 50
 
+# The share of the ceiling, in percent, the deployments' checkouts kept to the last by its enforcement may hold
+# (docs/deploy.md, 「The Cargo build directory」): the ones read most recently, as many as fit, so the working
+# checkouts keep the rest of the room.
+deployment_keep_percent = 30
+
 
 # The trim run once a prune that is not a dry run is done, the build root handed to it as its last word
 # (docs/deploy.md, 「The Cargo build directory」): fstrim needs root, and `-n` keeps sudo from waiting on a

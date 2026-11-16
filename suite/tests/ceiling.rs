@@ -12,7 +12,7 @@ use bmo_testbed_core::policy::prune::PRUNE;
 use bmo_testbed_suite::ceiling::{
   CEILING_VARIABLE, Ceiling, CeilingPlan, CeilingSetting, Enforcement, HeldBy, Holder, Keepers,
 };
-use bmo_testbed_suite::crates::CHECKOUT_RECORD_NAME;
+use bmo_testbed_suite::crates::{CHECKOUT_RECORD_NAME, DEPLOYMENT_MARK_NAME};
 use bmo_testbed_suite::prune::{HOUR_MS, directory_bytes, disk_free_bytes, take_prune_locks};
 use bmo_testbed_suite::superseded::CARGO_BUILD_LOCK_NAME;
 
@@ -268,7 +268,7 @@ fn last_the_checkouts_profile_directories_are_emptied_oldest_first_but_their_loc
   let enforcement = enforce(&built.root, 0, &Keepers::default(), true);
   let last = &enforcement.rules[2];
 
-  assert_eq!(enforcement.rules.len(), 3);
+  assert_eq!(enforcement.rules.len(), 5);
   assert_eq!(last.names, ["a-0123456789ab", "b-0123456789ab"]);
   assert!(none_exist(&built.a_unit) && none_exist(&built.b_unit));
   assert!(none_exist(&built.a_rest) && none_exist(&built.b_rest));
@@ -278,6 +278,71 @@ fn last_the_checkouts_profile_directories_are_emptied_oldest_first_but_their_loc
   // nothing holds what is left, which is that unit alone.
   assert!(all_exist(&built.shared_linked));
   assert!(enforcement.over() && enforcement.holders.is_empty());
+}
+
+// A live checkout's directory under the build root holding `count` units from `first` on, read at `at`, carrying a
+// deployment's mark where `deployment` says so; its units.
+fn checkout_of(
+  root: &Path,
+  name: &str,
+  first: u64,
+  count: u64,
+  at: i64,
+  deployment: bool,
+) -> Vec<Vec<PathBuf>> {
+  let dir = root.join("checkouts").join(name);
+
+  write(&dir.join(CHECKOUT_RECORD_NAME), 8, at);
+
+  if deployment {
+    write(&dir.join(DEPLOYMENT_MARK_NAME), 0, at);
+  }
+
+  (first..first + count).map(|index| unit(&dir.join("debug"), index, at)).collect()
+}
+
+// "kept deployments' checkouts' own units: as rule 2, for the directories of the kept deployments' checkouts": a
+// deployment's checkout within the share keeps its unit though it was read before the working checkout's units
+#[test]
+fn a_kept_deployment_s_checkout_keeps_its_units_while_a_working_checkout_s_later_read_ones_go() {
+  let scratch = tempfile::tempdir().unwrap();
+  let root = scratch.path().join("build");
+  let now = now();
+  let deployment = checkout_of(&root, "deployed-0123456789ab", 1, 1, now - 50 * HOUR_MS, true);
+  let working = checkout_of(&root, "working-0123456789ab", 2, 6, now - HOUR_MS, false);
+  let held = directory_bytes(&root);
+  let enforcement = enforce(&root, held - bytes_of(&working[0]), &Keepers::default(), true);
+
+  assert!(!enforcement.over(), "{enforcement:?}");
+  assert!(all_exist(&deployment[0]));
+  assert_eq!(working.iter().filter(|one| none_exist(one)).count(), 1);
+  assert_eq!(enforcement.rules.len(), 2);
+}
+
+// "The deployments' checkouts kept to the last are bounded by the prune policy's share of the ceiling ... the
+// ones read most recently first ... Every other deployment's checkout stands with the working checkouts": the share
+// holds one of two deployments' checkouts, so the one read longer ago goes first
+#[test]
+fn beyond_the_kept_share_a_deployment_s_checkout_stands_with_the_working_ones() {
+  let scratch = tempfile::tempdir().unwrap();
+  let root = scratch.path().join("build");
+  let now = now();
+  let older = checkout_of(&root, "older-0123456789ab", 1, 1, now - 50 * HOUR_MS, true);
+  let newer = checkout_of(&root, "newer-0123456789ab", 2, 1, now - 2 * HOUR_MS, true);
+  let working = checkout_of(&root, "working-0123456789ab", 3, 4, now - HOUR_MS, false);
+  let held = directory_bytes(&root);
+  let ceiling = held - bytes_of(&older[0]);
+
+  assert!(
+    ceiling / 100 * PRUNE.deployment_keep_percent < 2 * bytes_of(&newer[0]),
+    "the share holds one"
+  );
+
+  let enforcement = enforce(&root, ceiling, &Keepers::default(), true);
+
+  assert!(!enforcement.over(), "{enforcement:?}");
+  assert!(none_exist(&older[0]));
+  assert!(all_exist(&newer[0]) && working.iter().all(|one| all_exist(one)));
 }
 
 // "It never removes ... anything in a profile directory whose build lock the prune does not hold"; the event

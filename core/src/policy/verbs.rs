@@ -163,6 +163,8 @@ pub struct PruneWords {
   pub shared_units: String,
   pub checkout_units: String,
   pub checkout_dirs: String,
+  pub deployment_units: String,
+  pub deployment_dirs: String,
   pub by_build_lock: String,
   pub by_deployment: String,
   pub by_program: String,

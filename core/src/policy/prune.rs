@@ -13,6 +13,7 @@ pub struct Prune {
   pub deploy_build_days: i64,
   pub ceiling_gigabytes: u64,
   pub ceiling_room_gigabytes: u64,
+  pub deployment_keep_percent: u64,
   pub trim_command: Vec<String>,
   pub placed_disk_free_gigabytes: f64,
 }

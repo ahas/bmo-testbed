@@ -4,6 +4,7 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
+use bmo_testbed_core::turn::{Env, process_env, stands_at_front};
 use serde_json::Value;
 
 /// The paths at a checkout's root that every crate stands on: the workspace's manifest, its lockfile and
@@ -140,6 +141,10 @@ pub fn cargo_target_root() -> PathBuf {
 /// The file in a checkout's own target directory naming the checkout's path, which the prune reads.
 pub const CHECKOUT_RECORD_NAME: &str = "checkout-root";
 
+/// The mark in a checkout's directory under the build root saying a deployment has built there, which the
+/// ceiling's enforcement keeps to the last (docs/deploy.md, 「The Cargo build directory」).
+pub const DEPLOYMENT_MARK_NAME: &str = "deployment-checkout";
+
 /// The name of the checkout's own target directory: the checkout's directory and a hash of its whole path,
 /// so two checkouts with one directory name stay apart.
 pub fn checkout_target_name(root: &Path) -> String {
@@ -181,6 +186,16 @@ pub(crate) fn on_path(name: &str) -> Option<PathBuf> {
   })
 }
 
+/// The deployment's mark written into a checkout's directory under the build root, where `env` stands its
+/// caller at the front: a deployment builds there.
+pub fn mark_deployment_checkout(target: &Path, env: &Env) {
+  let mark = target.join(DEPLOYMENT_MARK_NAME);
+
+  if stands_at_front(env) && !mark.exists() {
+    put_in_place(&mark, |made| std::fs::write(made, ""));
+  }
+}
+
 /// The checkout's workspace wrapper: a link to `env`, which Cargo mixes into the workspace crates' output
 /// names so each checkout's crates stay apart while the dependencies are shared. It is the link committed
 /// beside the checkout's Cargo configuration, by the path Cargo reads it by in a build typed by hand —
@@ -216,6 +231,8 @@ pub fn cargo_environment(root: &Path) -> Vec<(String, String)> {
   if std::fs::read_to_string(&record).ok().as_deref() != Some(checkout.as_str()) {
     put_in_place(&record, |made| std::fs::write(made, &checkout));
   }
+
+  mark_deployment_checkout(&target, &process_env());
 
   let wrapper = compiler_wrapper(root, &target);
 

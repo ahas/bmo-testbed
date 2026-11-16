@@ -20,9 +20,9 @@
 - **Every test file runs in its own runner process,** until it ends, as many at once as the sweep is
   wide.
 - **Width:** the run's share of the testbed's wide lane (`docs/testbed.md`, 「The width」): the
-  machine's thread count divided by the lane's seats for a run holding one seat, as a close's does, and
-  the whole of it for a run holding every seat, as a deployment's does. The commands in the lane's
-  other seats share the machine with it, as does the narrow lane's one command of a few threads.
+  machine's thread count divided by the lane's seats for the one seat a run holds, a close's in one of
+  the lane's seats and a deployment's in its own. The commands in the lane's other seats share the
+  machine with it, as does the narrow lane's one command of a few threads.
 - **The largest files start first.** A file's size says roughly how many tests it holds, so the long
   runs start while the rest can still fill the places around them.
 - **A file's process takes its descendants with it.** Each file runs as the head of a process group of

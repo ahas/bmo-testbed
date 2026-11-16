@@ -13,7 +13,8 @@ use crate::policy::fill_marks;
 use crate::policy::lanes::LANES;
 use crate::queue::{now_ms, process_alive};
 use crate::turn::{
-  Env, HELD_VARIABLE, Lane, TurnEntry, lock_path, read_queue, scope_of, stands_at_front, stands_next,
+  Env, HELD_VARIABLE, Lane, TurnEntry, lane_seats_held, lock_path, read_queue, scope_of, stands_at_front,
+  stands_next,
 };
 
 /// The variable a deployment's or a whole run's unit is named by inside it.
@@ -84,12 +85,13 @@ pub fn runs_here(env: &Env) -> bool {
     .any(|name| env.get(*name).is_some_and(|value| !value.is_empty()))
 }
 
-/// Whether this machine's wide lane has no seat for a run now: every seat held, or someone already waiting for
-/// one. A run that may go either way goes elsewhere only then, so this machine's own seats are used first.
+/// Whether this machine's wide lane has no seat for a run now: every one of its own seats held, or someone
+/// already waiting for one. A run that may go either way goes elsewhere only then, so this machine's own seats
+/// are used first; the deployment's seat is never one such a run could take.
 pub fn wide_lane_full(env: &Env) -> bool {
-  let line = read_queue(&lock_path(env, Lane::Wide));
+  let lock = lock_path(env, Lane::Wide);
 
-  line.holders.len() >= Lane::Wide.seats(env) || !line.waiting.is_empty()
+  lane_seats_held(&lock) >= Lane::Wide.seats(env) || !read_queue(&lock).waiting.is_empty()
 }
 
 static PLACED_RUNS: AtomicU64 = AtomicU64::new(0);

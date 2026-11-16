@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
@@ -115,13 +115,38 @@ pub fn seat_paths(path: &Path, seats: usize) -> Vec<PathBuf> {
     .collect()
 }
 
-// The seats of a lane as they stand on the disk, whatever number its takers were given: the first one's lock
+/// A lane's deployment's seat from its first seat's lock: `-front.lock` in place of `.lock`.
+pub fn front_seat_path(path: &Path) -> PathBuf {
+  let text = path.to_string_lossy();
+
+  PathBuf::from(format!("{}-front.lock", text.strip_suffix(".lock").unwrap_or(&text)))
+}
+
+/// How many of the lane's own seats are held, the deployment's seat left out: what a run asks before it goes
+/// to another machine for want of a seat here.
+pub fn lane_seats_held(path: &Path) -> usize {
+  lane_seats(path).iter().filter(|seat| read_holder_record(seat).is_some()).count()
+}
+
+// The lane's own seats as they stand on the disk, whatever number its takers were given: the first one's lock
 // and each further one whose lock stands, in order.
-fn standing_seats(path: &Path) -> Vec<PathBuf> {
+fn lane_seats(path: &Path) -> Vec<PathBuf> {
   let mut seats = vec![path.to_path_buf()];
 
   while let Some(next) = seat_paths(path, seats.len() + 1).pop().filter(|next| next.exists()) {
     seats.push(next);
+  }
+
+  seats
+}
+
+// Every seat of a lane as it stands on the disk: its own, then its deployment's seat where that stands.
+fn standing_seats(path: &Path) -> Vec<PathBuf> {
+  let mut seats = lane_seats(path);
+  let front = front_seat_path(path);
+
+  if front.exists() {
+    seats.push(front);
   }
 
   seats
@@ -230,8 +255,8 @@ impl Seats {
   }
 }
 
-/// A lane's line as it stands: who holds each seat held, in the seats' order, and who waits behind them in
-/// order.
+/// A lane's line as it stands: who holds each seat held, in the seats' order, the deployment's seat last, and
+/// who waits behind them in order.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
 pub struct TestbedQueue {
   pub holders: Vec<TurnEntry>,
@@ -519,17 +544,14 @@ fn waiting_line(ask: &TurnAsk<'_>, queue: &TestbedQueue, waited: f64) -> String 
 
 /// A lane's turn: at once inside a caller's, in line otherwise for as long as the line takes, and not had only
 /// where the harness the caller runs for is gone while it waits. Every caller takes one seat; one at the front
-/// takes the next seat that frees, ahead of everyone.
+/// takes the lane's deployment's seat first, and else the next of the lane's seats that frees, ahead of
+/// everyone.
 pub fn take_turn(ask: &TurnAsk<'_>) -> TestbedTurn {
-  take_seated_turn(ask, false)
-}
-
-// A lane's turn in one seat, or in every seat of the lane where `every` says so.
-fn take_seated_turn(ask: &TurnAsk<'_>, every: bool) -> TestbedTurn {
   let env = &ask.env;
   let path = ask.path.clone().unwrap_or_else(|| lock_path(env, ask.lane));
   let seats = seat_paths(&path, ask.lane.seats(env));
-  let inside = seats_held_by_caller(&seats, env);
+  let front_seat = front_seat_path(&path);
+  let inside = seats_held_by_caller(&[seats.as_slice(), std::slice::from_ref(&front_seat)].concat(), env);
 
   if inside > 0 {
     return TestbedTurn::Inside {
@@ -589,7 +611,8 @@ fn take_seated_turn(ask: &TurnAsk<'_>, every: bool) -> TestbedTurn {
         },
         poll: ask.poll,
       },
-      every,
+      deployment_seat: Some(&front_seat),
+      front,
       spare: &spare,
     },
   );
@@ -610,7 +633,7 @@ fn take_seated_turn(ask: &TurnAsk<'_>, every: bool) -> TestbedTurn {
     ..entry
   };
   let record = serde_json::to_string(&record).unwrap_or_default();
-  let paths: Vec<PathBuf> = taken.seats().into_iter().map(|at| seats[at].clone()).collect();
+  let paths = vec![taken.seat().to_path_buf()];
 
   for seat in &paths {
     let _ = std::fs::write(holder_record_path(seat), &record);
@@ -632,108 +655,6 @@ fn take_seated_turn(ask: &TurnAsk<'_>, every: bool) -> TestbedTurn {
       _seats: taken,
       watching: job.map(watch_harness),
     },
-  }
-}
-
-/// Several lanes' turns asked for together: had, each lane's turn held until this is dropped, or one lane
-/// not had and none held.
-pub enum TestbedTurns {
-  Had {
-    /// The whole time taken over every lane.
-    waited_seconds: f64,
-    /// Every lane was already its caller's.
-    inside: bool,
-    held: TurnsHeld,
-  },
-  Queued(TestbedTurn),
-}
-
-/// The lanes' turns held, let go in the reverse of the order they were taken.
-pub struct TurnsHeld(Vec<TestbedTurn>);
-
-impl TurnsHeld {
-  fn release(&mut self) {
-    while self.0.pop().is_some() {}
-  }
-}
-
-impl Drop for TurnsHeld {
-  fn drop(&mut self) {
-    self.release();
-  }
-}
-
-impl TestbedTurns {
-  pub fn had(&self) -> bool {
-    matches!(self, Self::Had { .. })
-  }
-
-  pub fn waited_seconds(&self) -> f64 {
-    match self {
-      Self::Had { waited_seconds, .. } => *waited_seconds,
-      Self::Queued(turn) => turn.waited_seconds(),
-    }
-  }
-
-  /// The variable a command started under these turns is handed, so it runs inside every one of them.
-  pub fn held_variable(&self) -> Option<(&'static str, String)> {
-    match self {
-      Self::Had { inside: false, .. } => Some((HELD_VARIABLE, std::process::id().to_string())),
-      _ => None,
-    }
-  }
-
-  /// What a caller says once its turns are settled.
-  pub fn words(&self) -> String {
-    match self {
-      Self::Had { inside: true, .. } => LANES.settled.inside.clone(),
-      Self::Had { waited_seconds, .. } => {
-        fill_marks(&LANES.settled.own, &[("seconds", &waited_seconds.round().to_string())])
-      }
-      Self::Queued(turn) => turn.words(),
-    }
-  }
-}
-
-/// Several lanes' turns, taken one after another in the order given, every seat of each: had once every one
-/// is, and not had where any one is not, those already taken let go again. The wait is the whole time taken,
-/// and what the holder starts with its variable runs inside each of them.
-pub fn take_turns(lanes: &[Lane], ask: &TurnAsk<'_>) -> TestbedTurns {
-  let asked = Instant::now();
-  let mut taken = TurnsHeld(Vec::new());
-
-  for lane in lanes {
-    let turn = take_seated_turn(
-      &TurnAsk {
-        command: ask.command.clone(),
-        lane: *lane,
-        say: ask.say,
-        path: None,
-        env: ask.env.clone(),
-        checkout: ask.checkout.clone(),
-        poll: ask.poll,
-        notice_seconds: ask.notice_seconds,
-      },
-      true,
-    );
-
-    if let TestbedTurn::Queued { ahead, holders, .. } = turn {
-      taken.release();
-
-      return TestbedTurns::Queued(TestbedTurn::Queued {
-        waited_seconds: asked.elapsed().as_secs_f64(),
-        ahead,
-        holders,
-      });
-    }
-
-    taken.0.push(turn);
-  }
-
-  TestbedTurns::Had {
-    waited_seconds: asked.elapsed().as_secs_f64(),
-    inside: taken.0.iter().all(|turn| matches!(turn, TestbedTurn::Inside { .. })),
-    held: taken,
   }
 }
 
