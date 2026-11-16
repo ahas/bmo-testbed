@@ -470,6 +470,7 @@ verb's own name, and each noun takes what that verb takes.
 | `BMO_BACKUP_SNAPSHOT_DIR` | the declared snapshot and verify commands | Set by the backup: the directory to write into or read from |
 | `BMO_CARGO_TARGET_DIR` | `cargo`, `prune`, the suite | The shared Cargo build directory. Default `$HOME/.local/share/bmo/cargo-target` |
 | `BMO_CARGO_TARGET_CEILING_GB` | `prune` | The shared Cargo build directory's ceiling, in gigabytes of a thousand million bytes, never more than its filesystem can hold with the prune policy's room left free; anything that is not a positive whole number means the policy's, 200 (`docs/deploy.md`, 「The Cargo build directory」) |
+| `BMO_CARGO_TARGET_DEPLOYMENT_CEILING_GB` | `prune` | The deployments' checkouts' own ceiling under the shared Cargo build directory, in gigabytes of a thousand million bytes, which the prune holds them to by least recent read; anything that is not a positive whole number means the policy's, 0, which sets none and keeps them whole (`docs/deploy.md`, 「The Cargo build directory」) |
 | `XDG_CONFIG_HOME` | `deploy` | Where the user units are installed |
 
 ## The declaration
@@ -532,7 +533,7 @@ keep (`docs/deploy.md`, 「The unit links」).
 | `data-backup-failed` | `verb` (`snapshot`, `media` or `prune`), `failures`, each with `step`, `target` and `said` |
 | `restore-drill-failed` | `verb` (`drill`), `failures`, each with `step`, `target` and `said`, a count mismatch naming its database, table and both counts |
   | `releases-pinned` | `releases`, each with `release` and `processes`, each with `pid`, `unit` and `command` |
-  | `cargo-target-over-ceiling` | `bytes` (what the directory holds once the prune's enforcement is done), `ceiling_bytes`, `holders`, each with `path`, `by` (`build-lock` for a profile directory whose build lock a build holds, `deployment` for the directory of a running deployment's checkout or build tree, `program` for a checkout's directory a program built there runs from) and `bytes`. Sent only where the enforcement could not bring the directory under its ceiling |
+  | `cargo-target-over-ceiling` | `bytes` (what the directory holds once the prune's enforcement is done), `ceiling_bytes`, `holders`, each with `path`, `by` (`build-lock` for a profile directory whose build lock a build holds, `deployment` for the directory of a running deployment's checkout or build tree, `program` for a checkout's directory a program built there runs from, `deployment-checkout` for a deployment's checkout, which the directory's ceiling never removes from) and `bytes`. Sent only where the enforcement could not bring the directory under its ceiling |
   | `placed-disk-low` | `machine` (the placed machine's label), `floor_bytes`, `disks`, each with `path` (as the settings name it), `source` (the filesystem's source, the drive itself for a WSL drive mount) and `free_bytes` |
   | `disk-trim-failed` | `path` (the build directory the trim was run on), `said` |
   | `full-suite-failed` | `head`, `log`, `step` (the failing setup or static step, or null), `failures`, each with `unit` and `package` |

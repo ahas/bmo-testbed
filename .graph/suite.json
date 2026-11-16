@@ -2,11 +2,12 @@
   {
     "id": "suite/cargo-verb-and-prune",
     "title": "Cargo verb and prune",
-    "what": "The cargo verb over the shared build directory, its lock kept to its manifests, and removing what a build superseded; the prune verb on a timer, here and on the placed machine, removing what no build reads, trimming the filesystem and warning when the placed machine's disk or host drive runs low.",
+    "what": "The cargo verb over the shared build directory, its lock kept to its manifests, removing what a build superseded; the prune verb on a timer, here and on the placed machine: what no build reads and the ceiling, deployments' checkouts kept unless a ceiling of their own is set, then the trim.",
     "files": [
       "suite/src/cargo.rs",
       "suite/src/superseded.rs",
       "suite/src/prune.rs",
+      "suite/src/ceiling.rs",
       "cli/src/cargo.rs",
       "core/src/cargo_lock.rs",
       "units/bmo-cargo-prune.service",
@@ -14,6 +15,7 @@
       "units/bmo-upkeep.slice",
       "docs/deploy.md",
       "suite/tests/prune.rs",
+      "suite/tests/ceiling.rs",
       "suite/tests/superseded.rs",
       "core/tests/cargo_lock.rs"
     ],
@@ -27,7 +29,8 @@
       "cargo prune 타이머",
       "디스크 여유 경고",
       "정리 타이머",
-      "디스크 부족 경고"
+      "디스크 부족 경고",
+      "배포캐시"
     ],
     "needs": [
       "core/lanes-and-turn",
@@ -38,8 +41,8 @@
       "core/silence-watch",
       "core/placement"
     ],
-    "base": "f643b8482d1c6e9894116a808ba2ee20987f8b98",
-    "changed": 1794824961389
+    "base": "7e4750d940ee285a165bf56ec19b246dab575cea",
+    "changed": 1794829066108
   },
   {
     "id": "suite/change-check",
@@ -277,8 +280,8 @@
       "core/run-verb-and-status",
       "core/silence-watch"
     ],
-    "base": "f643b8482d1c6e9894116a808ba2ee20987f8b98",
-    "changed": 1794824948765
+    "base": "7e4750d940ee285a165bf56ec19b246dab575cea",
+    "changed": 1794828692857
   },
   {
     "id": "suite/test-count",

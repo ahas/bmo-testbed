@@ -17,7 +17,7 @@ use bmo_testbed_core::policy::prune::PRUNE;
 use bmo_testbed_core::queue::{HeldLock, LockWait, Rank, now_ms, take_lock};
 use serde_json::Value;
 
-use crate::crates::{CHECKOUT_RECORD_NAME, checkout_target_name, resolved};
+use crate::crates::{CHECKOUT_RECORD_NAME, checkout_target_name, is_deployment_checkout, resolved};
 use crate::superseded::{
   BUILT_UNITS_NAME, CARGO_BUILD_LOCK_NAME, UNIT_DIRS, read_record, recorded_units, unit_hash,
 };
@@ -616,8 +616,9 @@ pub fn plan_prune(root: &Path, older_than_ms: i64, now: i64, incremental_older_t
   }
 
   // A live checkout builds in its own directory, whose every file its outputs stand on, so what goes there is
-  // its stale incremental state alone.
-  for checkout in &live_checkouts {
+  // its stale incremental state alone; nothing goes from a deployment's checkout, which a deployment would build
+  // again from cold.
+  for checkout in live_checkouts.iter().filter(|checkout| !is_deployment_checkout(checkout)) {
     for profile in profile_dirs(checkout) {
       plan_profile(&profile, cutoff, now - incremental_older_than_ms, &standing, &mut plan);
     }

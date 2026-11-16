@@ -141,8 +141,8 @@ pub fn cargo_target_root() -> PathBuf {
 /// The file in a checkout's own target directory naming the checkout's path, which the prune reads.
 pub const CHECKOUT_RECORD_NAME: &str = "checkout-root";
 
-/// The mark in a checkout's directory under the build root saying a deployment has built there, which the
-/// ceiling's enforcement keeps to the last (docs/deploy.md, 「The Cargo build directory」).
+/// The mark in a checkout's directory under the build root saying a deployment has built there, which the prune
+/// never removes from (docs/deploy.md, 「The Cargo build directory」).
 pub const DEPLOYMENT_MARK_NAME: &str = "deployment-checkout";
 
 /// The name of the checkout's own target directory: the checkout's directory and a hash of its whole path,
@@ -194,6 +194,11 @@ pub fn mark_deployment_checkout(target: &Path, env: &Env) {
   if stands_at_front(env) && !mark.exists() {
     put_in_place(&mark, |made| std::fs::write(made, ""));
   }
+}
+
+/// Whether a checkout's directory under the build root carries a deployment's mark.
+pub fn is_deployment_checkout(target: &Path) -> bool {
+  target.join(DEPLOYMENT_MARK_NAME).exists()
 }
 
 /// The checkout's workspace wrapper: a link to `env`, which Cargo mixes into the workspace crates' output

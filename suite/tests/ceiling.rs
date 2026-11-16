@@ -9,8 +9,10 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use bmo_testbed_core::policy::prune::PRUNE;
+use bmo_testbed_core::policy::verbs::VERBS;
 use bmo_testbed_suite::ceiling::{
-  CEILING_VARIABLE, Ceiling, CeilingPlan, CeilingSetting, Enforcement, HeldBy, Holder, Keepers,
+  CEILING_VARIABLE, Ceiling, CeilingPlan, CeilingSetting, DEPLOYMENT_CEILING_VARIABLE, Enforcement, HeldBy,
+  Holder, Keepers,
 };
 use bmo_testbed_suite::crates::{CHECKOUT_RECORD_NAME, DEPLOYMENT_MARK_NAME};
 use bmo_testbed_suite::prune::{HOUR_MS, directory_bytes, disk_free_bytes, take_prune_locks};
@@ -157,20 +159,37 @@ fn built(scratch: &Path) -> Built {
   }
 }
 
-// A ceiling of `bytes` set by the environment, on a filesystem with room enough for it.
-fn ceiling_of(bytes: u64, held: u64) -> Ceiling {
+// A ceiling of `bytes` set by the environment, with the deployments' own of `deployments` where it is given, on a
+// filesystem with room enough for it.
+fn ceiling_of(bytes: u64, deployments: Option<u64>, held: u64) -> Ceiling {
   Ceiling::of(
-    CeilingSetting { bytes, named: true },
+    CeilingSetting {
+      bytes,
+      named: true,
+      deployments,
+    },
     held,
     bytes.saturating_add(PRUNE.ceiling_room_gigabytes * GIGABYTE),
   )
 }
 
-// The enforcement over the build directory with nothing gone before it and the prune holding every lock.
+// The enforcement over the build directory with nothing gone before it and the prune holding every lock, the
+// deployments' checkouts kept whole.
 fn enforce(root: &Path, ceiling: u64, keepers: &Keepers, remove: bool) -> Enforcement {
+  enforce_with(root, ceiling, None, keepers, remove)
+}
+
+// The same with the deployments' own ceiling `deployments`.
+fn enforce_with(
+  root: &Path,
+  ceiling: u64,
+  deployments: Option<u64>,
+  keepers: &Keepers,
+  remove: bool,
+) -> Enforcement {
   let held = directory_bytes(root);
 
-  CeilingPlan::of(root, &[], ceiling_of(ceiling, held), held).enforce(keepers, remove)
+  CeilingPlan::of(root, &[], ceiling_of(ceiling, deployments, held), held).enforce(keepers, remove)
 }
 
 // "Its ceiling is a setting of the machine: BMO_CARGO_TARGET_CEILING_GB ... and 200 where the environment names
@@ -183,6 +202,7 @@ fn the_ceiling_is_its_setting_and_never_more_than_its_filesystem_leaves_with_the
   let policy = CeilingSetting {
     bytes: PRUNE.ceiling_gigabytes * GIGABYTE,
     named: false,
+    deployments: None,
   };
   let room = PRUNE.ceiling_room_gigabytes * GIGABYTE;
 
@@ -190,7 +210,8 @@ fn the_ceiling_is_its_setting_and_never_more_than_its_filesystem_leaves_with_the
     named("300"),
     CeilingSetting {
       bytes: 300 * GIGABYTE,
-      named: true
+      named: true,
+      deployments: None,
     }
   );
 
@@ -213,6 +234,7 @@ fn the_ceiling_is_its_setting_and_never_more_than_its_filesystem_leaves_with_the
   let any = CeilingSetting {
     bytes: u64::MAX,
     named: true,
+    deployments: None,
   };
 
   assert!(Ceiling::of(any, held, free).bytes <= (held + free).saturating_sub(room));
@@ -268,7 +290,7 @@ fn last_the_checkouts_profile_directories_are_emptied_oldest_first_but_their_loc
   let enforcement = enforce(&built.root, 0, &Keepers::default(), true);
   let last = &enforcement.rules[2];
 
-  assert_eq!(enforcement.rules.len(), 5);
+  assert_eq!(enforcement.rules.len(), 3);
   assert_eq!(last.names, ["a-0123456789ab", "b-0123456789ab"]);
   assert!(none_exist(&built.a_unit) && none_exist(&built.b_unit));
   assert!(none_exist(&built.a_rest) && none_exist(&built.b_rest));
@@ -301,48 +323,72 @@ fn checkout_of(
   (first..first + count).map(|index| unit(&dir.join("debug"), index, at)).collect()
 }
 
-// "kept deployments' checkouts' own units: as rule 2, for the directories of the kept deployments' checkouts": a
-// deployment's checkout within the share keeps its unit though it was read before the working checkout's units
+// "neither the prune's rules nor its ceiling remove anything in it"; "the enforcement removes every working
+// checkout's rebuildable output and stops there, the directory standing over its ceiling ... which its line and
+// its event name": a deployment's checkout read long before the working one keeps every unit, and is named as
+// what holds the rest
 #[test]
-fn a_kept_deployment_s_checkout_keeps_its_units_while_a_working_checkout_s_later_read_ones_go() {
+fn a_deployment_s_checkout_keeps_everything_and_holds_the_rest_once_the_working_ones_are_emptied() {
   let scratch = tempfile::tempdir().unwrap();
   let root = scratch.path().join("build");
   let now = now();
-  let deployment = checkout_of(&root, "deployed-0123456789ab", 1, 1, now - 50 * HOUR_MS, true);
-  let working = checkout_of(&root, "working-0123456789ab", 2, 6, now - HOUR_MS, false);
-  let held = directory_bytes(&root);
-  let enforcement = enforce(&root, held - bytes_of(&working[0]), &Keepers::default(), true);
+  let deployment = checkout_of(&root, "deployed-0123456789ab", 1, 2, now - 50 * HOUR_MS, true);
+  let working = checkout_of(&root, "working-0123456789ab", 3, 2, now - HOUR_MS, false);
+  let enforcement = enforce(&root, 0, &Keepers::default(), true);
 
-  assert!(!enforcement.over(), "{enforcement:?}");
-  assert!(all_exist(&deployment[0]));
-  assert_eq!(working.iter().filter(|one| none_exist(one)).count(), 1);
-  assert_eq!(enforcement.rules.len(), 2);
+  assert!(enforcement.over(), "{enforcement:?}");
+  assert!(deployment.iter().all(|one| all_exist(one)));
+  assert!(working.iter().all(|one| none_exist(one)));
+  assert_eq!(
+    enforcement
+      .holders
+      .iter()
+      .map(|holder| (holder.path.clone(), holder.by))
+      .collect::<Vec<_>>(),
+    [(root.join("checkouts").join("deployed-0123456789ab"), HeldBy::DeploymentCheckout)]
+  );
 }
 
-// "The deployments' checkouts kept to the last are bounded by the prune policy's share of the ceiling ... the
-// ones read most recently first ... Every other deployment's checkout stands with the working checkouts": the share
-// holds one of two deployments' checkouts, so the one read longer ago goes first
+// "BMO_CARGO_TARGET_DEPLOYMENT_CEILING_GB ... Where it names no positive whole number, the default, the
+// deployments' checkouts are kept whole"
 #[test]
-fn beyond_the_kept_share_a_deployment_s_checkout_stands_with_the_working_ones() {
+fn the_deployments_ceiling_is_named_in_gigabytes_and_none_where_nothing_positive_is_named() {
+  let named = |given: &str| {
+    CeilingSetting::of(&HashMap::from([(DEPLOYMENT_CEILING_VARIABLE.to_owned(), given.to_owned())]))
+      .deployments
+  };
+
+  assert_eq!(named("50"), Some(50 * GIGABYTE));
+
+  for unread in ["0", "-5", "none", ""] {
+    assert_eq!(named(unread), None, "{unread:?}");
+  }
+
+  assert_eq!(CeilingSetting::of(&HashMap::new()).deployments, None);
+}
+
+// "Where it names one, the enforcement holds them to it ... while they hold more, it removes their rebuildable
+// output by two rules of their own ... in the same order of least recent read": the directory under its own
+// ceiling, the deployments' checkouts one unit over theirs lose the unit read longest ago, and nothing else goes
+#[test]
+fn a_deployments_ceiling_takes_their_unit_read_longest_ago_and_nothing_of_the_working_checkouts() {
   let scratch = tempfile::tempdir().unwrap();
   let root = scratch.path().join("build");
   let now = now();
-  let older = checkout_of(&root, "older-0123456789ab", 1, 1, now - 50 * HOUR_MS, true);
-  let newer = checkout_of(&root, "newer-0123456789ab", 2, 1, now - 2 * HOUR_MS, true);
-  let working = checkout_of(&root, "working-0123456789ab", 3, 4, now - HOUR_MS, false);
+  let older = checkout_of(&root, "older-0123456789ab", 1, 2, now - 50 * HOUR_MS, true);
+  let newer = checkout_of(&root, "newer-0123456789ab", 3, 1, now - 2 * HOUR_MS, true);
+  let working = checkout_of(&root, "working-0123456789ab", 4, 2, now - HOUR_MS, false);
+  let unit_bytes = bytes_of(&newer[0]);
   let held = directory_bytes(&root);
-  let ceiling = held - bytes_of(&older[0]);
-
-  assert!(
-    ceiling / 100 * PRUNE.deployment_keep_percent < 2 * bytes_of(&newer[0]),
-    "the share holds one"
-  );
-
-  let enforcement = enforce(&root, ceiling, &Keepers::default(), true);
+  let enforcement = enforce_with(&root, held, Some(2 * unit_bytes), &Keepers::default(), true);
 
   assert!(!enforcement.over(), "{enforcement:?}");
-  assert!(none_exist(&older[0]));
+  assert_eq!(older.iter().filter(|one| none_exist(one)).count(), 1);
   assert!(all_exist(&newer[0]) && working.iter().all(|one| all_exist(one)));
+  assert_eq!(
+    enforcement.rules.iter().map(|rule| (rule.words, rule.count)).collect::<Vec<_>>(),
+    [(VERBS.prune.deployment_units.as_str(), 1)]
+  );
 }
 
 // "It never removes ... anything in a profile directory whose build lock the prune does not hold"; the event

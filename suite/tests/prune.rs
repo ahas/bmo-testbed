@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use bmo_testbed_core::policy::prune::PRUNE;
-use bmo_testbed_suite::crates::{CHECKOUT_RECORD_NAME, checkout_target_name};
+use bmo_testbed_suite::crates::{CHECKOUT_RECORD_NAME, DEPLOYMENT_MARK_NAME, checkout_target_name};
 use bmo_testbed_suite::prune::{
   CARGO_LOCK_NAME, DAY_MS, HOUR_MS, PrunePlan, UnitFingerprint, plan_clear, read_fingerprint,
   take_prune_locks,
@@ -482,4 +482,36 @@ fn the_locks_are_cargos_own_build_lock_in_each_profile_directory_held_until_let_
   assert!(build_lock.exists());
   assert_eq!(taken, 2);
   assert!(told.contains(&root.join("debug")), "{told:?}");
+}
+
+// "incremental state unchanged for three hours ... in each live checkout's directory but a deployment's
+// checkout's"; "nor anything in a deployment's checkout's directory": two live checkouts with incremental state
+// past the span, and only the working one's goes
+#[test]
+fn a_deployment_s_checkout_keeps_its_stale_incremental_state_while_a_working_one_s_goes() {
+  let scratch = tempfile::tempdir().unwrap();
+  let now = now();
+  let past_span = now - (PRUNE.incremental_hours + 1) * HOUR_MS;
+  let root = scratch.path().join("build");
+  let session = |checkout: &Path| {
+    let dir = root.join("checkouts").join(checkout_target_name(checkout));
+    let crate_state = dir.join("debug/incremental/own_crate-0abc");
+
+    std::fs::create_dir_all(checkout).unwrap();
+    std::fs::create_dir_all(dir.join("debug/.fingerprint")).unwrap();
+    write(&dir.join(CHECKOUT_RECORD_NAME), &checkout.to_string_lossy(), now);
+    write(&crate_state.join("s-old/dep-graph.bin"), "", past_span);
+    date_dirs(&crate_state, past_span);
+    (dir, crate_state)
+  };
+  let (_, working) = session(&scratch.path().join("working"));
+  let (deployment_dir, deployment) = session(&scratch.path().join("deployed"));
+
+  write(&deployment_dir.join(DEPLOYMENT_MARK_NAME), "", now);
+
+  let plan = plan_prune(&root, now);
+
+  assert!(plan.incremental.iter().any(|path| path.starts_with(&working)), "{:?}", plan.incremental);
+  assert!(!plan.paths().iter().any(|path| path.starts_with(&deployment_dir)), "{:?}", plan.paths());
+  assert!(deployment.exists());
 }

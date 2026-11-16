@@ -40,6 +40,7 @@ fn no_room() -> CeilingSetting {
   CeilingSetting {
     bytes: 0,
     named: true,
+    deployments: None,
   }
 }
 

@@ -32,10 +32,10 @@ ceiling_gigabytes = 200
 # them.
 ceiling_room_gigabytes = 50
 
-# The share of the ceiling, in percent, the deployments' checkouts kept to the last by its enforcement may hold
-# (docs/deploy.md, 「The Cargo build directory」): the ones read most recently, as many as fit, so the working
-# checkouts keep the rest of the room.
-deployment_keep_percent = 30
+# The deployments' checkouts' own ceiling where `BMO_CARGO_TARGET_DEPLOYMENT_CEILING_GB` names none, in gigabytes
+# of a thousand million bytes; 0 sets none, which keeps them whole, since whatever a prune takes from a
+# deployment's checkout its next deployment compiles again from cold.
+deployment_ceiling_gigabytes = 0
 
 
 # The trim run once a prune that is not a dry run is done, the build root handed to it as its last word
