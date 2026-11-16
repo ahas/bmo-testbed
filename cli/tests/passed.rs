@@ -1,7 +1,7 @@
 //! What a run of the suite writes of what it ran on, and the `passed` verb reading it back (docs/boundary.md,
 //! 「The record」 and 「`passed`」): a whole run from a clean checkout is the passed run a deployment's gate
 //! takes, and a run from a checkout with uncommitted changes to tracked files, or of part of the suite, is
-//! none.
+//! none; and the `toolchain` verb, which tells the gate the toolchains it judged with (「`toolchain`」).
 
 use std::path::Path;
 
@@ -82,4 +82,32 @@ fn a_dirty_or_partial_run_is_no_passed_run() {
   let refused = ran(&mut testbed(&repo, &data, &["passed", "--commit", "no-such-commit"]));
 
   assert_eq!(refused.code, 2, "{}", refused.err);
+}
+
+// "`toolchain` ... for each such language in the order of their names, a line with its name and a colon, then what
+// the command printed ... `--json` prints one object instead"
+#[test]
+fn toolchain_answers_each_language_naming_a_toolchain_command_in_the_order_of_their_names() {
+  let dir = tempfile::tempdir().unwrap();
+  let repo = dir.path().join("repo");
+  let data = dir.path().join("data");
+
+  checkout(&repo, "testbed = 0\n");
+  std::fs::create_dir_all(&data).unwrap();
+
+  let thin = ran(&mut testbed(&repo, &data, &["toolchain"]));
+
+  assert_eq!(thin.code, 0, "{}", thin.err);
+  assert!(thin.out.starts_with("bun: "), "{}", thin.out);
+
+  let cargo = thin.out.find("\ncargo: ").expect("a cargo line");
+  let node = thin.out.find("\nnode: ").expect("a node line");
+
+  assert!(cargo < node, "{}", thin.out);
+
+  let structured = ran(&mut testbed(&repo, &data, &["toolchain", "--json"]));
+  let answered: serde_json::Map<String, serde_json::Value> =
+    serde_json::from_str(structured.out.trim()).expect("one object");
+
+  assert_eq!(answered.keys().map(String::as_str).collect::<Vec<_>>(), ["bun", "cargo", "node"]);
 }

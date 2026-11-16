@@ -8,7 +8,7 @@ use bmo_testbed_client::{
   Deployment, DeploymentState, EventKind, PageQuery, RestartsQuery, TestRun, TestRunKind, TestRunState,
   TestRunsQuery,
 };
-use bmo_testbed_record::{EventsRead, Record, TestRunEnd, record_path};
+use bmo_testbed_record::{EventsRead, GateGround, GatePass, Record, TestRunEnd, record_path};
 
 fn test_run(checkout: &str, pid: i64) -> TestRun {
   TestRun {
@@ -323,4 +323,54 @@ fn the_passed_suite_is_the_newest_whole_clean_run_on_the_commit_where_it_passed(
   // A newer whole clean run that failed outweighs the older one that passed.
   suite_run(&mut record, "aaa", Some(true), Some(true), 100, TestRunState::Failed);
   assert_eq!(passed(&record, "aaa"), None);
+}
+
+// "A gate's pass ... the repository, the commit, the commit the gate's range began at, the heads of the
+// repositories laid beside the tree it judged": a pass is found on exactly its ground and from the moment asked.
+#[test]
+fn a_gates_pass_is_found_on_exactly_its_ground_and_no_earlier_than_asked() {
+  let dir = tempfile::tempdir().unwrap();
+  let mut record = Record::open(dir.path()).unwrap();
+  let at = bmo_testbed_core::queue::now_ms();
+  let ground = GateGround {
+    repository: "repository".to_owned(),
+    commit: "c".repeat(40),
+    since: Some("a".repeat(40)),
+    heads: vec!["1".repeat(40), "2".repeat(40)],
+    toolchains: "cargo: rustc 1.0.0\n".to_owned(),
+  };
+
+  record
+    .write_gate_pass(&GatePass {
+      ground: ground.clone(),
+      machine: None,
+      at,
+    })
+    .unwrap();
+
+  let found =
+    |ground: &GateGround, since: i64| record.gate_passed(ground, since).unwrap().map(|pass| pass.at);
+
+  assert_eq!(found(&ground, at), Some(at));
+  assert_eq!(found(&ground, at + 1), None);
+  assert_eq!(
+    found(
+      &GateGround {
+        since: None,
+        ..ground.clone()
+      },
+      0
+    ),
+    None
+  );
+  assert_eq!(
+    found(
+      &GateGround {
+        heads: vec!["1".repeat(40)],
+        ..ground.clone()
+      },
+      0
+    ),
+    None
+  );
 }

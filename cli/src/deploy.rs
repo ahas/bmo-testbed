@@ -19,8 +19,8 @@ use bmo_testbed_core::turn::{Env, FRONT_VARIABLE, NOT_RUN_EXIT_CODE, harness_pid
 use bmo_testbed_core::verb::{REFUSED_EXIT_CODE, data_root};
 use bmo_testbed_deploy::console::{LayerPin, LayerRelease, PinnedLayer};
 use bmo_testbed_deploy::deployment::{
-  BuildAsk, DeployAsk, DeployPlaces, Gate, GateAsk, GateFault, GateOutcome, GateStep, LaidUnits, Machine,
-  Passed, SuitePassed, deploy as deploy_run,
+  BuildAsk, DeployAsk, DeployPlaces, Gate, GateAsk, GateFault, GateFooting, GateOutcome, GateStep,
+  LaidUnits, Machine, Passed, SuitePassed, deploy as deploy_run, passed_before,
 };
 use bmo_testbed_deploy::line::DeployLine;
 use bmo_testbed_deploy::progress::DEPLOY_PROGRESS_VARIABLE;
@@ -34,6 +34,7 @@ use bmo_testbed_suite::once_more::run_judged;
 use bmo_testbed_suite::quick::shared_versions::find_shared;
 use bmo_testbed_suite::run::{SuiteAsk, SuiteWords, ask_of};
 use bmo_testbed_suite::static_check::{check_steps, run_static_check, spawn_step};
+use bmo_testbed_suite::toolchain::{toolchain_text, toolchains};
 
 use crate::home_of;
 use crate::placement::{BenchFor, FarEnd, MachinePlacement, PLACEMENT_VARIABLE, ReadyBench};
@@ -42,7 +43,8 @@ use crate::suite::repository;
 use crate::words::{BINARY, DeployFlags};
 
 /// The gate a deployment passes: the declared static check over the range from what was live, then the
-/// suite over the same range, what failed run once more, unless the deployment left the suite out.
+/// suite over the same range, what failed run once more, unless the deployment left the suite out; nothing
+/// where an earlier pass stands on the same footing.
 pub struct SuiteGate<'a> {
   pub repo: &'a Repository,
   pub hook: &'a Hook,
@@ -52,10 +54,48 @@ impl Gate for SuiteGate<'_> {
   fn pass(&self, ask: &GateAsk<'_>) -> GateOutcome {
     // The gate judges the commit's committed trees, by the checkout's declaration (docs/deploy.md, 「What the
     // deploy run does, in order」).
-    let repo = &Repository {
+    let repo = Repository {
       root: ask.tree.to_path_buf(),
       declaration: self.repo.declaration.clone(),
     };
+    let footing = GateFooting {
+      heads: ask.heads.to_vec(),
+      toolchains: toolchain_text(&toolchains(&repo.root)),
+      machine: None,
+    };
+
+    if let Some(earlier) = (ask.earlier)(&footing) {
+      return passed_before(footing, earlier);
+    }
+
+    GateOutcome {
+      footing: Some(footing),
+      ..self.judged(&repo, ask)
+    }
+  }
+
+  fn dependents(&self, _: &GateAsk<'_>) -> GateOutcome {
+    let started = Instant::now();
+    let ended = crate::dependents::ended(self.repo, true);
+    let step = GateStep {
+      name: "dependents".to_owned(),
+      code: i64::from(ended.code),
+      waited_seconds: 0.0,
+      ran_seconds: started.elapsed().as_secs_f64(),
+    };
+
+    GateOutcome {
+      passed: ended.code == 0,
+      reason: ended.line,
+      steps: vec![step],
+      ..GateOutcome::default()
+    }
+  }
+}
+
+impl SuiteGate<'_> {
+  // The static check, then the suite where it is asked, in the tree the gate judges.
+  fn judged(&self, repo: &Repository, ask: &GateAsk<'_>) -> GateOutcome {
     let mut steps = Vec::new();
     let failed = run_static_check(
       &repo.root,
@@ -119,24 +159,6 @@ impl Gate for SuiteGate<'_> {
       reason: fill_marks(&DEPLOY.run.gate_suite, &[("code", &code.to_string())]),
       flaky: flaky.tests.iter().map(|one| (one.test.clone(), one.file.clone())).collect(),
       steps,
-      ..GateOutcome::default()
-    }
-  }
-
-  fn dependents(&self, _: &GateAsk<'_>) -> GateOutcome {
-    let started = Instant::now();
-    let ended = crate::dependents::ended(self.repo, true);
-    let step = GateStep {
-      name: "dependents".to_owned(),
-      code: i64::from(ended.code),
-      waited_seconds: 0.0,
-      ran_seconds: started.elapsed().as_secs_f64(),
-    };
-
-    GateOutcome {
-      passed: ended.code == 0,
-      reason: ended.line,
-      steps: vec![step],
       ..GateOutcome::default()
     }
   }
@@ -243,6 +265,77 @@ impl PlacedGate<'_> {
     }
   }
 
+  // What the gate stands on there: the heads laid beside the bench and the toolchains that machine's testbed
+  // answers in it, with the machine's label; none where the toolchains could not be read.
+  fn footing(&self, bench: &ReadyBench) -> Option<GateFooting> {
+    let toolchains = self.machine.read(bench, &[self.testbed(), "toolchain".to_owned()])?;
+
+    Some(GateFooting {
+      heads: bench.heads.clone(),
+      toolchains,
+      machine: Some(self.machine.settings.label().to_owned()),
+    })
+  }
+
+  // The static check there, then the suite where it is asked and the machine's own record holds no passed run
+  // of the whole suite on the commit, each as that machine's own verb in the bench.
+  fn judged_there(&self, bench: &ReadyBench, ask: &GateAsk<'_>) -> GateOutcome {
+    let since = ask.since.iter().flat_map(|since| ["--since".to_owned(), (*since).to_owned()]);
+    let check = [self.testbed(), "check".to_owned(), "static".to_owned()]
+      .into_iter()
+      .chain(since.clone())
+      .collect::<Vec<_>>();
+    let checked = self.step(bench, "check", &check, true);
+    let mut steps = vec![checked.step];
+
+    if checked.broken {
+      return self.broken(steps);
+    }
+
+    if steps[0].code != 0 {
+      return GateOutcome {
+        passed: false,
+        reason: fill_marks(&DEPLOY.run.gate_check, &[("code", &steps[0].code.to_string())]),
+        steps,
+        ..GateOutcome::default()
+      };
+    }
+
+    // Where the deploying machine's record held no passed run of the whole suite on the commit, the placed
+    // machine's own record is asked, since a suite placed there is written there alone.
+    let suite_passed = if ask.suite { self.passed_there(bench, ask.commit) } else { None };
+
+    if !ask.suite || suite_passed.is_some() {
+      return GateOutcome {
+        passed: true,
+        steps,
+        suite_passed,
+        ..GateOutcome::default()
+      };
+    }
+
+    let suite = [self.testbed(), "suite".to_owned(), "--again".to_owned()]
+      .into_iter()
+      .chain(since)
+      .collect::<Vec<_>>();
+    let ran = self.step(bench, OwnStep::Tests.name(), &suite, false);
+
+    steps.push(ran.step);
+
+    if ran.broken {
+      return self.broken(steps);
+    }
+
+    let code = steps[1].code;
+
+    GateOutcome {
+      passed: code == 0,
+      reason: fill_marks(&DEPLOY.run.gate_suite, &[("code", &code.to_string())]),
+      steps,
+      ..GateOutcome::default()
+    }
+  }
+
   // The passed run of the whole suite on the commit that the machine's own record holds, asked of its
   // `passed` verb in the bench; none where it answers none, answers a run that is not one, or does not answer
   // at all.
@@ -297,59 +390,17 @@ impl Gate for PlacedGate<'_> {
         };
       }
     };
-    let since = ask.since.iter().flat_map(|since| ["--since".to_owned(), (*since).to_owned()]);
-    let check = [self.testbed(), "check".to_owned(), "static".to_owned()]
-      .into_iter()
-      .chain(since.clone())
-      .collect::<Vec<_>>();
-    let checked = self.step(&bench, "check", &check, true);
-    let mut steps = vec![checked.step];
+    let footing = self.footing(&bench);
 
-    if checked.broken {
-      return self.broken(steps);
+    if let Some(footing) = &footing
+      && let Some(earlier) = (ask.earlier)(footing)
+    {
+      return passed_before(footing.clone(), earlier);
     }
-
-    if steps[0].code != 0 {
-      return GateOutcome {
-        passed: false,
-        reason: fill_marks(&DEPLOY.run.gate_check, &[("code", &steps[0].code.to_string())]),
-        steps,
-        ..GateOutcome::default()
-      };
-    }
-
-    // Where the deploying machine's record held no passed run of the whole suite on the commit, the placed
-    // machine's own record is asked, since a suite placed there is written there alone.
-    let suite_passed = if ask.suite { self.passed_there(&bench, ask.commit) } else { None };
-
-    if !ask.suite || suite_passed.is_some() {
-      return GateOutcome {
-        passed: true,
-        steps,
-        suite_passed,
-        ..GateOutcome::default()
-      };
-    }
-
-    let suite = [self.testbed(), "suite".to_owned(), "--again".to_owned()]
-      .into_iter()
-      .chain(since)
-      .collect::<Vec<_>>();
-    let ran = self.step(&bench, OwnStep::Tests.name(), &suite, false);
-
-    steps.push(ran.step);
-
-    if ran.broken {
-      return self.broken(steps);
-    }
-
-    let code = steps[1].code;
 
     GateOutcome {
-      passed: code == 0,
-      reason: fill_marks(&DEPLOY.run.gate_suite, &[("code", &code.to_string())]),
-      steps,
-      ..GateOutcome::default()
+      footing,
+      ..self.judged_there(&bench, ask)
     }
   }
 

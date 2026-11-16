@@ -193,6 +193,23 @@ bmo-testbed passed [--commit <sha>] [--json]
 - Exits 0 where such a run stands, 1 where none does, the line saying so, and 2 where its words or the
   declaration do not read or the commit names none.
 
+### `toolchain`
+
+```
+bmo-testbed toolchain [--json]
+```
+
+- Answers the toolchains the checkout it runs in is built and tested with, each language's own answer
+  (`docs/testbed.md`, 「Languages」): for every language that names a command saying its toolchain, that
+  command run in the checkout as the testbed runs the language's commands there, a toolchain the Cargo
+  home holds found there first, so a toolchain file the checkout carries is read. It runs nothing else
+  and takes no turn. A deployment's gate reads it where the gate runs to know the ground it passed on
+  (`docs/deploy.md`, 「What the deploy run does, in order」, step 3).
+- Prints, for each such language in the order of their names, a line with its name and a colon, then
+  what the command printed, or `none` where it did not start or did not end 0. **`--json`** prints one
+  object instead, each language's name to what its command printed, or null.
+- Exits 0, and 2 where its words do not read.
+
 ### `dependents`
 
 ```
@@ -345,7 +362,8 @@ bmo-testbed deploy [--commit <sha>] [--message <why>] [--dry-run] [--no-check] [
   the record and the `deployed` event; the commit's subject stands where none is given. Outside a
   deployment's unit it starts one, prints its name
   and the command that reads its journal, and exits 0; inside it, it runs and exits 0 where the commit
-  went live, 1 where it failed or was rolled back. Its refusals exit 2 in the caller's own process.
+  went live, or was live already when its turn came, 1 where it failed or was rolled back. Its refusals
+  exit 2 in the caller's own process.
   Deployments started together each run in their own unit and pass their gate and their build one after
   the other, in the order they asked, through the deployment line under the data root's `locks/`
   (`docs/deploy.md`, 「The deployment line」).
@@ -555,6 +573,12 @@ keep (`docs/deploy.md`, 「The unit links」).
   answering nothing), and whether it was a run of the whole suite. A deployment's gate reads them to
   leave its suite out (`docs/deploy.md`, 「What the deploy run does, in order」, step 3); a run written
   before the record held them holds null, which never stands for a passed whole suite.
+- **A gate's pass** is written by a deployment whose gate passed, on the machine the deployment runs on
+  whatever machine the gate ran on: the repository, the commit, the commit the gate's range began at,
+  the heads of the repositories laid beside the tree it judged, the toolchains `toolchain` answered
+  there, that machine's label, and when. A later deployment's gate reads it to leave the whole gate out
+  (`docs/deploy.md`, 「What the deploy run does, in order」, step 3). It is no member: no route serves it
+  and no event tells of it.
 - **A deployment** is written as the deploy run begins its progress record and changed with it
   (`docs/deploy.md`, 「What a deployment says of itself as it runs」), and every line the deploy run
   says is one of its log lines.
@@ -563,7 +587,7 @@ keep (`docs/deploy.md`, 「The unit links」).
   starts again.
 - **Writing the record never changes a verb's outcome.** A record that cannot be opened or written is
   said on one line of standard error and the verb goes on.
-- **What it keeps:** test runs, deployments, their log lines and restarts for the policy's days, and
+- **What it keeps:** test runs, deployments, their log lines, restarts and gates' passes for the policy's days, and
   events for the policy's window; older ones go as the next one is written.
 
 ## The HTTP service
@@ -746,7 +770,7 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   | `machine` | string | the destination | The label the lines name the machine by |
   | `destination` | string | required | The machine as this machine's `ssh` reaches it |
   | `bench` | string | `~/.local/share/bmo/bench` | The runs' bench root there: every tree a run copies over stands under it at the path it has under this machine's home |
-  | `deploy_bench` | string | `~/.local/share/bmo/deploy-bench` | The deployments' bench root there: every tree a deployment copies over stands under the folder of its repository's name in it, at the path it has under this machine's home (「A deployment's bench stands apart」) |
+  | `deploy_bench` | string | `~/.local/share/bmo/deploy-bench` | The deployments' bench root there: every tree a deployment copies over stands under the folder of its repository's name in it, at the path it has under this machine's home, the bench itself at its repository's one place (「A deployment's bench stands apart」) |
   | `ssh` | list of strings | `["ssh"]` | The `ssh` program and its options |
   | `testbed` | string | `~/.local/share/bmo-testbed/deploy/bin/bmo-testbed` | The testbed binary there, its `built-from` beside it; the testbed's deployment copies its release's binary of the same name and its `built-from` onto them |
   | `cargo_target` | string | `~/.local/share/bmo/cargo-target` | That machine's shared Cargo build directory; a deployment's build is read back from the bench's own directory under it, the one that machine's Cargo verb builds in (`docs/deploy.md`, 「The Cargo build directory」) |
@@ -808,9 +832,22 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   copies a sibling repository's tree as it stands into its own place under `bench`, and a deployment of
   another repository lays its committed trees into its own folder, so nothing another run copies is written into a tree a
   deployment's gate or Cargo release build reads while it reads it, and the commit a deployment checks
-  out in its bench, with the untracked files it takes away, never reaches a tree a run reads. Each
-  repository's deployments keep one bench there, at one path, so the Cargo build directory that
-  machine's testbed names after it stays warm from one deployment to the next.
+  out in its bench, with the untracked files it takes away, never reaches a tree a run reads.
+- **Each repository's deployments keep one bench there, at one path,** whichever of the repository's
+  checkouts a deployment is taken from, so the Cargo build directory that machine's testbed names after
+  the bench stays warm from one deployment to the next. The bench stands where the repository's main
+  checkout, the work tree its common git directory belongs to, would stand beside the checkout: in the
+  folder holding the checkout, under the main checkout's folder name. A worktree standing beside its main
+  checkout therefore benches at the main checkout's place, and every path a manifest names upward from
+  the checkout resolves there as it does here. A checkout whose common git directory is no work tree's
+  `.git` benches under its own folder name.
+- **A bench another checkout of the repository left there goes.** Once the bench is ready, each
+  repository standing beside it in the same folder there whose root commits are the bench's own is
+  removed: a bench an earlier deployment made at another checkout's place, which no deployment reads any
+  more. The trees laid beside the bench are other repositories', whose roots differ, and stay. A removal
+  that fails is said on a line and fails nothing. The directory that machine's build root kept for a
+  removed bench is then the directory of a checkout that no longer exists, which its prune takes away
+  (`docs/deploy.md`, 「The Cargo build directory」).
 - **The run is then one `ssh` command:** the testbed binary there, in the bench, asked the `placed`
   verb with the words. Its standard error is this run's standard error, its standard output its one
   result line, and its exit code this run's exit code. The caller passes both on as they come, but for

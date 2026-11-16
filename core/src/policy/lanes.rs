@@ -83,6 +83,8 @@ pub struct PlacedWords {
   pub broken: String,
   pub broke: String,
   pub ran_there: String,
+  pub stale_removed: String,
+  pub stale_unremoved: String,
   pub setup_failed: String,
   pub no_registry: String,
   pub stale: String,

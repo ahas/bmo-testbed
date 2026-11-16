@@ -104,6 +104,11 @@ pub trait Language: Sync {
   fn script_command(&self, _script: &str) -> Option<Vec<String>> {
     None
   }
+  /// The command that says which toolchain the machine runs it with, run in a checkout so a toolchain file
+  /// the checkout carries is read; none for a language that brings no toolchain of its own.
+  fn toolchain_command(&self) -> Option<&'static [&'static str]> {
+    None
+  }
   /// The files at the repository's root that every package of its workspace stands on, so a change to one
   /// reaches them all; none for a language with no package workspace.
   fn root_configuration(&self) -> &'static [&'static str] {

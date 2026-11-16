@@ -13,6 +13,7 @@ pub struct UsageWords {
   pub suite: String,
   pub dependents: String,
   pub passed: String,
+  pub toolchain: String,
   pub count: String,
   pub log: String,
   pub template: String,

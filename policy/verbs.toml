@@ -16,6 +16,7 @@ suite     the repository's units, every one or those a change reaches
 dependents  the checkouts that build on this repository, listed or each one's suite run
 passed    the passed run of the whole suite on a commit this machine's record holds, which a
           deployment's gate takes in place of its own suite
+toolchain the toolchains the checkout is built and tested with, each language's own answer
 count     the tests a range removed, each accounted for or not, and the tests the tree holds
 log       what a suite's or a single run's log came to
 template  the suite's template database made, dropped or swept
@@ -101,6 +102,14 @@ Exits 0 where such a run stands and 1 where none does.
 
 --commit  the commit, the checkout's HEAD by default
 --json    the test run as one JSON object (docs/boundary.md)"""
+toolchain = """
+usage: {verb} toolchain [--json]
+
+Says the toolchains the checkout is built and tested with (docs/boundary.md): for each language that names
+a command saying its toolchain, what that command printed in the checkout, `none` where it did not start or
+did not end 0. A deployment's gate reads it to know the ground it passed on. It runs nothing else.
+
+--json  one object, each language's name to what its command printed, or null"""
 count = """
 usage: {verb} count [--since <commit>]
 

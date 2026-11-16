@@ -182,6 +182,10 @@ impl Language for Bun {
     Some(vec!["bun".to_owned(), "run".to_owned(), script.to_owned()])
   }
 
+  fn toolchain_command(&self) -> Option<&'static [&'static str]> {
+    Some(&["bun", "--version"])
+  }
+
   fn root_configuration(&self) -> &'static [&'static str] {
     &["package.json", "bun.lock", "bunfig.toml", "tsconfig.json"]
   }

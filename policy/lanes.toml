@@ -103,6 +103,10 @@ broken = "the connection to it broke"
 broke = "the connection to {machine} broke"
 # Where a deployment's work there ran, as a build that failed there names it, {bench} the bench there.
 ran_there = "it ran on {machine} in {bench}"
+# The benches other checkouts of a deployed repository left beside its one bench there (docs/boundary.md,
+# 「A deployment's bench stands apart」): taken away, {names} their folders; or not, {said} what was said.
+stale_removed = "testbed: took away the benches other checkouts of the repository left on {machine}: {names}"
+stale_unremoved = "testbed: the benches other checkouts of the repository left on {machine} could not be taken away: {said}"
 setup_failed = "testbed: the setup step {command} failed with code {code}"
 no_registry = "testbed: the run's registry of checkouts could not be written at {file}: {why}"
 # The placed machine's testbed is not this one's release: {machine} the machine, {far} the commit its testbed

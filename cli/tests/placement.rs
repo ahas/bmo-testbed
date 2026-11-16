@@ -35,7 +35,7 @@ use bmo_testbed_core::policy::prune::PRUNE;
 use bmo_testbed_core::policy::verbs::VERBS;
 use bmo_testbed_core::queue::process_alive;
 use bmo_testbed_core::turn::{Env, Lane, NOT_RUN_EXIT_CODE, lock_path};
-use bmo_testbed_deploy::deployment::{BuildAsk, Gate, GateAsk, GateFault, Passed};
+use bmo_testbed_deploy::deployment::{BuildAsk, Gate, GateAsk, GateFault, Passed, none_earlier};
 use serde_json::{Value, json};
 
 use crate::stand::{Ran, checkout, git, install, ran, testbed};
@@ -789,6 +789,39 @@ fn a_deployments_bench_lays_each_dependency_at_its_main_head_never_its_working_t
   assert_eq!(std::fs::read_to_string(copied.join("src/lib.rs")).unwrap(), "pub fn half_written(\n");
 }
 
+// "Each repository's deployments keep one bench there, at one path, whichever of the repository's checkouts a
+// deployment is taken from"; "A bench another checkout of the repository left there goes ... The trees laid
+// beside the bench are other repositories', whose roots differ, and stay."
+#[test]
+fn a_worktree_deploys_from_its_repositorys_one_bench_and_the_bench_another_checkout_left_goes() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let base = dir.join("base");
+  let consumer = dir.join("consumer");
+  let worktree = dir.join("consumer-w2");
+
+  package_checkout(&base, "base", None);
+  package_checkout(&consumer, "consumer", Some("../base"));
+  git(&consumer, &["worktree", "add", "-q", "--detach", &worktree.to_string_lossy()]);
+
+  let machine = released(&dir, None, None);
+  let deployed = git(&worktree, &["rev-parse", "HEAD"]);
+  let left = dir.join("deploy-bench/consumer/consumer-w3");
+
+  git(&dir, &["clone", "-q", &consumer.to_string_lossy(), &left.to_string_lossy()]);
+
+  let bench = machine.ready(&worktree, &deployed, BenchFor::Deployment("consumer")).unwrap();
+  let one = dir.join("deploy-bench/consumer/consumer");
+  let laid = dir.join("deploy-bench/consumer/base");
+
+  assert_eq!(Path::new(&bench.path), one);
+  assert_eq!(git(&one, &["rev-parse", "HEAD"]), deployed);
+  assert_eq!(bench.heads, [git(&base, &["rev-parse", "main"])]);
+  assert!(!left.exists());
+  assert_eq!(git(&laid, &["rev-parse", "HEAD"]), git(&base, &["rev-parse", "main"]));
+  assert!(!dir.join("deploy-bench/consumer/consumer-w2").exists());
+}
+
 // "a tree no repository holds ... fails the step"
 #[test]
 fn a_deployments_bench_refuses_a_dependency_no_repository_holds() {
@@ -916,6 +949,7 @@ fn the_placed_run_is_running_once_the_far_side_says_its_turn_came() {
   let bench = ReadyBench {
     path: dir.to_string_lossy().into_owned(),
     checkouts: Vec::new(),
+    heads: Vec::new(),
   };
   // A stand-in `ssh` whose far side says its turn came and ends, whatever line it is handed.
   install(
@@ -1259,6 +1293,8 @@ fn passed_at(gate: &PlacedGate<'_>, dir: &Path) -> bmo_testbed_deploy::deploymen
     commit: &commit,
     since: None,
     suite: false,
+    heads: &[],
+    earlier: &none_earlier,
   })
 }
 
@@ -1268,7 +1304,9 @@ fn passed_at(gate: &PlacedGate<'_>, dir: &Path) -> bmo_testbed_deploy::deploymen
 fn a_static_check_the_connection_breaks_under_answers_broken_and_passes_when_asked_again() {
   let dir = tempfile::tempdir().unwrap();
   let dir = std::fs::canonicalize(dir.path()).unwrap();
-  let gate = dropping_gate(&dir, 1);
+  // The first two lines there break: the toolchains' read, which leaves the gate on no footing, and the static
+  // check.
+  let gate = dropping_gate(&dir, 2);
   let broke = fill_marks(&LANES.placed.broke, &[("machine", "machine-2")]);
 
   let first = passed_at(&gate, &dir);

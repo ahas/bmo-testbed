@@ -17,9 +17,9 @@ use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::turn::Env;
 use bmo_testbed_deploy::console::{ConsoleHands, MachineConsole};
 use bmo_testbed_deploy::deployment::{
-  BuildAsk, DeployAsk, DeployHands, DeployPlaces, Gate, GateAsk, GateFault, GateOutcome, LaidUnits,
-  Machine, StepAsk, StepRan, SuitePassed, deploy, major_change, release_build, version_major,
-  workspace_binaries,
+  BuildAsk, DeployAsk, DeployHands, DeployPlaces, Gate, GateAsk, GateFault, GateFooting, GateOutcome,
+  LaidUnits, Machine, StepAsk, StepRan, SuitePassed, deploy, gate_ground, major_change, passed_before,
+  release_build, version_major, workspace_binaries,
 };
 use bmo_testbed_deploy::expansion::committed_tree;
 use bmo_testbed_deploy::line::DeployLine;
@@ -27,7 +27,7 @@ use bmo_testbed_deploy::progress::{Outcome, read_deploy_progress};
 use bmo_testbed_deploy::release::{LiveProcess, release_dir};
 use bmo_testbed_deploy::run::{Ran, run_quiet};
 use bmo_testbed_deploy::tree::{read_deploy_record, short};
-use bmo_testbed_record::{Record, TestRunEnd};
+use bmo_testbed_record::{GatePass, Record, TestRunEnd};
 use serde_json::Value;
 
 use crate::console::Face;
@@ -1514,6 +1514,129 @@ fn a_passed_run_the_gate_found_on_its_machine_is_named_with_the_machine() {
     "{}",
     said(&hands)
   );
+}
+
+// A gate standing on the footing it is given: it asks for an earlier pass on it and runs nothing where one
+// stands, and otherwise passes on it, counting how many times it ran.
+struct Footed {
+  footing: GateFooting,
+  ran: Cell<usize>,
+}
+
+impl Footed {
+  fn on(toolchains: &str) -> Self {
+    Self {
+      footing: GateFooting {
+        heads: vec!["b".repeat(40), "a".repeat(40)],
+        toolchains: toolchains.to_owned(),
+        machine: Some("machine-2".to_owned()),
+      },
+      ran: Cell::new(0),
+    }
+  }
+}
+
+impl Gate for Footed {
+  fn pass(&self, ask: &GateAsk<'_>) -> GateOutcome {
+    if let Some(earlier) = (ask.earlier)(&self.footing) {
+      return passed_before(self.footing.clone(), earlier);
+    }
+
+    self.ran.set(self.ran.get() + 1);
+    GateOutcome {
+      passed: true,
+      footing: Some(self.footing.clone()),
+      ..GateOutcome::default()
+    }
+  }
+}
+
+impl Scene {
+  // A gate's pass on the repository's `HEAD`, nothing live before it, written into the scene's record.
+  fn seed_gate_pass(&self, toolchains: &str) {
+    let head = must(&["rev-parse", "HEAD"], &self.source);
+    let footing = Footed::on(toolchains).footing;
+    let pass = GatePass {
+      ground: gate_ground(&Repository::read(&self.source).unwrap().name(), &head, None, &footing),
+      machine: footing.machine,
+      at: Machine.now_ms() - 60 * 60 * 1000,
+    };
+
+    Record::open(&self.at("testbed-data")).unwrap().write_gate_pass(&pass).unwrap();
+  }
+}
+
+// "Every later gate ... asks the record for a pass of the same repository, commit, range, heads and toolchains
+// ... Where one stands the gate runs nothing ... and the deployment says on one line that the gate is left out"
+#[test]
+fn an_earlier_pass_on_the_same_ground_leaves_the_whole_gate_out() {
+  let scene = Scene::new();
+  let hands = Hands::default();
+  let gate = Footed::on("cargo: rustc 1.0.0\n");
+
+  scene.seed_gate_pass("cargo: rustc 1.0.0\n");
+
+  assert_eq!(scene.run_asked_of(&gate, &hands), 0, "{}", said(&hands));
+  assert_eq!(gate.ran.get(), 0, "{}", said(&hands));
+  assert!(said(&hands).contains("the gate is left out: "), "{}", said(&hands));
+  assert!(said(&hands).contains(" on machine-2 over the same range"), "{}", said(&hands));
+}
+
+// "Anything less certain runs the gate: ... another toolchain"; "A gate that passes is written into this
+// machine's record"
+#[test]
+fn a_pass_on_another_toolchain_runs_the_gate_and_its_own_pass_is_written() {
+  let scene = Scene::new();
+  let hands = Hands::default();
+  let head = must(&["rev-parse", "HEAD"], &scene.source);
+  let gate = Footed::on("cargo: rustc 2.0.0\n");
+
+  scene.seed_gate_pass("cargo: rustc 1.0.0\n");
+
+  assert_eq!(scene.run_asked_of(&gate, &hands), 0, "{}", said(&hands));
+  assert_eq!(gate.ran.get(), 1, "{}", said(&hands));
+  assert!(!said(&hands).contains("the gate is left out"), "{}", said(&hands));
+
+  let ground = gate_ground(&Repository::read(&scene.source).unwrap().name(), &head, None, &gate.footing);
+  let written = Record::open(&scene.at("testbed-data")).unwrap().gate_passed(&ground, 0).unwrap();
+
+  assert_eq!(written.map(|pass| pass.machine), Some(Some("machine-2".to_owned())));
+}
+
+// "A commit already live when its turn comes ends the deployment there ... exits 0: no gate, no backup, no
+// release, no restart"
+#[test]
+fn a_commit_already_live_when_its_turn_comes_ends_live_without_a_gate() {
+  let scene = Scene::new();
+  let hands = Hands::default();
+  let gate = Footed::on("cargo: rustc 1.0.0\n");
+
+  assert_eq!(scene.run_asked_of(&gate, &hands), 0, "{}", said(&hands));
+
+  let restarts = hands.systemctl.borrow().len();
+  let again = Hands::default();
+
+  assert_eq!(scene.run_asked_of(&gate, &again), 0, "{}", said(&again));
+  assert_eq!(gate.ran.get(), 1, "{}", said(&again));
+  assert!(
+    said(&again).contains("is already live, so nothing is laid down again"),
+    "{}",
+    said(&again)
+  );
+  assert!(again.systemctl.borrow().is_empty(), "{:?}", again.systemctl.borrow());
+  assert!(restarts > 0);
+}
+
+impl Scene {
+  // The deployment run against the scene's record with the gate given.
+  fn run_asked_of(&self, gate: &dyn Gate, hands: &Hands) -> u8 {
+    let ask = DeployAsk {
+      record: Some(self.at("testbed-data")),
+      ..DeployAsk::default()
+    };
+
+    self.run_with(&ask, gate, hands, &self.env())
+  }
 }
 
 // The line naming the machine whose connection broke, as the placed gate says it.

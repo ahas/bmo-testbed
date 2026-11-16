@@ -382,6 +382,8 @@ flowchart TD
     that file's name, which decides the folder its test files run from (`docs/suite.md`, 「Which
     files run」);
   - for a language that runs package scripts, the command that runs a project's script;
+  - for a language whose toolchain a machine installs apart from the repository, the command that says
+    which toolchain it is, which the `toolchain` verb runs (`docs/boundary.md`, 「`toolchain`」);
   - for a language of a package workspace, its root configuration, the files at the repository's root
     a change to which reaches every package, and the name of its lockfile, which marks a folder
     carrying it beside a package manifest as a project of its own (`docs/checks.md`, 「Which tests a
@@ -407,7 +409,10 @@ flowchart TD
     does, by bun's configuration;
   - `cargo` and `node` read no configuration file of their own, so their test files run from the
     repository's root; `cargo` and `browser` name no root configuration and no lockfile, since a
-    Cargo workspace is read through `cargo metadata` and a browser file stands in bun's workspace.
+    Cargo workspace is read through `cargo metadata` and a browser file stands in bun's workspace;
+  - their toolchains are said by `rustc -vV` for `cargo`, `bun --version` for `bun` and
+    `node --version` for `node`; `browser` names none, since it runs on bun and its browsers are the
+    packages the lockfile pins.
 - **A command no language claims** still runs through the testbed when it is started there, read by
   the plain language, `plain`: its exit code, its time, and the last lines of its output on a
   failure.
@@ -423,8 +428,9 @@ flowchart TD
    per file or binary.
 5. Where it runs test files or package scripts, answer its naming and its commands for them, and
    where its runner reads a configuration file of its own, that file's name; for a package
-   workspace, its root configuration and its lockfile.
+   workspace, its root configuration and its lockfile; for a toolchain the machine installs, the
+   command that says it.
 6. Put a test in `core`'s tests that holds a claimed command, an unclaimed one, the widening, a
    summary read back, and its naming, commands, configuration and workspace files where it has them.
-7. Nothing else changes: `classify`, the run, its result, the suite and the check read the list.
+7. Nothing else changes: `classify`, the run, its result, the suite, the check and `toolchain` read the list.
    Adding a language is a minor version (`docs/boundary.md`, 「Versions」).

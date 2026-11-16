@@ -61,7 +61,7 @@
   {
     "id": "deploy/deploy-run",
     "title": "Deploy run",
-    "what": "A deploy run in its own unit, by its commit's declaration, reading committed trees only: the line held from gate to build, placed gate and build tried again where the connection breaks, backup, release, quiet, flip, health waited within its bound, console probed, rolled back where either fails.",
+    "what": "A deploy run in its own unit, by its commit's declaration, reading committed trees only: the line held from gate to build, a commit live at its turn ended there, a gate passed on the same ground left out, placed work tried again, backup, release, quiet, flip, health, console probe, rollback.",
     "files": [
       "deploy/src/deployment.rs",
       "deploy/src/line.rs",
@@ -88,7 +88,9 @@
       "PlacedGate",
       "CommittedTree",
       "committed_tree",
-      "TreeStore"
+      "TreeStore",
+      "GateFooting",
+      "gate_ground"
     ],
     "aliases": [
       "빌드 트리",
@@ -98,7 +100,8 @@
       "배치 기계의 testbed도 같은 릴리스로 자동으로 맞추기",
       "배포 17건을 한꺼번에 걸면",
       "커밋된 트리",
-      "health 대기"
+      "health 대기",
+      "이미 통과한 커밋은 다시 검사하지 않기"
     ],
     "needs": [
       "core/declaration",
@@ -116,8 +119,8 @@
       "suite/cargo-verb-and-prune",
       "core/main-branch"
     ],
-    "base": "2d06a03b2d7ea64819d32de670c8d0c21c2d0dc5",
-    "changed": 1794775341627
+    "base": "7e4750d940ee285a165bf56ec19b246dab575cea",
+    "changed": 1794829686416
   },
   {
     "id": "deploy/hosted-deploy-tool",

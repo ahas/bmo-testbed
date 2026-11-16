@@ -97,15 +97,17 @@
   {
     "id": "core/languages",
     "title": "Languages",
-    "what": "The language type in core and its members bun, node, cargo, browser and plain: what each claims as heavy, how it widens a command, reads a log and names failed files or tests, runs test files, hands a per-test limit or reads a test still running, and its configuration, root files and lockfile.",
+    "what": "The language type in core and its members bun, node, cargo, browser and plain: what each claims as heavy, how it widens a command, reads a log, runs test files, hands a per-test limit, names its toolchain command, and its configuration, root files and lockfile; the toolchain verb asks them.",
     "files": [
       "core/src/languages/mod.rs",
       "core/src/languages/bun.rs",
       "core/src/languages/node.rs",
       "core/src/languages/cargo.rs",
       "core/src/languages/browser.rs",
+      "suite/src/toolchain.rs",
       "docs/testbed.md",
-      "core/tests/languages.rs"
+      "core/tests/languages.rs",
+      "cli/tests/passed.rs"
     ],
     "symbols": [
       "Language",
@@ -114,8 +116,8 @@
     ],
     "aliases": [],
     "needs": [],
-    "base": "3b8d55c357e1dfb8ddd2bcf4197e36a02b0b3fb1",
-    "changed": 1794829785392
+    "base": "9863c967ccaa495e3399e6c128107b31aafabdb9",
+    "changed": 1794830058440
   },
   {
     "id": "core/main-branch",
@@ -141,7 +143,7 @@
   {
     "id": "core/placement",
     "title": "Placement",
-    "what": "Where a run goes: here by default or where its environment names a variable as this machine's, else over ssh to another machine whose testbed must be this release, which a deployment brings there first; that machine is also laid units, read for free disk by drive and handed the release.",
+    "what": "Where a run goes: here by default or where its environment names a variable as this machine's, else over ssh to another machine whose testbed must be this release; there a deployment keeps one bench per repository, and that machine is laid units, read for free disk and handed the release.",
     "files": [
       "core/src/placement.rs",
       "cli/src/placement.rs",
@@ -157,12 +159,14 @@
       "BenchFor",
       "BenchTree",
       "FarEnd",
-      "FarDisk"
+      "FarDisk",
+      "main_checkout_place"
     ],
     "aliases": [
       "배치 규칙",
       "다른 머신에 배치된 실행",
-      "배치 기계"
+      "배치 기계",
+      "벤치를 저장소 하나에 하나로"
     ],
     "needs": [
       "core/lanes-and-turn",
@@ -170,8 +174,8 @@
       "deploy/releases-and-rollback",
       "core/silence-watch"
     ],
-    "base": "7e4750d940ee285a165bf56ec19b246dab575cea",
-    "changed": 1794828692787
+    "base": "9863c967ccaa495e3399e6c128107b31aafabdb9",
+    "changed": 1794830058446
   },
   {
     "id": "core/policy-loader",

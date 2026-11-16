@@ -387,12 +387,16 @@ pub struct TreeStore<'a> {
 ///
 /// The list comes from the checkout's own workspace: a release or a build tree reads no manifest until
 /// the trees its manifests name stand, and the checkout is the one place they do.
+///
+/// The heads the trees were laid at, one for each tree laid.
 pub fn lay_outside_trees(
   tree: &Path,
   checkout: &Path,
   store: &TreeStore<'_>,
   run: CommandRun<'_>,
-) -> Result<(), String> {
+) -> Result<Vec<String>, String> {
+  let mut heads = Vec::new();
+
   for source in outside_roots(tree, checkout)? {
     let Some(relative) = upward(checkout, &source) else {
       continue;
@@ -400,6 +404,8 @@ pub fn lay_outside_trees(
     let place = normalize(&tree.join(relative));
     let committed = committed_tree(&source, checkout)?;
     let worktree = committed.worktree(store.store);
+
+    heads.push(committed.head.clone());
 
     put_build_tree(
       &BuildTree {
@@ -438,7 +444,7 @@ pub fn lay_outside_trees(
     })?;
   }
 
-  Ok(())
+  Ok(heads)
 }
 
 // The tree to lay for one a manifest names: the root of the Cargo workspace it is a member of, on

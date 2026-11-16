@@ -94,7 +94,7 @@ impl Laid {
     }
   }
 
-  fn lay(&self, tree: &Path, checkout: &Path) -> Result<(), String> {
+  fn lay(&self, tree: &Path, checkout: &Path) -> Result<Vec<String>, String> {
     lay_outside_trees(
       tree,
       checkout,

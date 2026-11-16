@@ -351,6 +351,7 @@ pub fn main(args: impl IntoIterator<Item = OsString>) -> u8 {
     Verb::Suite(args) => suite::suite(args),
     Verb::Dependents(args) => dependents::dependents(&args),
     Verb::Passed(args) => suite::passed(&args),
+    Verb::Toolchain(args) => suite::toolchain(&args),
     Verb::Count(args) => run_count(args),
     Verb::Log(args) => run_log(args),
     Verb::Template(args) => suite::template(&args),

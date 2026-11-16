@@ -83,6 +83,10 @@ impl Language for Cargo {
     })
   }
 
+  fn toolchain_command(&self) -> Option<&'static [&'static str]> {
+    Some(&["rustc", "-vV"])
+  }
+
   fn test_progress(&self, line: &str) -> Option<TestProgress> {
     let line = line.trim_end();
 

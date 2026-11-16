@@ -1,6 +1,6 @@
 //! The record (docs/boundary.md, 「The record」): one SQLite file under the data root's `testbed/` that every
 //! verb writes and the HTTP service reads. It holds the test runs, the deployments with their log lines,
-//! the restarts, and an event for each change of them, each member kept in the shape the client answers it
+//! the restarts, the gates' passes a deployment reads, and an event for each change of the members among them, each member kept in the shape the client answers it
 //! in. Every write that makes or changes a member writes its event in the same transaction, so the stream
 //! never tells of a change the collections do not hold.
 //!
@@ -59,6 +59,17 @@ const SCHEMA: &str = "
     reason TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS restarts_by_unit ON restarts (unit_name, id);
+  CREATE TABLE IF NOT EXISTS gate_passes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    repository TEXT NOT NULL,
+    git_commit TEXT NOT NULL,
+    range_from TEXT NOT NULL,
+    heads TEXT NOT NULL,
+    toolchains TEXT NOT NULL,
+    machine TEXT NOT NULL,
+    at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS gate_passes_by_commit ON gate_passes (repository, git_commit, id);
   CREATE TABLE IF NOT EXISTS events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     kind TEXT NOT NULL,
@@ -267,6 +278,59 @@ impl Record {
     let run = test_run_now(member_of(&member)?);
 
     Ok((run.state == TestRunState::Passed).then_some(run))
+  }
+
+  /// A gate's pass written as it stands (docs/boundary.md, 「The record」); no event tells of it.
+  pub fn write_gate_pass(&mut self, pass: &GatePass) -> Result<(), String> {
+    self.writing(|transaction| {
+      transaction
+        .execute(
+          "INSERT INTO gate_passes (repository, git_commit, range_from, heads, toolchains, machine, at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+          params![
+            pass.ground.repository,
+            pass.ground.commit,
+            pass.ground.since.as_deref().unwrap_or_default(),
+            pass.ground.heads.join("\n"),
+            pass.ground.toolchains,
+            pass.machine.as_deref().unwrap_or_default(),
+            pass.at,
+          ],
+        )
+        .map_err(failed)?;
+      Ok(())
+    })
+  }
+
+  /// The newest gate's pass on exactly the ground given, written no earlier than the moment given; none where
+  /// none stands (docs/deploy.md, 「What the deploy run does, in order」, step 3).
+  pub fn gate_passed(&self, ground: &GateGround, since: i64) -> Result<Option<GatePass>, String> {
+    self
+      .connection
+      .query_row(
+        "SELECT machine, at FROM gate_passes
+          WHERE repository = ?1 AND git_commit = ?2 AND range_from = ?3 AND heads = ?4 AND toolchains = ?5
+            AND at >= ?6
+          ORDER BY id DESC LIMIT 1",
+        params![
+          ground.repository,
+          ground.commit,
+          ground.since.as_deref().unwrap_or_default(),
+          ground.heads.join("\n"),
+          ground.toolchains,
+          since,
+        ],
+        |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)),
+      )
+      .optional()
+      .map_err(failed)
+      .map(|found| {
+        found.map(|(machine, at)| GatePass {
+          ground: ground.clone(),
+          machine: (!machine.is_empty()).then_some(machine),
+          at,
+        })
+      })
   }
 
   /// The deployment a run began, by the process that began it and when; none where the record holds none.
@@ -519,6 +583,27 @@ impl Record {
   }
 }
 
+/// What a deployment's gate judged beside the commit (docs/deploy.md, 「What the deploy run does, in order」,
+/// step 3): the repository, the commit, the commit its range began at, none where nothing was live, the head of
+/// every repository laid beside the tree it judged, in order, and the toolchains its machine answered.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct GateGround {
+  pub repository: String,
+  pub commit: String,
+  pub since: Option<String>,
+  pub heads: Vec<String>,
+  pub toolchains: String,
+}
+
+/// A gate's pass: the ground it passed on, the machine it ran on where it is not the deploying one, and when
+/// it was written.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GatePass {
+  pub ground: GateGround,
+  pub machine: Option<String>,
+  pub at: i64,
+}
+
 /// How a test run ended.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TestRunEnd {
@@ -564,8 +649,8 @@ fn post(transaction: &Transaction<'_>, kind: EventKind, data: &impl Serialize) -
   })
 }
 
-// What has stood past the policy's days goes: test runs and deployments with their log lines and restarts,
-// and the events past the window.
+// What has stood past the policy's days goes: test runs and deployments with their log lines and restarts, the
+// gates' passes, and the events past the window.
 fn prune(transaction: &Transaction<'_>, now: i64) -> Result<(), String> {
   let kept_from = now - RECORD.keep_days * DAY_MS;
   let window_from = now - RECORD.event_window_days * DAY_MS;
@@ -576,6 +661,7 @@ fn prune(transaction: &Transaction<'_>, now: i64) -> Result<(), String> {
        DELETE FROM log_lines WHERE deployment_id IN (SELECT id FROM deployments WHERE started_at < {kept_from});
        DELETE FROM restarts WHERE at < {kept_from};
        DELETE FROM deployments WHERE started_at < {kept_from};
+       DELETE FROM gate_passes WHERE at < {kept_from};
        DELETE FROM events WHERE at < {window_from};"
     ))
     .map_err(failed)

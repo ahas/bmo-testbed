@@ -65,6 +65,9 @@ quiet_unanswered_asks = 3
 # How many hours back a passed run of the whole suite on the commit leaves the gate's own suite out
 # (docs/deploy.md, 「What the deploy run does, in order」); a run begun earlier is none.
 passed_suite_hours = 24
+# How many hours back a gate's pass on the same commit, range, sibling heads and toolchains leaves the whole
+# gate out (docs/deploy.md, 「What the deploy run does, in order」); a pass written earlier is none.
+passed_gate_hours = 24
 # How often a deployment waiting in the deployment line says where it stands, in seconds (docs/deploy.md,
 # 「The deployment line」).
 line_say_seconds = 60
@@ -109,7 +112,9 @@ line_nobody = "nobody"
 retrying = "{said} during the {work}; trying again in {seconds}s, try {next} of {tries}"
 connection_lost = "{said} on {tries} tries running"
 gate_work = "gate"
-again = "{commit} is already what is deployed; laying it down again"
+again = "{commit} is already what is deployed; once its turn comes the deployment ends there if it still is"
+# The commit is still what is deployed once the turn comes, so the deployment ends live at once.
+already_live = "{commit} is already live, so nothing is laid down again and the deployment ends here"
 major = "the change is major: version {version} against the live {previous}; the repositories that build on this one are run"
 unit_faults = "{faults}; the reload after the flip would make that unit vanish, so put its file back or relink it in {dir} by hand first"
 dry = "--dry-run: {commit} would go live over {live}; nothing was changed"
@@ -126,6 +131,9 @@ gate_suite = "the suite ended with exit {code}"
 suite_left_out = "the suite is left out: test run {id} passed the whole suite on {commit} from a clean tree, begun {when} in {checkout}{on}; its log is {log}"
 # The machine whose record holds the run, where it is not this one: {machine} its label.
 on = " on {machine}"
+# The whole gate left out for an earlier pass on the same ground: {commit} a short commit, {when} when the pass
+# was written, {on} the machine line above or nothing.
+gate_passed_before = "the gate is left out: {commit} passed it {when}{on} over the same range, with the same heads beside it and the same toolchains"
 flaky = "flaky: {test} ({unit}) passed only when run once more"
 backup_none = "no backup is declared, so none is taken"
 backup_unnamed = "the backup could not be named: ninety-nine backups were already taken this second; nothing was changed"

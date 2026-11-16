@@ -738,6 +738,16 @@ impl BenchFor<'_> {
     matches!(self, Self::Run)
   }
 
+  /// Where the bench of a checkout stands there: a run's at the checkout's own place; a deployment's at the
+  /// place its repository's main checkout would have beside the checkout, so every checkout of the repository
+  /// deploys from one bench (docs/boundary.md, 「A deployment's bench stands apart」).
+  pub fn bench_place(self, settings: &MachineSettings, checkout: &Path, home: &Path) -> String {
+    match self {
+      Self::Run => settings.place_of(self, checkout, home),
+      Self::Deployment(_) => settings.place_of(self, &main_checkout_place(checkout), home),
+    }
+  }
+
   /// How a tree the checkout's workspace names outside it is laid beside the bench: for a run, copied as it
   /// stands; for a deployment, the repository holding it at the head of its main branch, since a deployment
   /// builds committed trees only (docs/deploy.md, 「The releases」). Why a tree has no committed tree to lay.
@@ -767,11 +777,35 @@ impl BenchFor<'_> {
   }
 }
 
-/// A bench made ready: its path on the placed machine, and the checkouts a run there knows, the bench and
-/// every tree copied beside it.
+/// Where the repository's main checkout would stand beside a checkout: in the folder holding the checkout, under
+/// the folder name of the work tree the checkout's common git directory belongs to. A checkout whose common git
+/// directory is no work tree's `.git`, or cannot be read, keeps its own place.
+pub fn main_checkout_place(checkout: &Path) -> PathBuf {
+  let common = Command::new("git")
+    .args(["rev-parse", "--path-format=absolute", "--git-common-dir"])
+    .current_dir(checkout)
+    .stdin(Stdio::null())
+    .stderr(Stdio::null())
+    .output()
+    .ok()
+    .filter(|done| done.status.success())
+    .map(|done| PathBuf::from(String::from_utf8_lossy(&done.stdout).trim()));
+  let main_name = common
+    .filter(|dir| dir.file_name().is_some_and(|name| name == ".git"))
+    .and_then(|dir| dir.parent().and_then(Path::file_name).map(ToOwned::to_owned));
+
+  match (main_name, checkout.parent()) {
+    (Some(name), Some(folder)) => folder.join(name),
+    _ => checkout.to_path_buf(),
+  }
+}
+
+/// A bench made ready: its path on the placed machine, the checkouts a run there knows, the bench and every tree
+/// copied beside it, and the heads of the committed trees laid beside it, none for a run's.
 pub struct ReadyBench {
   pub path: String,
   pub checkouts: Vec<String>,
+  pub heads: Vec<String>,
 }
 
 /// The placed machine, a member of the placement type: every run goes there over `ssh`, as the testbed's
@@ -1141,9 +1175,16 @@ impl MachinePlacement {
 
     trees.retain(|tree| seen.insert(tree.place().to_owned()));
 
-    let path = self.settings.place_of(purpose, checkout, &self.home);
+    let path = purpose.bench_place(&self.settings, checkout, &self.home);
     let checkouts = std::iter::once(path.clone())
       .chain(trees.iter().map(|tree| tree.place().to_owned()))
+      .collect();
+    let heads = trees
+      .iter()
+      .filter_map(|tree| match tree {
+        BenchTree::Committed { commit, .. } => Some(commit.clone()),
+        BenchTree::AsItStands { .. } => None,
+      })
       .collect();
     let source = BenchSource {
       checkout,
@@ -1155,7 +1196,71 @@ impl MachinePlacement {
     };
 
     ready_bench(&self.settings.as_bench(path.clone()), &source)?;
-    Ok(ReadyBench { path, checkouts })
+
+    if !purpose.open_files() {
+      self.remove_stale_benches(checkout, commit, &path);
+    }
+
+    Ok(ReadyBench {
+      path,
+      checkouts,
+      heads,
+    })
+  }
+
+  // The benches other checkouts of the repository left beside its one deployment bench there taken away: each
+  // repository in the bench's folder whose root commits are the commit's own, but for the bench itself; said on
+  // a line, and failing nothing (docs/boundary.md, 「A deployment's bench stands apart」).
+  fn remove_stale_benches(&self, checkout: &Path, commit: &str, bench: &str) {
+    let words = &LANES.placed;
+    let roots = Command::new("git")
+      .args(["rev-list", "--max-parents=0", commit])
+      .current_dir(checkout)
+      .stdin(Stdio::null())
+      .stderr(Stdio::null())
+      .output()
+      .ok()
+      .filter(|done| done.status.success())
+      .map(|done| {
+        let mut roots: Vec<String> =
+          String::from_utf8_lossy(&done.stdout).split_whitespace().map(str::to_owned).collect();
+
+        roots.sort();
+        roots.iter().map(|root| format!("{root} ")).collect::<String>()
+      })
+      .filter(|roots| !roots.is_empty());
+    let (Some(roots), Some((folder, name))) = (roots, bench.rsplit_once('/')) else {
+      return;
+    };
+    // Each folder's root commits are read as git lists them, sorted and each followed by a space, as `roots` is.
+    let line = format!(
+      "cd {} 2>/dev/null || exit 0; for d in */; do d=${{d%/}}; [ \"$d\" = {} ] && continue; \
+       [ -e \"$d/.git\" ] || continue; \
+       r=$(git -C \"$d\" rev-list --max-parents=0 HEAD 2>/dev/null | sort | tr '\\n' ' '); \
+       [ \"$r\" = {} ] || continue; rm -rf -- \"$d\" && echo \"$d\"; done; exit 0",
+      far_path(folder),
+      quoted(name),
+      quoted(&roots),
+    );
+    let done = self.ssh().arg(line).output();
+    let machine = self.settings.label();
+
+    match done {
+      Ok(done) if done.status.success() => {
+        let names: Vec<String> = String::from_utf8_lossy(&done.stdout).lines().map(str::to_owned).collect();
+
+        if !names.is_empty() {
+          eprintln!(
+            "{}",
+            fill_marks(&words.stale_removed, &[("machine", machine), ("names", &names.join(", "))])
+          );
+        }
+      }
+      done => eprintln!(
+        "{}",
+        fill_marks(&words.stale_unremoved, &[("machine", machine), ("said", &said(&done))])
+      ),
+    }
   }
 
   // The one `ssh` command running the words in the bench through the `placed` verb.

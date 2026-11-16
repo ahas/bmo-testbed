@@ -181,6 +181,10 @@ impl Language for Node {
     Some(vec!["npm".to_owned(), "run".to_owned(), script.to_owned()])
   }
 
+  fn toolchain_command(&self) -> Option<&'static [&'static str]> {
+    Some(&["node", "--version"])
+  }
+
   fn root_configuration(&self) -> &'static [&'static str] {
     &["package.json", "package-lock.json", "tsconfig.json"]
   }

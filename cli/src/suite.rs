@@ -25,6 +25,7 @@ use bmo_testbed_suite::log::{
 use bmo_testbed_suite::once_more::run_judged;
 use bmo_testbed_suite::run::{SuiteAsk, SuiteWords, ask_of, run, verdict_line};
 use bmo_testbed_suite::template::{TemplateVerb, template as template_on};
+use bmo_testbed_suite::toolchain::{toolchain_text, toolchains};
 use bmo_testbed_suite::workspace::git_lines;
 use serde_json::json;
 
@@ -32,7 +33,9 @@ use crate::own::run_own;
 use crate::placement_of;
 use crate::recorded::{command_run, suite_record};
 use crate::said::Said;
-use crate::words::{BINARY, CountArgs, LogArgs, PassedArgs, SuiteArgs, TemplateArgs, TemplateWord};
+use crate::words::{
+  BINARY, CountArgs, LogArgs, PassedArgs, SuiteArgs, TemplateArgs, TemplateWord, ToolchainArgs,
+};
 
 /// The repository the verb runs in, or the code it ends with where its declaration does not read.
 pub fn repository() -> Result<Repository, u8> {
@@ -145,6 +148,26 @@ pub fn passed(args: &PassedArgs) -> u8 {
         ],
       )
     );
+  }
+
+  0
+}
+
+/// `toolchain`: the toolchains the checkout is built and tested with, each language's own answer.
+pub fn toolchain(args: &ToolchainArgs) -> u8 {
+  let repo = match repository() {
+    Ok(repo) => repo,
+    Err(code) => return code,
+  };
+  let found = toolchains(&repo.root);
+
+  if args.json {
+    let object: serde_json::Map<String, serde_json::Value> =
+      found.iter().map(|one| (one.language.to_owned(), json!(one.said))).collect();
+
+    println!("{}", serde_json::Value::Object(object));
+  } else {
+    print!("{}", toolchain_text(&found));
   }
 
   0

@@ -33,6 +33,7 @@ pub enum Verb {
   Suite(SuiteArgs),
   Dependents(DependentsArgs),
   Passed(PassedArgs),
+  Toolchain(ToolchainArgs),
   Count(CountArgs),
   Log(LogArgs),
   Template(TemplateArgs),
@@ -248,6 +249,13 @@ pub struct PassedArgs {
   pub json: bool,
 }
 
+/// `toolchain`: the toolchains the checkout is built and tested with.
+#[derive(Debug, Args)]
+pub struct ToolchainArgs {
+  #[arg(long)]
+  pub json: bool,
+}
+
 #[derive(Debug, Args)]
 pub struct CountArgs {
   #[arg(long)]
@@ -447,6 +455,7 @@ pub fn read(args: impl IntoIterator<Item = OsString>) -> Result<Words, clap::Err
     .mut_subcommand("suite", |verb| verb.override_help(usage(&said.suite)))
     .mut_subcommand("dependents", |verb| verb.override_help(usage(&said.dependents)))
     .mut_subcommand("passed", |verb| verb.override_help(usage(&said.passed)))
+    .mut_subcommand("toolchain", |verb| verb.override_help(usage(&said.toolchain)))
     .mut_subcommand("count", |verb| verb.override_help(usage(&said.count)))
     .mut_subcommand("log", |verb| verb.override_help(usage(&said.log)))
     .mut_subcommand("template", |verb| verb.override_help(usage(&said.template)))

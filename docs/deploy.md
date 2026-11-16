@@ -220,7 +220,8 @@
   one (`docs/boundary.md`, 「Placement」, 「The placed machine」). The deployment benches the commit
   there, each repository holding an outside tree with it at its main head (「The releases」), pushed
   and checked out as the bench itself is, never copied from a working tree, in a bench of the repository's own that no
-  run and no other repository's deployment copies into, as the build tree stands apart here
+  run and no other repository's deployment copies into, one bench for the repository whichever of its
+  checkouts the deployment is taken from, as the build tree stands apart and stands once here
   (`docs/boundary.md`, 「A deployment's bench stands apart」), and sets the bench up with the declared
   setup steps; the static check (`check static`, no test among it) and the suite then run there, each as
   that machine's own testbed verb in its own turn, and the Cargo release build runs there in that machine's Cargo build root,
@@ -309,6 +310,12 @@ flowchart TD
 - **Its turn reads the live release again.** Once its turn comes, the deployment reads the deployment
   record again, so the range its gate checks and the major change it judges are against what the
   deployment before it put live.
+- **A commit already live when its turn comes ends the deployment there.** Where the record read again
+  names the commit asked for, the deployment says so on a line, begins its progress record and ends it
+  live at once, lets the line go and exits 0: no gate, no backup, no release, no restart and no event,
+  since what it would lay down is what serves already. A deployment of the live commit asked while
+  another stands ahead of it in the line therefore runs whole only where that other one has put
+  something else live by then.
 - **It holds the line from the gate to the end of the build** (steps 3 to 6), then lets it go. What
   follows waits on services rather than on any machine's threads, and the wait for quiet lasts as long
   as the work it waits on, so the next deployment's gate begins while this one restarts. A deployment that
@@ -427,7 +434,8 @@ flowchart TD
    the repository otherwise than the checkout's, places the deployment elsewhere or deploys nothing, or
    where an env file it declares is missing. Check every unit link will still find its unit file. Then
    stand in the deployment line until its turn comes or its bound passes, and read the deployment record
-   again (「The deployment line」). Adopt a deploy tree that is still a directory.
+   again, ending there, live, where it names the commit (「The deployment line」). Adopt a deploy tree that
+   is still a directory.
 3. **Pass the gate:** the declared static check and the suite over the range from the deployed commit,
    each heavy command at the front in its lane's deployment's seat (`docs/testbed.md`, 「The front of the
    line」), with what failed run once more, on the placed
@@ -435,6 +443,18 @@ flowchart TD
    leaves it out where the caller already ran it, and so does a declaration with `gate = false`. The
    deployment asks the gate through a hand of its own, which the binary answers with the suite's
    static check and run, so a test stands in for it.
+   - **The whole gate is left out where it already passed on the same ground.** A gate that passes is
+     written into this machine's record (`docs/boundary.md`, 「The record」) by the deployment itself:
+     the repository, the commit, the commit the range began at (none where nothing was live), the head
+     of every repository the gate laid beside the tree it judged, and the tree's toolchains as the
+     `toolchain` verb answers them where the gate ran (`docs/boundary.md`, 「`toolchain`」), with the
+     machine it ran on. Every later gate, once it has laid its tree and read its toolchains, asks the
+     record for a pass of the same repository, commit, range, heads and toolchains written within the
+     policy's hours, twenty-four. Where one stands the gate runs nothing, neither the static check nor
+     the suite, and the deployment says on one line that the gate is left out, naming when the pass was
+     written and the machine it ran on. Anything less certain runs the gate: a sibling's head that
+     moved, another toolchain, another range, a pass older than the limit, or toolchains that could not
+     be read, which find no pass and write none. The suites a major change runs are never left out.
    - **The suite is left out where it already passed on the commit.** The close that landed the commit
      ran the repository's whole suite on it (`docs/testbed.md`, 「The close line」), so a passed run of
      it is taken in place of the gate's own. The run taken is the newest test run of the repository's

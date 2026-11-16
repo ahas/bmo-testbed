@@ -28,7 +28,7 @@ use bmo_testbed_core::turn::{
   Env, FRONT_VARIABLE, Lane, NOT_RUN_EXIT_CODE, TurnAsk, harness_pid, process_env, take_turn,
 };
 use bmo_testbed_core::verb::REFUSED_EXIT_CODE;
-use bmo_testbed_record::Record;
+use bmo_testbed_record::{GateGround, GatePass, Record, say_unwritten};
 use serde_json::{Value, json};
 
 use crate::adopt::{Adopting, adopt, prune_retired};
@@ -162,7 +162,8 @@ pub struct DeployAsk {
 }
 
 /// What the gate is asked: the commit, in the checkout it is taken from, over the range from what was live,
-/// and whether its suite runs: not where a passed run of the whole suite on the commit stands already.
+/// whether its suite runs: not where a passed run of the whole suite on the commit stands already, and the
+/// earlier pass on the footing it finds itself on, which leaves it out whole.
 pub struct GateAsk<'a> {
   /// The checkout the commit is taken from, which a gate on another machine makes its bench from.
   pub root: &'a Path,
@@ -172,6 +173,35 @@ pub struct GateAsk<'a> {
   pub commit: &'a str,
   pub since: Option<&'a str>,
   pub suite: bool,
+  /// The head of every repository laid beside `tree`, which a gate on this machine judges with it.
+  pub heads: &'a [String],
+  /// The pass an earlier gate wrote on the footing given, asked once the gate knows its footing; none where
+  /// none stands.
+  pub earlier: &'a dyn Fn(&GateFooting) -> Option<GatePass>,
+}
+
+/// What a gate stands on beside the commit and its range: the head of every repository laid beside the tree it
+/// judges, the toolchains its machine answered there, and that machine's label where it is not this one.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct GateFooting {
+  pub heads: Vec<String>,
+  pub toolchains: String,
+  pub machine: Option<String>,
+}
+
+/// The gate's answer where an earlier pass on its footing leaves it out: passed, running nothing.
+pub fn passed_before(footing: GateFooting, earlier: GatePass) -> GateOutcome {
+  GateOutcome {
+    passed: true,
+    footing: Some(footing),
+    earlier: Some(earlier),
+    ..GateOutcome::default()
+  }
+}
+
+/// A gate that asks nothing earlier: the footing it finds is never passed before.
+pub fn none_earlier(_: &GateFooting) -> Option<GatePass> {
+  None
 }
 
 /// A passed run of the whole suite on the commit, which the gate takes in place of its own suite: the test
@@ -203,6 +233,58 @@ pub struct GateOutcome {
   pub flaky: Vec<(String, String)>,
   pub steps: Vec<GateStep>,
   pub suite_passed: Option<SuitePassed>,
+  /// What the gate stood on, where it could tell; a pass is written on it.
+  pub footing: Option<GateFooting>,
+  /// The earlier pass on the same footing that left the gate out whole.
+  pub earlier: Option<GatePass>,
+}
+
+/// The ground a deployment's gate stands on: the repository, the commit, the range's start and the footing the
+/// gate found, its heads in order so the same trees read alike however they were laid.
+pub fn gate_ground(
+  repository: &str,
+  commit: &str,
+  since: Option<&str>,
+  footing: &GateFooting,
+) -> GateGround {
+  let mut heads = footing.heads.clone();
+
+  heads.sort();
+  heads.dedup();
+
+  GateGround {
+    repository: repository.to_owned(),
+    commit: commit.to_owned(),
+    since: since.map(str::to_owned),
+    heads,
+    toolchains: footing.toolchains.clone(),
+  }
+}
+
+/// The newest pass the record under a data root holds on the ground, written within the policy's hours before
+/// the moment given; none where it holds none or cannot be read.
+pub fn gate_passed(data_root: &Path, ground: &GateGround, now_ms: i64) -> Option<GatePass> {
+  let since = now_ms.saturating_sub(DEPLOY.numbers.passed_gate_hours.saturating_mul(60 * 60 * 1000));
+
+  Record::open(data_root)
+    .and_then(|record| record.gate_passed(ground, since))
+    .ok()
+    .flatten()
+}
+
+/// The line saying the gate is left out for an earlier pass on the same ground.
+pub fn gate_left_out_before(earlier: &GatePass) -> String {
+  let said = &DEPLOY.run;
+  let on = earlier
+    .machine
+    .as_deref()
+    .map(|machine| fill_marks(&said.on, &[("machine", machine)]))
+    .unwrap_or_default();
+
+  fill_marks(
+    &said.gate_passed_before,
+    &[("commit", &short(&earlier.ground.commit)), ("when", &iso(earlier.at)), ("on", &on)],
+  )
 }
 
 /// The passed run of a repository's whole suite on a commit that the record under a data root holds, begun
@@ -902,7 +984,7 @@ impl<'a> Laying<'a> {
   // The trees the workspace names outside the repository laid beside `tree` as links into their committed
   // trees, each repository put at its main head in the committed trees' folder (docs/deploy.md, 「The
   // releases」).
-  fn lay_committed_trees(&self, tree: &Path) -> Result<(), String> {
+  fn lay_committed_trees(&self, tree: &Path) -> Result<Vec<String>, String> {
     let run = |line: &[String], cwd: &Path| self.hands.run(line, cwd);
     let store = committed_trees(&self.places.deploy_dir);
 
@@ -918,8 +1000,8 @@ impl<'a> Laying<'a> {
   }
 
   // The build tree put at the commit with its outside trees laid at their committed heads, which the gate on
-  // this machine and the release build read: its path.
-  fn put_commit_tree(&self) -> Result<PathBuf, String> {
+  // this machine and the release build read: its path, and the heads laid beside it.
+  fn put_commit_tree(&self) -> Result<(PathBuf, Vec<String>), String> {
     let places = &self.places;
     let tree = expansion_tree(&places.deploy_dir);
     let run = |line: &[String], cwd: &Path| self.hands.run(line, cwd);
@@ -933,9 +1015,9 @@ impl<'a> Laying<'a> {
       },
       &run,
     )?;
-    self.lay_committed_trees(&tree)?;
+    let heads = self.lay_committed_trees(&tree)?;
 
-    Ok(tree)
+    Ok((tree, heads))
   }
 
   // The release built in the build tree at the commit: the Cargo release build where the commit has a Cargo
@@ -945,7 +1027,7 @@ impl<'a> Laying<'a> {
     let said = &DEPLOY.run;
     let places = &self.places;
     let build = &self.repo.declaration.build;
-    let tree = self.put_commit_tree()?;
+    let (tree, _) = self.put_commit_tree()?;
 
     let profile = &build.cargo_profile;
     let target = build_target(&places.deploy_dir);
@@ -1492,6 +1574,9 @@ pub async fn deploy(
 
   run.previous = read_deploy_record(&places.record);
 
+  // A commit already live when the turn comes is what this deployment would lay down: it ends there, live.
+  let already_live = run.previous.as_ref().is_some_and(|previous| previous.commit == commit);
+
   // The deploy root holds the run's own record, log and progress file; the first deployment makes it
   // before the run begins writing there.
   let _ = std::fs::create_dir_all(&places.deploy_root);
@@ -1509,6 +1594,17 @@ pub async fn deploy(
     },
     now_ms,
   ));
+
+  if already_live {
+    run.say(&fill_marks(&said.already_live, &[("commit", &shown)]));
+
+    if let Some(progress) = &run.progress {
+      progress.end(Outcome::Live, None);
+    }
+
+    drop(line);
+    return 0;
+  }
 
   // The deploy tree still a directory, taken into the release layout first.
   let git = |args: &[&str], cwd: &Path| run.git(args, cwd);
@@ -1572,10 +1668,10 @@ pub async fn deploy(
     // build tree put at the commit with its outside trees laid at their committed heads, set up by the
     // declared steps so a fresh tree holds the packages its check needs (docs/deploy.md, 「What the deploy run
     // does, in order」).
-    let tree = run
-      .put_commit_tree()
-      .and_then(|tree| run.set_up_test_tree(&checkout.declaration.test.setup, &tree).map(|()| tree));
-    let tree = match tree {
+    let tree = run.put_commit_tree().and_then(|(tree, heads)| {
+      run.set_up_test_tree(&checkout.declaration.test.setup, &tree).map(|()| (tree, heads))
+    });
+    let (tree, heads) = match tree {
       Ok(tree) => tree,
       Err(why) => {
         return run.failed(
@@ -1601,6 +1697,16 @@ pub async fn deploy(
       }));
     }
 
+    // An earlier pass on the footing the gate finds leaves it out whole; this machine's record holds it, wherever
+    // the gate ran.
+    let ground_of = |footing: &GateFooting| gate_ground(&repo.name(), &commit, since.as_deref(), footing);
+    let earlier = |footing: &GateFooting| {
+      ask
+        .record
+        .as_deref()
+        .and_then(|data_root| gate_passed(data_root, &ground_of(footing), hands.now_ms()))
+    };
+
     // The gate is asked again while the connection to its machine breaks under it, every try's steps written.
     let (passed, tries) = run.tried(
       &said.gate_work,
@@ -1611,6 +1717,8 @@ pub async fn deploy(
           commit: &commit,
           since: since.as_deref(),
           suite: passed_here.is_none(),
+          heads: &heads,
+          earlier: &earlier,
         });
 
         if let Some(cgroup) = &unit_cgroup {
@@ -1628,6 +1736,20 @@ pub async fn deploy(
 
     if let Some(found) = &passed.suite_passed {
       run.say(&suite_left_out(found));
+    }
+
+    if let Some(earlier) = &passed.earlier {
+      run.say(&gate_left_out_before(earlier));
+    } else if let (true, Some(footing), Some(data_root)) = (passed.passed, &passed.footing, &ask.record) {
+      let pass = GatePass {
+        ground: ground_of(footing),
+        machine: footing.machine.clone(),
+        at: hands.now_ms(),
+      };
+
+      if let Err(why) = Record::open(data_root).and_then(|mut record| record.write_gate_pass(&pass)) {
+        say_unwritten(&why);
+      }
     }
 
     if !passed.passed {
@@ -1663,6 +1785,8 @@ pub async fn deploy(
       commit: &commit,
       since: run.previous.as_ref().map(|previous| previous.commit.as_str()),
       suite: true,
+      heads: &[],
+      earlier: &none_earlier,
     });
 
     if let Some(cgroup) = &unit_cgroup {
