@@ -114,6 +114,11 @@ ran_there = "it ran on {machine} in {bench}"
 # 「A deployment's bench stands apart」): taken away, {names} their folders; or not, {said} what was said.
 stale_removed = "testbed: took away the benches other checkouts of the repository left on {machine}: {names}"
 stale_unremoved = "testbed: the benches other checkouts of the repository left on {machine} could not be taken away: {said}"
+# A deployment's bench made ready without a tree its manifests name by a path (docs/boundary.md,
+# 「A deployment's bench stands apart」): the bench is at fault and not the commit, {machine} the machine and
+# {names} the trees that do not stand there; or the guard itself could not ask the machine, {said} what it said.
+trees_gone = "testbed: the deployment's bench on {machine} is missing trees its manifests name by a path: {names}; the bench is at fault, not the commit"
+trees_unread = "testbed: the trees a deployment's bench must hold could not be read on {machine}: {said}"
 setup_failed = "testbed: the setup step {command} failed with code {code}"
 no_registry = "testbed: the run's registry of checkouts could not be written at {file}: {why}"
 # The placed machine's testbed is not this one's release: {machine} the machine, {far} the commit its testbed

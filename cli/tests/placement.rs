@@ -5,7 +5,9 @@
 //! bench made ready over the same stand-in, from the remote that machine can reach or empty where it can reach
 //! none, the run the testbed's `placed` verb there, a machine that cannot be reached, or settings that do not
 //! read, leaving the run here, the shared versions laid over their copy as their main branch holds them, a
-//! deployment's bench standing apart from a run's copy of the same tree, a testbed there that is not this one's release refused before any bench is made and a run meeting it kept
+//! deployment's bench standing apart from a run's copy of the same tree, its sweep keeping a laid sibling that
+//! shares the deployed repository's root commits while the bench another checkout left goes and the making of
+//! the bench blaming itself naming the tree where a laid sibling does not stand, a testbed there that is not this one's release refused before any bench is made and a run meeting it kept
 //! here, a run whose environment sets a variable its declaration names as this machine's kept here, the
 //! run standing in its lane here while it lasts, running once the far side says its turn came, that line read
 //! and not passed on, and the `placed` verb there passing its command's output on, telling its own holder
@@ -689,6 +691,12 @@ fn the_testbed_there_is_brought_to_a_release_carrying_one_and_read_back_at_its_c
 // A checkout holding one package, its manifest naming the dependency given by a path, committed.
 fn package_checkout(dir: &Path, name: &str, dependency: Option<&str>) {
   checkout(dir, &format!("testbed = 0\nname = \"{name}\"\n"));
+  package_on(dir, name, dependency);
+}
+
+// One package committed onto a repository that already stands, its manifest naming the dependency given
+// by a path.
+fn package_on(dir: &Path, name: &str, dependency: Option<&str>) {
   std::fs::create_dir_all(dir.join("src")).unwrap();
 
   let depends = dependency
@@ -823,6 +831,86 @@ fn a_worktree_deploys_from_its_repositorys_one_bench_and_the_bench_another_check
   assert!(!left.exists());
   assert_eq!(git(&laid, &["rev-parse", "HEAD"]), git(&base, &["rev-parse", "main"]));
   assert!(!dir.join("deploy-bench/consumer/consumer-w2").exists());
+}
+
+// "The sweep never takes a tree laid for this deployment ... it is the laid list that keeps them apart": two
+// repositories split from one history share their root commits, so a deployment of the consumer keeps the
+// sibling laid as its dependency beside the one bench while the clone an earlier checkout left goes.
+#[test]
+fn a_deployments_bench_keeps_a_laid_sibling_sharing_its_root_commits() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let root = dir.join("root");
+  let base = dir.join("base");
+  let consumer = dir.join("consumer");
+
+  // One history, split into two repositories that each hold one package: their root commits are the same.
+  checkout(&root, "testbed = 0\n");
+  git(&dir, &["clone", "-q", &root.to_string_lossy(), &base.to_string_lossy()]);
+  git(&dir, &["clone", "-q", &root.to_string_lossy(), &consumer.to_string_lossy()]);
+  package_on(&base, "base", None);
+  package_on(&consumer, "consumer", Some("../base"));
+
+  let machine = released(&dir, None, None);
+  let deployed = git(&consumer, &["rev-parse", "HEAD"]);
+  let left = dir.join("deploy-bench/consumer/consumer-w3");
+
+  git(&dir, &["clone", "-q", &consumer.to_string_lossy(), &left.to_string_lossy()]);
+
+  let bench = machine.ready(&consumer, &deployed, BenchFor::Deployment("consumer")).unwrap();
+  let one = dir.join("deploy-bench/consumer/consumer");
+  let laid = dir.join("deploy-bench/consumer/base");
+
+  assert_eq!(Path::new(&bench.path), one);
+  assert_eq!(git(&one, &["rev-parse", "HEAD"]), deployed);
+  assert!(bench.checkouts.contains(&laid.to_string_lossy().into_owned()), "{:?}", bench.checkouts);
+  assert_eq!(git(&laid, &["rev-parse", "HEAD"]), git(&base, &["rev-parse", "main"]));
+  assert!(!left.exists());
+}
+
+// "where one does not once the bench is made ready, the bench is at fault and not the commit": a
+// stand-in node that answers the laid tree's checkout as done without running it leaves the bench without
+// that working tree, and the making of the bench fails naming the tree and blaming the bench.
+#[test]
+fn a_deployment_blames_its_bench_when_a_laid_sibling_does_not_stand() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let base = dir.join("base");
+  let consumer = dir.join("consumer");
+  let ssh = dir.join("ssh");
+  let place = dir.join("deploy-bench/consumer/base");
+
+  package_checkout(&base, "base", None);
+  package_checkout(&consumer, "consumer", Some("../base"));
+
+  let machine = released(&dir, None, None);
+
+  // The stand-in `ssh` runs every line but the laid tree's checkout, which it answers as done; the tree's
+  // repository stands from the push with no commit checked out.
+  install(
+    &SSH.replace(
+      "exec sh -c",
+      &format!(
+        "case \"$*\" in *\"{}\"*\" && git checkout\"*) exit 0 ;; esac\nexec sh -c",
+        place.display()
+      ),
+    ),
+    &ssh,
+  );
+
+  let deployed = git(&consumer, &["rev-parse", "HEAD"]);
+  let why = machine
+    .ready(&consumer, &deployed, BenchFor::Deployment("consumer"))
+    .map(|bench| bench.path)
+    .unwrap_err();
+
+  assert_eq!(
+    why,
+    fill_marks(
+      &LANES.placed.trees_gone,
+      &[("machine", "machine-2"), ("names", &place.to_string_lossy())]
+    )
+  );
 }
 
 // "a tree no repository holds ... fails the step"

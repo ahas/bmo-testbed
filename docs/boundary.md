@@ -850,13 +850,19 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   checkout therefore benches at the main checkout's place, and every path a manifest names upward from
   the checkout resolves there as it does here. A checkout whose common git directory is no work tree's
   `.git` benches under its own folder name.
-- **A bench another checkout of the repository left there goes.** Once the bench is ready, each
-  repository standing beside it in the same folder there whose root commits are the bench's own is
-  removed: a bench an earlier deployment made at another checkout's place, which no deployment reads any
-  more. The trees laid beside the bench are other repositories', whose roots differ, and stay. A removal
-  that fails is said on a line and fails nothing. The directory that machine's build root kept for a
-  removed bench is then the directory of a checkout that no longer exists, which its prune takes away
-  (`docs/deploy.md`, 「The Cargo build directory」).
+- **A bench another checkout of the repository left there goes.** Once the bench is ready and every tree
+  the deployed repository's manifests name by a path has been laid beside it, each repository standing
+  beside it in the same folder there whose root commits are the bench's own is removed: a bench an
+  earlier deployment made at another checkout's place, which no deployment reads any more. The sweep
+  never takes a tree laid for this deployment, nor a folder holding one deeper down: a sibling repository
+  whose history was split from the deployed repository's shares its root commits, so the roots alone do
+  not tell another checkout's leftover from a path dependency, and it is the laid list that keeps them
+  apart. Every laid tree stands on the bench before any step runs there, and where one does not once the
+  bench is made ready, the bench is at fault and not the commit: the making fails naming the missing
+  trees, no step runs, and the deployment reports the bench rather than a check the commit never failed.
+  A removal that fails is said on a line and fails nothing. The directory that machine's build root kept
+  for a removed bench is then the directory of a checkout that no longer exists, which its prune takes
+  away (`docs/deploy.md`, 「The Cargo build directory」).
 - **The run is then one `ssh` command:** the testbed binary there, in the bench, asked the `placed`
   verb with the words. Its standard error is this run's standard error, its standard output its one
   result line, and its exit code this run's exit code. The caller passes both on as they come, but for

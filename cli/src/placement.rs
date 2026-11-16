@@ -1216,6 +1216,7 @@ impl MachinePlacement {
     let mut seen = std::collections::HashSet::new();
 
     trees.retain(|tree| seen.insert(tree.place().to_owned()));
+    let places = trees.iter().map(|tree| tree.place().to_owned()).collect::<Vec<String>>();
 
     let path = purpose.bench_place(&self.settings, checkout, &self.home);
     let checkouts = std::iter::once(path.clone())
@@ -1240,7 +1241,8 @@ impl MachinePlacement {
     ready_bench(&self.settings.as_bench(path.clone()), &source)?;
 
     if !purpose.open_files() {
-      self.remove_stale_benches(checkout, commit, &path);
+      self.remove_stale_benches(checkout, commit, &path, &places);
+      self.trees_stand(&places)?;
     }
 
     Ok(ReadyBench {
@@ -1251,9 +1253,10 @@ impl MachinePlacement {
   }
 
   // The benches other checkouts of the repository left beside its one deployment bench there taken away: each
-  // repository in the bench's folder whose root commits are the commit's own, but for the bench itself; said on
-  // a line, and failing nothing (docs/boundary.md, 「A deployment's bench stands apart」).
-  fn remove_stale_benches(&self, checkout: &Path, commit: &str, bench: &str) {
+  // repository in the bench's folder whose root commits are the commit's own, but for the bench itself and for
+  // every folder `laid` names or holds one of; said on a line, and failing nothing (docs/boundary.md,
+  // 「A deployment's bench stands apart」).
+  fn remove_stale_benches(&self, checkout: &Path, commit: &str, bench: &str, laid: &[String]) {
     let words = &LANES.placed;
     let roots = Command::new("git")
       .args(["rev-list", "--max-parents=0", commit])
@@ -1274,14 +1277,34 @@ impl MachinePlacement {
     let (Some(roots), Some((folder, name))) = (roots, bench.rsplit_once('/')) else {
       return;
     };
+    // A tree laid for this deployment is kept, and so is the folder of the bench's folder holding one deeper
+    // down: a sibling repository whose history was split from the deployed repository's shares its root
+    // commits, so the roots alone would take that dependency for another checkout's leftover.
+    let mut kept = vec![name.to_owned()];
+    let below = format!("{folder}/");
+
+    for place in laid {
+      if let Some(rest) = place.strip_prefix(&below) {
+        let first = rest.split('/').next().unwrap_or_default();
+
+        if !first.is_empty() && !kept.iter().any(|kept| kept == first) {
+          kept.push(first.to_owned());
+        }
+      }
+    }
+
+    let skips = kept
+      .iter()
+      .map(|kept| format!("[ \"$d\" = {} ] && continue;", quoted(kept)))
+      .collect::<Vec<String>>()
+      .join(" ");
     // Each folder's root commits are read as git lists them, sorted and each followed by a space, as `roots` is.
     let line = format!(
-      "cd {} 2>/dev/null || exit 0; for d in */; do d=${{d%/}}; [ \"$d\" = {} ] && continue; \
+      "cd {} 2>/dev/null || exit 0; for d in */; do d=${{d%/}}; {skips} \
        [ -e \"$d/.git\" ] || continue; \
        r=$(git -C \"$d\" rev-list --max-parents=0 HEAD 2>/dev/null | sort | tr '\\n' ' '); \
        [ \"$r\" = {} ] || continue; rm -rf -- \"$d\" && echo \"$d\"; done; exit 0",
       far_path(folder),
-      quoted(name),
       quoted(&roots),
     );
     let done = self.ssh().arg(line).output();
@@ -1302,6 +1325,42 @@ impl MachinePlacement {
         "{}",
         fill_marks(&words.stale_unremoved, &[("machine", machine), ("said", &said(&done))])
       ),
+    }
+  }
+
+  // Every tree a deployment's manifests name by a path standing on the bench before any step reads it: where
+  // one does not, the bench is at fault and not the commit, the making of the bench failing with the missing
+  // trees named (docs/boundary.md, 「A deployment's bench stands apart」).
+  fn trees_stand(&self, laid: &[String]) -> Result<(), String> {
+    if laid.is_empty() {
+      return Ok(());
+    }
+
+    let words = &LANES.placed;
+    let listed = laid.iter().map(|place| far_path(place)).collect::<Vec<String>>().join(" ");
+    let line = format!(
+      "for p in {listed}; do git -C \"$p\" rev-parse --verify -q HEAD >/dev/null 2>&1 || echo \"$p\"; \
+       done; exit 0"
+    );
+
+    match self.ssh().arg(line).output() {
+      Ok(done) if done.status.success() => {
+        let missing: Vec<String> =
+          String::from_utf8_lossy(&done.stdout).lines().map(str::to_owned).collect();
+
+        if missing.is_empty() {
+          return Ok(());
+        }
+
+        Err(fill_marks(
+          &words.trees_gone,
+          &[("machine", self.settings.label()), ("names", &missing.join(", "))],
+        ))
+      }
+      done => Err(fill_marks(
+        &words.trees_unread,
+        &[("machine", self.settings.label()), ("said", &said(&done))],
+      )),
     }
   }
 
