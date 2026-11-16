@@ -38,8 +38,8 @@
       "core/silence-watch",
       "core/placement"
     ],
-    "base": "3dd281e07ef4399530874f7ea309b86b5b4c06d4",
-    "changed": 1794768727571
+    "base": "f643b8482d1c6e9894116a808ba2ee20987f8b98",
+    "changed": 1794824961389
   },
   {
     "id": "suite/change-check",
@@ -94,8 +94,8 @@
       "core/languages",
       "core/policy-loader"
     ],
-    "base": "6dabc83764d4656ee0b33e707f39ef8853b817db",
-    "changed": 1794547120120
+    "base": "f643b8482d1c6e9894116a808ba2ee20987f8b98",
+    "changed": 1794824961375
   },
   {
     "id": "suite/dependents",
@@ -234,19 +234,21 @@
   {
     "id": "suite/suite-run",
     "title": "Suite run",
-    "what": "The suite verb: every test file, crate, project and tool as one unit in a process of its own, a sweep wide inside the machine turn and a fence; each test held to the per-test limit; browser files in a lane of one; the verdict names skipped tests and --again runs failures once more.",
+    "what": "The suite verb: every test file, crate, project and tool as one unit in a process of its own, inside the machine turn and a fence; the crates' tests built once over every crate reached and run from the binaries Cargo's runner wrote down; a per-test limit; --again runs failures once more.",
     "files": [
       "suite/src/run.rs",
       "suite/src/sweep.rs",
       "suite/src/unit.rs",
       "suite/src/fence.rs",
       "suite/src/once_more.rs",
+      "suite/src/crate_tests.rs",
       "cli/src/suite.rs",
       "units/bmo-suite.slice",
       "docs/suite.md",
       "suite/tests/suite.rs",
       "suite/tests/unit.rs",
       "suite/tests/once_more.rs",
+      "suite/tests/crate_tests.rs",
       "cli/tests/suite_verb.rs"
     ],
     "symbols": [
@@ -254,10 +256,14 @@
       "run_saying",
       "SuiteAsk",
       "SuiteEnded",
-      "PerTest"
+      "PerTest",
+      "RunRecord",
+      "TestBinary"
     ],
     "aliases": [
-      "팀즈 아바타 테스트가 스위트에서 실제로 돌게"
+      "팀즈 아바타 테스트가 스위트에서 실제로 돌게",
+      "워크스페이스 테스트를 한 번에 빌드",
+      "쓰지 않는 바이너리 빌드 빼기"
     ],
     "needs": [
       "core/declaration",
@@ -271,8 +277,8 @@
       "core/run-verb-and-status",
       "core/silence-watch"
     ],
-    "base": "98128f71e9350a1038e8e1f6cddf145282cd7f4c",
-    "changed": 1794823081800
+    "base": "f643b8482d1c6e9894116a808ba2ee20987f8b98",
+    "changed": 1794824948765
   },
   {
     "id": "suite/test-count",

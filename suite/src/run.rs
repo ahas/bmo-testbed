@@ -23,13 +23,14 @@ use bmo_testbed_core::turn::{self, Lane, NOT_RUN_EXIT_CODE, TestbedTurn, TurnAsk
 use bmo_testbed_core::witness::{RunBegun, RunEnded, RunVerdict, RunWitness};
 
 use crate::cargo::{HeldLock, cargo_verb_line};
+use crate::crate_tests::{RunRecord, runner_config};
 use crate::crates::{
-  CrateDeclaration, cargo_environment, cargo_program, crate_build_args, crate_library_test_args,
-  crate_test_args, set_by_cargo, workspace_crates,
+  CrateDeclaration, cargo_environment, crate_build_args, library_tests_build_args, set_by_cargo,
+  tests_build_args, workspace_crates,
 };
 use crate::fence::{LiveClear, LiveFence, clear_fence, fence_limits, fence_suite, fenced_build_jobs};
 use crate::log::tally_of;
-use crate::own_binary::testbed_line;
+use crate::own_binary::{running_testbed, testbed_line};
 use crate::selection::{
   Layout, Selection, changed_paths, glob_matches, select_packages, selected_tests, selection_lines,
 };
@@ -523,27 +524,30 @@ fn run_held(
 
   // The crates, the projects of their own and the tools checked by their manifest this run checks, each one
   // unit named by its directory and a slash: every one on a whole run, the ones the change marked on a selected
-  // run, and on a run narrowed to paths only those a word names.
-  let all_crates = || match workspace_crates(root) {
-    Ok(crates) => crates,
+  // run, and on a run narrowed to paths only those a word names. The crates the run reaches before any word
+  // narrows it are the ones its tests are built over, so a run narrowed to one crate stands on the same build.
+  let whole_layout = || match workspace_crates(root) {
+    Ok(crates) => Layout::of_parts(repo, crates),
     Err(why) => {
       say(&fill_marks(&SUITE.selection.no_crates, &[("why", &why)]));
-      Vec::new()
+      Layout::of_parts(repo, Vec::new())
     }
   };
-  let crates: Vec<CrateDeclaration> = match &selected {
-    Some((layout, chosen)) => picked_units(
-      &layout
-        .crates
-        .iter()
-        .filter(|one| chosen.crates.contains_key(&one.name))
-        .cloned()
-        .collect::<Vec<_>>(),
-      |one| one.dir.as_str(),
-      &ask.picked,
-    ),
-    None => picked_units(&all_crates(), |one| one.dir.as_str(), &ask.picked),
+  let whole;
+  let (layout, marked): (&Layout, Option<&Selection>) = match &selected {
+    Some((layout, chosen)) => (layout, Some(chosen)),
+    None => {
+      whole = whole_layout();
+      (&whole, None)
+    }
   };
+  let reached_crates: Vec<CrateDeclaration> = layout
+    .crates
+    .iter()
+    .filter(|one| marked.is_none_or(|chosen| chosen.crates.contains_key(&one.name)))
+    .cloned()
+    .collect();
+  let crates: Vec<CrateDeclaration> = picked_units(&reached_crates, |one| one.dir.as_str(), &ask.picked);
   // Every project of its own the checkout holds, which keeps a nested project's files out of the one holding
   // it; and the ones the run checks.
   let every_project: Vec<OwnProject> = match &selected {
@@ -582,20 +586,16 @@ fn run_held(
       |one| one.dir.as_str(),
       &ask.picked,
     ),
-    None => {
-      let layout = Layout::of_parts(repo, workspace_crates(root).unwrap_or_default());
-
-      picked_units(
-        &layout
-          .tools
-          .iter()
-          .cloned()
-          .chain(layout.packages.iter().filter_map(package_check))
-          .collect::<Vec<_>>(),
-        |one| one.dir.as_str(),
-        &ask.picked,
-      )
-    }
+    None => picked_units(
+      &layout
+        .tools
+        .iter()
+        .cloned()
+        .chain(layout.packages.iter().filter_map(package_check))
+        .collect::<Vec<_>>(),
+      |one| one.dir.as_str(),
+      &ask.picked,
+    ),
   };
   let unit_of = |dir: &str| format!("{dir}/");
   let crate_units: HashMap<String, CrateDeclaration> =
@@ -615,20 +615,26 @@ fn run_held(
     })
     .collect();
 
+  // The crates' tests are built over every crate the run reaches, the runner Cargo hands each test binary
+  // writing it down into the run's own record, which each crate's unit runs from (docs/suite.md, 「Heavy units
+  // run in a lane of one」).
+  let reached: Vec<String> = reached_crates.iter().map(|one| one.name.clone()).collect();
+  let record = RunRecord::fresh();
+  let tests_build = tests_build_args(&reached, &runner_config(&running_testbed(), record.path()));
+
   // Where the run tests a crate, the workspace's lock with its path packages brought to their manifests from
-  // before the first build to the run's end: a crate's tests run Cargo holding its lock outside the Cargo
-  // verb, which aligns the lock around its own command alone (docs/deploy.md, 「The Cargo build directory」).
+  // before the first build to the run's end: the crates' tests run outside the Cargo verb, which aligns the lock
+  // around its own command alone, and may run Cargo themselves (docs/deploy.md, 「The Cargo build directory」).
   // It is put back as it was found once the run ends.
-  let held_lock = crates.first().and_then(|one| HeldLock::aligned(root, &crate_test_args(&one.name)));
+  let held_lock = (!crates.is_empty()).then(|| HeldLock::aligned(root, &tests_build)).flatten();
 
   if let Some(held) = &held_lock {
     say(&held.said());
   }
 
-  // What the run's Rust stands on, built once before any guard is counted, each crate by itself in the very
-  // words its run or the testkit uses, through the repository's Cargo verb, which removes what the build
-  // superseded.
-  let prebuild = |what: &str, crate_name: &str, args: Vec<String>| {
+  // What the run's Rust stands on, built once before any guard is counted, through the repository's Cargo verb,
+  // which removes what the build superseded; the code each build ended with.
+  let prebuild = |building: &dyn Fn(&str) -> String, args: Vec<String>| -> i32 {
     let line = cargo_verb_line(&args);
     let built = Command::new(&line[0])
       .args(&line[1..])
@@ -641,29 +647,25 @@ fn run_held(
       Err(why) => (127, why.to_string()),
     };
 
-    say(&format!(
-      "{}\n{said}",
-      fill_marks(
-        &SUITE.lines.building,
-        &[("what", what), ("crate", crate_name), ("code", &code.to_string())]
-      )
-    ));
+    say(&format!("{}\n{said}", building(&code.to_string())));
+    code
+  };
+  let count = &reached.len().to_string();
+  let building_tests = |what: &'static str| {
+    move |code: &str| {
+      fill_marks(&SUITE.lines.building_tests, &[("what", what), ("count", count), ("code", code)])
+    }
   };
 
   // A library and its own tests compile the same source twice, a crate's two heaviest compiles, which Cargo
-  // would start side by side; the library's tests go first and alone, so the two never meet in the fence.
-  let no_run = |mut args: Vec<String>| {
-    args.push("--no-run".to_owned());
-    args
-  };
-
-  for one in &crates {
-    if one.library {
-      prebuild(&SUITE.lines.library_tests, &one.name, no_run(crate_library_test_args(&one.name)));
+  // would start side by side; the libraries' tests go first and alone, so the two never meet in the fence.
+  let tests_built: Option<i32> = (!crates.is_empty()).then(|| {
+    if reached_crates.iter().any(|one| one.library) {
+      prebuild(&building_tests(&SUITE.lines.library_tests), library_tests_build_args(&reached));
     }
 
-    prebuild(&SUITE.lines.tests, &one.name, no_run(crate_test_args(&one.name)));
-  }
+    prebuild(&building_tests(&SUITE.lines.tests), tests_build.clone())
+  });
 
   // The browser test files each project of its own the run checks declares for itself, each with the unit of
   // its project: they run in the browser lane once the project's own check, which readies the project, has
@@ -690,8 +692,15 @@ fn run_held(
   // Only for a run that starts a TypeScript test: the shared target directory has one lock, which another
   // build holds for minutes, and a run with nothing to drive a binary never queues behind it.
   if !in_scope.is_empty() {
-    for (crate_name, binaries) in driven_binaries(ask, &selected, &crates) {
-      prebuild(&SUITE.lines.binaries, &crate_name, crate_build_args(&crate_name, &binaries));
+    for one in driven_crates(ask, layout, marked) {
+      let building = |code: &str| {
+        fill_marks(
+          &SUITE.lines.building,
+          &[("what", &SUITE.lines.binaries), ("crate", &one.name), ("code", code)],
+        )
+      };
+
+      prebuild(&building, crate_build_args(&one.name, &one.binaries));
     }
   }
 
@@ -745,12 +754,6 @@ fn run_held(
   ));
 
   let cargo_env = cargo_environment(root);
-  let cargo = cargo_program(
-    cargo_env
-      .iter()
-      .find(|(name, _)| name == "CARGO_HOME")
-      .map_or("", |(_, home)| home.as_str()),
-  );
   let silence = test.silence();
   let per_test_seconds = test.per_test_seconds();
   let unit_command = |file: &String| -> UnitCommand {
@@ -803,8 +806,13 @@ fn run_held(
       env.push(("HOME".to_owned(), home.to_string_lossy().into_owned()));
 
       return UnitCommand {
-        program: cargo.clone(),
-        args: crate_test_args(&one.name),
+        program: running_testbed().to_string_lossy().into_owned(),
+        args: vec![
+          "crate-tests".to_owned(),
+          "run".to_owned(),
+          record.path().to_string_lossy().into_owned(),
+          one.name.clone(),
+        ],
         cwd: root.to_path_buf(),
         env,
         home: Some(home),
@@ -847,7 +855,9 @@ fn run_held(
         &[("script", &repo.declaration.projects.check_script)],
       )),
       (_, Some(tool)) => tool.check.clone().err(),
-      _ => None,
+      _ => tests_built
+        .filter(|code| *code != 0 && crate_units.contains_key(file))
+        .map(|code| fill_marks(&SUITE.file.unbuilt_crate, &[("code", &code.to_string())])),
     };
 
     if let Some(why) = no_check {
@@ -940,48 +950,25 @@ fn run_held(
   code
 }
 
-// Every binary the test files may ask the test kit for, gathered by the crate that builds it: those of
-// every crate a marked package's `runs` names — every crate a whole run tests, none on a run narrowed to
-// paths.
-fn driven_binaries(
-  ask: &SuiteAsk,
-  selected: &Option<(Layout, Selection)>,
-  tested: &[CrateDeclaration],
-) -> Vec<(String, Vec<String>)> {
-  let driven: Vec<CrateDeclaration> = if !ask.picked.is_empty() {
-    Vec::new()
-  } else {
-    match selected {
-      None => tested.to_vec(),
-      Some((layout, chosen)) => {
-        let launched: Vec<String> = layout
-          .packages
-          .iter()
-          .filter(|one| chosen.marked.contains_key(&one.name))
-          .flat_map(|one| one.runs.iter().map(|run| run.trim_end_matches('/').to_owned()))
-          .collect();
-
-        layout.crates.iter().filter(|one| launched.contains(&one.dir)).cloned().collect()
-      }
-    }
-  };
-  let mut wanted: Vec<(String, Vec<String>)> = Vec::new();
-  let mut want = |crate_name: &str, binaries: &[String]| {
-    let at = wanted.iter().position(|(name, _)| name == crate_name).unwrap_or_else(|| {
-      wanted.push((crate_name.to_owned(), Vec::new()));
-      wanted.len() - 1
-    });
-
-    for binary in binaries {
-      if !wanted[at].1.contains(binary) {
-        wanted[at].1.push(binary.clone());
-      }
-    }
-  };
-
-  for one in &driven {
-    want(&one.name, &one.binaries);
+// The crates whose binaries the run's test files start: the ones a package's `runs` names, every package's on a
+// whole run and the marked ones' on a selected run; none on a run a word narrows (docs/suite.md, 「Heavy units run
+// in a lane of one」).
+fn driven_crates(ask: &SuiteAsk, layout: &Layout, marked: Option<&Selection>) -> Vec<CrateDeclaration> {
+  if !ask.picked.is_empty() {
+    return Vec::new();
   }
 
-  wanted
+  let launched: Vec<String> = layout
+    .packages
+    .iter()
+    .filter(|one| marked.is_none_or(|chosen| chosen.marked.contains_key(&one.name)))
+    .flat_map(|one| one.runs.iter().map(|run| run.trim_end_matches('/').to_owned()))
+    .collect();
+
+  layout
+    .crates
+    .iter()
+    .filter(|one| launched.contains(&one.dir) && !one.binaries.is_empty())
+    .cloned()
+    .collect()
 }

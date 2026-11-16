@@ -378,22 +378,32 @@ pub fn owning_crate<'a>(crates: &'a [CrateDeclaration], path: &str) -> Option<&'
     .max_by_key(|one| one.dir.len())
 }
 
-/// A crate's tests as the suite runs them: that crate alone, since Cargo settles the features of every
-/// dependency over all the packages one command names (docs/suite.md, 「Heavy units run in a lane of one」).
-pub fn crate_test_args(name: &str) -> Vec<String> {
-  ["test", "--locked", "-p", name].map(str::to_owned).to_vec()
-}
+/// The crates' libraries' own tests built, run by nothing, by one command over every crate the run reaches, so
+/// with the features the whole build settles (docs/suite.md, 「Heavy units run in a lane of one」).
+pub fn library_tests_build_args(names: &[String]) -> Vec<String> {
+  let mut args: Vec<String> = ["test", "--locked", "--no-run", "--lib"].map(str::to_owned).to_vec();
 
-/// A crate's library's own tests alone, in the words of its whole tests and so with their features, which
-/// a build of the whole after them finds built (docs/suite.md, 「Heavy units run in a lane of one」).
-pub fn crate_library_test_args(name: &str) -> Vec<String> {
-  let mut args = crate_test_args(name);
-
-  args.push("--lib".to_owned());
+  args.extend(packages(names));
   args
 }
 
-/// A crate's binaries as the testkit builds them: that crate alone, for the same reason as its tests.
+/// The crates' tests built and run by one command over every crate the run reaches, each test binary handed to
+/// the runner `runner_config` names (docs/suite.md, 「Heavy units run in a lane of one」). Cargo settles the
+/// features of every dependency over all the packages one command names, so the crates the others share are
+/// built once.
+pub fn tests_build_args(names: &[String], runner_config: &str) -> Vec<String> {
+  let mut args: Vec<String> = ["test", "--locked", "--no-fail-fast", "--tests"].map(str::to_owned).to_vec();
+
+  args.extend(packages(names));
+  args.extend(["--config".to_owned(), runner_config.to_owned()]);
+  args
+}
+
+fn packages(names: &[String]) -> impl Iterator<Item = String> + '_ {
+  names.iter().flat_map(|name| ["-p".to_owned(), name.clone()])
+}
+
+/// A crate's binaries as the test files start them: that crate alone.
 pub fn crate_build_args(name: &str, binaries: &[String]) -> Vec<String> {
   let mut args: Vec<String> = ["build", "--locked", "-p", name].map(str::to_owned).to_vec();
 

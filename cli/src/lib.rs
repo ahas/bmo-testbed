@@ -35,14 +35,15 @@ use bmo_testbed_core::policy::verbs::VERBS;
 use bmo_testbed_core::silence::{Silence, run_passed_on};
 use bmo_testbed_core::turn::{Env, NOT_RUN_EXIT_CODE, process_env};
 use bmo_testbed_core::verb::{self, REFUSED_EXIT_CODE, RunWords, VerbGround, data_root};
+use bmo_testbed_suite::crate_tests;
 use bmo_testbed_suite::dependents::CHECKOUTS_VARIABLE;
 
 use crate::classify::{TakesTurn, answer, heavy_command};
 use crate::placement::{HttpPlacement, MachinePlacement};
 use crate::recorded::{Recorded, command_run};
 use crate::words::{
-  CargoArgs, CargoWord, ClassifyArgs, CountArgs, DeployArgs, DeployWord, LogArgs, PlacedArgs, RunArgs,
-  TestArgs, TestWord, Verb,
+  CargoArgs, CargoWord, ClassifyArgs, CountArgs, CrateTestsWord, DeployArgs, DeployWord, LogArgs,
+  PlacedArgs, RunArgs, TestArgs, TestWord, Verb,
 };
 
 /// The placement a run started in a directory asks: kept here where its environment sets a variable the
@@ -336,6 +337,14 @@ pub fn main(args: impl IntoIterator<Item = OsString>) -> u8 {
   match words.verb {
     Verb::Run(args) => run(args),
     Verb::Placed(args) => placed(args),
+    Verb::CrateTests(args) => match args.word {
+      CrateTestsWord::Record {
+        record,
+        executable,
+        args,
+      } => crate_tests::record(&record, executable, args),
+      CrateTestsWord::Run { record, package } => crate_tests::run(&record, &package),
+    },
     Verb::Status(args) if args.free => u8::from(wide_lane_full(&process_env())),
     Verb::Status(args) => status(args.json),
     Verb::Classify(args) => classify(args),

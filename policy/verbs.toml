@@ -8,6 +8,8 @@ usage: {verb} <verb> [<words>…]
 
 run       a heavy test or build command, run in the machine's turn
 placed    the far side of a run placed on this machine: the setup, then the command
+crate-tests  the suite's own: a crate's test binaries written down as Cargo runs them, or run
+          from that record
 status    each lane and the repository's close line: who holds it, and who waits behind
 classify  whether a shell line holds a heavy command started outside the testbed
 suite     the repository's units, every one or those a change reaches
@@ -235,6 +237,15 @@ a command of their own, marked so they are never placed again, and this verb end
 
 --setup     the declared [test].setup steps first, in the bench
 --checkout  a checkout the run knows here, the bench and each tree copied beside it; named once each"""
+crate_tests = """
+usage: {verb} crate-tests record <record> <executable> [<argument>…]
+       {verb} crate-tests run <record> <package>
+
+The suite's own two halves of a crate's tests (docs/boundary.md). record is Cargo's runner while the
+suite builds: it runs nothing, writes the executable, its arguments, its folder and the variables
+Cargo set for it into the record as one line, and exits 0. run runs every executable the record
+names for the package, in order, each to its end, from its folder and with its variables, and exits
+with the first failing one's code."""
 serve = """
 usage: {verb} serve [--listen <address>] [--token <token>]
 

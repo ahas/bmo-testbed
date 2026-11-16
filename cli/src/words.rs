@@ -27,6 +27,7 @@ pub struct Words {
 pub enum Verb {
   Run(RunArgs),
   Placed(PlacedArgs),
+  CrateTests(CrateTestsArgs),
   Status(StatusArgs),
   Classify(ClassifyArgs),
   Suite(SuiteArgs),
@@ -130,6 +131,31 @@ pub enum BackupWord {
 pub struct BackupPruneArgs {
   #[arg(long)]
   pub dry_run: bool,
+}
+
+/// `crate-tests`: the suite's own two halves of a crate's tests (docs/boundary.md, 「crate-tests」).
+#[derive(Debug, Args)]
+#[command(disable_help_subcommand = true)]
+pub struct CrateTestsArgs {
+  #[command(subcommand)]
+  pub word: CrateTestsWord,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum CrateTestsWord {
+  /// Cargo's runner while the suite builds: the test binary written down, nothing run.
+  Record {
+    record: PathBuf,
+    executable: String,
+    #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+    args: Vec<String>,
+  },
+  /// Every test binary the record holds for the package, run to its end.
+  Run {
+    record: PathBuf,
+    #[arg(value_parser = named)]
+    package: String,
+  },
 }
 
 #[derive(Debug, Args)]
@@ -409,6 +435,13 @@ pub fn read(args: impl IntoIterator<Item = OsString>) -> Result<Words, clap::Err
     .override_help(usage(&said.binary))
     .mut_subcommand("run", |verb| verb.override_help(usage(&said.run)))
     .mut_subcommand("placed", |verb| verb.override_help(usage(&said.placed)))
+    .mut_subcommand("crate-tests", |verb| {
+      ["record", "run"]
+        .iter()
+        .fold(verb.override_help(usage(&said.crate_tests)), |verb, word| {
+          verb.mut_subcommand(word, |word| word.override_help(usage(&said.crate_tests)))
+        })
+    })
     .mut_subcommand("status", |verb| verb.override_help(usage(&said.status)))
     .mut_subcommand("classify", |verb| verb.override_help(usage(&said.classify)))
     .mut_subcommand("suite", |verb| verb.override_help(usage(&said.suite)))

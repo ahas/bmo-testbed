@@ -4,6 +4,7 @@ mod cargo;
 mod ceiling;
 mod check;
 mod count;
+mod crate_tests;
 mod crates;
 mod dependents;
 mod log;

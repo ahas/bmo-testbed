@@ -95,6 +95,7 @@ pub struct LineWords {
   pub on_postgres: String,
   pub template_stands: String,
   pub template_failed: String,
+  pub building_tests: String,
   pub building: String,
   pub tests: String,
   pub library_tests: String,
@@ -117,6 +118,18 @@ pub struct FileWords {
   pub tests_step: String,
   pub no_tool_check: String,
   pub unread_manifest: String,
+  pub unbuilt_crate: String,
+}
+
+/// What the crate-tests verb says (docs/boundary.md, 「crate-tests」).
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CrateTestsWords {
+  pub running: String,
+  pub none: String,
+  pub unread: String,
+  pub unwritten: String,
+  pub unstarted: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -186,6 +199,7 @@ pub struct Suite {
   pub again: AgainWords,
   pub lines: LineWords,
   pub file: FileWords,
+  pub crate_tests: CrateTestsWords,
   pub ending: EndingWords,
   pub check: CheckWords,
   pub cargo: CargoWords,

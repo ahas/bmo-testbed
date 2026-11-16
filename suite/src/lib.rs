@@ -6,6 +6,7 @@ pub mod cargo;
 pub mod ceiling;
 pub mod check;
 pub mod count;
+pub mod crate_tests;
 pub mod crates;
 pub mod dependents;
 pub mod fence;

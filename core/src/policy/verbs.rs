@@ -25,6 +25,7 @@ pub struct UsageWords {
   pub backups: String,
   pub backup: String,
   pub placed: String,
+  pub crate_tests: String,
   pub serve: String,
   pub mcp: String,
 }

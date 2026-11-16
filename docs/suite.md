@@ -61,25 +61,51 @@
   run side by side; the projects go down the lane first, then the crates.
 - **Their verdicts stand in the log as a file's do,** and the totals count Cargo's result lines with
   the runner's, ignored tests as skipped.
-- **Crates are built once, before the units start.** Every crate to be tested is built once the run
-  has its turn and before its seconds are counted, by one Cargo command per crate with the words its
-  run will use, so no unit compiles inside the sweep. A crate with a library builds its
-  library's own tests first, alone, then the whole crate, so the two heaviest compiles never run side
-  by side. A build that fails fails each unit again, by name.
+- **The crates' tests are built once, by one Cargo command naming every crate the run reaches,** once
+  the run has its turn and before its seconds are counted, so no unit compiles inside the sweep. Cargo
+  settles the features of each dependency over all the packages one command names, so one command
+  builds a crate the others share once, where a command per crate would build it again for every set
+  of features.
+  - **The crates the run reaches** are every crate of the workspace on a whole run and the ones the
+    change marked on a selected run, before any word narrows the run to some of them. A run naming one
+    crate's unit, as the run once more of a failed crate does (「What failed runs once more」), stands on
+    the same build as the run it narrows and builds nothing again where nothing changed. A run whose
+    words leave it no crate builds none.
+  - **The libraries' own tests go first, alone,** by the same command over the same crates kept to their
+    libraries, then everything else, so a library and its own tests, a crate's two heaviest compiles,
+    never run side by side.
+  - **The build names its tests by Cargo's `--tests`:** each library's and each binary's own tests and
+    every integration test. A crate's documentation examples are not run as tests.
+- **Cargo's own runner writes each test binary down.** The second command runs the tests as Cargo runs
+  them, with a runner of the testbed's own (`crate-tests record`, `docs/boundary.md`) that runs no test:
+  for each test binary it writes down the binary, its package, the folder Cargo runs it from and the
+  variables Cargo hands it, `CARGO`, `CARGO_MANIFEST_DIR`, `CARGO_MANIFEST_PATH`, the package's
+  `CARGO_PKG_` values and the library path, into a record of the run's own, and ends at once. The
+  record goes with the run.
+- **A crate's unit runs the test binaries written down for it** (`crate-tests run`), one after another,
+  each to its end, from the folder Cargo would run it from and with the variables Cargo would hand it
+  laid over the unit's own environment. It fails where any of them failed, on the first failure's code,
+  and a crate with no test binary passes, saying so. A build that failed fails each crate's unit by name,
+  the build's own output standing above them in the log.
 - **The lock's path packages follow their manifests for the whole run.** A run that tests a crate
   brings the workspace lock's path packages to their manifests before its first build, as the Cargo
   verb does around a command holding its lock, says on one line which moved, and keeps the lock so until
   its last unit has ended, when it is put back as it was found (`docs/deploy.md`, 「The Cargo build
-  directory」). The crates' builds ahead go through the Cargo verb, but each crate's tests run Cargo
-  holding its lock as a unit of the sweep, outside the verb, so a sibling's new version fails neither.
+  directory」). The crates' builds go through the Cargo verb, which aligns the lock around its own
+  command alone, while the crates' tests run outside it and may run Cargo themselves, so a sibling's new
+  version fails neither.
 - **Cargo is handed as many jobs as the fence's memory holds** at a gigabyte and a half each, never
   more than the run's width nor fewer than one; a caller that named fewer keeps its own. The run says
   the number under its first line.
 - **Each build ahead that passed removes what it superseded** (`docs/deploy.md`, 「The Cargo build
   directory」).
-- **A test that drives a crate's binary** asks the test kit for it by name; the binary is built once
-  per run and its path in the checkout's own target directory handed back, so the test runs the code
-  of the checkout it stands in.
+- **A crate's binaries are built for the test files only where a package asks for them.** A package
+  whose tests start a crate's binary names the crate's directory in its `runs` (`docs/checks.md`, 「Which
+  tests a change runs」). A run that starts a test file builds, once, the binaries of every crate so
+  named: by every package on a whole run, by the packages the change marked on a selected run, and by
+  none on a run a word narrows. A test finds the binary in the checkout's own target directory, so it
+  runs the code of the checkout it stands in. A crate's own integration tests have its binaries built
+  by Cargo with them.
 
 ## One run at a time on a machine
 

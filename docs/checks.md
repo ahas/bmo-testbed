@@ -10,7 +10,8 @@
   - `reads`: globs of paths outside any package that its tests read, such as a document or a prompt.
     A glob another package claims does not mark this one, so every such read is declared;
   - `runs`: files of another package it launches as a process, or a crate's directory whose binary its
-    tests start;
+    tests start, which the suite builds for its test files only where a package names it so (`docs/suite.md`,
+    「Heavy units run in a lane of one」);
   - `always`: the package is selected on every change;
   - `check`: a command checking a part of the package that is not covered by its runner, run inside the
     package's folder through `sh`, as one unit of the suite where the package is marked and as one step

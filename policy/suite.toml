@@ -117,10 +117,12 @@ server_down = "database: the test server is not up: {why}"
 on_postgres = "database: the database tests run on PostgreSQL, each file on a clone of {template}"
 template_stands = "database: the template stands"
 template_failed = "database: the template could not be made: {why}"
-# A Cargo build ahead of the guards, of the {what} — `tests`, `library_tests` or `binaries` — of a {crate}.
+# A Cargo build ahead of the guards: the {what} — `tests` or `library_tests` — of the {count} crates the run
+# reaches, in one command; and the `binaries` of one {crate} its test files start.
+building_tests = "building {what} of {count} crate(s): exit {code}"
 building = "building {what} of {crate}: exit {code}"
 tests = "the tests"
-library_tests = "the library's own tests"
+library_tests = "the libraries' own tests"
 binaries = "the binaries"
 # The plan, {browser} the declared browser globs or `no_browser`.
 plan = "{count} files, {width} at a time, the browser files ({browser}) one at a time beside them, and the projects of their own, the tools checked by their manifest and the crates one at a time in a lane of their own"
@@ -146,6 +148,17 @@ no_runner = "no declared language runs its {script} script, so nothing of it cou
 tests_step = "{language} test"
 no_tool_check = "its {manifest} names no {key} command, so nothing of it could be checked"
 unread_manifest = "its {manifest} does not read, so nothing of it could be checked: {why}"
+# A crate whose tests the build ahead did not build, by the {code} that build ended with.
+unbuilt_crate = "its tests did not build: the build of the crates' tests above ended with exit {code}"
+
+# What the crate-tests verb says (docs/boundary.md, 「crate-tests」): the line ahead of each test binary it
+# runs, a package with none written down, and a record or a binary it could not read or start.
+[crate_tests]
+running = "     Running {executable}"
+none = "no test binary of {package} was written down, so it has no tests to run"
+unread = "the record of test binaries {record} does not read: {why}"
+unwritten = "the record of test binaries {record} could not be written: {why}"
+unstarted = "{executable} could not be started: {why}"
 
 # What the sweep came to, and the verdict the run ends on.
 [ending]

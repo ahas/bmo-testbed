@@ -95,6 +95,25 @@ bmo-testbed placed [--setup] [--checkout <path>…] -- <command…>
   any program. A testbed verb among them takes its own turn here.
 - Exits 2 where its words do not read (no `--`, no command).
 
+### `crate-tests`
+
+```
+bmo-testbed crate-tests record <record> <executable> [<argument>…]
+bmo-testbed crate-tests run <record> <package>
+```
+
+- The suite's own two halves of a crate's tests (`docs/suite.md`, 「Heavy units run in a lane of one」).
+- **`record`** is Cargo's runner while the suite builds the crates' tests: it runs nothing, adds one line
+  of JSON to the record naming the executable, its arguments, the folder it was started in and the
+  variables Cargo set for it, `CARGO`, `CARGO_MANIFEST_DIR`, `CARGO_MANIFEST_PATH`, every `CARGO_PKG_`
+  value and `LD_LIBRARY_PATH`, and exits 0; 1 where the record cannot be written.
+- **`run`** runs every executable the record names for the package, by its `CARGO_PKG_NAME`, in the
+  order they were written, each to its end, from its folder and with its variables laid over the verb's
+  own environment, its output passed through with a line naming it ahead. Exits 0 where every one
+  passed or there is none, saying so where there is none; the first failing one's code otherwise, or 1
+  where one could not be started; and 1 where the record does not read.
+- Exits 2 where its words do not read.
+
 ### `status`
 
 ```
