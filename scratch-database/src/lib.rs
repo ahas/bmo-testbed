@@ -1,12 +1,15 @@
 //! A Rust test's own database (docs/suite.md, 「The test database」): the database the migrator a test hands
 //! in makes, migrated once per test binary into a template, and each test handed a copy of it, which the
-//! server makes in a fraction of the time a migration takes. A copy is dropped when its test is done, and the
-//! templates and copies a binary left behind are dropped by the next binary to make a template.
+//! server makes in a fraction of the time a migration takes. A test that needs nothing migrated is handed a
+//! blank database under the copies' name. A copy is dropped when its test is done, failing the test where it
+//! cannot be, and the templates and copies a binary left behind are dropped by the next binary to make a
+//! template.
 
 use std::any::TypeId;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
 
+use bmo_testbed_core::policy::fill_shown;
 use sea_orm::{ConnectOptions, ConnectionTrait, Database, DatabaseConnection, DbBackend, Statement, Value};
 use sea_orm_migration::MigratorTrait;
 use serde::Deserialize;
@@ -23,6 +26,8 @@ pub const TEST_POSTGRES_VARIABLE: &str = "BMO_TEST_POSTGRES";
 pub struct ScratchPolicy {
   pub names: Names,
   pub server: Server,
+  pub drop: Dropping,
+  pub words: Words,
 }
 
 #[derive(Debug, Deserialize)]
@@ -38,6 +43,20 @@ pub struct Server {
   pub address: String,
   pub admin_database: String,
   pub connections: u32,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Dropping {
+  pub tries: u32,
+  pub session_end_milliseconds: i64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Words {
+  pub not_dropped: String,
+  pub unreachable: String,
 }
 
 pub static SCRATCH: LazyLock<ScratchPolicy> = LazyLock::new(|| {
@@ -79,34 +98,83 @@ pub fn address_of(database: &str) -> String {
   address_in(&test_address(), database)
 }
 
-async fn server() -> PgConnection {
+async fn reach_server() -> Result<PgConnection, String> {
   let address = address_of(&SCRATCH.server.admin_database);
-  let options: PgConnectOptions = address.parse().unwrap();
+  let unreachable = |why: &dyn std::fmt::Display| {
+    fill_shown(&SCRATCH.words.unreachable, &[("address", &address), ("why", why)])
+  };
+  let options: PgConnectOptions = address.parse().map_err(|why| unreachable(&why))?;
 
-  PgConnection::connect_with(&options).await.unwrap()
+  PgConnection::connect_with(&options).await.map_err(|why| unreachable(&why))
 }
 
-// The process a template's or a copy's name says made it.
-fn maker_of(database: &str) -> &str {
+async fn server() -> PgConnection {
+  reach_server().await.unwrap_or_else(|why| panic!("{why}"))
+}
+
+// The process a template's or a copy's name says made it, where the name is one of theirs.
+fn maker_of(database: &str) -> Option<u32> {
   let names = &SCRATCH.names;
 
   database
     .strip_prefix(names.template.as_str())
-    .or_else(|| database.strip_prefix(names.copy.as_str()))
-    .unwrap_or(database)
+    .or_else(|| database.strip_prefix(names.copy.as_str()))?
     .split('_')
-    .next()
-    .unwrap_or_default()
+    .next()?
+    .parse()
+    .ok()
 }
 
-// The templates and copies whose process is gone, dropped once a binary, before its first template.
+// One drop asked: every session of the test role on the database ended, then the database dropped without
+// force, which asks the server's own maintenance on it to stop.
+async fn drop_once(admin: &mut PgConnection, database: &str) -> Result<(), sqlx::Error> {
+  sqlx::query(
+    "SELECT pg_terminate_backend(pid, $2) FROM pg_stat_activity \
+     WHERE datname = $1 AND usename = current_user AND pid <> pg_backend_pid()",
+  )
+  .bind(database)
+  .bind(SCRATCH.drop.session_end_milliseconds)
+  .execute(&mut *admin)
+  .await?;
+  admin.execute(format!("DROP DATABASE IF EXISTS \"{database}\"").as_str()).await?;
+
+  Ok(())
+}
+
+/// A database of the test server dropped, its role's sessions on it ended first. The drop is not forced: a
+/// forced one must end every session on the database, and a role that is no superuser may not end the
+/// server's own maintenance, which a plain drop asks to stop. It is asked again a few times; the reason the
+/// database still stands, where it does.
+pub async fn drop_database(database: &str) -> Result<(), String> {
+  let mut admin = reach_server().await?;
+  let mut dropped = Ok(());
+
+  for _ in 0..SCRATCH.drop.tries.max(1) {
+    dropped = drop_once(&mut admin, database).await;
+
+    if dropped.is_ok() {
+      break;
+    }
+  }
+
+  let _ = admin.close().await;
+
+  dropped.map_err(|why| fill_shown(&SCRATCH.words.not_dropped, &[("database", &database), ("why", &why)]))
+}
+
+// The templates and copies whose process is gone, dropped once a binary, before its first template: only
+// those the test role may drop and no client is connected to, so a database another machine's test holds
+// on a shared server stands.
 async fn sweep() {
   SWEPT
     .get_or_init(|| async {
       let names = &SCRATCH.names;
       let mut admin = server().await;
       let left: Vec<String> = sqlx::query_scalar(
-        "SELECT datname::text FROM pg_database WHERE datname LIKE $1 OR datname LIKE $2",
+        "SELECT datname::text FROM pg_database d \
+         WHERE (datname LIKE $1 OR datname LIKE $2) AND pg_has_role(datdba, 'MEMBER') \
+         AND NOT EXISTS (SELECT 1 FROM pg_stat_activity a \
+                         WHERE a.datname = d.datname AND a.backend_type = 'client backend')",
       )
       .bind(format!("{}%", names.template.replace('_', "\\_")))
       .bind(format!("{}%", names.copy.replace('_', "\\_")))
@@ -114,13 +182,13 @@ async fn sweep() {
       .await
       .unwrap();
 
+      admin.close().await.unwrap();
+
       for old in left {
-        if !alive(maker_of(&old)) {
-          let _ = admin.execute(format!("DROP DATABASE IF EXISTS \"{old}\" WITH (FORCE)").as_str()).await;
+        if maker_of(&old).is_some_and(|maker| !alive(&maker.to_string())) {
+          drop_database(&old).await.unwrap_or_else(|why| panic!("{why}"));
         }
       }
-
-      admin.close().await.unwrap();
     })
     .await;
 }
@@ -178,9 +246,8 @@ pub async fn connect(database: &str) -> DatabaseConnection {
   Database::connect(options).await.unwrap()
 }
 
-/// A new copy of this binary's database migrated by `M`, empty; its database's name.
-pub async fn copy<M: MigratorTrait + 'static>() -> String {
-  let template = template::<M>().await;
+// A new database of this process's under the copies' name, made from the template given; its name.
+async fn copy_of(template: &str) -> String {
   let database =
     format!("{}{}_{}", SCRATCH.names.copy, std::process::id(), COPIES.fetch_add(1, Ordering::SeqCst));
   let mut admin = server().await;
@@ -194,22 +261,38 @@ pub async fn copy<M: MigratorTrait + 'static>() -> String {
   database
 }
 
-/// A copy dropped, its connections ended with it. It goes on a thread of its own, since a guard dropped inside
-/// the runtime may not block on it.
+/// A new copy of this binary's database migrated by `M`, empty; its database's name.
+pub async fn copy<M: MigratorTrait + 'static>() -> String {
+  let template = template::<M>().await;
+
+  copy_of(&template).await
+}
+
+/// A new blank database, nothing migrated, under the copies' name; its database's name. A binary's blank
+/// databases are swept as its copies are.
+pub async fn blank() -> String {
+  sweep().await;
+  copy_of("template0").await
+}
+
+/// A copy dropped, its connections ended with it; it panics with the server's reason where the copy still
+/// stands. It goes on a thread of its own, since a guard dropped inside the runtime may not block on it.
 pub fn drop_copy(database: String) {
-  let _ = std::thread::spawn(move || {
-    let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+  dropped_apart(database).unwrap_or_else(|why| panic!("{why}"));
+}
 
-    runtime.block_on(async move {
-      let mut admin = server().await;
+// A database dropped on a thread and a runtime of its own; the reason it still stands, where it does.
+fn dropped_apart(database: String) -> Result<(), String> {
+  std::thread::spawn(move || {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+      .enable_all()
+      .build()
+      .map_err(|why| why.to_string())?;
 
-      let _ = admin
-        .execute(format!("DROP DATABASE IF EXISTS \"{database}\" WITH (FORCE)").as_str())
-        .await;
-      let _ = admin.close().await;
-    });
+    runtime.block_on(drop_database(&database))
   })
-  .join();
+  .join()
+  .unwrap_or_else(|_| Err("the thread dropping it panicked".to_owned()))
 }
 
 /// A migrated, empty database of the test's own, dropped when the guard goes.
@@ -221,7 +304,15 @@ pub struct Scratch {
 impl Scratch {
   /// A copy of the database `M` migrates, and a connection to it.
   pub async fn new<M: MigratorTrait + 'static>() -> Scratch {
-    let database = copy::<M>().await;
+    Scratch::opened(copy::<M>().await).await
+  }
+
+  /// A blank database, nothing migrated, and a connection to it.
+  pub async fn blank() -> Scratch {
+    Scratch::opened(blank().await).await
+  }
+
+  async fn opened(database: String) -> Scratch {
     let db = connect(&database).await;
 
     Scratch { database, db }
@@ -264,7 +355,15 @@ impl Scratch {
 }
 
 impl Drop for Scratch {
+  // A copy that still stands fails its test; where the test is already failing, a second panic would abort
+  // the binary, so the reason is written out instead.
   fn drop(&mut self) {
-    drop_copy(std::mem::take(&mut self.database));
+    if let Err(why) = dropped_apart(std::mem::take(&mut self.database)) {
+      if std::thread::panicking() {
+        eprintln!("{why}");
+      } else {
+        panic!("{why}");
+      }
+    }
   }
 }

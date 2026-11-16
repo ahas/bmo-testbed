@@ -1,13 +1,13 @@
 //! What the first template a binary makes takes away (docs/suite.md, 「The test database」): every
-//! template and copy whose process is gone, and nothing a living process holds. A binary of its own, so
-//! its one test makes the binary's first template.
+//! template and copy whose process is gone, and nothing a living process or a connected client holds. A
+//! binary of its own, so its one test makes the binary's first template.
 
 // The integration tests' migrators, of which the sweep hands in one.
 #[allow(dead_code)]
 #[path = "../migrators.rs"]
 mod migrators;
 
-use bmo_testbed_scratch_database::{SCRATCH, Scratch, connect};
+use bmo_testbed_scratch_database::{SCRATCH, Scratch, connect, drop_database};
 use sea_orm::{ConnectionTrait, DbBackend, Statement};
 
 use migrators::Kept;
@@ -40,22 +40,30 @@ async fn stands(database: &str) -> bool {
 }
 
 #[tokio::test]
-async fn the_first_template_drops_what_a_gone_process_left_and_keeps_a_living_ones() {
+async fn the_first_template_drops_what_a_gone_process_left_and_keeps_what_is_held() {
   let names = &SCRATCH.names;
   let left_template = format!("{}{GONE}_0", names.template);
   let left_copy = format!("{}{GONE}_3", names.copy);
   let living = format!("{}{}_999", names.copy, std::process::id());
+  // A gone process's name, as a test on another machine sharing the server would leave it while it runs.
+  let connected = format!("{}{GONE}_4", names.copy);
 
-  for database in [&left_template, &left_copy, &living] {
+  for database in [&left_template, &left_copy, &living, &connected] {
     admin_run(&format!("CREATE DATABASE \"{database}\"")).await;
   }
 
+  let client = connect(&connected).await;
   let scratch = Scratch::new::<Kept>().await;
 
   assert!(!stands(&left_template).await);
   assert!(!stands(&left_copy).await);
   assert!(stands(&living).await);
+  assert!(stands(&connected).await);
 
   drop(scratch);
-  admin_run(&format!("DROP DATABASE \"{living}\" WITH (FORCE)")).await;
+  client.close().await.unwrap();
+
+  for database in [&living, &connected] {
+    drop_database(database).await.unwrap();
+  }
 }

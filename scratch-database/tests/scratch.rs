@@ -68,6 +68,20 @@ async fn each_migrator_handed_in_makes_a_template_of_its_own() {
 }
 
 #[tokio::test]
+async fn a_blank_database_holds_no_table_and_goes_by_the_copies_name() {
+  let blank = Scratch::blank().await;
+
+  assert_eq!(
+    blank
+      .count("SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'", vec![])
+      .await,
+    0
+  );
+  assert!(blank.name().starts_with(&SCRATCH.names.copy), "{}", blank.name());
+}
+
+// The guard's own connection is still open as it drops the database, so the drop ends it.
+#[tokio::test]
 async fn a_scratch_database_is_dropped_with_its_guard() {
   let scratch = Scratch::new::<Kept>().await;
   let name = scratch.name().to_owned();

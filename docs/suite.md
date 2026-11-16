@@ -224,8 +224,17 @@
   - The first test of a binary to ask makes the binary's template, `bmo_rs_tmpl_<process>_<n>`, one
     for each migrator handed in, and migrates it; each test is handed a copy,
     `bmo_rs_copy_<process>_<n>`, which the server makes in a fraction of the time a migration takes.
-  - A copy is dropped as its test ends, its connections ended with it. The first template a binary
-    makes drops every template and copy whose process is gone.
+  - A test that needs a database with nothing migrated is handed a blank one, made from `template0`
+    under the copies' name and dropped and swept as a copy is.
+  - A copy is dropped as its test ends. The drop first ends every session of the test role on it, then
+    drops it without force, which asks the server's own maintenance on it to stop: a forced drop would
+    have to end that maintenance, which a role that is no superuser may not. It is asked again a few
+    times, and a copy still standing fails its test with the server's reason.
+  - The first template or blank database a binary makes first drops every template and copy whose
+    process, the one its name
+    carries, is gone from this machine, that the test role may drop and that no client is connected
+    to, the same way; one still standing fails that test. It touches no other name, so a repository's
+    own `bmo_<repository>_test_` databases and the suite's pool are never its.
   - The server is the one `BMO_TEST_POSTGRES` names, which the suite sets; with nothing named, the
     machine's own PostgreSQL socket.
 - **At most ten files that use the database run at once,** whatever the sweep's width.

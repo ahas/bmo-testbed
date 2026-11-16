@@ -888,8 +888,9 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   destination is reached through, the dumps and their counts, the archives, the snapshot, the media,
   the rotation and the drill.
 - **`scratch-database`:** per-test databases copied from a template the migrator a test hands in
-  makes (`docs/suite.md`, 「The test database」): a scratch database dropped with its guard, its
-  address and connection, and the test server's address; a consumer's crate may take it as a
+  makes (`docs/suite.md`, 「The test database」): a scratch database, migrated or blank, dropped with
+  its guard and failing its test where it cannot be, its address and connection, and the test server's
+  address; a consumer's crate may take it as a
   dev-dependency.
 - **`testkit`:** the TypeScript package `@bmo-testbed/testkit`, which a consumer may take as a
   dev-dependency (`docs/suite.md`, 「The test home」):

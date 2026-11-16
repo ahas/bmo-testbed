@@ -2,8 +2,9 @@
 # by and the server they stand on where the run names none.
 
 [names]
-# What a template's and a copy's names begin with, ahead of the process that made them; the binary that
-# makes a template drops every one of either whose process is gone.
+# What a template's and a copy's names begin with, ahead of the process that made them; a blank database
+# goes by the copies' name. The first template or blank database a binary makes drops every one of either
+# whose process is gone. No repository's own test databases, bmo_<repository>_test_, begin with either.
 template = "bmo_rs_tmpl_"
 copy = "bmo_rs_copy_"
 
@@ -14,3 +15,14 @@ address = "postgres:///bmo_test?host=/var/run/postgresql"
 admin_database = "postgres"
 # The connections each scratch database is opened with.
 connections = 4
+
+[drop]
+# How many times a drop is asked before the database is taken to stand; the server itself waits a few
+# seconds on each for the sessions and maintenance it was asked to end.
+tries = 3
+# How long ending one of the test role's sessions on the database is waited on.
+session_end_milliseconds = 5000
+
+[words]
+not_dropped = "the scratch database {database} still stands: {why}"
+unreachable = "the test server at {address} does not answer: {why}"

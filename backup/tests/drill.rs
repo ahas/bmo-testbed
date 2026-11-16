@@ -8,7 +8,7 @@ use bmo_testbed_backup::manifest::Manifest;
 use bmo_testbed_backup::outcome::Voice;
 use bmo_testbed_backup::policy::BACKUP;
 use bmo_testbed_backup::snapshot::{slot_of, snapshot};
-use bmo_testbed_scratch_database::{SCRATCH, test_address};
+use bmo_testbed_scratch_database::{SCRATCH, Scratch, test_address};
 use sqlx::postgres::PgConnection;
 use sqlx::{Connection as _, Executor as _};
 
@@ -28,45 +28,22 @@ async fn statements(address: &str, sql: &[&str]) {
   connection.close().await.unwrap();
 }
 
-// A database of the test's own, with rows in two schemas; dropped when the guard goes.
-struct Source(String);
+// A blank database of the test's own, with rows in two schemas; dropped when the guard goes.
+async fn source() -> Scratch {
+  let scratch = Scratch::blank().await;
 
-impl Source {
-  async fn new() -> Self {
-    let name = format!("backup_source_{}", std::process::id());
-    let drop = format!("DROP DATABASE IF EXISTS \"{name}\" WITH (FORCE)");
-    let create = format!("CREATE DATABASE \"{name}\" TEMPLATE template0");
-
-    statements(&server(), &[&drop, &create]).await;
-    statements(
-      &address_in(&server(), &name).unwrap(),
-      &[
-        "CREATE TABLE notes (id serial PRIMARY KEY, body text)",
-        "INSERT INTO notes (body) SELECT 'line ' || n FROM generate_series(1, 25) n",
-        "CREATE SCHEMA side",
-        "CREATE TABLE side.\"Mixed Case\" (id int)",
-        "INSERT INTO side.\"Mixed Case\" VALUES (1), (2), (3)",
-        "CREATE TABLE empty (id int)",
-      ],
-    )
-    .await;
-
-    Self(name)
+  for sql in [
+    "CREATE TABLE notes (id serial PRIMARY KEY, body text)",
+    "INSERT INTO notes (body) SELECT 'line ' || n FROM generate_series(1, 25) n",
+    "CREATE SCHEMA side",
+    "CREATE TABLE side.\"Mixed Case\" (id int)",
+    "INSERT INTO side.\"Mixed Case\" VALUES (1), (2), (3)",
+    "CREATE TABLE empty (id int)",
+  ] {
+    scratch.run(sql, vec![]).await;
   }
-}
 
-impl Drop for Source {
-  fn drop(&mut self) {
-    let name = self.0.clone();
-
-    let _ = std::thread::spawn(move || {
-      let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
-
-      runtime
-        .block_on(statements(&server(), &[&format!("DROP DATABASE IF EXISTS \"{name}\" WITH (FORCE)")]));
-    })
-    .join();
-  }
+  scratch
 }
 
 fn manifest_at(path: std::path::PathBuf) -> Manifest {
@@ -75,10 +52,9 @@ fn manifest_at(path: std::path::PathBuf) -> Manifest {
 
 #[test]
 fn a_snapshot_is_sent_whole_and_the_drill_restores_every_count() {
-  let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
-  let source = runtime.block_on(Source::new());
-
-  drop(runtime);
+  // The source's connections stay on the runtime that opened them until it is dropped, at the test's end.
+  let opened = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+  let source = opened.block_on(source());
 
   let ground = Ground::new();
 
@@ -88,7 +64,7 @@ fn a_snapshot_is_sent_whole_and_the_drill_restores_every_count() {
 
   let plan = ground.plan(&ground.settings(&format!(
     "folders = [\"data/brain\", \"data/env\"]\ndatabases = [\"{}\"]\nserver = \"{}\"\nlarge_file_bytes = 1000",
-    source.0,
+    source.name(),
     server()
   )));
   let now = chrono::Local::now();
@@ -99,7 +75,7 @@ fn a_snapshot_is_sent_whole_and_the_drill_restores_every_count() {
 
   assert!(outcome.passed(), "{:?} {said:?}", outcome.failed);
 
-  let dump = format!("{}{}", source.0, BACKUP.names.dump_suffix);
+  let dump = format!("{}{}", source.name(), BACKUP.names.dump_suffix);
   let expected: Vec<String> = [format!("daily/{day}"), format!("hourly/{slot}")]
     .iter()
     .flat_map(|base| {

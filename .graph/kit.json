@@ -2,19 +2,26 @@
   {
     "id": "kit/scratch-database",
     "title": "Scratch database",
-    "what": "A Rust test's own PostgreSQL database, cloned from a template made once per migrator the test hands in, and dropped with its guard.",
+    "what": "A Rust test's own PostgreSQL database, migrated from a per-migrator template or blank, dropped with its guard without force (failing the test where it stands), and a gone process's leftovers swept by the binary's first template.",
     "files": [
       "scratch-database/src/lib.rs",
       "policy/scratch-database.toml",
       "docs/suite.md"
     ],
-    "symbols": [],
+    "symbols": [
+      "Scratch",
+      "copy",
+      "blank",
+      "drop_copy",
+      "drop_database",
+      "test_address"
+    ],
     "aliases": [],
     "needs": [
       "core/policy-loader"
     ],
-    "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
-    "changed": 1793664723585
+    "base": "25c8537ca27ee592d433c87169331ccaa25a007c",
+    "changed": 1794806276971
   },
   {
     "id": "kit/test-kit",
