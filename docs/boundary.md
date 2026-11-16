@@ -109,7 +109,8 @@ bmo-testbed crate-tests run <record> <package>
   value and `LD_LIBRARY_PATH`, and exits 0; 1 where the record cannot be written.
 - **`run`** runs every executable the record names for the package, by its `CARGO_PKG_NAME`, in the
   order they were written, each to its end, from its folder and with its variables laid over the verb's
-  own environment, its output passed through with a line naming it ahead. Exits 0 where every one
+  own environment, its output passed through with a line naming it ahead on standard output, where the
+  harness writes its results. Exits 0 where every one
   passed or there is none, saying so where there is none; the first failing one's code otherwise, or 1
   where one could not be started; and 1 where the record does not read.
 - Exits 2 where its words do not read.
@@ -168,10 +169,11 @@ bmo-testbed suite [--since <commit>] [--again] [--json] [<word>…]
 - Every run is a test run of kind `suite` in the record (「The record」), its log the run's own.
 - **`--json`** prints one command run (「Members」) on standard output once the run has ended, its log
   the run's own; the exit code is the same.
-- **With `--again`,** a first run that failed says `suite: once more`, naming
-  them, runs them once more by name and ends as that second run ends; the tests that passed only the
-  second time are written down and sent as a `suite-flaky` event (`docs/suite.md`, 「What failed runs
-  once more」). The suite's own flags come before its words.
+- **With `--again`,** a unit that ran and failed runs once more as soon as it ends, narrowed to what
+  failed in it: its first account stands under the `redo` mark, followed by a line opening with
+  `suite: once more` naming the unit and what runs, and the unit stands on that second run. The tests
+  that passed only the second time are written down and sent as a `suite-flaky` event (`docs/suite.md`,
+  「What failed runs once more」). The suite's own flags come before its words.
 - Exits 0 where it passed, 1 where anything failed, 75 where it was not run, 2 where its words or the
   declaration do not read.
 

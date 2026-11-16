@@ -69,7 +69,10 @@ pub struct TemplateWords {
 #[serde(deny_unknown_fields)]
 pub struct AgainWords {
   pub once_more: String,
-  pub either: String,
+  pub whole: String,
+  pub tests: String,
+  pub binary: String,
+  pub files: String,
   pub joiner: String,
   pub flaky_summary: String,
   pub unrecorded: String,
@@ -109,6 +112,7 @@ pub struct LineWords {
 pub struct FileWords {
   pub ok: String,
   pub failed: String,
+  pub redo: String,
   pub heading: String,
   pub signalled: String,
   pub silent: String,

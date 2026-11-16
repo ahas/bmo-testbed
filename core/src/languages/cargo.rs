@@ -98,6 +98,28 @@ impl Language for Cargo {
     })
   }
 
+  // A test binary ends its output on the harness's `test result:` line; the tests it failed are the ones
+  // whose own result line said so above it.
+  fn failed_tests(&self, output: &str) -> Option<Vec<String>> {
+    sum_of(output, &PASS)?;
+
+    let mut failed: Vec<String> = Vec::new();
+
+    for test in output.split('\n').filter_map(|line| FAILED_TEST.captures(line.trim_end())) {
+      if !failed.iter().any(|one| one == &test[1]) {
+        failed.push(test[1].to_owned());
+      }
+    }
+
+    Some(failed)
+  }
+
+  // The harness takes every word that is no option as a filter, and `--exact` makes each match a test's
+  // whole name only.
+  fn exact_tests(&self, tests: &[String]) -> Option<Vec<String>> {
+    Some(std::iter::once("--exact".to_owned()).chain(tests.iter().cloned()).collect())
+  }
+
   fn failures(&self, log: &str) -> Vec<String> {
     let lines: Vec<&str> = log.split('\n').collect();
 

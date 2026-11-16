@@ -83,6 +83,23 @@ pub trait Language: Sync {
   fn test_progress(&self, _line: &str) -> Option<TestProgress> {
     None
   }
+  /// The test files its runner's output names as holding a failed test, each once and as the output writes
+  /// it; none where the output holds a failure it gives no file, so that running only the files named would
+  /// leave a failure out, and none for a language whose runner names no files.
+  fn failed_files(&self, _output: &str) -> Vec<String> {
+    Vec::new()
+  }
+  /// The tests the result its runner ends on names as failed, each once; none where no such result stands
+  /// in the output, as where the run was ended before its runner could say, and for a language whose runner
+  /// writes none.
+  fn failed_tests(&self, _output: &str) -> Option<Vec<String>> {
+    None
+  }
+  /// The words that run only these tests, each matched by its full name; none for a language whose runner
+  /// takes no such words.
+  fn exact_tests(&self, _tests: &[String]) -> Option<Vec<String>> {
+    None
+  }
   /// The command that runs a project's package script; none for a language that runs no scripts.
   fn script_command(&self, _script: &str) -> Option<Vec<String>> {
     None

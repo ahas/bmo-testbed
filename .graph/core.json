@@ -97,7 +97,7 @@
   {
     "id": "core/languages",
     "title": "Languages",
-    "what": "The language type in core and its members bun, node, cargo, browser and plain: what each claims as heavy, how it widens a command, reads a log, names and runs test files, hands a per-test limit or reads a test still running, and its configuration, root files and lockfile.",
+    "what": "The language type in core and its members bun, node, cargo, browser and plain: what each claims as heavy, how it widens a command, reads a log and names failed files or tests, runs test files, hands a per-test limit or reads a test still running, and its configuration, root files and lockfile.",
     "files": [
       "core/src/languages/mod.rs",
       "core/src/languages/bun.rs",
@@ -114,8 +114,8 @@
     ],
     "aliases": [],
     "needs": [],
-    "base": "98128f71e9350a1038e8e1f6cddf145282cd7f4c",
-    "changed": 1794823081770
+    "base": "3b8d55c357e1dfb8ddd2bcf4197e36a02b0b3fb1",
+    "changed": 1794829785392
   },
   {
     "id": "core/main-branch",

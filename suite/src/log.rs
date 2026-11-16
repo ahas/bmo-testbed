@@ -1,7 +1,8 @@
 //! A run of the suite read back out of its log (docs/suite.md, 「Reading the output」): the verdict it ended
 //! on, the tests and the files that failed, each failing test with the unit it stands in, and the files it
 //! never started — the lines the run writes in the policy's words, read by their shape — and the warnings
-//! the tools it ran printed.
+//! the tools it ran printed. The first account of a unit run once more is passed over, since the unit stands
+//! on its second run.
 
 use std::sync::LazyLock;
 
@@ -21,6 +22,9 @@ static MARKED_FILE: LazyLock<Regex> =
 static UNSTARTED: LazyLock<Regex> = LazyLock::new(|| pattern(r"^never started within \d+s: (.+)$"));
 // The line the sweep writes before each unit's output, whatever its mark, and Cargo's line for a failed test.
 static UNIT_HEADING: LazyLock<Regex> = LazyLock::new(|| pattern(r"^(?:ok|fail|CUT)\s+[\d.]+s\s+(\S+)$"));
+// The heading of a unit's first account where it ran once more.
+static REDO_HEADING: LazyLock<Regex> =
+  LazyLock::new(|| pattern(&format!(r"^{}\s+[\d.]+s\s+\S+$", regex::escape(&SUITE.file.redo))));
 static CARGO_FAILED: LazyLock<Regex> = LazyLock::new(|| pattern(r"^test (\S+) \.\.\. FAILED$"));
 
 // A warning as each tool the check runs prints one. A log holds the output of many tools one after another,
@@ -35,6 +39,22 @@ static CARGO_COUNT: LazyLock<Regex> = LazyLock::new(|| pattern(r"generated \d+ w
 // A badge whose words are only the bracketed names of where it came from says what it warns of on the line
 // below.
 static ONLY_SOURCES: LazyLock<Regex> = LazyLock::new(|| pattern(r"^(?:\[[^\]]*\]\s*)*$"));
+
+/// The lines of a log that stand: every line but those of an account under the redo mark, from its heading to
+/// the next unit's heading or the next line of the run's own (docs/suite.md, 「What failed runs once more」).
+fn standing(log: &str) -> impl Iterator<Item = &str> {
+  let mut passing_over = false;
+
+  log.lines().filter(move |line| {
+    if REDO_HEADING.is_match(line) {
+      passing_over = true;
+    } else if UNIT_HEADING.is_match(line) || line.starts_with(&SUITE.lines.mark) {
+      passing_over = false;
+    }
+
+    !passing_over
+  })
+}
 
 fn split_names(list: &str) -> impl Iterator<Item = String> + '_ {
   list.split(", ").map(str::trim).filter(|name| !name.is_empty()).map(str::to_owned)
@@ -80,7 +100,7 @@ fn count(digits: &str) -> u64 {
 pub fn tally_of(log: &str) -> Tally {
   let mut tally = Tally::default();
 
-  for line in log.lines() {
+  for line in standing(log) {
     if let Some(cargo) = CARGO_RESULT.captures(line) {
       tally.pass += count(&cargo[1]);
       tally.fail += count(&cargo[2]);
@@ -118,7 +138,7 @@ pub fn verdict_of(log: &str) -> Option<String> {
 /// What failed: each test bun names on a line of its own, and the files the sweep's closing lines name, in
 /// the order they were written, each once.
 pub fn failures_of(log: &str) -> Vec<String> {
-  once(log.lines().flat_map(|line| {
+  once(standing(log).flat_map(|line| {
     if let Some(test) = FAILED_TEST.captures(line) {
       return vec![test[1].to_owned()];
     }
@@ -136,7 +156,7 @@ pub fn failed_files_of(log: &str) -> Vec<String> {
   let mut under: Option<String> = None;
   let mut files = Vec::new();
 
-  for line in log.lines() {
+  for line in standing(log) {
     if let Some(header) = FILE_HEADER.captures(line) {
       under = Some(header[1].to_owned());
       continue;
@@ -194,7 +214,7 @@ pub fn failed_tests_of(log: &str) -> Vec<FailedTest> {
   let mut under: Option<String> = None;
   let mut tests: Vec<FailedTest> = Vec::new();
 
-  for line in log.lines() {
+  for line in standing(log) {
     if let Some(unit) = UNIT_HEADING.captures(line) {
       swept = true;
       under = Some(unit[1].to_owned());

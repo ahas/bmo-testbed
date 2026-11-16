@@ -237,7 +237,7 @@
   {
     "id": "suite/suite-run",
     "title": "Suite run",
-    "what": "The suite verb: every test file, crate, project and tool as one unit in a process of its own, inside the machine turn and a fence; the crates' tests built once over every crate reached and run from the binaries Cargo's runner wrote down; a per-test limit; --again runs failures once more.",
+    "what": "The suite verb: every test file, crate, project and tool as one unit in a process of its own, inside the machine turn and a fence; the crates' tests built once and run from the binaries Cargo's runner wrote down; --again reruns a failed unit at once, narrowed to its failed tests or files.",
     "files": [
       "suite/src/run.rs",
       "suite/src/sweep.rs",
@@ -266,7 +266,8 @@
     "aliases": [
       "팀즈 아바타 테스트가 스위트에서 실제로 돌게",
       "워크스페이스 테스트를 한 번에 빌드",
-      "쓰지 않는 바이너리 빌드 빼기"
+      "쓰지 않는 바이너리 빌드 빼기",
+      "실패한 테스트만 바로 다시 돌리기"
     ],
     "needs": [
       "core/declaration",
@@ -280,8 +281,8 @@
       "core/run-verb-and-status",
       "core/silence-watch"
     ],
-    "base": "7e4750d940ee285a165bf56ec19b246dab575cea",
-    "changed": 1794828692857
+    "base": "3b8d55c357e1dfb8ddd2bcf4197e36a02b0b3fb1",
+    "changed": 1794829785386
   },
   {
     "id": "suite/test-count",
@@ -305,7 +306,7 @@
   {
     "id": "suite/test-log",
     "title": "Test log",
-    "what": "Reads a run's log back: its tally, verdict, failed tests and the units that never started; the log verb answers it thin or as JSON under the answer ceiling.",
+    "what": "Reads a run's log back, passing over a unit's first account where it ran once more: its tally, verdict, failed tests and the units that never started; the log verb answers it thin or as JSON under the answer ceiling.",
     "files": [
       "suite/src/log.rs",
       "cli/src/suite.rs",
@@ -319,7 +320,7 @@
       "core/policy-loader"
     ],
     "base": "f7019e5f08cfb47f7cf49d6bfa78bf1fcd22d73c",
-    "changed": 1793664723663
+    "changed": 1794829785380
   },
   {
     "id": "suite/test-template",

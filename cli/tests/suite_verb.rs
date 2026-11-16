@@ -454,6 +454,46 @@ fn a_test_a_project_s_check_skips_is_named_on_the_verdict() {
   assert!(done.err.contains("skipped: no such program on this machine"), "{}", done.err);
 }
 
+// "a project of its own: the test files its tests' output names as holding a failed test ... The steps of the
+// check before its tests do not run again": a project whose one file fails the first time runs that file once
+// more by itself, its check's earlier step and its other file run once, and the run passes.
+#[test]
+fn a_project_runs_once_more_only_its_failed_test_files() {
+  let dir = tempfile::tempdir().unwrap();
+  let (repo, data) = project_with_tests(dir.path(), FLAKY);
+
+  std::fs::write(
+    repo.join("road/package.json"),
+    r#"{ "name": "road", "scripts": { "check": "echo step >> ../steps && bun test" } }"#,
+  )
+  .unwrap();
+  std::fs::write(
+    repo.join("road/tests/steady.test.ts"),
+    "import { test } from \"bun:test\";\nimport { appendFileSync } from \"node:fs\";\n\n\
+     test(\"steady\", () => {\n  appendFileSync(`${import.meta.dir}/../../steady`, \"ran\\n\");\n});\n",
+  )
+  .unwrap();
+
+  let mut command = testbed(&repo, &data, &["suite", "--again"]);
+
+  command
+    .env("SUITE_FLAKY_MARK", dir.path().join("seen"))
+    .env_remove("BMO_TESTBED_EVENT_HOOK");
+  std::os::unix::process::CommandExt::process_group(&mut command, 0);
+
+  let done = ended(command.spawn().unwrap());
+  let files = fill_marks(&SUITE.again.files, &[("names", "tests/road.test.ts")]);
+  let once_more = fill_marks(
+    &SUITE.again.once_more,
+    &[("mark", &SUITE.lines.mark), ("unit", "road/"), ("what", &files)],
+  );
+
+  assert_eq!(done.code, 0, "{}", done.err);
+  assert!(done.err.lines().any(|line| line == once_more), "{}", done.err);
+  assert_eq!(std::fs::read_to_string(repo.join("steps")).unwrap(), "step\n");
+  assert_eq!(std::fs::read_to_string(repo.join("steady")).unwrap(), "ran\n");
+}
+
 // "with --again what failed runs once more, and what passed only then is written down and sent as an event"
 #[test]
 fn a_run_once_more_passes_on_its_second_run_and_tells_of_the_flaky_test() {
@@ -473,7 +513,10 @@ fn a_run_once_more_passes_on_its_second_run_and_tells_of_the_flaky_test() {
   std::os::unix::process::CommandExt::process_group(&mut command, 0);
 
   let done = ended(command.spawn().unwrap());
-  let once_more = opening(&SUITE.again.once_more, &[("count", "1")]);
+  let once_more = fill_marks(
+    &SUITE.again.once_more,
+    &[("mark", &SUITE.lines.mark), ("unit", "flaky.test.ts"), ("what", &SUITE.again.whole)],
+  );
   let record = std::fs::read_to_string(data.join("testbed/suite-flaky.jsonl")).unwrap();
   let payload: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&event).unwrap()).unwrap();
 
@@ -580,6 +623,8 @@ fn a_crate_s_tests_pass_where_a_sibling_s_version_moved_past_the_lock() {
 // unit runs the test binaries written down for it, from the folder Cargo would run it from and with the
 // variables Cargo would hand it": a workspace of two crates is built by one command, the first crate's test
 // reads its package and folder as Cargo hands them, and the second crate's failing test fails its unit alone.
+// With --again, "a binary whose own result names the tests that failed runs only those ... from the same build,
+// so nothing is built again".
 #[test]
 fn the_crates_tests_run_from_one_build_with_what_cargo_would_hand_them() {
   let dir = tempfile::tempdir().unwrap();
@@ -608,7 +653,11 @@ fn the_crates_tests_run_from_one_build_with_what_cargo_would_hand_them() {
     ("one/src/lib.rs", "pub fn one() -> u8 {\n  1\n}\n".to_owned()),
     ("one/tests/one.rs", one_test.to_owned()),
     ("two/Cargo.toml", manifest("sample-two")),
-    ("two/src/lib.rs", "#[test]\nfn fails() {\n  assert_eq!(1 + 1, 3);\n}\n".to_owned()),
+    (
+      "two/src/lib.rs",
+      "#[test]\nfn fails() {\n  assert_eq!(1 + 1, 3);\n}\n\n#[test]\nfn holds() {\n  assert_eq!(1 + 1, 2);\n}\n"
+        .to_owned(),
+    ),
   ] {
     std::fs::create_dir_all(repo.join(path).parent().unwrap()).unwrap();
     std::fs::write(repo.join(path), text).unwrap();
@@ -617,9 +666,11 @@ fn the_crates_tests_run_from_one_build_with_what_cargo_would_hand_them() {
   git(&repo, &["add", "-A"]);
   git(&repo, &["commit", "-qm", "crates"]);
 
-  let mut command = testbed(&repo, &data, &["suite"]);
+  let mut command = testbed(&repo, &data, &["suite", "--again"]);
 
-  command.env("BMO_CARGO_TARGET_DIR", dir.path().join("cargo-target"));
+  command
+    .env("BMO_CARGO_TARGET_DIR", dir.path().join("cargo-target"))
+    .env_remove("BMO_TESTBED_EVENT_HOOK");
   std::os::unix::process::CommandExt::process_group(&mut command, 0);
 
   let done = ended(command.spawn().unwrap());
@@ -636,6 +687,18 @@ fn the_crates_tests_run_from_one_build_with_what_cargo_would_hand_them() {
   assert_eq!(done.err.matches(&built(&SUITE.lines.library_tests)).count(), 1, "{}", done.err);
   assert_eq!(done.err.matches(&built(&SUITE.lines.tests)).count(), 1, "{}", done.err);
   assert!(unit(&SUITE.file.ok, "one/"), "{}", done.err);
+  assert!(unit(&SUITE.file.redo, "two/"), "{}", done.err);
   assert!(unit(&SUITE.file.failed, "two/"), "{}", done.err);
   assert!(done.err.contains("reads_what_cargo_hands_it ... ok"), "{}", done.err);
+
+  let narrowed = fill_marks(&SUITE.again.tests, &[("names", "fails")]);
+  let once_more = fill_marks(
+    &SUITE.again.once_more,
+    &[("mark", &SUITE.lines.mark), ("unit", "two/"), ("what", &narrowed)],
+  );
+  let second = done.err.split(&once_more).nth(1).unwrap_or_default();
+
+  assert!(done.err.lines().any(|line| line == once_more), "{}", done.err);
+  assert!(second.contains("running 1 test\n"), "{}", done.err);
+  assert!(!second.contains("holds"), "{}", done.err);
 }

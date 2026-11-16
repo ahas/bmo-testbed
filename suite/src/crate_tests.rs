@@ -7,6 +7,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
+use bmo_testbed_core::languages::{Cargo, Language};
 use bmo_testbed_core::policy::fill_shown;
 use bmo_testbed_core::policy::suite::SUITE;
 use serde::{Deserialize, Serialize};
@@ -61,6 +62,17 @@ pub struct RunRecord(PathBuf);
 impl RunRecord {
   pub fn fresh() -> Self {
     let path = std::env::temp_dir().join(format!("bmo-testbed-crate-tests-{}.jsonl", std::process::id()));
+    let _ = std::fs::remove_file(&path);
+
+    Self(path)
+  }
+
+  /// A record of its own beside this one, begun empty and taken away with it, for the binaries of one
+  /// crate's run once more.
+  pub fn beside(&self, name: &str) -> Self {
+    let path = self
+      .0
+      .with_file_name(format!("bmo-testbed-crate-tests-{}-{name}.jsonl", std::process::id()));
     let _ = std::fs::remove_file(&path);
 
     Self(path)
@@ -131,10 +143,16 @@ pub fn record(record: &Path, executable: String, args: Vec<String>) -> u8 {
   }
 }
 
+// The line ahead of a binary's output, naming it.
+fn running_line(binary: &TestBinary) -> String {
+  fill_shown(&SUITE.crate_tests.running, &[("executable", &binary.executable)])
+}
+
 // A binary run to its end from its folder with its variables over this process's own, its output passed through;
-// the code it ended with, a signal that ended it read as the shell reads it.
+// the code it ended with, a signal that ended it read as the shell reads it. The line naming it goes to the
+// output the harness writes its results to, so each binary's results stand under it.
 fn run_one(binary: &TestBinary) -> i32 {
-  eprintln!("{}", fill_shown(&SUITE.crate_tests.running, &[("executable", &binary.executable)]));
+  println!("{}", running_line(binary));
 
   let ran = Command::new(&binary.executable)
     .args(&binary.args)
@@ -182,4 +200,68 @@ pub fn run(record: &Path, package: &str) -> u8 {
     .fold(0, |first, code| if first == 0 { code } else { first });
 
   u8::try_from(first_failure).unwrap_or(1)
+}
+
+/// A test binary a crate's unit runs once more, and the tests it is narrowed to by name; none where it runs
+/// whole.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BinaryOnceMore {
+  pub binary: TestBinary,
+  pub tests: Vec<String>,
+}
+
+/// The binaries of `package` a crate's unit runs once more, read from what its first run of `binaries` said
+/// (docs/suite.md, 「What failed runs once more」): each that failed, as narrowly as its output names what
+/// failed. One whose own result names failed tests runs only those, by their full names; one with no result,
+/// or never started, runs whole; one whose result names no failure is left out. None where that comes to
+/// no fewer than the whole unit, every binary whole, or to nothing, so the whole unit runs once more.
+pub fn binaries_once_more(binaries: &[TestBinary], package: &str, said: &str) -> Vec<BinaryOnceMore> {
+  let own: Vec<&TestBinary> = binaries.iter().filter(|binary| binary.package() == Some(package)).collect();
+  let headings: Vec<String> = own.iter().map(|binary| running_line(binary)).collect();
+  let mut sections: Vec<Option<String>> = vec![None; own.len()];
+  let mut at: Option<usize> = None;
+
+  for line in said.split('\n') {
+    if let Some(found) = headings.iter().position(|heading| heading == line.trim_end()) {
+      at = Some(found);
+      sections[found] = Some(String::new());
+    } else if let Some(section) = at.and_then(|found| sections[found].as_mut()) {
+      section.push_str(line);
+      section.push('\n');
+    }
+  }
+
+  let again: Vec<BinaryOnceMore> = own
+    .iter()
+    .zip(&sections)
+    .filter_map(|(binary, section)| {
+      let whole = || BinaryOnceMore {
+        binary: (*binary).clone(),
+        tests: Vec::new(),
+      };
+
+      match section.as_deref().map(|section| Cargo.failed_tests(section)) {
+        Some(Some(failed)) if failed.is_empty() => None,
+        Some(Some(failed)) => match Cargo.exact_tests(&failed) {
+          Some(words) => {
+            let mut narrowed = (*binary).clone();
+
+            narrowed.args.extend(words);
+            Some(BinaryOnceMore {
+              binary: narrowed,
+              tests: failed,
+            })
+          }
+          None => Some(whole()),
+        },
+        _ => Some(whole()),
+      }
+    })
+    .collect();
+
+  if again.len() == own.len() && again.iter().all(|one| one.tests.is_empty()) {
+    return Vec::new();
+  }
+
+  again
 }

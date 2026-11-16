@@ -86,12 +86,16 @@ no_migrate = "the declaration names no migrate command to make the template with
 migrate_failed = "the migrate command ended with {code}: {said}"
 failed = "template: {why}"
 
-# A run judged once more (docs/suite.md, 「What failed runs once more」): {count} files and units and
-# {names} them, what failed in either run where the second failed too, the event's summary of {count}
-# flaky tests in {repository}, and a record that could not be written, {why} what it came to.
+# A unit run once more as soon as it failed (docs/suite.md, 「What failed runs once more」): the line after
+# its first account naming the {unit} and {what} runs, which is the whole unit, the {names} of the tests run
+# by name, a test {binary} run whole, or the {names} of the failed files; {count} flaky tests in
+# {repository} for the event's summary, and a record that could not be written, {why} what it came to.
 [again]
-once_more = "{mark} once more, {count} that failed or never started: {names}"
-either = "{mark} failed in either run: {names}"
+once_more = "{mark} once more: {unit}, {what}"
+whole = "the whole unit"
+tests = "{names} by name"
+binary = "{binary} whole"
+files = "the failed files {names}"
 joiner = ", "
 flaky_summary = "{count} tests of {repository} passed only when run once more"
 unrecorded = "{mark} the flaky tests could not be written down: {why}"
@@ -132,6 +136,8 @@ no_browser = "none declared"
 [file]
 ok = "ok  "
 failed = "fail"
+# The mark of a failed unit's first account where it runs once more, which the readers of a log pass over.
+redo = "redo"
 heading = "{mark} {seconds}s  {file}"
 # How a unit's process ended, under its heading where its output cannot say: the number of the {signal}
 # that ended it, or the exit {code} of one that failed having said nothing.

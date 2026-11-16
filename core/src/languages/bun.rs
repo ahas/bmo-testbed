@@ -53,6 +53,10 @@ static PASS: LazyLock<Regex> = LazyLock::new(|| pattern(r"^\s*([\d,]+) pass$"));
 static FAIL: LazyLock<Regex> = LazyLock::new(|| pattern(r"^\s*([\d,]+) fail$"));
 static SKIP: LazyLock<Regex> = LazyLock::new(|| pattern(r"^\s*([\d,]+) (?:skip|todo)$"));
 static FAILED: LazyLock<Regex> = LazyLock::new(|| pattern(r"^\(fail\) (.+?)(?: \[[\d.]+m?s\])?$"));
+// The heading bun writes above what one test file said, and its count of errors outside any test.
+static FILE_HEADING: LazyLock<Regex> =
+  LazyLock::new(|| pattern(r"^(\S+[._](?:test|spec)\.[cm]?[jt]sx?):$"));
+static ERRORS: LazyLock<Regex> = LazyLock::new(|| pattern(r"^\s*([\d,]+) errors?$"));
 
 /// Whether a path is a browser test's, which drives a browser and is the browser language's.
 pub(crate) fn browser_path(path: &str) -> bool {
@@ -100,6 +104,34 @@ impl Language for Bun {
       .split('\n')
       .filter_map(|line| FAILED.captures(line).map(|found| found[1].to_owned()))
       .collect()
+  }
+
+  // Each `(fail)` line given to the file heading above it. A file that failed to load, or an error thrown
+  // between tests, counts among the failures or the errors with no `(fail)` line of its own, so where the
+  // lines given a file fall short of bun's own counts no file is named.
+  fn failed_files(&self, output: &str) -> Vec<String> {
+    let mut under: Option<&str> = None;
+    let mut given = 0u64;
+    let mut files: Vec<String> = Vec::new();
+
+    for line in output.split('\n').map(str::trim_end) {
+      if let Some(heading) = FILE_HEADING.captures(line) {
+        under = heading.get(1).map(|file| file.as_str());
+      } else if FAILED.is_match(line)
+        && let Some(file) = under
+      {
+        given += 1;
+
+        if !files.iter().any(|one| one == file) {
+          files.push(file.to_owned());
+        }
+      }
+    }
+
+    let counted = sum_of(output, &FAIL).unwrap_or(0);
+    let errors = sum_of(output, &ERRORS).unwrap_or(0);
+
+    if given == counted && errors == 0 { files } else { Vec::new() }
   }
 
   fn test_naming(&self) -> &'static [&'static str] {

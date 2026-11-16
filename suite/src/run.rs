@@ -23,13 +23,13 @@ use bmo_testbed_core::turn::{self, Lane, NOT_RUN_EXIT_CODE, TestbedTurn, TurnAsk
 use bmo_testbed_core::witness::{RunBegun, RunEnded, RunVerdict, RunWitness};
 
 use crate::cargo::{HeldLock, cargo_verb_line};
-use crate::crate_tests::{RunRecord, runner_config};
+use crate::crate_tests::{RunRecord, binaries_once_more, read_record, runner_config, write_down};
 use crate::crates::{
   CrateDeclaration, cargo_environment, crate_build_args, library_tests_build_args, set_by_cargo,
   tests_build_args, workspace_crates,
 };
 use crate::fence::{LiveClear, LiveFence, clear_fence, fence_limits, fence_suite, fenced_build_jobs};
-use crate::log::tally_of;
+use crate::log::{FailedTest, failed_tests_of, tally_of};
 use crate::own_binary::{running_testbed, testbed_line};
 use crate::selection::{
   Layout, Selection, changed_paths, glob_matches, select_packages, selected_tests, selection_lines,
@@ -54,6 +54,9 @@ pub struct SuiteAsk {
   pub extra: Vec<String>,
   /// Where the run keeps its own log and its test run; a run handed none keeps neither.
   pub record: Option<SuiteRecord>,
+  /// Whether a unit that ran and failed runs once more as soon as it ends (docs/suite.md, 「What failed runs
+  /// once more」).
+  pub again: bool,
 }
 
 /// Where a run keeps its record: the folder its own log goes under, the words it was asked with as one line,
@@ -74,8 +77,8 @@ impl std::fmt::Debug for SuiteRecord {
   }
 }
 
-/// What a run came to: the code it ends with, its own log, how long it waited for its turn and ran, and the
-/// test run its witness kept.
+/// What a run came to: the code it ends with, its own log, how long it waited for its turn and ran, the
+/// test run its witness kept, and each unit it ran once more.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct SuiteEnded {
   pub code: u8,
@@ -83,6 +86,16 @@ pub struct SuiteEnded {
   pub waited_seconds: f64,
   pub seconds: f64,
   pub test_run: Option<i64>,
+  pub once_more: Vec<UnitOnceMore>,
+}
+
+/// A unit that failed and ran once more: the tests its first run named as failing, and whether its second
+/// run passed.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct UnitOnceMore {
+  pub unit: String,
+  pub failed_tests: Vec<FailedTest>,
+  pub passed: bool,
 }
 
 /// The run's words as the binary read them: its own flags, and every other word as given.
@@ -188,16 +201,27 @@ pub fn ask_of(given: &SuiteWords, test: &Test) -> SuiteAsk {
       .map(|word| (*word).clone())
       .collect(),
     record: None,
+    again: false,
   }
 }
 
 /// What the log holds of one unit, written whole as it ends: its heading, what it said, and how its process
 /// ended where it was ended by a signal or failed having said nothing.
 pub fn unit_account(file: &str, ran: &UnitRun) -> String {
+  account(mark(ran.code), file, ran)
+}
+
+/// What the log holds of a unit's first run where the unit runs once more: its account under the redo mark,
+/// which the readers of a log pass over (docs/suite.md, 「What failed runs once more」).
+pub fn redo_account(file: &str, ran: &UnitRun) -> String {
+  account(&SUITE.file.redo, file, ran)
+}
+
+fn account(mark: &str, file: &str, ran: &UnitRun) -> String {
   let said = &SUITE.file;
   let heading = fill_marks(
     &said.heading,
-    &[("mark", mark(ran.code)), ("seconds", &format!("{:.1}", ran.seconds)), ("file", file)],
+    &[("mark", mark), ("seconds", &format!("{:.1}", ran.seconds)), ("file", file)],
   );
   let ending = match ran.signal {
     Some(signal) => Some(fill_marks(&said.signalled, &[("signal", &signal.to_string())])),
@@ -428,7 +452,7 @@ pub fn run_saying(repo: &Repository, ask: &SuiteAsk, heard: &(dyn Fn(&str) + Syn
     }),
     _ => None,
   };
-  let code = run_held(repo, ask, selected, &turn, turn_command, &env, say);
+  let (code, once_more) = run_held(repo, ask, selected, &turn, turn_command, &env, say);
 
   if let (Some(record), Some(id), Some((path, _))) = (ask.record.as_ref(), test_run, log.as_ref()) {
     let tally = tally_of(&std::fs::read_to_string(path).unwrap_or_default());
@@ -453,6 +477,7 @@ pub fn run_saying(repo: &Repository, ask: &SuiteAsk, heard: &(dyn Fn(&str) + Syn
     waited_seconds: turn.waited_seconds(),
     seconds: started.elapsed().as_secs_f64(),
     test_run,
+    once_more,
     ..ended(code)
   }
 }
@@ -465,7 +490,7 @@ fn run_held(
   turn_command: &str,
   env: &HashMap<String, String>,
   say: &(dyn Fn(&str) + Sync),
-) -> u8 {
+) -> (u8, Vec<UnitOnceMore>) {
   let root = repo.root.as_path();
   let test = &repo.declaration.test;
   let limits = fence_limits(test.memory_gb, env.get("BMO_SUITE_MEMORY_GB").map(String::as_str));
@@ -756,15 +781,66 @@ fn run_held(
   let cargo_env = cargo_environment(root);
   let silence = test.silence();
   let per_test_seconds = test.per_test_seconds();
-  let unit_command = |file: &String| -> UnitCommand {
-    // No unit inherits what a Cargo running this suite set for its own package: a unit that runs Cargo would
-    // build as though for that package (docs/deploy.md, 「The Cargo build directory」). Nor does it inherit the
-    // deployment's own variables, which name the live data rather than the test's (docs/suite.md, 「What a test
-    // unit is handed」); what the suite names for the unit itself is handed after them.
-    let base: Vec<(String, String)> = std::env::vars()
+  // No unit inherits what a Cargo running this suite set for its own package: a unit that runs Cargo would
+  // build as though for that package (docs/deploy.md, 「The Cargo build directory」). Nor does it inherit the
+  // deployment's own variables, which name the live data rather than the test's (docs/suite.md, 「What a test
+  // unit is handed」); what the suite names for the unit itself is handed after them.
+  let unit_env = || -> Vec<(String, String)> {
+    std::env::vars()
       .filter(|(name, _)| !set_by_cargo(name) && !SUITE.environment.stripped.contains(name))
       .chain(handed.iter().cloned())
-      .collect();
+      .collect()
+  };
+  // A crate's unit running the test binaries a record holds for it: Cargo itself, in the checkout's own build
+  // environment, with a home of its own as every test file has. Rust's test harness keeps no per-test limit,
+  // so the run keeps it over the crate's tests.
+  let crate_command = |one: &CrateDeclaration, binaries: &Path| -> UnitCommand {
+    let home =
+      std::env::temp_dir().join(format!("bmo-testbed-crate-home-{}-{}", std::process::id(), one.name));
+    let _ = std::fs::create_dir_all(&home);
+    let mut env = unit_env();
+
+    env.extend(cargo_env.iter().cloned());
+    env.push(("HOME".to_owned(), home.to_string_lossy().into_owned()));
+
+    UnitCommand {
+      program: running_testbed().to_string_lossy().into_owned(),
+      args: vec![
+        "crate-tests".to_owned(),
+        "run".to_owned(),
+        binaries.to_string_lossy().into_owned(),
+        one.name.clone(),
+      ],
+      cwd: root.to_path_buf(),
+      env,
+      home: Some(home),
+      silence: Silence::default(),
+      per_test: Some(PerTest {
+        language: &Cargo,
+        limit: Duration::from_secs(per_test_seconds),
+      }),
+    }
+  };
+  // Test files run from the folder of their runner's configuration under `under`, a folder of the repository,
+  // with the run's words and its per-test limit; none where one command cannot run them all.
+  let files_command = |under: &Path, files: &[String]| -> Option<UnitCommand> {
+    let mut groups = file_groups(under, test, files).into_iter();
+    let group = groups.next()?;
+
+    if groups.next().is_some() || group.files.len() != files.len() {
+      return None;
+    }
+
+    let mut words = ask.extra.clone();
+
+    words.extend(group.language.per_test_limit(&ask.extra, per_test_seconds));
+
+    let line = group.language.test_command(&group.files, &words)?;
+
+    Some(UnitCommand::of(line, under.join(group.dir), unit_env(), None))
+  };
+  let unit_command = |file: &String| -> UnitCommand {
+    let base = unit_env();
 
     if let Some(project) = project_units.get(file) {
       // A project with no runner of its script is said before its run is asked for.
@@ -795,54 +871,74 @@ fn run_held(
     }
 
     if let Some(one) = crate_units.get(file) {
-      let home =
-        std::env::temp_dir().join(format!("bmo-testbed-crate-home-{}-{}", std::process::id(), one.name));
-      let _ = std::fs::create_dir_all(&home);
-      let mut env = base;
-
-      // Cargo itself, in the checkout's own build environment, with a home of its own as every test file
-      // has.
-      env.extend(cargo_env.iter().cloned());
-      env.push(("HOME".to_owned(), home.to_string_lossy().into_owned()));
-
-      return UnitCommand {
-        program: running_testbed().to_string_lossy().into_owned(),
-        args: vec![
-          "crate-tests".to_owned(),
-          "run".to_owned(),
-          record.path().to_string_lossy().into_owned(),
-          one.name.clone(),
-        ],
-        cwd: root.to_path_buf(),
-        env,
-        home: Some(home),
-        silence: Silence::default(),
-        // Rust's test harness keeps no per-test limit, so the run keeps it over the crate's tests.
-        per_test: Some(PerTest {
-          language: &Cargo,
-          limit: Duration::from_secs(per_test_seconds),
-        }),
-      };
+      return crate_command(one, record.path());
     }
 
     // A test file listed has a runner, since a repository with none lists no test file; it runs from the
     // folder of its runner's configuration.
-    let (dir, line) = file_groups(root, test, std::slice::from_ref(file))
-      .into_iter()
-      .next()
-      .and_then(|group| {
-        let mut words = ask.extra.clone();
-
-        words.extend(group.language.per_test_limit(&ask.extra, per_test_seconds));
-
-        let line = group.language.test_command(&group.files, &words)?;
-
-        Some((group.dir, line))
-      })
-      .unwrap_or_default();
-
-    UnitCommand::of(line, root.join(dir), base, None)
+    files_command(root, std::slice::from_ref(file))
+      .unwrap_or_else(|| UnitCommand::of(Vec::new(), root.to_path_buf(), base, None))
   };
+  // What a unit that failed runs once more, read from its first run, and what the line before it says runs
+  // (docs/suite.md, 「What failed runs once more」): a crate's failed binaries narrowed to their failed tests,
+  // standing in a record of their own, a project's failed test files, or else the whole unit.
+  let again_said = &SUITE.again;
+  let once_more_of = |file: &String, first: &UnitRun| -> (UnitCommand, String, Option<RunRecord>) {
+    let whole = || (unit_command(file), again_said.whole.clone(), None);
+
+    if let Some(one) = crate_units.get(file) {
+      let narrowed = read_record(record.path())
+        .map(|binaries| binaries_once_more(&binaries, &one.name, &first.output))
+        .unwrap_or_default();
+      let own = record.beside(&one.name);
+
+      if narrowed.is_empty() || narrowed.iter().any(|again| write_down(own.path(), &again.binary).is_err())
+      {
+        return whole();
+      }
+
+      let what: Vec<String> = narrowed
+        .iter()
+        .map(|again| {
+          if again.tests.is_empty() {
+            let executable = &again.binary.executable;
+            let shown = Path::new(executable)
+              .file_name()
+              .map_or_else(|| executable.clone(), |name| name.to_string_lossy().into_owned());
+
+            fill_marks(&again_said.binary, &[("binary", &shown)])
+          } else {
+            fill_marks(&again_said.tests, &[("names", &again.tests.join(&again_said.joiner))])
+          }
+        })
+        .collect();
+
+      return (crate_command(one, own.path()), what.join(&again_said.joiner), Some(own));
+    }
+
+    if let Some(project) = project_units.get(file) {
+      let under = root.join(&project.dir);
+      let mut failed: Vec<String> = Vec::new();
+
+      for named in file_languages(test).iter().flat_map(|language| language.failed_files(&first.output)) {
+        if !failed.contains(&named) {
+          failed.push(named);
+        }
+      }
+
+      let held = !failed.is_empty() && failed.iter().all(|one| under.join(one).is_file());
+
+      if let Some(command) = held.then(|| files_command(&under, &failed)).flatten() {
+        let what = fill_marks(&again_said.files, &[("names", &failed.join(&again_said.joiner))]);
+
+        return (command, what, None);
+      }
+    }
+
+    whole()
+  };
+  // Each unit that failed and ran once more.
+  let ran_once_more: Mutex<Vec<UnitOnceMore>> = Mutex::new(Vec::new());
   // The tests the units skipped, by the counts their own output gives.
   let skipped = AtomicU64::new(0);
   let file_run = |file: &String| -> i32 {
@@ -874,10 +970,36 @@ fn run_held(
       ..unit_command(file)
     });
 
-    skipped.fetch_add(tally_of(&ran.output).skip, Ordering::Relaxed);
-    say(&unit_account(file, &ran));
+    if ran.code == 0 || !ask.again {
+      skipped.fetch_add(tally_of(&ran.output).skip, Ordering::Relaxed);
+      say(&unit_account(file, &ran));
 
-    ran.code
+      return ran.code;
+    }
+
+    // A unit that failed runs once more at once, in its own place of the sweep, and stands on that run.
+    let (command, what, _own_record) = once_more_of(file, &ran);
+
+    say(&format!(
+      "{}\n{}",
+      redo_account(file, &ran).trim_end(),
+      fill_marks(&again_said.once_more, &[("mark", &SUITE.lines.mark), ("unit", file), ("what", &what)])
+    ));
+
+    let second = run_unit(&UnitCommand { silence, ..command });
+
+    skipped.fetch_add(tally_of(&second.output).skip, Ordering::Relaxed);
+    say(&unit_account(file, &second));
+
+    if let Ok(mut ran_once_more) = ran_once_more.lock() {
+      ran_once_more.push(UnitOnceMore {
+        unit: file.clone(),
+        failed_tests: failed_tests_of(&unit_account(file, &ran)),
+        passed: second.code == 0,
+      });
+    }
+
+    second.code
   };
   let lane = |file: &String| -> Option<String> {
     if browser_file(test, file) || project_browser.iter().any(|(one, _)| one == file) {
@@ -947,7 +1069,7 @@ fn run_held(
   say(&format!("\n{}", verdict_line(ok, took(), &note)));
   turn::record_turn_times(env, turn_command, Lane::Wide, turn.waited_seconds(), took());
 
-  code
+  (code, ran_once_more.into_inner().unwrap_or_default())
 }
 
 // The crates whose binaries the run's test files start: the ones a package's `runs` names, every package's on a

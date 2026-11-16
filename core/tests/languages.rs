@@ -450,3 +450,65 @@ fn a_cargo_command_whose_product_is_read_here_stays() {
     assert!(!cargo_placeable(&words(line)), "{line:?}");
   }
 }
+
+// "the test files that held a failed test ... none where no file can be given every failure": bun names the
+// files above its `(fail)` lines only where they account for every failure and error its counts give.
+#[test]
+fn bun_names_the_failed_files_only_where_they_account_for_every_failure() {
+  let two_files = lines(&[
+    "tests/a.test.ts:",
+    "(fail) fails here [0.12ms]",
+    "",
+    "tests/c.test.ts:",
+    "(fail) c fails [0.02ms]",
+    "(fail) c fails again [0.02ms]",
+    "",
+    " 2 pass",
+    " 3 fail",
+  ]);
+  let load_error = lines(&[
+    "tests/a.test.ts:",
+    "(fail) fails here [0.11ms]",
+    "tests/d.test.ts:",
+    "# Unhandled error between tests",
+    "error: load breaks",
+    " 2 pass",
+    " 2 fail",
+    " 1 error",
+  ]);
+
+  assert_eq!(Bun.failed_files(&two_files), ["tests/a.test.ts", "tests/c.test.ts"]);
+  assert!(Bun.failed_files(&load_error).is_empty());
+  assert!(Bun.failed_files(" 4 pass\n").is_empty());
+  assert!(Cargo.failed_files(&two_files).is_empty());
+}
+
+// "the tests that result names as failed, none where no result stands, with the words that run only those
+// tests": Cargo reads the harness's result and hands the names after `--exact`.
+#[test]
+fn cargo_names_the_failed_tests_of_its_result_and_runs_them_by_exact_name() {
+  let ended = lines(&[
+    "running 3 tests",
+    "test store::holds ... ok",
+    "test store::waits ... FAILED",
+    "test store::retries ... FAILED",
+    "",
+    "failures:",
+    "    store::waits",
+    "    store::retries",
+    "",
+    "test result: FAILED. 1 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s",
+  ]);
+  let cut = lines(&["running 3 tests", "test store::holds ... ok"]);
+  let passed = "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out\n";
+
+  assert_eq!(Cargo.failed_tests(&ended), Some(words(&["store::waits", "store::retries"])));
+  assert_eq!(Cargo.failed_tests(&cut), None);
+  assert_eq!(Cargo.failed_tests(passed), Some(Vec::new()));
+  assert_eq!(
+    Cargo.exact_tests(&words(&["store::waits", "store::retries"])),
+    Some(words(&["--exact", "store::waits", "store::retries"]))
+  );
+  assert_eq!(Bun.failed_tests(&ended), None);
+  assert_eq!(Bun.exact_tests(&words(&["a"])), None);
+}

@@ -374,6 +374,10 @@ flowchart TD
     unit and a test may run」);
   - for a language whose runner says, while a test runs, that the test has been running long, that line
     read as the test and how long it had run, and its result line read as the test ended;
+  - for a language whose runner names, in its output, the test files that held a failed test, those
+    files, and for one whose runner ends its output on a result of its own, the tests that result names
+    as failed, none where no result stands, with the words that run only those tests, each matched by
+    its full name (`docs/suite.md`, 「What failed runs once more」);
   - for a language whose runner reads a configuration file of its own from the folder it starts in,
     that file's name, which decides the folder its test files run from (`docs/suite.md`, 「Which
     files run」);
@@ -386,12 +390,15 @@ flowchart TD
   - `bun`: `bun test` over anything but one test file; its test files are named `*.test.ts`, run by
     `bun test` handed each file as a path from where it runs (a word that is not written as a path
     is a filter bun matches within every test file's path) and `--timeout 0`, which lifts bun's own
-    per-test limit unless the words name one; it hands a per-test limit as `--timeout` in milliseconds, its
+    per-test limit unless the words name one; it hands a per-test limit as `--timeout` in milliseconds, it
+    names a test file holding a failed test by the file's own heading above the test's `(fail)` line, its
     configuration is `bunfig.toml`, and
     it runs a project's script with `bun run`. Its root configuration is `package.json`, `bun.lock`,
     `bunfig.toml` and `tsconfig.json`, and its lockfile `bun.lock`;
   - `cargo`: build, check, clippy, test, bench, doc and nextest; it reads Rust's test harness saying a test
     has been running for over a number of seconds, and a test's `ok`, `FAILED` or `ignored` result line;
+    its failed tests are the `FAILED` ones above the harness's `test result:` line, and it runs only
+    named tests by handing them after `--exact`;
   - `node`: package scripts that test, check or build under npm, pnpm, yarn or bun; `node --test`;
     Vitest; Jest. Its test files are named `*.test.js`, `*.test.mjs` and `*.test.cjs`, run by
     `node --test`, and it runs a project's script with `npm run`. Its root configuration is

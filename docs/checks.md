@@ -28,7 +28,10 @@
   turns discovery off or names its projects (`docs/declaration.md`). It names its own check: the
   `check` script of its manifest, run inside it, its static check and its tests together, readying the
   project first: the testbed itself installs nothing in a project, so the check installs the project's
-  locked packages. A project whose manifest gives none fails every run that selects it. The project's
+  locked packages. Its tests are the script's last step, and every step ends the script where it fails,
+  so a check whose tests ran passed every step before them and a run once more of the files that
+  failed stands for the whole check (`docs/suite.md`, 「What failed runs once more」). A project whose
+  manifest gives none fails every run that selects it. The project's
   test files are run by that script and by nothing else of the testbed's, apart from the browser files
   it declares: a script that stops at the static check leaves them run nowhere (`docs/suite.md`, 「Which
   files run」).

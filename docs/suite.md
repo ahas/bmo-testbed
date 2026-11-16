@@ -68,9 +68,8 @@
   of features.
   - **The crates the run reaches** are every crate of the workspace on a whole run and the ones the
     change marked on a selected run, before any word narrows the run to some of them. A run naming one
-    crate's unit, as the run once more of a failed crate does (「What failed runs once more」), stands on
-    the same build as the run it narrows and builds nothing again where nothing changed. A run whose
-    words leave it no crate builds none.
+    crate's unit stands on the same build as the run it narrows and builds nothing again where nothing
+    changed. A run whose words leave it no crate builds none.
   - **The libraries' own tests go first, alone,** by the same command over the same crates kept to their
     libraries, then everything else, so a library and its own tests, a crate's two heaviest compiles,
     never run side by side.
@@ -317,18 +316,41 @@
 
 ## What failed runs once more
 
-- **A test failing only now and then lets a change through once the next run passes,** and is mended
-  rather than forgotten. A close and a deployment never stall on one.
-- **With `--again`,** where the first run failed, the files and units that failed run once more, alone
-  and by name, in the same tree. The run says so first,
-  naming them.
-  - It runs once more at most, and judges on that second run: where it passed, the run passes; where
-    it did not, it fails as the second run ended, with what failed in either run named.
-  - A run whose turn never came has nothing to run once more.
-- **What passed the second time is flaky:** each test the first run named as failing, with the file or
-  unit it stands in, and each file or unit that failed.
+- **A test failing only now and then lets a change through once its unit passes when run once more,**
+  and is mended rather than forgotten. A close and a deployment never stall on one.
+- **With `--again`, a unit that ran and failed runs once more at once,** as soon as it ends, in the
+  place of the sweep it held and before that place takes another unit: a heavy unit's second run stays
+  in the lane of one, a browser file's in the browser lane, and a project's browser files wait for it
+  as they wait for the project's check. The run's verdict waits for no other unit, so the whole run
+  takes no longer than its slowest unit with its second run.
+  - A unit runs once more at most, and stands on that second run: where it passed, the unit passes;
+    where it did not, the unit fails.
+  - A unit that never ran, a project with no check, a crate whose tests did not build, is not run once
+    more: nothing of it ran to fail only now and then.
+- **What runs once more is what failed, as narrowly as the unit can name it:**
+  - **A crate:** each test binary that failed, from the same build, so nothing is built again. A
+    binary whose own result names the tests that failed runs only those, each by its full name matched
+    exactly, through Rust's test harness's `--exact`; one that ended with no result of its own, ended
+    by the per-test limit or by a signal, runs whole, as does one that never started because its unit
+    was ended before it. A binary that passed does not run again.
+  - **A project of its own:** the test files its tests' output names as holding a failed test, run as
+    a test file of the repository runs (「Which files run」): by the declared language that runs them,
+    from the folder of that runner's configuration inside the project, with the run's words and
+    per-test limit. The steps of the check before its tests do not run again, since a project's check
+    runs its tests last and ends at the first step that fails (`docs/checks.md`, 「Which tests a change
+    runs」), so a check whose tests named a failed file passed every step before them. Where the output
+    names no failed file, names one the project does not hold, or names files one command cannot run
+    together, the whole check runs once more.
+  - **A test file, a browser file or a declared package check:** the unit as it ran.
+- **The log holds both runs of a unit.** The first run's account stands under the `redo` mark in
+  place of `fail`, followed at once by a line opening with `suite: once more` that names the unit and
+  what runs once more; the second run's account follows under its own heading once it ends. The
+  readers of a log pass over an account under the `redo` mark (「Reading the output」), so the totals
+  and what failed are what each unit stands on.
+- **What passed the second time is flaky:** each test the first run of a unit named as failing, with
+  the unit it stands in, and each unit whose second run passed, whatever the rest of the run came to.
 - **The flaky record:** one line in `suite-flaky.jsonl` under the data root's `testbed/` for each run
-  that found any, with the time, the commit, the tests by name with their files, the files and the
+  that found any, with the time, the commit, the tests by name with their units, the units and the
   log, and a `suite-flaky` event goes to the hook (`docs/boundary.md`, 「Events」).
 
 ## The daily whole run
@@ -405,3 +427,6 @@
 - **The `log` verb** answers the three questions of a log: how many passed, how many failed, and what
   failed. The totals are the sum of every summary block in the log, not the last one. It reads a
   single file's runner log as well. It ends non-zero on a failure.
+- **An account under the `redo` mark is passed over,** from its heading to the next unit's heading or
+  the next line opening with `suite:`: a unit run once more stands on its second run (「What failed runs
+  once more」), so the totals, the failed tests and the failed units are read from that run alone.

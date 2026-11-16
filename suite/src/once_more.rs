@@ -1,10 +1,9 @@
-//! A suite that failed, run once more before it is judged (docs/suite.md, 「What failed runs once
-//! more」): the one step a close and a deployment both take, and the record of what passed
-//! only the second time, so a test failing now and then is mended rather than forgotten.
+//! The suite with a failed unit run once more as soon as it ends (docs/suite.md, 「What failed runs once
+//! more」): the one step a close and a deployment both take, and the record of what passed only the second
+//! time, so a test failing now and then is mended rather than forgotten.
 
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 
 use bmo_testbed_core::declaration::Repository;
 use bmo_testbed_core::events::{Event, Hook};
@@ -12,113 +11,9 @@ use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::suite::SUITE;
 use serde_json::json;
 
-use crate::log::{
-  FailedTest, failed_files_of, failed_tests_of, failures_of, unstarted_of, verdict_of, warnings_of,
-};
-use crate::run::{SuiteAsk, SuiteEnded, run_saying};
+use crate::log::FailedTest;
+use crate::run::{SuiteAsk, SuiteEnded, UnitOnceMore, run};
 use crate::workspace::git_lines;
-
-/// A suite's run: its exit code, and what its log says of it.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct SuiteRun {
-  pub code: i64,
-  /// The suite's own last line, where it wrote one.
-  pub verdict: Option<String>,
-  /// What failed as the log names it: each failing test, and the files the sweep names.
-  pub failures: Vec<String>,
-  /// Each failing test with the file or unit it stands in.
-  pub failed_tests: Vec<FailedTest>,
-  /// The test files and units that failed.
-  pub failed_files: Vec<String>,
-  /// The files and units that never started within the suite's guard.
-  pub unstarted: Vec<String>,
-  /// The warnings the tests printed.
-  pub warnings: Vec<String>,
-}
-
-fn once(all: impl IntoIterator<Item = String>) -> Vec<String> {
-  let mut seen: Vec<String> = Vec::new();
-
-  for one in all {
-    if !seen.contains(&one) {
-      seen.push(one);
-    }
-  }
-
-  seen
-}
-
-impl SuiteRun {
-  /// A run read out of the output it wrote and the code it ended with.
-  pub fn of_log(code: i64, log: &str) -> Self {
-    Self {
-      code,
-      verdict: verdict_of(log),
-      failures: failures_of(log),
-      failed_tests: failed_tests_of(log),
-      failed_files: failed_files_of(log),
-      unstarted: unstarted_of(log),
-      warnings: warnings_of(log),
-    }
-  }
-
-  /// Whether it passed: it ended in nought and wrote its verdict, since a run that wrote none has no result
-  /// whatever its code says.
-  pub fn passed(&self) -> bool {
-    self.code == 0 && self.verdict.is_some()
-  }
-
-  /// What a run once more takes: the files and units that failed, then those that never started, each once.
-  pub fn again(&self) -> Vec<String> {
-    once(self.failed_files.iter().chain(&self.unstarted).cloned())
-  }
-}
-
-/// A first run, and the second where what failed or never started in it ran once more.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct SuiteRuns {
-  pub first: SuiteRun,
-  pub again: Option<SuiteRun>,
-}
-
-impl SuiteRuns {
-  /// The run the judgement stands on: the second where there is one.
-  pub fn last(&self) -> &SuiteRun {
-    self.again.as_ref().unwrap_or(&self.first)
-  }
-
-  pub fn passed(&self) -> bool {
-    self.last().passed()
-  }
-
-  /// Each run, in the order it ran.
-  pub fn each(&self) -> impl Iterator<Item = &SuiteRun> {
-    std::iter::once(&self.first).chain(&self.again)
-  }
-
-  /// The files and units that failed in either run, each once.
-  pub fn failed_files(&self) -> Vec<String> {
-    once(self.each().flat_map(|run| run.failed_files.iter().cloned()))
-  }
-
-  /// What failed in either run as the logs name it, each once.
-  pub fn failures(&self) -> Vec<String> {
-    once(self.each().flat_map(|run| run.failures.iter().cloned()))
-  }
-
-  /// What passed only the second time: what the first run failed, where the run once more passed. One that
-  /// only never started is not flaky, since nothing of it had run.
-  pub fn flaky(&self) -> Flaky {
-    if self.again.is_none() || !self.passed() {
-      return Flaky::default();
-    }
-
-    Flaky {
-      tests: self.first.failed_tests.clone(),
-      files: self.first.failed_files.clone(),
-    }
-  }
-}
 
 /// The tests and the files that failed and then passed.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -147,25 +42,6 @@ impl Flaky {
           .cloned(),
       )
       .collect()
-  }
-}
-
-/// The suite judged on a run once more where its first run failed or left files unstarted: `again` runs
-/// the files and units it is handed, alone and by name, in the same tree and over the same range as the
-/// first. It runs once more at most, and not at all where there is nothing to name — a first run that
-/// passed, or one whose turn never came and started nothing.
-pub fn run_once_more(first: SuiteRun, again: impl FnOnce(&[String]) -> SuiteRun) -> SuiteRuns {
-  let named = first.again();
-
-  if first.passed() || named.is_empty() {
-    return SuiteRuns { first, again: None };
-  }
-
-  let second = again(&named);
-
-  SuiteRuns {
-    first,
-    again: Some(second),
   }
 }
 
@@ -217,96 +93,64 @@ fn own_log() -> String {
     .unwrap_or_default()
 }
 
-/// The suite run with `--again` (docs/suite.md, 「What failed runs once more」): run once, and where it failed
-/// or left units unstarted, run once more over what it named, judged on that second run. What passed only
-/// the second time is written down under the data root and sent to the hook as `suite-flaky`. Every line
-/// both runs write goes to standard error as it comes. What the run the judgement stands on came to, its code
-/// the judgement's, and what was flaky.
+/// What passed only the second time: each test the first run of a unit named as failing, and the unit, for
+/// every unit whose run once more passed.
+pub fn flaky_of(once_more: &[UnitOnceMore]) -> Flaky {
+  let passed = || once_more.iter().filter(|one| one.passed);
+
+  Flaky {
+    tests: passed().flat_map(|one| one.failed_tests.iter().cloned()).collect(),
+    files: passed().map(|one| one.unit.clone()).collect(),
+  }
+}
+
+/// The suite run with `--again` (docs/suite.md, 「What failed runs once more」): each unit that ran and failed
+/// runs once more as soon as it ends and stands on that second run. What passed only the second time is
+/// written down under the data root and sent to the hook as `suite-flaky`. Every line the run writes goes to
+/// standard error as it comes. What the run came to, and what was flaky.
 pub fn run_judged(repo: &Repository, ask: &SuiteAsk, data_root: &Path, hook: &Hook) -> (SuiteEnded, Flaky) {
   let said = &SUITE.again;
-  let heard = Mutex::new(String::new());
-  let say = |line: &str| {
-    eprintln!("{line}");
-
-    if let Ok(mut heard) = heard.lock() {
-      heard.push_str(line);
-      heard.push('\n');
-    }
-  };
-  let taken = || heard.lock().map(|mut heard| std::mem::take(&mut *heard)).unwrap_or_default();
-  let first_ended = run_saying(repo, ask, &say);
-  let first = SuiteRun::of_log(i64::from(first_ended.code), &taken());
-  let mut last = first_ended.clone();
-  let runs = run_once_more(first, |named| {
-    say(&format!(
-      "\n{}",
-      fill_marks(
-        &said.once_more,
-        &[
-          ("mark", &SUITE.lines.mark),
-          ("count", &named.len().to_string()),
-          ("names", &named.join(&said.joiner)),
-        ],
-      )
-    ));
-
-    let again = SuiteAsk {
-      picked: named.to_vec(),
+  let ended = run(
+    repo,
+    &SuiteAsk {
+      again: true,
       ..ask.clone()
-    };
+    },
+  );
+  let flaky = flaky_of(&ended.once_more);
 
-    last = run_saying(repo, &again, &say);
-    SuiteRun::of_log(i64::from(last.code), &taken())
-  });
-
-  if runs.again.is_none() {
-    return (first_ended, Flaky::default());
+  if flaky.is_empty() {
+    return (ended, flaky);
   }
 
-  if !runs.passed() {
+  let head = git_lines(&repo.root, &["rev-parse", "HEAD"])
+    .ok()
+    .and_then(|lines| lines.into_iter().next());
+  let log = ended.log.as_ref().map_or_else(own_log, |path| path.to_string_lossy().into_owned());
+  let seen = FlakySeen {
+    flaky: &flaky,
+    head: head.as_deref().unwrap_or_default(),
+    log: &log,
+  };
+
+  if let Err(why) = write_flaky(data_root, &seen) {
     eprintln!(
       "{}",
-      fill_marks(
-        &said.either,
-        &[("mark", &SUITE.lines.mark), ("names", &runs.failures().join(&said.joiner))]
-      )
+      fill_marks(&said.unrecorded, &[("mark", &SUITE.lines.mark), ("why", &why.to_string())])
     );
-    return (last, Flaky::default());
   }
 
-  let flaky = runs.flaky();
+  let tests: Vec<_> = flaky.tests.iter().map(|one| json!({ "test": one.test, "unit": one.file })).collect();
 
-  if !flaky.is_empty() {
-    let head = git_lines(&repo.root, &["rev-parse", "HEAD"])
-      .ok()
-      .and_then(|lines| lines.into_iter().next());
-    let log = own_log();
-    let seen = FlakySeen {
-      flaky: &flaky,
-      head: head.as_deref().unwrap_or_default(),
-      log: &log,
-    };
+  hook.send(&Event {
+    name: "suite-flaky",
+    commit: head,
+    summary: fill_marks(
+      &said.flaky_summary,
+      &[("count", &flaky.names().len().to_string()), ("repository", &repo.name())],
+    ),
+    detail: json!({ "tests": tests, "units": flaky.files, "log": log }),
+  });
 
-    if let Err(why) = write_flaky(data_root, &seen) {
-      eprintln!(
-        "{}",
-        fill_marks(&said.unrecorded, &[("mark", &SUITE.lines.mark), ("why", &why.to_string())])
-      );
-    }
-
-    let tests: Vec<_> =
-      flaky.tests.iter().map(|one| json!({ "test": one.test, "unit": one.file })).collect();
-
-    hook.send(&Event {
-      name: "suite-flaky",
-      commit: head,
-      summary: fill_marks(
-        &said.flaky_summary,
-        &[("count", &flaky.names().len().to_string()), ("repository", &repo.name())],
-      ),
-      detail: json!({ "tests": tests, "units": flaky.files, "log": log }),
-    });
-  }
-
-  (last, flaky)
+  (ended, flaky)
 }
