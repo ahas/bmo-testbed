@@ -96,6 +96,9 @@
     that crate belongs to, are never formatted; the lints reach the workspace's members alone, and a
     path dependency is compiled as a dependency, its warnings shown and never denied. A workspace Cargo
     cannot read is judged whole, and one with no member inside the root owes neither step.
+  - **A declaration declares no step of its own that type-checks, formats or lints the workspace's
+    crates** (`docs/declaration.md`, 「`[[check.step]]`: one static step each, in order」); the rules
+    after this one say what becomes of a step a declaration still declares.
   - **A declared step that only repeats it is left out,** so a check formats and lints once, and a
     declared format step never follows a path dependency into a sibling repository's checkout. A step
     only repeats it where it runs at the root and its command, split the way the shell splits it, is

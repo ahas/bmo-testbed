@@ -485,8 +485,9 @@ flowchart TD
      own crates compile against it, at its committed head; its warnings are shown and never denied. A
      sibling's formatting or lints therefore never fail a deployment, and its uncommitted changes are
      never read, while every file of the repository's own is judged in full (`docs/checks.md`,
-     「The static check」). A declared step that only repeats these formatting and lints, such as a
-     `cargo fmt --all --check` that would follow a path dependency into a sibling's tree, is left
+     「The static check」). A declaration declares no step of its own that formats or lints these
+     packages (`docs/declaration.md`); one that still declares a step only repeating them, such as a
+     `cargo fmt --all --check` that would follow a path dependency into a sibling's tree, has it left
      out for them. A sibling whose version has moved past the one the repository's lock names fails
      nothing, since the lock's path packages are brought to their manifests before the lints and the
      build (「The Cargo build directory」). A sibling whose committed head does not compile still fails

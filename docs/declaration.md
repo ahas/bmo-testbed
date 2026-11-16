@@ -137,6 +137,12 @@ with an empty reason, is refused.
 | `when` | list of globs | every change | The paths that reach this step; a change touching none of them leaves it out |
 | `retry_out_of_memory` | boolean | `false` | Run again where the kernel killed it for want of memory (`docs/testbed.md`, 「Memory」) |
 
+A declaration declares no step that type-checks, formats or lints its Cargo workspace's own crates,
+such as `cargo check`, `cargo clippy` or `cargo fmt`, through `cargo` or the Cargo verb and with
+whatever flags: the static check formats and lints them wherever a change reaches a crate, and the
+change check runs `cargo check` on every crate it marks. A declared step adds only what the testbed
+does not do.
+
 Where the static check runs the Cargo workspace's own formatting and lints, a declared step whose
 command only repeats them, such as `cargo fmt --all --check` or
 `cargo clippy --workspace --all-targets -- -D warnings` at the root, is left out and counts as passed
