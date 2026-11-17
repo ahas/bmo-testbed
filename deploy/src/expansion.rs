@@ -263,9 +263,11 @@ fn empty_folder(folder: &Path, data_root: &Path) -> Result<(), String> {
   entries.flatten().try_for_each(|entry| remove_tree(&entry.path(), data_root))
 }
 
-/// The trees a workspace names by a path outside the repository, each as the root laid for it: a member of
-/// another Cargo workspace is its workspace root, a standalone package itself; a tree inside another is
-/// reached through it and is not among them. Read from the checkout's workspace for the tree given.
+/// The trees outside the repository a build of its workspace reads by a path, each as the root laid for it:
+/// those its manifests name and, followed until none is new, those the packages in them name in turn. A
+/// member of another Cargo workspace is laid as its workspace root, a standalone package as itself; a tree
+/// inside another is reached through it and is not among them. Read from the checkout's workspace and its
+/// surroundings for the tree given.
 pub fn outside_roots(tree: &Path, checkout: &Path) -> Result<Vec<PathBuf>, String> {
   let mut laid: Vec<PathBuf> = Vec::new();
 
@@ -371,11 +373,11 @@ pub struct TreeStore<'a> {
   pub data_root: &'a Path,
 }
 
-/// The trees outside the repository that its manifests name by a path — the base libraries and the
-/// sibling repositories' crates a release build reads — laid beside `tree` where those paths point, out
-/// of the checkout at the same place, each as a link into its repository's committed tree. A worktree of
-/// the repository carries nothing beside it, so a release built in one reads such a tree from a path only
-/// a link laid there makes.
+/// The trees outside the repository a release build reads by a path — the base libraries and the sibling
+/// repositories' crates its manifests name, and every tree those name in turn — laid beside `tree` where
+/// those paths point, out of the checkout at the same place, each as a link into its repository's committed
+/// tree. A worktree of the repository carries nothing beside it, so a release built in one reads such a tree
+/// from a path only a link laid there makes.
 ///
 /// A deployment builds committed trees only (docs/deploy.md, 「The releases」): each repository holding such
 /// a tree is put in the store at the head of its main branch, and the link reaches into that worktree, never
@@ -385,8 +387,9 @@ pub struct TreeStore<'a> {
 /// the named path resolves and the member finds the root it inherits from; the trees named inside one
 /// workspace share that one link. A standalone package is laid by itself.
 ///
-/// The list comes from the checkout's own workspace: a release or a build tree reads no manifest until
-/// the trees its manifests name stand, and the checkout is the one place they do.
+/// The list comes from the checkout's own workspace and the trees beside it: a release or a build tree reads
+/// no manifest until the trees its manifests name stand, and the checkout's surroundings are the one place
+/// they do.
 ///
 /// The heads the trees were laid at, one for each tree laid.
 pub fn lay_outside_trees(
@@ -492,58 +495,95 @@ fn links_only(folder: &Path) -> bool {
   })
 }
 
-// Every path dependency of the checkout's Cargo workspace that points outside it, read off Cargo's own
-// word, as the path it names from the checkout's surroundings. The checkout is what is read: `tree`'s own
-// manifests resolve nothing until the trees they name stand.
+// Every tree outside the checkout a build of its workspace reads by a path, read off Cargo's own word, as the
+// path it names from the checkout's surroundings: each path dependency of the checkout's own members that
+// points outside it, then each path dependency the package standing in such a tree names in turn, followed
+// until no new tree turns up. A tree reached that way is built as a dependency, whose dev-dependencies Cargo
+// never reads, so those are not followed. The checkout is what is read: `tree`'s own manifests resolve
+// nothing until the trees they name stand.
 fn outside_trees(tree: &Path, checkout: &Path) -> Result<Vec<PathBuf>, String> {
   if !tree.join("Cargo.toml").exists() {
     return Ok(Vec::new());
   }
 
+  let mut pending = Vec::new();
+
+  for package in workspace_packages(checkout, None, tree)? {
+    let in_checkout = package["manifest_path"]
+      .as_str()
+      .and_then(|manifest| Path::new(manifest).parent())
+      .is_some_and(|dir| dir.starts_with(checkout));
+
+    if in_checkout {
+      pending.extend(path_dependencies(&package, true).filter(|at| !at.starts_with(checkout)));
+    }
+  }
+
+  let mut outside: Vec<PathBuf> = Vec::new();
+
+  while let Some(at) = pending.pop() {
+    if outside.contains(&at) {
+      continue;
+    }
+
+    outside.push(at.clone());
+
+    // A tree standing nowhere has nothing to follow; the laying names it as absent.
+    let manifest = at.join("Cargo.toml");
+    let Ok(own) = std::fs::canonicalize(&manifest) else {
+      continue;
+    };
+    let packages = workspace_packages(&at, Some(&manifest), &at)?;
+    let standing = packages.iter().find(|package| {
+      package["manifest_path"]
+        .as_str()
+        .is_some_and(|path| std::fs::canonicalize(path).is_ok_and(|path| path == own))
+    });
+
+    if let Some(package) = standing {
+      pending.extend(path_dependencies(package, false).filter(|next| !next.starts_with(checkout)));
+    }
+  }
+
+  Ok(outside)
+}
+
+// The packages of the Cargo workspace read in `dir`, of the manifest given or the one Cargo finds there, its
+// members alone; a reading that fails names `named` as the tree whose outside trees went unread.
+fn workspace_packages(dir: &Path, manifest: Option<&Path>, named: &Path) -> Result<Vec<Value>, String> {
   let unread = |said: String| {
-    fill_shown(&DEPLOY.expansion.trees_unread, &[("tree", &tree.display()), ("said", &said)])
+    fill_shown(&DEPLOY.expansion.trees_unread, &[("tree", &named.display()), ("said", &said)])
   };
-  let read = command(
-    &words(["cargo", "metadata", "--no-deps", "--offline", "--format-version", "1"]),
-    Some(checkout),
-  )
-  .output()
-  .map_err(|why| unread(why.to_string()))?;
+  let mut asked = words(["cargo", "metadata", "--no-deps", "--offline", "--format-version", "1"]);
+
+  if let Some(manifest) = manifest {
+    asked.push("--manifest-path".to_owned());
+    asked.push(manifest.display().to_string());
+  }
+
+  let read = command(&asked, Some(dir)).output().map_err(|why| unread(why.to_string()))?;
 
   if !read.status.success() {
     return Err(unread(String::from_utf8_lossy(&read.stderr).trim().to_owned()));
   }
 
-  let metadata: Value = serde_json::from_slice(&read.stdout).map_err(|why| unread(why.to_string()))?;
-  let packages = metadata["packages"].as_array().into_iter().flatten();
-  let mut outside = Vec::new();
+  let mut metadata: Value = serde_json::from_slice(&read.stdout).map_err(|why| unread(why.to_string()))?;
 
-  for package in packages {
-    let Some(manifest) = package["manifest_path"].as_str() else {
-      continue;
-    };
-    let Some(dir) = Path::new(manifest).parent() else {
-      continue;
-    };
-    if !dir.starts_with(checkout) {
-      continue;
-    }
-
-    let dependencies = package["dependencies"].as_array().into_iter().flatten();
-
-    for dependency in dependencies {
-      let Some(path) = dependency["path"].as_str() else {
-        continue;
-      };
-      let at = normalize(Path::new(path));
-
-      if !at.starts_with(checkout) {
-        outside.push(at);
-      }
-    }
+  match metadata["packages"].take() {
+    Value::Array(packages) => Ok(packages),
+    _ => Ok(Vec::new()),
   }
+}
 
-  Ok(outside)
+// The paths a package's dependencies name, normalized; its dev-dependencies among them only where asked.
+fn path_dependencies(package: &Value, with_dev: bool) -> impl Iterator<Item = PathBuf> + '_ {
+  package["dependencies"]
+    .as_array()
+    .into_iter()
+    .flatten()
+    .filter(move |dependency| with_dev || dependency["kind"].as_str() != Some("dev"))
+    .filter_map(|dependency| dependency["path"].as_str())
+    .map(|path| normalize(Path::new(path)))
 }
 
 // The path from one absolute directory to another, a step up for each folder between them.

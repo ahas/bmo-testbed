@@ -418,6 +418,65 @@ fn a_standalone_package_beside_a_sibling_member_is_laid_by_itself() {
   assert!(reads(&tree));
 }
 
+// A standalone package, committed in a repository of its own, that names one tree by a path among its
+// dependencies and another among its dev-dependencies.
+fn package_naming(dir: &Path, name: &str, dependency: (&str, &str), dev_dependency: (&str, &str)) {
+  std::fs::create_dir_all(dir.join("src")).unwrap();
+  std::fs::write(
+    dir.join("Cargo.toml"),
+    format!(
+      "[package]\nname = \"{name}\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]\n{} = {{ path = \"{}\" }}\n\n[dev-dependencies]\n{} = {{ path = \"{}\" }}\n",
+      dependency.0, dependency.1, dev_dependency.0, dev_dependency.1
+    ),
+  )
+  .unwrap();
+  std::fs::write(dir.join("src/lib.rs"), "").unwrap();
+  committed(dir);
+}
+
+// Whether a tree's whole dependency graph resolves, every tree reached by a path included.
+fn resolves(tree: &Path) -> bool {
+  std::process::Command::new("cargo")
+    .args(["metadata", "--offline", "--format-version", "1"])
+    .current_dir(tree)
+    .output()
+    .unwrap()
+    .status
+    .success()
+}
+
+// "every tree those trees name in turn" is laid; "its dev-dependencies left out"
+#[test]
+fn a_tree_a_named_sibling_names_by_a_path_is_laid_as_well() {
+  let root = tempfile::tempdir().unwrap();
+  let middle = root.path().join("workspace/services/middle");
+  let far = root.path().join("workspace/services/far");
+  let checkout = root.path().join("workspace/services/app");
+  let tree = root.path().join("run/deploy-expand");
+  let named = [("middle", "../middle")];
+  let laid = Laid::under(root.path());
+
+  sibling_workspace(&far, &["client"]);
+  package_naming(&middle, "middle", ("client", "../far/crates/client"), ("probe", "../absent"));
+  app_on(&checkout, &named);
+  app_on(&tree, &named);
+
+  let heads = laid.lay(&tree, &checkout).unwrap();
+
+  assert_eq!(heads.len(), 2, "the named sibling and the tree it names are both laid");
+  assert_eq!(symlink(&root.path().join("run/middle")), Some(laid.committed_for(&middle, &checkout)));
+  assert_eq!(
+    symlink(&root.path().join("run/far")),
+    Some(laid.committed_for(&far, &checkout)),
+    "the tree the sibling names is laid at its workspace root"
+  );
+  assert!(
+    !root.path().join("run/absent").exists(),
+    "a dependency's dev-dependency is not followed"
+  );
+  assert!(resolves(&tree), "the build tree's whole graph resolves through the links");
+}
+
 // "a link already on its committed tree is left as it is"
 #[test]
 fn a_link_already_on_the_committed_tree_is_left_alone() {

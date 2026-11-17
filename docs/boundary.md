@@ -819,9 +819,10 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   for a run it copies its open files over with `rsync`, the files git ignores and the `.git` directory
   left out, and for a deployment it copies none and takes every untracked file away, since the release is
   the commit alone; and it lays
-  every tree the checkout's workspace names outside the repository, the base libraries and the
-  sibling crates among them, and the checkout holding the shared versions the declaration names, found
-  through this machine's registry, each at its own place under the bench root, so a path a manifest
+  every tree outside the repository the checkout's workspace reads by a path, the base libraries and
+  the sibling crates among them, each tree those name in turn followed until none is new
+  (`docs/deploy.md`, 「The releases」), and the checkout holding the shared versions the declaration
+  names, found through this machine's registry, each at its own place under the bench root, so a path a manifest
   names resolves there as it does here and the quick checks find what they read. For a run it copies
   each tree as it stands, the same way as the open files. For a deployment it lays no working tree: the
   repository holding each tree is made ready at its place as the bench is, from its own reachable

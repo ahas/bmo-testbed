@@ -61,7 +61,7 @@
   {
     "id": "deploy/deploy-run",
     "title": "Deploy run",
-    "what": "A deploy run in its own unit, by its commit's declaration, reading committed trees only: the line held from gate to build, a commit live at its turn ended there, a gate passed on the same ground left out, placed work tried again, backup, release, quiet, flip, health, console probe, rollback.",
+    "what": "A deploy run in its own unit, by its commit's declaration, reading committed trees only, path deps closed: the line held from gate to build, a commit live at its turn ended there, a gate already passed skipped, placed work tried again, backup, release, quiet, flip, health, console probe, rollback.",
     "files": [
       "deploy/src/deployment.rs",
       "deploy/src/line.rs",
@@ -101,7 +101,8 @@
       "배포 17건을 한꺼번에 걸면",
       "커밋된 트리",
       "health 대기",
-      "이미 통과한 커밋은 다시 검사하지 않기"
+      "이미 통과한 커밋은 다시 검사하지 않기",
+      "경로 의존을 끝까지 따라가 깔기"
     ],
     "needs": [
       "core/declaration",
@@ -119,8 +120,8 @@
       "suite/cargo-verb-and-prune",
       "core/main-branch"
     ],
-    "base": "7e4750d940ee285a165bf56ec19b246dab575cea",
-    "changed": 1794829686416
+    "base": "8ab89b44f91bd840f493b515c8324591748dc69c",
+    "changed": 1794899080824
   },
   {
     "id": "deploy/hosted-deploy-tool",

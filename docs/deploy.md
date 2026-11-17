@@ -31,7 +31,7 @@
 | Deploy tree | A symbolic link to the live release: the one stable path every unit, every link and every caller names, moved from one release to the next by a single rename |
 | Releases | `deploy-releases/` beside the link, one release per deployed commit, named by its first twelve hex digits |
 | Build tree | `deploy-expand` beside the link, a detached worktree moved to each commit, where the gate run on this machine and the release build run, its target directory kept warm between deployments until the prune takes it (「The releases」) |
-| Committed trees | `deploy-trees/` beside the link, one detached worktree for each repository holding a tree the workspace names outside the repository, moved to the head of that repository's main branch, which the release and the build tree read such a tree from (「The releases」) |
+| Committed trees | `deploy-trees/` beside the link, one detached worktree for each repository holding a tree outside the repository its build reads by a path, moved to the head of that repository's main branch, which the release and the build tree read such a tree from (「The releases」) |
 | Data root | The repository's runtime data, inside no checkout and inside no release |
 | Deployment record | `deployed.json` under the deploy root, naming the commit that runs, its subject, the reason it was deployed, the release's version, when it was laid down and the backup behind it |
 | Deployment log | `deployed.log` under the deploy root, one line per deployment |
@@ -65,21 +65,26 @@
   (「Where a deployment runs」).
 - **The trees the workspace names by a path outside the repository — the base libraries and the
   sibling repositories' crates a release build reads — are laid where each manifest names them, as
-  links into the committed trees.** A worktree of the repository alone carries nothing beside it,
-  so the release and the build tree read such a tree through a link laid where the path points; the
+  links into the committed trees, and so is every tree those trees name in turn.** A tree so named is
+  built as a dependency and reads its own path dependencies, a sibling's crate reaching a third
+  repository's crate by a path: the list follows the package standing in each named tree to the paths
+  its manifest names, its dev-dependencies left out since Cargo reads none of a dependency's, until no
+  new tree turns up, and every tree on it is laid as the first ones are. A worktree of the repository
+  alone carries nothing beside it, so the release and the build tree read such a tree through a link
+  laid where the path points; the
   build tree's declared path reaches the deploy root's parent, where the repositories of one
   workspace share one. A tree that is a member of another Cargo workspace — one Cargo, asked from the
   checkout's copy of it, places under a workspace root above it — reads its inherited fields from
   that root, so the link is laid at the root instead, and the named path resolves through it; every
   tree named inside one workspace shares that one link. A standalone package is linked by itself. The
-  list of trees, and where each one's link goes, is read from the checkout's workspace, since a
-  worktree reads no manifest until the trees its manifests name stand where they point; what a link
-  reaches is the committed tree alone. Where a link is to be laid, a link already on its committed
+  list of trees, and where each one's link goes, is read from the checkout's workspace and the trees
+  beside it, since a worktree reads no manifest until the trees its manifests name stand where they
+  point; what a link reaches is the committed tree alone. Where a link is to be laid, a link already on its committed
   tree is left as it is, a link pointing elsewhere, onto a checkout's working tree among them, is
   moved onto it, and a folder holding nothing but folders and links, as an earlier laying leaves, is
   replaced; any other tree standing there is left as it is.
 - **The committed trees stand in `deploy-trees/`,** one detached worktree for each repository holding
-  a tree the workspace names, named after that repository's folder with a short digest of its path, a
+  a tree on that list, named after that repository's folder with a short digest of its path, a
   tree inside the repository reached at its own path within the worktree. Each is put at its
   repository's main head the way the build tree is put at the commit (below): made where it is not
   there yet, moved by a checkout where it is, every path the head moved stamped, its submodules brought
