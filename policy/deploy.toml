@@ -106,6 +106,10 @@ line_waiting = "waiting for the deployment line ({seconds}s so far): {ahead} ahe
 line_taken = "the deployment line's turn came after {seconds}s"
 line_bound = "waited {minutes} minutes for the deployment line, its bound; going on beside {holder}"
 line_nobody = "nobody"
+# The deploy root's turn (docs/deploy.md, 「The deployment line」): {seconds} how long it waited, {holder} the
+# deployment under way it waits behind, or `line_nobody`.
+root_waiting = "waiting for the deployment of this repository under way to end ({seconds}s so far): {holder}"
+root_taken = "the deployment of this repository under way ended; its turn came after {seconds}s"
 # The connection to the placed machine broke under the deployment's work there (docs/deploy.md, 「A connection that
 # breaks under the placed machine」): {said} the line naming the machine, {work} the work, {seconds} the pause,
 # {next} the try about to begin and {tries} every try there is, or {tries} the tries it broke on running.
@@ -309,6 +313,7 @@ live_unbuilt = "the live release {release} does not stand built for {commit}, an
 leftover = "taking away what an unfinished run left at {release}"
 not_added = "the release {release} could not be added at {commit}: {said}"
 unread_processes = "the live processes could not be read, so no release was pruned"
+unread_under_way = "the deployments under way could not be read from the testbed's record, so no release was pruned: {why}"
 not_removed = "the release {name} could not be removed: {why}"
 
 # Why a checkout or its unit links cannot be deployed (docs/deploy.md, 「What it refuses」): {named} the dirty

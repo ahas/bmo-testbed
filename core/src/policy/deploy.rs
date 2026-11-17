@@ -76,6 +76,8 @@ pub struct RunWords {
   pub line_taken: String,
   pub line_bound: String,
   pub line_nobody: String,
+  pub root_waiting: String,
+  pub root_taken: String,
   pub retrying: String,
   pub connection_lost: String,
   pub gate_work: String,
@@ -248,6 +250,7 @@ pub struct ReleaseWords {
   pub leftover: String,
   pub not_added: String,
   pub unread_processes: String,
+  pub unread_under_way: String,
   pub not_removed: String,
 }
 

@@ -1,7 +1,8 @@
 //! The machine's deployment line (docs/deploy.md, 「The deployment line」): every deployment stands in it, the
 //! first to ask going first, and holds it from its gate to the end of its build, so deployments asked together
 //! pass their gate and their build one after the other. A deployment waiting there says where it stands, and
-//! once it has waited the bound it goes on beside the holder, so the wait never fails it.
+//! once it has waited the bound it goes on beside the holder, so the wait never fails it. Before the line, a
+//! deployment waits for its deploy root's turn, which keeps one deployment of a deploy root under way at a time.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -97,6 +98,71 @@ impl DeployLine {
 
     if waited > 0 {
       say(&fill_marks(&said.line_taken, &[("seconds", &waited.to_string())]));
+    }
+
+    Some(held)
+  }
+}
+
+/// The run lock under the deploy root, the deploy root's turn.
+pub const DEPLOY_RUN_LOCK: &str = "deploy-run.lock";
+
+/// A deploy root's turn (docs/deploy.md, 「The deployment line」): one deployment of a deploy root runs at a
+/// time, the first to ask going first, each holding the turn to its end. A deployment waits for it with no
+/// bound, saying where it stands at once and then at the pace given.
+#[derive(Debug, Clone)]
+pub struct RootTurn {
+  pub lock: PathBuf,
+  pub say_every: Duration,
+  /// How often a waiting deployment looks; none is the lanes' pace. A test sets it short.
+  pub poll: Option<Duration>,
+}
+
+impl RootTurn {
+  /// The turn of a deploy root, said at the deployment line's pace.
+  pub fn under(deploy_root: &Path) -> Self {
+    Self {
+      lock: deploy_root.join(DEPLOY_RUN_LOCK),
+      say_every: Duration::from_secs(DEPLOY.numbers.line_say_seconds),
+      poll: None,
+    }
+  }
+
+  /// The deploy root's turn, stood for under the holder's name and held until it is dropped. The wait has no
+  /// bound, so none comes back only where the pace is zero.
+  pub fn take(&self, holder: &str, say: &dyn Fn(&str)) -> Option<HeldLock> {
+    let said = &DEPLOY.run;
+    let began = now_ms();
+
+    if let Some(dir) = self.lock.parent() {
+      let _ = std::fs::create_dir_all(dir);
+    }
+
+    let mut wait_on = |ahead: Option<&str>| -> Option<i64> {
+      let now = now_ms();
+      let holding = ahead.map_or_else(|| said.line_nobody.clone(), str::to_owned);
+
+      say(&fill_marks(
+        &said.root_waiting,
+        &[("seconds", &((now - began) / 1000).to_string()), ("holder", &holding)],
+      ));
+
+      Some(now.saturating_add(millis(self.say_every)))
+    };
+    let held = take_lock(
+      &self.lock,
+      0.0,
+      LockWait {
+        holder: holder.to_owned(),
+        wait_on: Some(&mut wait_on),
+        poll: self.poll,
+        ..LockWait::default()
+      },
+    )?;
+    let waited = (now_ms() - began) / 1000;
+
+    if waited > 0 {
+      say(&fill_marks(&said.root_taken, &[("seconds", &waited.to_string())]));
     }
 
     Some(held)

@@ -36,6 +36,7 @@
 | Deployment record | `deployed.json` under the deploy root, naming the commit that runs, its subject, the reason it was deployed, the release's version, when it was laid down and the backup behind it |
 | Deployment log | `deployed.log` under the deploy root, one line per deployment |
 | Progress record | `deploy-progress.json` under the deploy root, where a run stands while it runs |
+| Run lock | `deploy-run.lock` under the deploy root, the deploy root's turn, which the deployment under way holds to its end (「The deployment line」) |
 | Backup directory | `<deploy root>/backups` unless the declaration names another, where the deployment's backup is written, readable by the user alone, inside neither the data root nor a git work tree |
 
 - **The data root is never inside a git work tree.** A deployment finding it there does not start.
@@ -118,8 +119,16 @@
   reads. A process hands the release it reads on to what it starts, through `BMO_DEPLOY_DIR`.
 - **Retention:** each deployment prunes the releases twice, before it prepares its own and once it is
   live. A prune keeps the live release, the one before it, the one the deployment itself runs from,
-  the one it lays down and every release a live process stands in, and takes every other away through
-  the guarded removal and then `git worktree prune`.
+  the one it lays down, the one every deployment of the deploy root still under way lays down and every
+  release a live process stands in, and takes every other away through the guarded removal and then
+  `git worktree prune`.
+  - **A deployment is under way** where the progress record holds its run without an ending, or the
+    testbed's record holds it for the repository without an end, and its process lives. Its release is
+    the one its commit names. The deploy root's turn keeps a second deployment from starting beside it,
+    and the prune keeps its release all the same, so a deployment waiting for quiet, which no process
+    stands in between its asks, keeps the release its quiet runs from whatever else prunes.
+  - **A testbed's record that cannot be read prunes no release,** said on a line as a warning, as
+    where the live processes cannot be read.
   - **A process stands in a release** where its working directory or executable lies inside it, or its
     `BMO_DEPLOY_DIR` names it, as `/proc` says of every process of the account.
   - **More than twelve releases left standing** after a prune sends a `releases-pinned` event naming,
@@ -285,7 +294,8 @@
 ```mermaid
 flowchart TD
   A[deployments asked together] --> B[each starts its own unit]
-  B --> C[ticket in the deployment line]
+  B --> R[its deploy root's turn, once the one before of the same root has ended]
+  R --> C[ticket in the deployment line]
   C --> D{its turn?}
   D -- not yet --> E[says where it stands]
   E --> F{bound passed?}
@@ -295,6 +305,7 @@ flowchart TD
   G --> H
   H --> I[lets the line go]
   I --> J[steps before the flip to the end, its own outcome]
+  J --> K[lets its deploy root's turn go]
 ```
 
 - **Deployments on one machine pass their gate and their build one after the other.** Every deployment
@@ -306,12 +317,27 @@ flowchart TD
 - **The verb and the hosted tool take any number of deployments at once.** Each call starts its own unit
   as before; the unit waits its turn in the line and ends with its own outcome, which its caller reads as
   it reads any deployment's.
-- **A deployment stands in the line once its refusals are judged,** after the commit is read and before
-  it writes its progress record (「What the deploy run does, in order」, step 2), so a refusal and a dry
-  run never wait. A deployment waiting there has written nothing into its progress record or the
-  testbed's record yet, so two deployments of one repository never write one progress record at once:
-  it is read through its unit's journal, which the hosted tool follows it by. A call of the same
-  repository and commit asked while one waits therefore attaches to nothing and waits behind it.
+- **One deployment of a deploy root runs at a time.** Before it stands in the line, a deployment takes
+  its deploy root's turn, the lock `deploy-run.lock` under the deploy root, the first to ask going
+  first, and holds it to its end, whatever its outcome; one whose process dies lets go with it. A
+  deployment whose deploy root has a deployment under way, past its build and waiting for quiet or
+  restarting, waits there until that one has ended, however long that takes, with no bound. Two
+  deployments of one deploy root side by side would each read the live release before the other's
+  flip, write over each other's progress record, prune each other's release and flip over each
+  other, so the later one waits and goes on from what the earlier one left live.
+  - **While it waits it says so,** at once and then at the line's pace, naming the deployment it
+    waits behind. It holds no ticket in the line meanwhile, so deployments of other repositories pass
+    it.
+  - **A deployment started inside the unit of a run of its own deploy root that has not ended** carries
+    that run on (「What a deployment says of itself as it runs」) and takes no turn of its own, since the
+    run it carries holds it.
+- **A deployment stands in the line once its refusals are judged** and its deploy root's turn has come,
+  after the commit is read and before it writes its progress record (「What the deploy run does, in
+  order」, step 2), so a refusal and a dry run never wait. A deployment waiting for either has written
+  nothing into its progress record or the testbed's record yet, so two deployments of one repository
+  never write one progress record at once: it is read through its unit's journal, which the hosted tool
+  follows it by. A call of the same repository and commit asked while one waits therefore attaches to
+  nothing and waits behind it.
 - **Its turn reads the live release again.** Once its turn comes, the deployment reads the deployment
   record again, so the range its gate checks and the major change it judges are against what the
   deployment before it put live.
@@ -323,7 +349,8 @@ flowchart TD
   something else live by then.
 - **It holds the line from the gate to the end of the build** (steps 3 to 6), then lets it go. What
   follows waits on services rather than on any machine's threads, and the wait for quiet lasts as long
-  as the work it waits on, so the next deployment's gate begins while this one restarts. A deployment that
+  as the work it waits on, so the next deployment's gate begins while this one restarts, where the next
+  deployment is of another deploy root; one of the same deploy root still waits its root's turn. A deployment that
   ends sooner, failed or stopped, lets the line go as it ends, and one whose process dies lets go with it.
 - **While it waits it says so,** every policy's seconds, sixty: how long it has waited, how many
   deployments stand ahead and which one holds the line. Once its turn comes it says how long it waited.
@@ -438,7 +465,8 @@ flowchart TD
    and check it is on the remote. Read the commit's declaration, and stop where it does not read, names
    the repository otherwise than the checkout's, places the deployment elsewhere or deploys nothing, or
    where an env file it declares is missing. Check every unit link will still find its unit file. Then
-   stand in the deployment line until its turn comes or its bound passes, and read the deployment record
+   take the deploy root's turn once no other deployment of it is under way, stand in the deployment line
+   until its turn comes or its bound passes, and read the deployment record
    again, ending there, live, where it names the commit (「The deployment line」). Adopt a deploy tree that
    is still a directory.
 3. **Pass the gate:** the declared static check and the suite over the range from the deployed commit,

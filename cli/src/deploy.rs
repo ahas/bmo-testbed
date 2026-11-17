@@ -589,6 +589,7 @@ pub fn deploy(args: &DeployFlags) -> u8 {
     record: Some(data_root()),
     layer_pin: Some(pinned_layer),
     line: Some(DeployLine::under(&data_root())),
+    root_poll: None,
     retry: DEPLOY
       .numbers
       .retry_pauses_seconds

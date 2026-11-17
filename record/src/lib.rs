@@ -408,6 +408,33 @@ impl Record {
     Ok(paged(items, limit))
   }
 
+  /// The deployments of the repository named still under way: written running, their process alive.
+  pub fn deployments_under_way(&self, repository: &str) -> Result<Vec<Deployment>, String> {
+    let mut statement = self
+      .connection
+      .prepare(
+        "SELECT member FROM deployments
+          WHERE json_extract(member, '$.repositoryName') = ?1
+            AND json_extract(member, '$.state') = 'running'
+          ORDER BY id",
+      )
+      .map_err(failed)?;
+    let rows = statement
+      .query_map(params![repository], |row| row.get::<_, String>(0))
+      .map_err(failed)?;
+    let mut under_way = Vec::new();
+
+    for row in rows {
+      let deployment = deployment_now(member_of(&row.map_err(failed)?)?);
+
+      if deployment.state == DeploymentState::Running {
+        under_way.push(deployment);
+      }
+    }
+
+    Ok(under_way)
+  }
+
   /// One line a deployment said.
   pub fn add_log_line(&mut self, deployment_id: i64, text: &str) -> Result<LogLine, String> {
     let at = now_ms();

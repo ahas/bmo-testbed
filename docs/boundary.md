@@ -366,7 +366,9 @@ bmo-testbed deploy [--commit <sha>] [--message <why>] [--dry-run] [--no-check] [
   exit 2 in the caller's own process.
   Deployments started together each run in their own unit and pass their gate and their build one after
   the other, in the order they asked, through the deployment line under the data root's `locks/`
-  (`docs/deploy.md`, 「The deployment line」).
+  (`docs/deploy.md`, 「The deployment line」). A deployment of a repository whose earlier deployment is
+  still under way waits, before the line, until that one has ended, so one deployment of a deploy root
+  runs at a time.
   `--dry-run` says in the caller's own process what it would do, changes nothing and starts no unit.
   `--force-live` goes on at once past a declared `quiet` command that names work under way or could not
   tell, instead of waiting for it to answer 0 (`docs/deploy.md`, 「What the deploy run does, in order」),

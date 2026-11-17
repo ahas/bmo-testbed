@@ -61,7 +61,7 @@
   {
     "id": "deploy/deploy-run",
     "title": "Deploy run",
-    "what": "A deploy run in its own unit, by its commit's declaration, reading committed trees only, path deps closed: the line held from gate to build, a commit live at its turn ended there, a gate already passed skipped, placed work tried again, backup, release, quiet, flip, health, console probe, rollback.",
+    "what": "A deploy run in its own unit, by its commit's declaration, committed trees only, path deps closed: one run per deploy root, the line held gate to build, a commit live at its turn ended there, a passed gate skipped, placed work retried, backup, release, quiet, flip, health, console probe, rollback.",
     "files": [
       "deploy/src/deployment.rs",
       "deploy/src/line.rs",
@@ -84,6 +84,7 @@
     ],
     "symbols": [
       "DeployLine",
+      "RootTurn",
       "GateFault",
       "PlacedGate",
       "CommittedTree",
@@ -102,7 +103,8 @@
       "커밋된 트리",
       "health 대기",
       "이미 통과한 커밋은 다시 검사하지 않기",
-      "경로 의존을 끝까지 따라가 깔기"
+      "경로 의존을 끝까지 따라가 깔기",
+      "배포 정리가 아직 quiet를 기다리는 다른 배포의 릴리스를 지움"
     ],
     "needs": [
       "core/declaration",
@@ -120,8 +122,8 @@
       "suite/cargo-verb-and-prune",
       "core/main-branch"
     ],
-    "base": "8ab89b44f91bd840f493b515c8324591748dc69c",
-    "changed": 1794899080824
+    "base": "98c14a2cd226ac12d5bb9d8a2b891fd6d2a904ba",
+    "changed": 1794916399939
   },
   {
     "id": "deploy/hosted-deploy-tool",
@@ -158,8 +160,8 @@
       "deploy/deploy-run",
       "record/record"
     ],
-    "base": "9b86febe98a51e2e757fbcefeb44c1db55fcb4c2",
-    "changed": 1794478118849
+    "base": "98c14a2cd226ac12d5bb9d8a2b891fd6d2a904ba",
+    "changed": 1794916416702
   },
   {
     "id": "deploy/releases-and-rollback",
@@ -185,7 +187,7 @@
     "needs": [
       "core/policy-loader"
     ],
-    "base": "2a697e7005d23d4201403e8c2b1af370614661c3",
-    "changed": 1794775341621
+    "base": "98c14a2cd226ac12d5bb9d8a2b891fd6d2a904ba",
+    "changed": 1794916416708
   }
 ]

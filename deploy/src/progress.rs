@@ -15,6 +15,7 @@ use std::path::{Path, PathBuf};
 use bmo_testbed_client::{
   Deployment, DeploymentStage, DeploymentState, DeploymentStep, StageName, StepPart, StepState, StopCode,
 };
+use bmo_testbed_core::queue::process_alive;
 use bmo_testbed_record::{Record, say_unwritten};
 use serde::{Deserialize, Serialize};
 
@@ -179,6 +180,26 @@ pub fn deploy_progress_path(root: &Path) -> PathBuf {
 /// The record out of its file's text; none where there is none or it does not read as one.
 pub fn read_deploy_progress(text: Option<&str>) -> Option<DeployProgress> {
   serde_json::from_str(text?).ok()
+}
+
+impl DeployProgress {
+  /// Whether a run in the unit given carries this record on: it is unended and begun in that same unit, so
+  /// the run is a deployment started inside the unit of the run that began it.
+  pub fn carried_in(&self, unit: Option<&str>) -> bool {
+    self.ending.is_none() && unit.is_some() && self.unit.as_deref() == unit
+  }
+
+  /// The commit of the run this record holds while it is under way: unended, its process alive.
+  pub fn under_way(&self) -> Option<&str> {
+    (self.ending.is_none() && process_alive(self.pid))
+      .then_some(self.commit.as_deref())
+      .flatten()
+  }
+}
+
+/// The record at the path given, as it stands; none where there is none or it does not read as one.
+pub fn deploy_progress_at(path: &Path) -> Option<DeployProgress> {
+  read_deploy_progress(std::fs::read_to_string(path).ok().as_deref())
 }
 
 // The record written beside itself and renamed over, so a reader never meets half of it.
@@ -394,12 +415,8 @@ fn take_ahead(record: &mut DeployProgress, name: &str, part: Option<Part>) {
 /// Begins the record, or carries on the one a run in the same unit began and has not ended: a deployment
 /// another run starts inside its own unit writes into that run's record.
 pub fn begin_deploy(path: &Path, start: &DeployStart, now: fn() -> i64) -> DeployRun {
-  let standing = read_deploy_progress(std::fs::read_to_string(path).ok().as_deref());
-
-  if let Some(standing) = standing
-    && standing.ending.is_none()
-    && start.unit.is_some()
-    && standing.unit == start.unit
+  if let Some(standing) = deploy_progress_at(path)
+    && standing.carried_in(start.unit.as_deref())
   {
     let run = DeployRun {
       path: path.to_path_buf(),

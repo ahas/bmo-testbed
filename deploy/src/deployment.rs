@@ -42,8 +42,10 @@ use crate::expansion::{
   BuildTree, TreeStore, bring_submodules, build_target, committed_trees, expansion_tree, lay_outside_trees,
   put_build_tree,
 };
-use crate::line::DeployLine;
-use crate::progress::{DeployRun, DeployStart, Outcome, Part, Stage, begin_deploy, deploy_progress_path};
+use crate::line::{DeployLine, RootTurn};
+use crate::progress::{
+  DeployRun, DeployStart, Outcome, Part, Stage, begin_deploy, deploy_progress_at, deploy_progress_path,
+};
 use crate::release::{
   LiveProcess, Preparing, differing_binaries, flip, link_of, live_processes, live_release, logged_before,
   pinned_detail, place_binaries, prepare, prune, put_link, release_dir, release_holding,
@@ -155,6 +157,9 @@ pub struct DeployAsk {
   /// The deployment line the run stands in from its gate to the end of its build (docs/deploy.md, 「The
   /// deployment line」); none stands in none.
   pub line: Option<DeployLine>,
+  /// How often a deployment waiting for its deploy root's turn looks (docs/deploy.md, 「The deployment
+  /// line」); none is the lanes' pace. A test sets it short.
+  pub root_poll: Option<Duration>,
   /// The pauses between the tries of the gate's work on another machine whose connection broke under it
   /// (docs/deploy.md, 「A connection that breaks under the placed machine」), one try more than pauses; none
   /// tries once.
@@ -859,19 +864,52 @@ impl<'a> Laying<'a> {
     1
   }
 
-  // Every release but the ones kept and the ones a live process stands in taken away, and the retired trees
-  // nothing stands in; more releases left standing than the policy allows is sent as `releases-pinned`.
+  // The release of every deployment of the deploy root still under way (docs/deploy.md, 「The releases」): the
+  // progress record's run and the testbed's record's deployments of the repository, each unended with its
+  // process alive; why not where the testbed's record cannot be read.
+  fn releases_under_way(&self) -> Result<Vec<PathBuf>, String> {
+    let recorded = match self.ask.record.as_deref() {
+      Some(root) => Record::open(root)?.deployments_under_way(&self.repo.name())?,
+      None => Vec::new(),
+    };
+    let progress = deploy_progress_at(&self.places.progress);
+    let commits = progress
+      .as_ref()
+      .and_then(|standing| standing.under_way())
+      .into_iter()
+      .chain(recorded.iter().filter_map(|deployment| deployment.commit.as_deref()));
+
+    Ok(commits.map(|commit| release_dir(&self.places.deploy_dir, commit)).collect())
+  }
+
+  // Every release but the ones kept, the ones of the deployments still under way and the ones a live process
+  // stands in taken away, none where the deployments under way cannot be read; then the retired trees nothing
+  // stands in.
   fn prune_releases(&self, mut keep: Vec<PathBuf>) {
-    let said = &DEPLOY.run;
     let processes = self.hands.live_processes();
+
+    match self.releases_under_way() {
+      Ok(under_way) => {
+        keep.extend(under_way);
+        self.prune_release_trees(keep, processes.as_deref());
+      }
+      Err(why) => self.warn(fill_marks(&DEPLOY.release.unread_under_way, &[("why", &why)])),
+    }
+
+    self.prune_retired_trees(processes.as_deref());
+  }
+
+  // Every release but the ones kept and the ones a live process stands in taken away; more releases left
+  // standing than the policy allows is sent as `releases-pinned`.
+  fn prune_release_trees(&self, mut keep: Vec<PathBuf>, processes: Option<&[LiveProcess]>) {
+    let said = &DEPLOY.run;
     let places = &self.places;
 
     // The release the run itself runs from is never taken away under it.
     keep.extend(std::env::current_exe().ok().and_then(|exe| release_holding(&places.deploy_dir, &exe)));
 
     let git = |args: &[&str], cwd: &Path| self.git(args, cwd);
-    let pruned =
-      prune(&places.deploy_dir, &keep, processes.as_deref(), &places.source, &places.data_root, &git);
+    let pruned = prune(&places.deploy_dir, &keep, processes, &places.source, &places.data_root, &git);
 
     if !pruned.removed.is_empty() {
       self.say(&fill_marks(&said.pruned, &[("names", &pruned.removed.join(", "))]));
@@ -895,11 +933,15 @@ impl<'a> Laying<'a> {
         detail,
       });
     }
+  }
 
+  // The retired trees nothing stands in taken away, none where the live processes cannot be read.
+  fn prune_retired_trees(&self, processes: Option<&[LiveProcess]>) {
+    let said = &DEPLOY.run;
+    let places = &self.places;
+    let git = |args: &[&str], cwd: &Path| self.git(args, cwd);
     let in_use = |tree: &Path| {
-      processes
-        .as_deref()
-        .is_none_or(|processes| processes.iter().any(|process| process.stands_in(tree)))
+      processes.is_none_or(|processes| processes.iter().any(|process| process.stands_in(tree)))
     };
     let retired = prune_retired(&places.deploy_dir, &places.source, &places.data_root, &git, &in_use);
 
@@ -1563,14 +1605,28 @@ pub async fn deploy(
     return 0;
   }
 
-  // The deployment line, once nothing is left to refuse, its turn taken before the progress record is begun so
-  // two deployments of one repository never write one record at once; then what the deployment before it put
-  // live, read again (docs/deploy.md, 「The deployment line」).
-  let line = ask.line.as_ref().and_then(|line| {
-    let unit = ask.unit.as_deref().map(|unit| format!(" ({unit})")).unwrap_or_default();
+  // The deploy root's turn and then the deployment line, once nothing is left to refuse, both taken before the
+  // progress record is begun so two deployments of one repository never write one record at once; then what
+  // the deployment before it put live, read again (docs/deploy.md, 「The deployment line」). A run carrying on
+  // the one whose unit it stands in takes no turn of its own: that run holds it.
+  let holder = format!(
+    "{} {shown}{}",
+    repo.name(),
+    ask.unit.as_deref().map(|unit| format!(" ({unit})")).unwrap_or_default()
+  );
+  let carried =
+    deploy_progress_at(&places.progress).is_some_and(|standing| standing.carried_in(ask.unit.as_deref()));
+  let _root_turn = (!carried)
+    .then(|| {
+      let turn = RootTurn {
+        poll: ask.root_poll,
+        ..RootTurn::under(&places.deploy_root)
+      };
 
-    line.take(&format!("{} {shown}{unit}", repo.name()), &|line| run.say(line))
-  });
+      turn.take(&holder, &|line| run.say(line))
+    })
+    .flatten();
+  let line = ask.line.as_ref().and_then(|line| line.take(&holder, &|line| run.say(line)));
 
   run.previous = read_deploy_record(&places.record);
 

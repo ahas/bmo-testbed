@@ -9,7 +9,9 @@ use std::cell::{Cell, RefCell};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use bmo_testbed_client::{DeploymentState, PageQuery, RestartsQuery, TestRun, TestRunKind, TestRunState};
+use bmo_testbed_client::{
+  Deployment, DeploymentState, PageQuery, RestartsQuery, TestRun, TestRunKind, TestRunState,
+};
 use bmo_testbed_core::declaration::Repository;
 use bmo_testbed_core::events::Hook;
 use bmo_testbed_core::policy::deploy::DEPLOY;
@@ -469,9 +471,29 @@ health = "true"
   // once they run out: 1 naming a turn under way, any other code saying it cannot read its store. The asks are
   // counted under `quiet-asks`.
   fn declare_quiet(&self, codes: &[i32]) {
-    let script = self.at("quiet.sh");
     let codes_at = self.at("quiet-codes");
     let asks = self.at("quiet-asks");
+
+    std::fs::write(&codes_at, codes.iter().map(|code| format!("{code}\n")).collect::<String>()).unwrap();
+    self.declare_quiet_script(&format!(
+      "n=$(( $(cat {asks} 2>/dev/null || echo 0) + 1 ))\necho $n > {asks}\ncode=$(sed -n \"${{n}}p\" {codes})\ncase \"$code\" in\n  1) echo 'a turn under way' ;;\n  ''|0) ;;\n  *) echo 'relation \"slots\" does not exist' >&2 ;;\nesac\nexit \"${{code:-0}}\"\n",
+      asks = asks.display(),
+      codes = codes_at.display(),
+    ));
+  }
+
+  // The declaration's `quiet`, a script that names a turn under way while the file given stands, and 0 once it
+  // is gone.
+  fn declare_quiet_while(&self, held: &Path) {
+    self.declare_quiet_script(&format!(
+      "if [ -e {held} ]; then echo 'a turn under way'; exit 1; fi\n",
+      held = held.display()
+    ));
+  }
+
+  // The declaration's `quiet`, the script given, run from the release it is asked in.
+  fn declare_quiet_script(&self, body: &str) {
+    let script = self.at("quiet.sh");
     // A declaration that already names a quiet has it named afresh.
     let declared = std::fs::read_to_string(self.source.join("testbed.toml"))
       .unwrap()
@@ -480,16 +502,7 @@ health = "true"
       .map(|line| format!("{line}\n"))
       .collect::<String>();
 
-    std::fs::write(&codes_at, codes.iter().map(|code| format!("{code}\n")).collect::<String>()).unwrap();
-    std::fs::write(
-      &script,
-      format!(
-        "n=$(( $(cat {asks} 2>/dev/null || echo 0) + 1 ))\necho $n > {asks}\ncode=$(sed -n \"${{n}}p\" {codes})\ncase \"$code\" in\n  1) echo 'a turn under way' ;;\n  ''|0) ;;\n  *) echo 'relation \"slots\" does not exist' >&2 ;;\nesac\nexit \"${{code:-0}}\"\n",
-        asks = asks.display(),
-        codes = codes_at.display(),
-      ),
-    )
-    .unwrap();
+    std::fs::write(&script, body).unwrap();
     self.write(
       "testbed.toml",
       &declared.replace(
@@ -1878,4 +1891,136 @@ fn a_deployment_whose_wait_in_the_line_passes_its_bound_goes_on_beside_the_holde
   assert_eq!(code, 0, "{}", said(&hands));
   assert!(said(&hands).contains(&passed), "{passed}\n{}", said(&hands));
   assert!(scene.deploy_dir().exists(), "{}", said(&hands));
+}
+
+// The first line out of the channel given holding one of the words given, waiting until the moment given; none
+// where the channel closes or the moment passes first.
+fn heard_until(
+  heard: &std::sync::mpsc::Receiver<String>,
+  words: &[&str],
+  until: Instant,
+) -> Option<String> {
+  std::iter::from_fn(|| heard.recv_timeout(until.saturating_duration_since(Instant::now())).ok())
+    .find(|line| words.iter().any(|word| line.contains(word)))
+}
+
+// The fixed words of a policy line, up to its first mark.
+fn words_of(line: &str) -> &str {
+  line.split('{').next().unwrap_or_default()
+}
+
+// "One deployment of a deploy root runs at a time ... waits there until that one has ended, however long that
+// takes"; "While it waits it says so, at once ... naming the deployment it waits behind"
+#[test]
+fn a_deployment_asked_while_one_of_its_repository_waits_for_quiet_waits_for_it_and_both_go_live() {
+  let scene = Scene::new();
+
+  assert_eq!(scene.run(&Hands::default()), 0);
+
+  let held = scene.at("work-under-way");
+
+  std::fs::write(&held, "").unwrap();
+  scene.declare_quiet_while(&held);
+
+  let earlier = scene.push("second");
+  let ask = DeployAsk {
+    root_poll: Some(Duration::from_millis(5)),
+    ..DeployAsk::default()
+  };
+  let (told_earlier, heard_earlier) = std::sync::mpsc::channel();
+  let (told_later, heard_later) = std::sync::mpsc::channel();
+  let given_up = Instant::now() + Duration::from_secs(60);
+  let (scene, ask) = (&scene, &ask);
+
+  let (later, (earlier_code, earlier_said), (later_code, later_said)) = std::thread::scope(|scope| {
+    let deploying_earlier = scope.spawn(move || {
+      let hands = Hands {
+        told: Some(told_earlier),
+        ..Hands::default()
+      };
+
+      (scene.run_paused(ask, &hands), said(&hands))
+    });
+
+    heard_until(&heard_earlier, &[words_of(&DEPLOY.run.quiet_live)], given_up);
+    scene.declare("v3", "true");
+    scene.declare_quiet_while(&held);
+
+    let later = scene.push("third");
+    let deploying_later = scope.spawn(move || {
+      let hands = Hands {
+        told: Some(told_later),
+        ..Hands::default()
+      };
+
+      (scene.run_paused(ask, &hands), said(&hands))
+    });
+
+    // The work under way ends once the later deployment waits behind the earlier one, or has pruned the
+    // releases beside it, or a minute has gone without either.
+    heard_until(
+      &heard_later,
+      &[words_of(&DEPLOY.run.root_waiting), words_of(&DEPLOY.run.pruned)],
+      given_up,
+    );
+    std::fs::remove_file(&held).unwrap();
+
+    (later, deploying_earlier.join().unwrap(), deploying_later.join().unwrap())
+  });
+  let log = std::fs::read_to_string(scene.at("live/deployed.log")).unwrap();
+  let laid: Vec<&str> = log.lines().filter_map(|line| line.split_whitespace().nth(1)).collect();
+
+  assert_eq!(earlier_code, 0, "{earlier_said}");
+  assert_eq!(later_code, 0, "{later_said}");
+  assert!(
+    later_said
+      .lines()
+      .any(|line| line.contains(words_of(&DEPLOY.run.root_waiting)) && line.contains(&short(&earlier))),
+    "{later_said}"
+  );
+  assert_eq!(laid[laid.len() - 2..], [earlier.as_str(), later.as_str()], "{log}");
+}
+
+// "A deployment is under way where ... the testbed's record holds it for the repository without an end, and its
+// process lives"
+#[test]
+fn a_release_the_testbeds_record_holds_under_way_outlasts_a_later_deployments_prune() {
+  let scene = Scene::new();
+  let first = must(&["rev-parse", "HEAD"], &scene.source);
+  let ask = DeployAsk {
+    record: Some(scene.at("testbed-data")),
+    ..DeployAsk::default()
+  };
+  let deploy = |version: &str| {
+    let hands = Hands::default();
+
+    scene.declare(version, "true");
+    scene.push(version);
+    assert_eq!(scene.run_with(&ask, &Told(true), &hands, &scene.env()), 0, "{}", said(&hands));
+  };
+
+  assert_eq!(scene.run_with(&ask, &Told(true), &Hands::default(), &scene.env()), 0);
+  deploy("v2");
+  Record::open(&scene.at("testbed-data"))
+    .unwrap()
+    .write_deployment(&Deployment {
+      id: 0,
+      repository_name: Some("sample".to_owned()),
+      unit_name: None,
+      pid: i64::from(std::process::id()),
+      commit: Some(first.clone()),
+      state: DeploymentState::Running,
+      plan: Vec::new(),
+      stages: Vec::new(),
+      steps: Vec::new(),
+      rolled_back: false,
+      stopped_for: None,
+      reason: None,
+      started_at: Machine.now_ms(),
+      ended_at: None,
+    })
+    .unwrap();
+  deploy("v3");
+
+  assert!(release_dir(&scene.deploy_dir(), &first).exists());
 }
