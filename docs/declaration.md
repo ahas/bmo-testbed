@@ -139,15 +139,15 @@ with an empty reason, is refused.
 
 A declaration declares no step that type-checks, formats or lints its Cargo workspace's own crates,
 such as `cargo check`, `cargo clippy` or `cargo fmt`, through `cargo` or the Cargo verb and with
-whatever flags: the static check formats and lints them wherever a change reaches a crate, and the
-change check runs `cargo check` on every crate it marks. A declared step adds only what the testbed
-does not do.
+whatever flags: the static check and the change check both format and lint them wherever a change
+marks a crate, the lints checking every crate as they lint it. A declared step adds only what the
+testbed does not do.
 
-Where the static check runs the Cargo workspace's own formatting and lints, a declared step whose
-command only repeats them, such as `cargo fmt --all --check` or
+Where either check runs the Cargo workspace's own formatting and lints, a declared step whose command
+only repeats them, such as `cargo fmt --all --check` or
 `cargo clippy --workspace --all-targets -- -D warnings` at the root, is left out and counts as passed
-(`docs/checks.md`, 「The static check」). The change check, which runs no such formatting or lints, runs
-it as declared.
+(`docs/checks.md`, 「The static check」 and 「The change check」). Where a change marks no crate, it
+runs as declared.
 
 ## `[build]`: building a release
 

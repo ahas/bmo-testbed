@@ -709,17 +709,6 @@ command = "cargo clippy --workspace --all-targets --features x -- -D warnings"
     );
   }
 
-  // "the change check runs every declared step as declared"
-  #[test]
-  fn the_change_check_runs_every_declared_step_as_declared() {
-    let (space, _) = cargo_space();
-    let changed = vec!["crates/alpha/src/lib.rs".to_owned()];
-    let steps = bmo_testbed_suite::static_check::declared_steps(&space.repo(), Some(&changed));
-
-    assert!(steps.iter().all(|step| step.covered_by.is_none()));
-    assert_eq!(steps.len(), 4);
-  }
-
   // "a Cargo command repeating the workspace check is read by its words"
   #[test]
   fn a_cargo_command_repeating_the_workspace_check_is_read_by_its_words() {

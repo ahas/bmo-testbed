@@ -198,6 +198,9 @@ where = " in {dir}"
 step = "{outcome} {name} · exit {code} · ran {ran}s, waited {waited}s"
 ok = "ok"
 failed = "FAILED"
+# A declared step the Cargo workspace check covers, left out and counted as passed: {name} the step, {by} the
+# workspace check's step that covers it.
+left_out = "ok {name} · left out, the Cargo workspace check's {by} covers it"
 # The heading of a step's output in the log: {command} what it ran.
 logged = "==> {name} ({command}): exit {code}"
 log = "log: {path}"

@@ -164,6 +164,7 @@ pub struct CheckWords {
   pub step: String,
   pub ok: String,
   pub failed: String,
+  pub left_out: String,
   pub logged: String,
   pub log: String,
   pub no_turn: String,

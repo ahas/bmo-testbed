@@ -256,11 +256,21 @@
 ## The change check
 
 - **One call for a change's writing check and its first verification:** the `check` verb. In order:
-  the enabled quick checks, the declared static steps the change reaches, `cargo check` on every crate
-  the change marks, then the test files the change touches, `cargo test` on the crates it touches
-  itself, and the check of every tool, project and package the change reaches, a step each. The test
-  files are one step for each declared language and folder they run from (`docs/suite.md`, 「Which
-  files run」), each file handed by its path from that folder. The whole suite stays with the close.
+  the static check's own steps for the change, then the test files the change touches, `cargo test` on
+  the crates it touches itself, and the check of every tool, project and package the change reaches, a
+  step each. The test files are one step for each declared language and folder they run from
+  (`docs/suite.md`, 「Which files run」), each file handed by its path from that folder. The whole suite
+  stays with the close.
+- **Its static steps are the static check's,** asked of the same place with the change it reads, so the
+  two never check differently (「The static check」): the enabled quick checks, the declared steps the
+  change reaches, and, where the change marks a crate, the Cargo workspace's `cargo fmt --check` and
+  `cargo clippy --all-targets --locked` with every warning an error over the repository's own packages,
+  through the Cargo verb in the shared build directory.
+  - **The lints are its type check:** they check every crate as they lint it, so no `cargo check` runs
+    beside them.
+  - **A declared step that only repeats them is left out** as the static check leaves it out: its line
+    is an `ok` line saying it was left out and which of the workspace check's steps covers it, with no
+    wait and no run, and it counts as passed.
 - **The change is read two ways.** Given files, it is those files. Given none, it is every path changed
   since `--since`, by default the merge base with the main branch, with the working tree and the
   untracked files.

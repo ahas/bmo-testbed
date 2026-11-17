@@ -228,13 +228,6 @@ pub fn step_reached(step: &declaration::CheckStep, changed: Option<&[String]>) -
   when.iter().any(|glob| changed.iter().any(|path| glob_matches(glob, path)))
 }
 
-/// The steps of the repository's own a change of `changed` owes, every path where none is named: the quick
-/// checks where it enables any, then its declared steps the change reaches, in their order, each run as
-/// declared.
-pub fn declared_steps(repo: &Repository, changed: Option<&[String]>) -> Vec<CheckStep> {
-  own_steps(repo, changed, false)
-}
-
 // The repository's own steps, each declared one that only repeats the Cargo workspace check marked as covered
 // where `workspace_checked`.
 fn own_steps(repo: &Repository, changed: Option<&[String]>, workspace_checked: bool) -> Vec<CheckStep> {
@@ -252,8 +245,12 @@ fn own_steps(repo: &Repository, changed: Option<&[String]>, workspace_checked: b
 /// workspace's own packages where a crate is marked, a declared step that only repeats them left out
 /// (docs/checks.md, 「The static check」).
 pub fn check_steps(repo: &Repository, since: Option<&str>) -> Vec<CheckStep> {
-  let changed = changed_since(&repo.root, since);
-  let changed = changed.as_deref();
+  static_steps(repo, changed_since(&repo.root, since).as_deref())
+}
+
+/// The steps a change of `changed` owes, every path where none is named, as `check_steps` answers them: the
+/// change check asks here with the change it read.
+pub fn static_steps(repo: &Repository, changed: Option<&[String]>) -> Vec<CheckStep> {
   let own = cargo_selected(repo, changed)
     .then(|| OwnPackages::of(&repo.root))
     .filter(OwnPackages::any);

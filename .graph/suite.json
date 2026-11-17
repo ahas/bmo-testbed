@@ -47,7 +47,7 @@
   {
     "id": "suite/change-check",
     "title": "Change check",
-    "what": "The check verb a job runs on its change: the quick checks, the declared static steps and cargo check it owes, then the tests it touches, one step per language and folder, and each reached project's and tool's check, all into one log.",
+    "what": "The check verb a job runs on its change: the static check's own steps for it, the workspace's cargo fmt and clippy where it marks a crate, then the tests it touches, one step per language and folder, and each reached project's and tool's check, all into one log.",
     "files": [
       "suite/src/check.rs",
       "suite/src/test_targets.rs",
@@ -71,8 +71,8 @@
       "calls/bmo-text",
       "core/silence-watch"
     ],
-    "base": "6dabc83764d4656ee0b33e707f39ef8853b817db",
-    "changed": 1794547133055
+    "base": "4fbfac1a4dc6df0845347ffdf44d58c7f7c932d7",
+    "changed": 1794892770670
   },
   {
     "id": "suite/change-selection",
@@ -214,7 +214,7 @@
   {
     "id": "suite/static-check",
     "title": "Static check",
-    "what": "The static check: the enabled quick checks, the repository's declared steps a change reaches, each in its directory and lane, then cargo fmt and a silence-watched clippy where a crate is marked; each step ends on its exit code or the signal that ended it.",
+    "what": "The static check: the enabled quick checks, the repository's declared steps a change reaches, each in its directory and lane, then cargo fmt and a silence-watched clippy where a crate is marked; the change check asks it for the same steps. Each step ends on its exit code or signal.",
     "files": [
       "suite/src/static_check.rs",
       "docs/checks.md",
@@ -231,8 +231,8 @@
       "core/policy-loader",
       "core/silence-watch"
     ],
-    "base": "93e631758d9e668b2cd9cc007838e3a62eedca56",
-    "changed": 1794545338688
+    "base": "4fbfac1a4dc6df0845347ffdf44d58c7f7c932d7",
+    "changed": 1794892775693
   },
   {
     "id": "suite/suite-run",

@@ -1,7 +1,8 @@
-//! The change check, in one call (docs/checks.md, 「The change check」): the quick checks, the declared static
-//! steps and `cargo check` the change owes, then the tests it touches and the check of each project, tool and
-//! package it reaches, every step run to its end and written to one log, and what the tests came to read back
-//! by the `log` verb. What the change touches is `touched`'s answer alone.
+//! The change check, in one call (docs/checks.md, 「The change check」): the static check's own steps for the
+//! change, the Cargo workspace's formatting and lints among them where it marks a crate, then the tests it
+//! touches and the check of each project, tool and package it reaches, every step run to its end and written
+//! to one log, and what the tests came to read back by the `log` verb. What the change touches is `touched`'s
+//! answer alone.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -17,7 +18,7 @@ use crate::cargo::cargo_verb_line;
 use crate::own_binary::testbed_line;
 use crate::run::{file_groups, script_runner};
 use crate::selection::changed_paths;
-use crate::static_check::{CheckStep, TimedRun, declared_steps, run_timed, spawn_step};
+use crate::static_check::{CheckStep, TimedRun, run_timed, spawn_step, static_steps};
 use crate::test_server::test_postgres;
 use crate::test_targets::TargetTests;
 use crate::tool_checks::CheckedTool;
@@ -98,19 +99,16 @@ fn of(step: CheckStep) -> Step {
   }
 }
 
-fn cargo(verb: &str, crates: &[String], env: Vec<(String, String)>) -> Step {
-  let mut command = cargo_verb_line(&[verb, "--locked"]);
-
-  if verb == "check" {
-    command.push("--all-targets".to_owned());
-  }
+// The crates owing their tests whole, in one step.
+fn whole_tests(crates: &[String], env: Vec<(String, String)>) -> Step {
+  let mut command = cargo_verb_line(&["test", "--locked"]);
 
   for one in crates {
     command.extend(["-p".to_owned(), one.clone()]);
   }
 
   Step {
-    name: format!("cargo {verb}"),
+    name: "cargo test".to_owned(),
     step: plain(".", command, env),
     tests: false,
   }
@@ -182,16 +180,12 @@ pub fn plan(repo: &Repository, ask: &CheckAsk) -> Result<CheckPlan, String> {
     (fill_shown(&SUITE.check.given, &[("count", &ask.files.len())]), ask.files.clone())
   };
   let touched = touched(repo, &changed);
-  let mut steps: Vec<Step> = declared_steps(repo, Some(&changed)).into_iter().map(of).collect();
+  let mut steps: Vec<Step> = static_steps(repo, Some(&changed)).into_iter().map(of).collect();
   let database: Vec<(String, String)> = if repo.declaration.test.database.is_some() {
     vec![("BMO_TEST_POSTGRES".to_owned(), test_postgres())]
   } else {
     vec![]
   };
-
-  if !touched.checked_crates.is_empty() {
-    steps.push(cargo("check", &touched.checked_crates, vec![]));
-  }
 
   // The touched test files, one step to each declared language that runs some of them and folder it runs
   // them from.
@@ -226,7 +220,7 @@ pub fn plan(repo: &Repository, ask: &CheckAsk) -> Result<CheckPlan, String> {
     .collect();
 
   if !whole.is_empty() {
-    steps.push(cargo("test", &whole, database.clone()));
+    steps.push(whole_tests(&whole, database.clone()));
   }
 
   for one in &touched.targets {
@@ -258,9 +252,9 @@ pub struct Checked {
   pub waited_seconds: f64,
 }
 
-/// Every step of the plan run to its end through `run`, each one's output appended to `log`; then, where the
-/// tests ran, the `log` verb's reading of that log through the same `run`. A failing step stops none after
-/// it.
+/// Every step of the plan run to its end through `run`, each one's output appended to `log`, a step the Cargo
+/// workspace check covers not run and said as passed in one line; then, where the tests ran, the `log` verb's
+/// reading of that log through the same `run`. A failing step stops none after it.
 pub fn run_check(
   root: &Path,
   plan: &CheckPlan,
@@ -285,6 +279,15 @@ pub fn run_check(
   let mut waited_seconds = 0.0;
 
   for step in &plan.steps {
+    if let Some(by) = step.step.covered_by {
+      let left_out = fill_shown(&words.left_out, &[("name", &step.name), ("by", &by.name())]);
+
+      written.push_str(&format!("{left_out}\n"));
+      let _ = std::fs::write(log, &written);
+      lines.push(left_out);
+      continue;
+    }
+
     let done = run(root, step);
 
     waited_seconds += done.waited_seconds.max(0.0);

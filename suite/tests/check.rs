@@ -13,7 +13,7 @@ use bmo_testbed_core::policy::{fill_marks, fill_shown};
 use bmo_testbed_suite::check::{
   CheckAsk, CheckPlan, default_log, default_since, plan, run_check, run_step,
 };
-use bmo_testbed_suite::static_check::TimedRun;
+use bmo_testbed_suite::static_check::{OwnPackages, TimedRun, cargo_format, cargo_lint};
 
 fn write(root: &Path, file: &str, text: &str) {
   let path = root.join(file);
@@ -696,12 +696,22 @@ fn a_service_checkout_s_change_runs_exactly_what_its_own_declaration_and_layout_
   let given = |file: &str| plan(&repo, &files(&[file])).unwrap();
   let quick = DeployStep::Quick.name();
 
+  let format = DeployStep::CargoFormat.name();
+  let lint = DeployStep::CargoLint.name();
+
   // A path of the crate standing at the root, its tests' shared module and a document no other unit holds
-  // are the root crate's own: checked and tested.
+  // are the root crate's own: the workspace formatted and linted, the declared lint that only repeats it
+  // left out, and the crate tested.
   for file in ["src/lib.rs", "tests/support/mod.rs", "docs/service.md"] {
     let planned = given(file);
 
-    assert_eq!(names(&planned), [quick, "lint", "cargo check", "cargo test"], "{file}");
+    assert_eq!(names(&planned), [quick, "lint", format, lint, "cargo test"], "{file}");
+    assert_eq!(planned.steps[1].step.covered_by, Some(DeployStep::CargoLint), "{file}");
+    assert_eq!(
+      planned.steps[2..4].iter().map(|step| step.step.clone()).collect::<Vec<_>>(),
+      [cargo_format(&OwnPackages::Workspace), cargo_lint(&OwnPackages::Workspace)],
+      "{file}"
+    );
     assert_eq!(planned.touched.checked_crates, ["service"], "{file}");
     assert_eq!(planned.touched.tested_crates, ["service"], "{file}");
     assert!(planned.touched.tests.is_empty(), "{file}");
@@ -732,6 +742,7 @@ fn a_service_checkout_s_change_runs_exactly_what_its_own_declaration_and_layout_
   let harness = given("ts/agent/harness.ts");
 
   assert_eq!(names(&harness), [quick, "lint", "bun test in tests/ts", "ts/ check:types"]);
+  assert_eq!(harness.steps[1].step.covered_by, None);
   assert_eq!(harness.touched.tests, ["tests/ts/harness.test.ts"]);
   assert!(harness.touched.checked_crates.is_empty());
   assert_eq!(harness.steps.last().unwrap().step.command, ["bun", "run", "check:types"]);
@@ -746,6 +757,26 @@ fn a_service_checkout_s_change_runs_exactly_what_its_own_declaration_and_layout_
   }
 
   assert_eq!(given("tests/ts/harness.test.ts").touched.tests, ["tests/ts/harness.test.ts"]);
+}
+
+// "a declared step that only repeats them is left out ... its line is an `ok` line saying it was left out and
+// which of the workspace check's steps covers it, with no wait and no run, and it counts as passed"
+#[test]
+fn a_declared_step_the_workspace_check_covers_is_never_run_and_says_so_as_passed() {
+  let dir = service_checkout();
+  let log = dir.path().join("check.log");
+  let planned = plan(&repo(dir.path()), &files(&["src/lib.rs"])).unwrap();
+  let checked = run_check(dir.path(), &planned, &log, &|_, step| {
+    assert_ne!(step.name, "lint", "a covered step ran");
+    ran(0, "fine\n")
+  });
+  let left_out =
+    fill_shown(&SUITE.check.left_out, &[("name", &"lint"), ("by", &DeployStep::CargoLint.name())]);
+
+  assert_eq!(checked.code, 0, "{:?}", checked.lines);
+  assert!(left_out.starts_with("ok lint "), "{left_out}");
+  assert_eq!(checked.lines.iter().filter(|line| **line == left_out).count(), 1, "{:?}", checked.lines);
+  assert!(std::fs::read_to_string(&log).unwrap().contains(&left_out));
 }
 
 // "a crate whose only changed paths are its test files runs those tests alone, a step of its own for each test
