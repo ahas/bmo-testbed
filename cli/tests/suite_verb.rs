@@ -564,9 +564,45 @@ fn the_suite_refuses_a_range_that_is_no_commit_before_it_runs_anything() {
 #[test]
 fn a_crate_s_tests_pass_where_a_sibling_s_version_moved_past_the_lock() {
   let dir = tempfile::tempdir().unwrap();
-  let repo = dir.path().join("repo");
-  let sibling = dir.path().join("sibling");
-  let data = dir.path().join("data");
+  let (repo, data, lock) = moved_sibling(dir.path());
+  let mut command = testbed(&repo, &data, &["suite"]);
+
+  command.env("BMO_CARGO_TARGET_DIR", dir.path().join("cargo-target"));
+  std::os::unix::process::CommandExt::process_group(&mut command, 0);
+
+  let done = ended(command.spawn().unwrap());
+
+  assert_eq!(done.code, 0, "{}", done.err);
+  assert!(done.err.contains("sample-sibling 0.1.0 -> 0.2.0"), "{}", done.err);
+  assert_eq!(std::fs::read_to_string(repo.join("Cargo.lock")).unwrap(), lock);
+}
+
+// "what a build stands on is ... asked for with the same words on the lock's path packages brought to their
+// manifests": a build holding its lock passes over a sibling's moved version, and the asking after it, which
+// holds the lock too, is answered, so the removal of what the build superseded is not given up.
+#[test]
+fn the_removal_after_a_locked_build_is_asked_on_the_lock_the_build_ran_on() {
+  let dir = tempfile::tempdir().unwrap();
+  let (repo, data, lock) = moved_sibling(dir.path());
+  let mut command = testbed(&repo, &data, &["cargo", "build", "--locked"]);
+
+  command.env("BMO_CARGO_TARGET_DIR", dir.path().join("cargo-target"));
+  std::os::unix::process::CommandExt::process_group(&mut command, 0);
+
+  let done = ended(command.spawn().unwrap());
+
+  assert_eq!(done.code, 0, "{}", done.err);
+  assert!(done.err.contains("sample-sibling 0.1.0 -> 0.2.0"), "{}", done.err);
+  assert!(!done.err.contains("superseded units not removed"), "{}", done.err);
+  assert_eq!(std::fs::read_to_string(repo.join("Cargo.lock")).unwrap(), lock);
+}
+
+// A checkout whose committed lock names a sibling crate, read by a path, at a version the sibling has moved
+// past: the checkout, the data folder, and the lock as committed.
+fn moved_sibling(dir: &Path) -> (PathBuf, PathBuf, String) {
+  let repo = dir.join("repo");
+  let sibling = dir.join("sibling");
+  let data = dir.join("data");
   let manifest = |name: &str, version: &str, more: &str| {
     format!("[package]\nname = \"{name}\"\nversion = \"{version}\"\nedition = \"2021\"\n{more}")
   };
@@ -607,16 +643,7 @@ fn a_crate_s_tests_pass_where_a_sibling_s_version_moved_past_the_lock() {
   git(&repo, &["add", "-A"]);
   git(&repo, &["commit", "-qm", "crate"]);
 
-  let mut command = testbed(&repo, &data, &["suite"]);
-
-  command.env("BMO_CARGO_TARGET_DIR", dir.path().join("cargo-target"));
-  std::os::unix::process::CommandExt::process_group(&mut command, 0);
-
-  let done = ended(command.spawn().unwrap());
-
-  assert_eq!(done.code, 0, "{}", done.err);
-  assert!(done.err.contains("sample-sibling 0.1.0 -> 0.2.0"), "{}", done.err);
-  assert_eq!(std::fs::read_to_string(repo.join("Cargo.lock")).unwrap(), lock("0.1.0"));
+  (repo, data, lock("0.1.0"))
 }
 
 // "the crates' tests are built once, by one Cargo command naming every crate the run reaches", and "a crate's

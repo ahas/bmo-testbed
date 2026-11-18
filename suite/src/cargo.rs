@@ -175,7 +175,15 @@ pub fn cargo_verb_line(args: &[impl AsRef<str>]) -> Vec<String> {
 pub fn remove_superseded_after(root: &Path, args: &[String], say: &mut dyn FnMut(&str)) {
   let Some(reporting) = reporting_args(args) else { return };
   let invocation = cargo_invocation(root, &reporting);
+  // The command asked about ran on the lock's path packages brought to their manifests and put the lock back,
+  // so the asking holds the lock the same way or Cargo refuses the lock the build itself passed on.
+  let aligned = align_path_packages(root, &reporting, &|| invocation.program());
   let asked = invocation.command(root).stdout(Stdio::piped()).stderr(Stdio::piped()).output();
+
+  if let Some(aligned) = &aligned {
+    aligned.put_back();
+  }
+
   let asked = match asked {
     Ok(asked) => asked,
     Err(why) => return say(&fill_shown(&SUITE.cargo.not_removed, &[("why", &why)])),

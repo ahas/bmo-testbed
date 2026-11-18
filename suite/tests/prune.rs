@@ -446,6 +446,68 @@ fn a_checkouts_own_unit_goes_once_no_record_names_it_however_lately_it_was_read_
   assert_eq!(plan.stray_targets, vec![checkout.join("target")]);
 }
 
+// "from a profile directory of a live checkout's own directory ... the same": a checkout builds in its own
+// directory, where an earlier unit of its own crate goes once no record names it and its grace is past, and a
+// dependency nothing stands on goes once unread for the span, while what the record names, what that was
+// built from, a unit within the grace and a dependency read lately stay.
+#[test]
+fn a_live_checkouts_own_directory_keeps_what_its_record_names_and_what_was_read_within_the_span() {
+  let scratch = tempfile::tempdir().unwrap();
+  let now = now();
+  let old = now - (PRUNE.older_than_days + 1) * DAY_MS;
+  let recent = now - HOUR_MS;
+  let before_grace = now - (PRUNE.own_grace_hours + 1) * HOUR_MS;
+  let within_grace = now - (PRUNE.own_grace_hours - 1) * HOUR_MS;
+  let root = scratch.path().join("within");
+  let checkout = scratch.path().join("within-checkout");
+  let dir = root.join("checkouts").join(checkout_target_name(&checkout));
+  let profile = dir.join("debug");
+
+  std::fs::create_dir_all(&checkout).unwrap();
+
+  let unread = unit(&profile, 30, "unread_dep", old, &[]);
+  let read = unit(&profile, 31, "read_dep", old, &[]);
+  let under = unit(&profile, 32, "used_dep", old, &[]);
+  let named = unit(&profile, 33, "own_crate", before_grace, &[&under]);
+  let earlier = unit(&profile, 34, "own_crate", before_grace, &[]);
+
+  unit(&profile, 35, "own_crate", within_grace, &[]);
+
+  for path in [
+    library(&profile, &read),
+    profile
+      .join(".fingerprint")
+      .join(format!("{}-{}", read.name, read.hash))
+      .join(format!("lib-{}", read.name)),
+  ] {
+    let modified = modified_ms(&std::fs::metadata(&path).unwrap());
+
+    date_as(&path, recent, modified);
+  }
+
+  let record = serde_json::json!({
+    "test": {
+      "at": now,
+      "wrapper": "wrapper",
+      "generation": "one",
+      "places": { "debug|crates/own|lib|own_crate|plain|build": format!("debug:{}", named.hash) },
+    }
+  });
+
+  write(&dir.join(CHECKOUT_RECORD_NAME), &checkout.to_string_lossy(), recent);
+  write(&dir.join(BUILT_UNITS_NAME), &record.to_string(), recent);
+
+  let plan = plan_prune(&root, now);
+  let mut gone: Vec<String> = plan.units.iter().map(|one| one.hash.clone()).collect();
+  let mut expected = vec![unread.hash, earlier.hash];
+
+  gone.sort();
+  expected.sort();
+
+  assert_eq!(gone, expected);
+  assert!(plan.checkouts.is_empty());
+}
+
 #[test]
 fn the_locks_are_cargos_own_build_lock_in_each_profile_directory_held_until_let_go() {
   let scratch = tempfile::tempdir().unwrap();

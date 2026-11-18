@@ -848,7 +848,8 @@ flowchart TD
   sibling's new version fails no gate, no check, no suite and no release build.
 - **Removing what a build superseded.** After a build, check, lint, test, bench or run the Cargo verb
   carried has passed, the units of the checkout's own crates that its earlier builds left and this one
-  replaced go. What a build stands on is Cargo's own word, its JSON messages. A record in the
+  replaced go. What a build stands on is Cargo's own word, its JSON messages, asked for with the same
+  words on the lock's path packages brought to their manifests as the command itself ran on them. A record in the
   checkout's target directory names, for each shape of build, the unit its last build stood on at each
   place, with the generation it was built in. The removal takes Cargo's build lock only where no build
   holds it at that moment, leaving what it found to the next build otherwise; it stands in no queue of
@@ -859,9 +860,12 @@ flowchart TD
   - from a profile directory standing at the build root itself, a unit of a checkout's own crates no live
     checkout's record names, built more than half a day ago, and any other unit no build has read for
     two days, or `--older-than` days, never a day or less;
+  - from a profile directory of a live checkout's own directory, but a deployment's checkout's (below),
+    the same: a unit of the checkout's own crates no record names, built more than half a day ago, and any
+    other unit no build has read for the span. A build leaves a unit behind each time a crate of the
+    checkout changes, so without this a checkout's directory grows with every build it has made;
   - incremental state unchanged for three hours, or `--incremental-older-than` hours, at the build root
-    and in each live checkout's directory but a deployment's checkout's (below), whose compiled units its own
-    outputs stand on and stay;
+    and in each live checkout's directory but a deployment's checkout's;
   - the directory of a checkout that no longer exists, a deployment's bench removed among them, since no
     deployment builds there again;
   - the whole `target/` directory of a live checkout, a stray a build typed outside the Cargo verb

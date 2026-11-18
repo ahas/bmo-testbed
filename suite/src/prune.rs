@@ -615,12 +615,18 @@ pub fn plan_prune(root: &Path, older_than_ms: i64, now: i64, incremental_older_t
     plan_profile(&profile, cutoff, now - incremental_older_than_ms, &standing, &mut plan);
   }
 
-  // A live checkout builds in its own directory, whose every file its outputs stand on, so what goes there is
-  // its stale incremental state alone; nothing goes from a deployment's checkout, which a deployment would build
-  // again from cold.
+  // A live checkout builds in its own directory, so its files' standing there keeps none of them: what stays is
+  // what its record names and what a build read within the spans, as at the build root. Nothing goes from a
+  // deployment's checkout, which a deployment would build again from cold.
+  let within = Standing {
+    live_inodes: HashSet::new(),
+    recorded: standing.recorded.clone(),
+    own_cutoff: standing.own_cutoff,
+  };
+
   for checkout in live_checkouts.iter().filter(|checkout| !is_deployment_checkout(checkout)) {
     for profile in profile_dirs(checkout) {
-      plan_profile(&profile, cutoff, now - incremental_older_than_ms, &standing, &mut plan);
+      plan_profile(&profile, cutoff, now - incremental_older_than_ms, &within, &mut plan);
     }
   }
 
