@@ -28,10 +28,12 @@ pub struct PersonalDataWords {
   pub hit: String,
   pub mail_kind: String,
   pub home_kind: String,
+  pub telephone_kind: String,
   pub network_kind: String,
   pub documentation_domains: Vec<String>,
   pub documentation_suffixes: Vec<String>,
   pub neutral_homes: Vec<String>,
+  pub unit_suffixes: Vec<String>,
   pub forms: Vec<PersonalDataForm>,
 }
 

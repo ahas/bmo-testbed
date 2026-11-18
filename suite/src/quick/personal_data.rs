@@ -79,15 +79,43 @@ fn is_private_address(address: &str) -> bool {
       || (*first == 100 && (64..=127).contains(second)))
 }
 
+// Whether a mail-shaped match names a unit of the service manager, written as a template and its instance,
+// rather than a mailbox.
+fn is_unit_name(words: &PersonalDataWords, found: &str) -> bool {
+  words.unit_suffixes.iter().any(|suffix| found.ends_with(suffix.as_str()))
+}
+
+// Whether a match stands inside a longer number, as the digits of a fraction do: a digit or a point touches
+// it on either side.
+fn is_part_of_a_number(line: &str, found: &regex::Match<'_>) -> bool {
+  let before = line[..found.start()].chars().next_back();
+  let mut after = line[found.end()..].chars();
+  let next = after.next();
+
+  before.is_some_and(|one| one.is_ascii_digit() || one == '.')
+    || next.is_some_and(|one| one.is_ascii_digit())
+    || (next == Some('.') && after.next().is_some_and(|one| one.is_ascii_digit()))
+}
+
 // Whether what a form found is a finding: not what the policy lets stand for its kind, nor anything the
 // declaration allows.
-fn kept(words: &PersonalDataWords, allowed: &[String], kind: &str, found: &str) -> bool {
+fn kept(
+  words: &PersonalDataWords,
+  allowed: &[String],
+  kind: &str,
+  line: &str,
+  at: &regex::Match<'_>,
+) -> bool {
+  let found = at.as_str();
+
   if allowed.iter().any(|allowed| !allowed.is_empty() && found.contains(allowed.as_str())) {
     return false;
   }
 
   if kind == words.mail_kind {
-    !is_documentation_address(words, found)
+    !is_documentation_address(words, found) && !is_unit_name(words, found)
+  } else if kind == words.telephone_kind {
+    !is_part_of_a_number(line, at)
   } else if kind == words.home_kind {
     !is_neutral_home(words, found)
   } else if kind == words.network_kind {
@@ -112,10 +140,7 @@ pub fn personal_data_in(path: &str, text: &str, allowed: &[String]) -> Vec<Strin
 
     for form in &forms.each {
       if !kinds.contains(&form.kind)
-        && form
-          .pattern
-          .find_iter(line)
-          .any(|found| kept(words, allowed, form.kind, found.as_str()))
+        && form.pattern.find_iter(line).any(|found| kept(words, allowed, form.kind, line, &found))
       {
         kinds.push(form.kind);
       }

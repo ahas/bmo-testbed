@@ -216,12 +216,15 @@ hit = "{path}:{line}: {kind}"
 # for documents, a home folder named for a role, and an address of no private network.
 mail_kind = "a mail address"
 home_kind = "a home path"
+telephone_kind = "a telephone number"
 network_kind = "a private network address"
 # The domains RFC 2606 and RFC 6761 keep for documents: an address there names no person and no machine.
 documentation_domains = ["example.com", "example.net", "example.org", "localhost"]
 documentation_suffixes = [".example", ".test", ".invalid", ".localhost"]
 # Home folders that name a role and no person.
-neutral_homes = ["user", "pc", "tester", "qa-admin", "placeholder", "example", "name", "you"]
+neutral_homes = ["user", "pc", "tester", "qa-admin", "placeholder", "example", "name", "you", "someone"]
+# A unit of the service manager written as a template and its instance has a mailbox's shape and names none.
+unit_suffixes = [".service", ".socket", ".slice", ".timer", ".target", ".mount", ".scope", ".path"]
 
 # The forms a line is read for. Each is written so that this file is no sample of what it looks for.
 [[personal_data.forms]]

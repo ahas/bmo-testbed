@@ -197,7 +197,9 @@
   number, a token and a private network address. A finding names the file, the line and the kind, never
   the value.
   - **What stands:** a mail address in the space kept for documents (`example.com`, `.test` and their
-    kin); a home path whose folder names a role, such as `user`; an address of no private network, the
+    kin); a unit of the service manager written as a template and its instance, which has a mailbox's
+    shape; a home path whose folder names a role, such as `user`; digits that stand inside a longer number,
+    as a fraction's do, and have a telephone number's shape; an address of no private network, the
     loopback among them; and a finding whose matched text holds a string the declaration's
     `personal_data_allowed` names.
   - **One check for every repository.** The forms and what they let stand are the testbed's policy, so a

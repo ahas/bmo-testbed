@@ -45,6 +45,9 @@ fn a_documentation_address_a_role_s_home_and_a_public_or_loopback_address_stand(
     joined(&["listens on ", "127", ".0.0.1"]),
     joined(&["version ", "1", ".", "2", ".", "3", ".", "4"]),
     joined(&["asks ", "8", ".8.8.8"]),
+    joined(&["under user", "@", "1000", ".", "service", "/app.slice"]),
+    joined(&["share 0", ".", "032", "9101", "5625"]),
+    joined(&["the path ", "/", "home", "/", "someone", "/.local"]),
   ];
 
   for line in standing {
