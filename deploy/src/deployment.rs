@@ -23,6 +23,7 @@ use bmo_testbed_core::policy::declaration::DECLARATION;
 use bmo_testbed_core::policy::deploy::DEPLOY;
 use bmo_testbed_core::policy::deploy_steps::DeployStep as OwnStep;
 use bmo_testbed_core::policy::fill_marks;
+use bmo_testbed_core::queue::HeldLock;
 use bmo_testbed_core::silence::{Output, Silence, Watch};
 use bmo_testbed_core::turn::{
   Env, FRONT_VARIABLE, Lane, NOT_RUN_EXIT_CODE, TurnAsk, harness_pid, process_env, take_turn,
@@ -42,7 +43,7 @@ use crate::expansion::{
   BuildTree, TreeStore, bring_submodules, build_target, committed_trees, expansion_tree, lay_outside_trees,
   put_build_tree,
 };
-use crate::line::{DeployLine, DeployTicket, FirstMark, RootTurn};
+use crate::line::{DeployLine, DeployTicket, FirstMark, RootTurn, waiting_commits};
 use crate::progress::{
   DeployRun, DeployStart, Outcome, Part, Stage, begin_deploy, deploy_progress_at, deploy_progress_path,
 };
@@ -1485,7 +1486,53 @@ pub async fn deploy(
   hands: &dyn DeployHands,
   hook: &Hook,
 ) -> u8 {
+  laid(repo, places, ask, env, gate, hands, hook, None).await
+}
+
+// The commit a deployment waiting for the deploy root's turn asks for that carries the one in hand, the furthest
+// on where several do (docs/deploy.md, 「The deployment line」). The remote is read again first, since a commit
+// asked for after this deployment began may not be in the checkout yet.
+fn later_asked(run: &Laying<'_>, lock: &Path, commit: &str) -> Option<String> {
+  let source = &run.places.source;
+  let asked = waiting_commits(lock, &run.repo.name());
+
+  if asked.is_empty() {
+    return None;
+  }
+
+  let _ = run.git(&["fetch", "--quiet", "origin"], source);
+  let carries =
+    |later: &str, earlier: &str| run.git(&["merge-base", "--is-ancestor", earlier, later], source).ok;
+
+  asked
+    .iter()
+    .filter_map(|named| {
+      let resolved = run.git(&["rev-parse", "--verify", "--quiet", &format!("{named}^{{commit}}")], source);
+
+      resolved.ok.then(|| resolved.out.trim().to_owned())
+    })
+    .filter(|later| later != commit && carries(later, commit))
+    .fold(None, |furthest: Option<String>, later| match furthest {
+      Some(furthest) if !carries(&later, &furthest) => Some(furthest),
+      _ => Some(later),
+    })
+}
+
+// The deploy run itself, under its deploy root's turn where one is handed in: a run that took the commit of a
+// deployment waiting behind it starts over on that commit, holding the turn it already has.
+#[allow(clippy::too_many_arguments)]
+async fn laid(
+  repo: &Repository,
+  places: &DeployPlaces,
+  ask: &DeployAsk,
+  env: &Env,
+  gate: &dyn Gate,
+  hands: &dyn DeployHands,
+  hook: &Hook,
+  turn: Option<HeldLock>,
+) -> u8 {
   let said = &DEPLOY.run;
+  let original = places.clone();
   let mut run = Laying {
     repo: repo.clone(),
     places: places.clone(),
@@ -1625,20 +1672,38 @@ pub async fn deploy(
   // the one whose unit it stands in takes no turn of its own: that run holds it.
   let ticket = DeployTicket {
     first: ask.first.clone(),
+    before_start: ask.before_start.is_some(),
     ..DeployTicket::asked(&repo.name(), &shown, ask.unit.as_deref())
   };
   let carried =
     deploy_progress_at(&places.progress).is_some_and(|standing| standing.carried_in(ask.unit.as_deref()));
-  let _root_turn = (!carried)
-    .then(|| {
-      let turn = RootTurn {
-        poll: ask.root_poll,
-        ..RootTurn::under(&places.deploy_root)
-      };
+  let root = RootTurn {
+    poll: ask.root_poll,
+    ..RootTurn::under(&places.deploy_root)
+  };
+  let taken_now = turn.is_none() && !carried;
+  let root_turn = match turn {
+    Some(held) => Some(held),
+    None => (!carried).then(|| root.take(&ticket, &|line| run.say(line))).flatten(),
+  };
 
-      turn.take(&ticket, &|line| run.say(line))
-    })
-    .flatten();
+  // A deployment waiting behind this one asks for a commit that carries it: that commit is put live in its
+  // place, read afresh under the turn already held. A gate left out stands on a pass of this commit alone.
+  if taken_now
+    && !ask.no_check
+    && let Some(later) = later_asked(&run, &root.lock, &commit)
+  {
+    run.say(&fill_marks(&said.joined, &[("commit", &shown), ("later", &short(&later))]));
+
+    let joined = DeployAsk {
+      commit: Some(later),
+      ..ask.clone()
+    };
+
+    return Box::pin(laid(checkout, &original, &joined, env, gate, hands, hook, root_turn)).await;
+  }
+
+  let _root_turn = root_turn;
   let line = ask.line.as_ref().and_then(|line| line.take(&ticket, &|line| run.say(line)));
 
   run.previous = read_deploy_record(&places.record);

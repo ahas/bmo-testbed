@@ -369,6 +369,15 @@ flowchart TD
 - **Its turn reads the live release again.** Once its turn comes, the deployment reads the deployment
   record again, so the range its gate checks and the major change it judges are against what the
   deployment before it put live.
+- **A deployment whose turn comes lays down the newest commit asked for behind it.** Once its deploy root's
+  turn comes, it reads the deployments still waiting for that turn. Where one of them asks for a commit that
+  carries its own, it puts that commit live in place of its own, the furthest on where several do, and says so
+  on a line: the repository is checked, built and restarted once for all of them, and each deployment it took
+  the commit of ends at its own turn on the commit already live, as below. It reads the commit it takes afresh:
+  its declaration, its places and every refusal are judged of that commit, and a refusal ends the deployment
+  as any refusal does. Two things keep a deployment to its own commit: its gate left out with `--no-check`,
+  since the pass it stands on is its own commit's, and a waiting deployment asked with `--before-start`, whose
+  command runs only in its own restart.
 - **A commit already live when its turn comes ends the deployment there.** Where the record read again
   names the commit asked for, the deployment says so on a line, begins its progress record and ends it
   live at once, lets the line go and exits 0: no gate, no backup, no release, no restart and no event,

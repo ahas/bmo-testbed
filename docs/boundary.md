@@ -150,7 +150,8 @@ bmo-testbed status [--json | --free [--narrow]]
     list of deployment tickets, in the order they will be served).
 - **A deployment ticket** carries `words` (what the line names it by, its repository, short commit and
   unit), `repository`, `commit` (the short commit), `unit` (null where the deployment runs in none),
-  `askedAt` (epoch milliseconds), `pid`, and `first`: null, or `by`, `why` and `at` (epoch milliseconds)
+  `askedAt` (epoch milliseconds), `pid`, `beforeStart` (whether it was asked with a command to run before its
+  start), and `first`: null, or `by`, `why` and `at` (epoch milliseconds)
   of the mark that put it first. A ticket a testbed of an earlier revision stood carries its `words` and
   `pid` alone, every other field null.
 - **A close entry** carries `scope`, `checkout`, `askedAt`, `heldAt` and `pid` as a queue entry does.

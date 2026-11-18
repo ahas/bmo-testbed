@@ -112,6 +112,10 @@ line_nobody = "nobody"
 # deployment under way it waits behind, or `line_nobody`.
 root_waiting = "waiting for the deployment of this repository under way to end ({seconds}s so far): {holder}"
 root_taken = "the deployment of this repository under way ended; its turn came after {seconds}s"
+# A deployment waiting for this deploy root's turn asks for a commit that carries the one in hand, so that one
+# is put live in its place (docs/deploy.md, 「The deployment line」): {commit} the commit in hand, {later} the
+# commit taken, both short.
+joined = "a deployment waiting for this repository asks for {later}, which carries {commit}; {later} is put live in its place"
 # The repository read through its primary checkout rather than the one the deployment was asked from
 # (docs/deploy.md, 「The releases」): {checkout} the primary checkout.
 primary = "reading the repository through its primary checkout {checkout}"

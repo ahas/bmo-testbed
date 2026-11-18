@@ -57,6 +57,9 @@ pub struct DeployTicket {
   #[serde(default)]
   pub pid: i64,
   pub first: Option<FirstMark>,
+  /// It was asked with a command to run before its start, which runs only in its own restart.
+  #[serde(default)]
+  pub before_start: bool,
 }
 
 impl DeployTicket {
@@ -70,6 +73,7 @@ impl DeployTicket {
       asked_at: Some(now_ms()),
       pid: 0,
       first: None,
+      before_start: false,
     }
   }
 
@@ -142,6 +146,18 @@ pub fn standing(lock: &Path) -> Standing {
     .collect();
 
   Standing { holder, waiting }
+}
+
+/// The commits the deployments waiting under a lock ask for, of the repository named, in the order the lock
+/// serves them: what a deployment whose turn came may put live in place of its own (docs/deploy.md, 「The
+/// deployment line」). One asked with a command to run before its start names none.
+pub fn waiting_commits(lock: &Path, repository: &str) -> Vec<String> {
+  standing(lock)
+    .waiting
+    .into_iter()
+    .filter(|ticket| ticket.repository.as_deref() == Some(repository) && !ticket.before_start)
+    .filter_map(|ticket| ticket.commit)
+    .collect()
 }
 
 /// The ticket of a deployment of the repository and commit waiting in a unit under any of the locks given, for

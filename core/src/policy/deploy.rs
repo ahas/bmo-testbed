@@ -79,6 +79,7 @@ pub struct RunWords {
   pub line_nobody: String,
   pub root_waiting: String,
   pub root_taken: String,
+  pub joined: String,
   pub primary: String,
   pub first_named: String,
   pub first_marked: String,
