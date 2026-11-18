@@ -88,6 +88,9 @@ pub struct CheckWords {
   pub not_enabled: String,
   pub settled: String,
   pub unsettled: String,
+  pub no_checkout: String,
+  pub twice: String,
+  pub no_commit: String,
 }
 
 #[derive(Debug, Deserialize)]

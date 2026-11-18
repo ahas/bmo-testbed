@@ -222,6 +222,15 @@ no_turn = "the machine's turn did not come: {words}"
 # Said on standard error every `check_standing_seconds` while a step runs: {name} the step, {seconds} how long
 # it has run.
 standing = "check: {name} still running ({seconds}s so far)"
+# A change check over several checkouts (docs/checks.md, 「The change check over several checkouts」): every line
+# of one checkout's check opened with {repository}, the name its declaration gives; the heading of its part in
+# the set's log; the line naming a failed repository and its failed {steps}, joined; and the set's log file
+# named by `set_log` with {hash} the set's own.
+set_line = "{repository}: {line}"
+set_logged = "==== {repository} ({checkout})"
+set_failed = "check FAILED: {repository}: {steps}"
+set_steps_joiner = ", "
+set_log = "check-set-{hash}.log"
 
 # What the cargo verb says of the units a passed build superseded (docs/deploy.md, 「The Cargo build
 # directory」): {why} what a call came to, {code} and {said} Cargo's exit and its last line, {count} units of

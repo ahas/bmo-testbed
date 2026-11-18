@@ -610,6 +610,7 @@ fn released(dir: &Path, far: Option<&str>, live: Option<&str>) -> MachinePlaceme
       disk_free_gigabytes: None,
       disk_paths: Vec::new(),
       order: None,
+      combined_order: None,
     },
     home: dir.to_path_buf(),
     deploy_tree: live.map(|_| dir.join("deploy")),
@@ -1963,4 +1964,138 @@ fn a_machine_out_of_reach_answers_broken_whether_or_not_begun_there_and_nothing_
   assert!(!unreached.passed && unreached.broken, "{unreached:?}");
   assert_eq!(unreached.reason, broke);
   assert_eq!(build(&begun, &begun_at), Some(Err(GateFault::Broken(broke))));
+}
+
+// The stand-in `ssh` with every `placed` line written down, one a line, and ended there; `status --free`
+// answers the machine full, so a run that may fall to this machine would.
+fn set_ssh(dir: &Path) -> (PathBuf, PathBuf) {
+  let ssh = dir.join("ssh");
+  let lines = dir.join("placed-lines");
+
+  install(
+    &SSH.replacen(
+      "shift\nexec",
+      &format!(
+        "shift\ncase \"$*\" in *\" placed \"*) echo \"$*\" >> {}; exit 0 ;; *\"status --free\"*) exit 1 ;; esac\nexec",
+        lines.display()
+      ),
+      1,
+    ),
+    &ssh,
+  );
+  (ssh, lines)
+}
+
+// "a change check over several checkouts is placed as one set: every checkout laid in one bench at the place it
+// has under this machine's home, the set run there by one `ssh` command naming each checkout by its path from
+// the first's bench and its since by the commit, and by default never falling to this machine however full the
+// placed machine is"
+#[test]
+fn a_set_of_checkouts_is_placed_as_one_run_laid_as_here_and_never_falls_to_this_machine() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let alpha = dir.join("work/alpha");
+  let beta = dir.join("base/beta");
+  let (ssh, lines) = set_ssh(&dir);
+
+  settle(&dir, &ssh, "stand");
+  checkout(&alpha, "testbed = 0\n");
+  checkout(&beta, "testbed = 0\n");
+  std::fs::write(alpha.join("open.txt"), "not yet committed").unwrap();
+  git(&beta, &["branch", "base"]);
+
+  let beta_base = git(&beta, &["rev-parse", "base"]);
+  let alpha_head = git(&alpha, &["rev-parse", "HEAD"]);
+  let done = on_machine(&alpha, &dir, &["check", "--checkout", ".", "--checkout", "../../base/beta@base"]);
+  let handed = std::fs::read_to_string(&lines).expect("the set was placed");
+  let handed: Vec<&str> = handed.lines().collect();
+
+  assert_eq!(done.code, 0, "{}\n{}", done.out, done.err);
+  assert_eq!(handed.len(), 1, "{handed:?}");
+  assert!(
+    handed[0].contains(&format!("cd {}", dir.join("bench/work/alpha").display())),
+    "{}",
+    handed[0]
+  );
+  let first = handed[0]
+    .find(&format!(".@{alpha_head}"))
+    .expect("the first checkout is named from its bench");
+  let second = handed[0]
+    .find(&format!("../../base/beta@{beta_base}"))
+    .expect("the second is named from the first's bench");
+
+  assert!(first < second, "{}", handed[0]);
+  assert!(
+    handed[0].contains(&format!("--checkout {}", dir.join("bench/base/beta").display())),
+    "{}",
+    handed[0]
+  );
+  assert!(!done.out.contains("check:"), "the set ran here: {}", done.out);
+
+  for (bench, from) in [(dir.join("bench/work/alpha"), &alpha), (dir.join("bench/base/beta"), &beta)] {
+    assert_eq!(git(&bench, &["rev-parse", "HEAD"]), git(from, &["rev-parse", "HEAD"]));
+  }
+
+  assert_eq!(
+    std::fs::read_to_string(dir.join("bench/work/alpha/open.txt")).unwrap(),
+    "not yet committed"
+  );
+}
+
+// "every placement but the placed machine refuses a change check over several checkouts rather than running it
+// here: the endpoint, a testbed naming no placed machine, and a run a declared variable keeps here, unless the
+// placed machine's combined_order names this machine"
+#[test]
+fn a_set_is_refused_by_every_placement_that_would_run_it_here() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let alpha = dir.join("alpha");
+  let beta = dir.join("beta");
+  let (ssh, lines) = set_ssh(&dir);
+  let set = ["check", "--checkout", ".", "--checkout", "../beta"];
+
+  checkout(&alpha, "testbed = 0\n\n[runner]\nlocal_variables = [\"STAND_LOCAL\"]\n");
+  checkout(&beta, "testbed = 0\n");
+
+  let unplaced = on_machine(&alpha, &dir, &set);
+
+  assert_eq!(unplaced.code, 1, "{}\n{}", unplaced.out, unplaced.err);
+  assert!(unplaced.err.contains(&LANES.placed.set_no_machine), "{}", unplaced.err);
+
+  settle(&dir, &ssh, "stand");
+
+  let endpoint = ran(
+    testbed(&alpha, &dir, &set)
+      .env("HOME", &dir)
+      .env("BMO_TESTBED_PLACEMENT", "http://127.0.0.1:9"),
+  );
+
+  assert_eq!(endpoint.code, 1, "{}\n{}", endpoint.out, endpoint.err);
+  assert!(endpoint.err.contains(&LANES.placed.set_one_checkout), "{}", endpoint.err);
+
+  let kept = ran(testbed(&alpha, &dir, &set).env("HOME", &dir).env("STAND_LOCAL", "1"));
+
+  assert_eq!(kept.code, 1, "{}\n{}", kept.out, kept.err);
+  assert!(
+    kept.err.contains(&fill_marks(&LANES.placed.set_kept, &[("variable", "STAND_LOCAL")])),
+    "{}",
+    kept.err
+  );
+  assert!(!lines.exists(), "a refused set was placed");
+
+  let settings = dir.join("env/placement.toml");
+  let named = std::fs::read_to_string(&settings).unwrap() + "combined_order = [\"machine-2\", \"local\"]\n";
+
+  std::fs::write(&settings, named).unwrap();
+
+  let here = ran(testbed(&alpha, &dir, &set).env("HOME", &dir).env("STAND_LOCAL", "1"));
+
+  assert_eq!(here.code, 0, "{}\n{}", here.out, here.err);
+  assert!(
+    here.err.contains(&fill_marks(&LANES.placed.kept, &[("variable", "STAND_LOCAL")])),
+    "{}",
+    here.err
+  );
+  assert!(here.out.lines().any(|line| line.starts_with("alpha: check:")), "{}", here.out);
+  assert!(here.out.lines().any(|line| line.starts_with("beta: check:")), "{}", here.out);
 }

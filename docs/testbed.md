@@ -322,6 +322,13 @@ flowchart TD
   on that machine and named in the lines that come back. The commit its `--since` names is resolved here
   and handed over as the commit itself, since a name such as `origin/main` names a commit only in this
   checkout and the bench there holds none of its references.
+- **A change check over several checkouts is placed whole as one set** (`docs/checks.md`, 「The change
+  check over several checkouts」): every checkout laid in one bench there at the place it has under this
+  machine's home, the set run there as that machine's change check in one wide seat of its line. It goes
+  by the settings' `combined_order`, whose default is the placed machine alone, so a busy placed machine
+  is waited for in its line and the set never falls to this machine; it runs here only where that order
+  names this machine, and any other placement refuses it rather than running it here
+  (`docs/boundary.md`, 「Placement」).
 - **What stays here, whatever the order says:**
   - a run started inside a turn already held, since its holder's seat is here and it stands in it;
   - a run inside a deployment's or a whole run's unit, since those hold their own place in this

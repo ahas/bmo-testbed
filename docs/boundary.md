@@ -269,6 +269,7 @@ bmo-testbed template make|drop|sweep <name>
 
 ```
 bmo-testbed check [--since <commit>] [--log <path>] [--json] [<file…>]
+bmo-testbed check --checkout <path>[@<rev>]… [--log <path>] [--json]
 bmo-testbed check quick
 bmo-testbed check static [--since <commit>]
 bmo-testbed check wording|layout|dependencies|cargo-profile|personal-data|shared-versions
@@ -287,6 +288,17 @@ bmo-testbed check dashes <file…> [--write]
   files; `--log` then names nothing here, and the log is that machine's. Under a failing step it prints
   what failed in that step's output, and a failing check's log is kept apart beside the log, its path on a
   line opening `failing log kept:` before the last line, `log:` (`docs/checks.md`, 「The change check」).
+- **`--checkout`**, given once or more, is the change check over several checkouts (`docs/checks.md`,
+  「The change check over several checkouts」): each checkout read from the directory the verb runs in, its
+  since after an `@` where given, each planned by its own declaration and the set run in one wide seat, every
+  line opening with its repository's name and the last lines naming each failed repository and its failed
+  steps. It is never given with `--since` or files. It exits 1 where any step failed or the placement
+  refuses the set, 2 where a checkout does not read, and 75 where the set was not run. Started outside a
+  held turn, a deployment's or a whole run's unit and a placed machine, it goes where the placed machine's
+  `combined_order` sends it (「Placement」) and runs there as that testbed's change check over the same
+  checkouts, each named by its place from the first checkout's bench and its since by the commit itself;
+  `--json` then prints that machine's command run, and the log is that machine's. A `--json` command run of
+  the set names its log and carries no test run.
 - **`static`** is the static check a deployment's gate passes, alone (`docs/checks.md`, 「The static check」):
   the quick checks, the declared steps the change since the commit reaches, then the workspace's formatting
   and lints, and no test; a declared step that only repeats those formatting and lints is left out, said in
@@ -589,8 +601,12 @@ keep (`docs/deploy.md`, 「The unit links」).
   deployments with their steps and log lines, the restarts, and the events of each.
 - **A test run** is written by every `run` that is not placed elsewhere, kind `command`, and by every
   `suite`, kind `suite`, a deployment's gate and the daily whole run among them. It is written once
-  its turn has come and ended with its counts; a run ending not run from there on ends `not-run`. A run placed elsewhere is written by the
-  machine it runs on.
+  its turn has come and ended with its counts; a run ending not run from there on ends `not-run`. A change
+  check over several checkouts writes one test run of kind `check` for each repository, its checkout, its
+  repository's name and its commit, once the set's turn has come. A run placed elsewhere is written by the
+  machine it runs on, a change check over several checkouts among them: its test runs stand in the record of
+  the machine that ran its steps, each naming its checkout as it stands there, and none is copied to the
+  machine that placed it.
 - **A test run carries what it ran on, read as its turn comes:** the checkout's `HEAD`, whether the
   checkout's tracked files stood unchanged against it (`git status --porcelain --untracked-files=no`
   answering nothing), and whether it was a run of the whole suite. A deployment's gate reads them to
@@ -659,7 +675,7 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   (string or null: the label of the machine a placed run runs on, null for an entry of this machine's
   own seats and line), and the booleans `front` and `next`, and `kept`, always false, since no place is
   kept for a waiter that left.
-- **Test run:** `id`, `kind` (`suite` or `command`), `checkout`, `repositoryName` (string or null),
+- **Test run:** `id`, `kind` (`suite`, `command` or `check`), `checkout`, `repositoryName` (string or null),
   `commit` (the checkout's `HEAD` as the run began, or null where git could not tell), `whole` (boolean
   or null: true for a suite run of every unit, with no range, no word naming a path and no word for the
   runner; false for any other run), `clean` (boolean or null: whether the checkout's tracked files stood
@@ -728,7 +744,7 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   | `testbed_deployments` | `GET /deployments` | a page of deployments |
   | `testbed_deployment` | `GET /deployments/{deploymentId}` | a deployment |
   | `testbed_run` | `bmo-testbed run --json --`, in the checkout named, in the narrow lane where `queue` names it | a command run |
-  | `testbed_check` | `bmo-testbed check --json`, in the checkout named, from `since` where named | a command run |
+  | `testbed_check` | `bmo-testbed check --json`, in the checkout named, from `since` where named; over several checkouts, each a `--checkout` with its own `since`, where `checkouts` names them | a command run |
   | `testbed_suite` | `bmo-testbed suite --json`, in the checkout named | a command run |
 
 - **A tool that fails** answers a tool error whose text is JSON: `status` where a route answered,
@@ -787,10 +803,32 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   testbed release is brought to it, never passed over (「The placed machine」); where neither can be had,
   the run ends as not run, exit code 75, and sends an event (「Events」). The placement endpoint chooses
   for itself and is told nothing of the order.
-- **In the crates the placement is a trait** in `core` with one method, asked with the run's words and
-  lane and answering here or elsewhere with an exit code; the local placement, always here, is the
+- **A change check over several checkouts is placed as one set** and never falls back to this machine. It
+  walks the placed machine's `combined_order` (「The placed machine」), whose default is the placed machine
+  alone, so it waits in that machine's line however long that takes, and goes to the machines in that order
+  as any run walks `order`. Where the machine cannot be reached within the wait, or its testbed cannot be
+  brought to the live release, it ends as not run, exit code 75, on the line naming the machine, as any
+  placed run does. It runs here only where `combined_order` names `local` and the walk comes to it. Every
+  other placement refuses the set, exit code 1, on a line saying why, and runs nothing: the placement
+  endpoint, whose request carries one checkout; a testbed whose settings name no placed machine; and a run
+  whose environment sets a variable one of the checkouts' declarations names in `[runner]
+  local_variables`, the line naming the variable, unless the placed machine's `combined_order` names
+  `local`, where the set stays here as such a run does.
+- **The set is laid in one bench and run there by one `ssh` command:** every checkout made ready at its own
+  place under the bench root, its commit with its open files over it, and every tree any of them reads by a
+  path laid beside them once; a tree whose place is one of the set's checkouts is that checkout and is not
+  copied over it. A checkout whose declaration names `[test].setup` steps has them run in its own bench
+  through the `placed` verb's `--setup`; the set then runs through the `placed` verb in the first
+  checkout's bench, as the testbed's change check there over every checkout by its path from that bench,
+  knowing every bench and tree laid. It stands here as one placed run, under the first checkout.
+- **In the crates the placement is a trait** in `core` with two methods. The first is asked with the run's
+  words and lane and answers here or elsewhere with an exit code; the local placement, always here, is the
   default, the placement kept here by a variable says so and answers here, and the placed machine, which
-  walks its order, and the HTTP placement in `cli` are members of it.
+  walks its order, and the HTTP placement in `cli` are members of it. The second is asked with a change
+  check's set of checkouts, and its default refuses the set on a line saying the placement carries one
+  checkout; the local placement refuses it as naming no placed machine, the placement kept here by a
+  variable refuses it naming the variable unless it was made knowing `combined_order` names `local`, and
+  the placed machine walks `combined_order`.
 
 ### The placed machine
 
@@ -808,6 +846,7 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   | `disk_free_gigabytes` | number | 50, the prune policy's | The free space, in gigabytes of a thousand million bytes, below which a disk of that machine sends `placed-disk-low` from this machine's prune (`docs/deploy.md`, 「The Cargo build directory」). Not negative |
   | `disk_paths` | list of strings | none | Paths on that machine whose disks' free space the prune reads beside `cargo_target`'s. A machine on a virtual disk names the mount of the host drive the disk file stands on, `/mnt/c` for a WSL machine whose disk file is on `C:`, since the virtual disk's own free space says nothing of that drive |
   | `order` | list of strings | the placed machine, then `local` | The machines a run that can be placed goes to, first choice first (「Placement」): the placed machine by its label, `machine` or else `destination`, and this machine as `local`. Each at most once and none other; an empty list does not read. A deployment's gate and release build go to the placed machine whatever it says |
+  | `combined_order` | list of strings | the placed machine alone | The machines a change check over several checkouts goes to, first choice first, read as `order` is (「Placement」). Left at its default the set never runs on this machine and waits in the placed machine's line; naming `local` lets the set fall to this machine as `order` lets a run |
 
   A `~` opening a path there is that machine's home. A file that does not read is no placement, said
   on a line.

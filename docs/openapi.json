@@ -649,6 +649,25 @@
         ],
         "type": "object"
       },
+      "SetCheckout": {
+        "additionalProperties": false,
+        "description": "One checkout of a change check over several checkouts: its path, and the commit its change is read from,\nits merge base with its declared main branch where none is named.",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "since": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
       "StageName": {
         "description": "The stages a deployment passes, in the order it passes them; a rollback is never planned.",
         "enum": [
@@ -821,6 +840,11 @@
             "const": "command",
             "description": "One heavy command of the `run` verb.",
             "type": "string"
+          },
+          {
+            "const": "check",
+            "description": "One repository's part of a change check over several checkouts.",
+            "type": "string"
           }
         ]
       },
@@ -890,7 +914,7 @@
   "info": {
     "description": "One machine's testbed shared by every checkout on it: the queue heavy commands wait in, whole-suite runs with change selection, quick static checks, and release-based deployments. The HTTP service only reads, from the record every verb writes and the lanes as they stand; running anything is the command line's, and the MCP server wraps those commands where the harness runs. Times are integers of epoch milliseconds, and every failure is answered in the error shape with its status.",
     "title": "bmo-testbed",
-    "version": "0.1.0-rev.51"
+    "version": "0.1.0-rev.52"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -1588,13 +1612,22 @@
     },
     {
       "command": "bmo-testbed check",
-      "description": "Run the change check of a checkout: its quick checks, static steps and the tests the change touches.",
+      "description": "Run the change check of a checkout: its quick checks, static steps and the tests the change touches. Name checkouts to check several repositories at once, each by its path and its own since, in one run on the placed machine.",
       "input": {
         "additionalProperties": false,
-        "description": "The checkout whose change is checked, and the commit the change is read from.",
+        "description": "The checkout whose change is checked, and the commit the change is read from; or the checkouts of a change\ncheck over several checkouts, each with its own since, read from the checkout the verb runs in.",
         "properties": {
           "checkout": {
             "type": "string"
+          },
+          "checkouts": {
+            "items": {
+              "$ref": "#/components/schemas/SetCheckout"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
           },
           "since": {
             "type": [

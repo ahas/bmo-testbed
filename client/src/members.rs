@@ -143,6 +143,8 @@ pub enum TestRunKind {
   Suite,
   /// One heavy command of the `run` verb.
   Command,
+  /// One repository's part of a change check over several checkouts.
+  Check,
 }
 
 /// Where a test run stands in its life.

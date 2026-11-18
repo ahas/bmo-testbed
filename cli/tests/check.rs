@@ -118,3 +118,124 @@ fn shared_versions_report_says_a_line_for_each_checkout_and_how_many_differ() {
     ]
   );
 }
+
+// A checkout of its own declaration, committed on main, then a branch whose commit changes `src/change.txt`;
+// the commit main stood on is answered.
+fn set_checkout(dir: &std::path::Path, declaration: &str) -> String {
+  checkout(dir, declaration);
+  std::fs::create_dir_all(dir.join("src")).unwrap();
+  std::fs::write(dir.join("src/change.txt"), "before\n").unwrap();
+  git(dir, &["add", "."]);
+  git(dir, &["commit", "-q", "-m", "base"]);
+
+  let base = git(dir, &["rev-parse", "HEAD"]);
+
+  git(dir, &["switch", "-q", "-c", "work/1"]);
+  std::fs::write(dir.join("src/change.txt"), "after\n").unwrap();
+  std::fs::write(dir.join("src/more.txt"), "more\n").unwrap();
+  git(dir, &["add", "."]);
+  git(dir, &["commit", "-q", "-m", "the branch's own"]);
+  base
+}
+
+// "each checkout is planned by its own declaration and its own since, every line names its repository, the last
+// lines name each failed repository and its failed steps, and each repository is one test run of kind check"
+#[test]
+fn a_set_plans_each_checkout_by_its_own_declaration_and_since_and_names_what_failed() {
+  use bmo_testbed_client::{TestRunKind, TestRunState, TestRunsQuery};
+
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let alpha = dir.join("work/alpha");
+  let beta = dir.join("base/beta");
+  let data = dir.join("data");
+  let alpha_base = set_checkout(
+    &alpha,
+    "testbed = 0\nname = \"alpha\"\n\n[[check.step]]\nid = \"alpha-step\"\ncommand = \"sh -c 'echo alpha ran'\"\n",
+  );
+  let beta_base = set_checkout(
+    &beta,
+    "testbed = 0\nname = \"beta\"\n\n[[check.step]]\nid = \"beta-step\"\ncommand = \"sh -c 'exit 4'\"\n",
+  );
+  // Beta's change is read since its branch's first commit, so only the file a later commit changed is changed,
+  // where its merge base with main would read two.
+  let beta_since = git(&beta, &["rev-parse", "HEAD"]);
+
+  std::fs::write(beta.join("src/change.txt"), "later\n").unwrap();
+  git(&beta, &["commit", "-q", "-am", "a later one"]);
+
+  let since_word = format!("../../base/beta@{beta_since}");
+  let done = ran(
+    testbed(&alpha, &data, &["check", "--checkout", ".", "--checkout", &since_word])
+      .env("BMO_TESTBED_PLACED", "1"),
+  );
+  let lines: Vec<&str> = done.out.lines().collect();
+
+  assert_eq!(done.code, 1, "{}\n{}", done.out, done.err);
+  assert!(lines.contains(&&*format!("alpha: check: 2 path(s) changed (since {alpha_base}); 0 test file(s), 0 crate(s) tested, 0 checked, 0 project check(s), 0 tool check(s)")), "{}", done.out);
+  assert!(lines.contains(&&*format!("beta: check: 1 path(s) changed (since {beta_since}); 0 test file(s), 0 crate(s) tested, 0 checked, 0 project check(s), 0 tool check(s)")), "{}", done.out);
+  assert_ne!(beta_since, beta_base);
+  assert!(lines.iter().any(|line| line.starts_with("alpha: ok alpha-step")), "{}", done.out);
+  assert!(
+    lines.iter().any(|line| line.starts_with("beta: FAILED beta-step · exit 4")),
+    "{}",
+    done.out
+  );
+  assert!(lines.contains(&"check FAILED: beta: beta-step"), "{}", done.out);
+  assert!(!lines.iter().any(|line| line.starts_with("check FAILED: alpha")), "{}", done.out);
+  assert!(lines.last().unwrap().starts_with("log: "), "{}", done.out);
+
+  let runs = bmo_testbed_record::Record::open(&data)
+    .unwrap()
+    .test_runs(&TestRunsQuery::default())
+    .unwrap()
+    .items;
+  let of = |name: &str| runs.iter().find(|run| run.repository_name.as_deref() == Some(name)).unwrap();
+
+  assert_eq!(runs.len(), 2, "{runs:?}");
+  assert!(
+    runs.iter().all(|run| run.kind == TestRunKind::Check && run.whole == Some(false)),
+    "{runs:?}"
+  );
+  assert_eq!(of("alpha").checkout, alpha.to_string_lossy());
+  assert_eq!(of("alpha").commit.as_deref(), Some(&*git(&alpha, &["rev-parse", "HEAD"])));
+  assert_eq!(of("alpha").state, TestRunState::Passed);
+  assert_eq!(of("beta").checkout, beta.to_string_lossy());
+  assert_eq!(of("beta").commit.as_deref(), Some(&*git(&beta, &["rev-parse", "HEAD"])));
+  assert_eq!(of("beta").state, TestRunState::Failed);
+}
+
+// "a path naming no checkout, two words naming one checkout and a since naming no commit end the call 2 before
+// anything runs, and --checkout is never given with --since or files"
+#[test]
+fn a_checkout_that_does_not_read_refuses_the_set_before_anything_runs() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let repo = dir.join("repo");
+
+  checkout(&repo, "testbed = 0\n");
+  std::fs::create_dir_all(dir.join("plain")).unwrap();
+
+  for (given, said) in [
+    (
+      &["check", "--checkout", ".", "--checkout", "../plain"][..],
+      "../plain names no checkout",
+    ),
+    (
+      &["check", "--checkout", ".", "--checkout", "../repo"],
+      "../repo names a checkout another --checkout already names",
+    ),
+    (
+      &["check", "--checkout", ".@no-such-commit"],
+      ".@no-such-commit: no-such-commit names no commit",
+    ),
+    (&["check", "--checkout", ".", "--since", "HEAD"], ""),
+    (&["check", "--checkout", ".", "a.ts"], ""),
+  ] {
+    let refused = ran(testbed(&repo, &dir.join("data"), given).env("BMO_TESTBED_PLACED", "1"));
+
+    assert_eq!(refused.code, 2, "{given:?}: {}", refused.err);
+    assert!(refused.err.contains(said), "{given:?}: {}", refused.err);
+    assert!(!refused.out.contains("check:"), "{given:?}: {}", refused.out);
+  }
+}

@@ -14,7 +14,7 @@ use std::sync::atomic::AtomicU64;
 
 use bmo_testbed_core::declaration::Repository;
 use bmo_testbed_core::events::Hook;
-use bmo_testbed_core::placement::{PlaceAsk, PlacedRun, Placement, lane_full};
+use bmo_testbed_core::placement::{PlaceAsk, PlacedRun, Placement, SetAsk, lane_full};
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::policy::prune::PRUNE;
@@ -593,6 +593,10 @@ pub struct MachineSettings {
   /// one, where none is named (docs/boundary.md, 「Placement」).
   #[serde(default)]
   pub order: Option<Vec<String>>,
+  /// The machines a change check over several checkouts goes to, first choice first, by name; the placed
+  /// machine alone where none is named (docs/boundary.md, 「Placement」).
+  #[serde(default)]
+  pub combined_order: Option<Vec<String>>,
 }
 
 /// A machine of the placement order: this one, or the placed machine the settings name.
@@ -682,7 +686,7 @@ impl MachineSettings {
           Some(floor) if !floor.is_finite() || floor < 0.0 => Err(unsettled(&LANES.placed.negative_floor)),
           _ => Ok(settings),
         })
-        .and_then(|settings| match settings.order() {
+        .and_then(|settings| match settings.order().and(settings.combined_order()) {
           Ok(_) => Ok(settings),
           Err(why) => Err(unsettled(&why)),
         }),
@@ -693,8 +697,26 @@ impl MachineSettings {
   /// machine's label or this machine's name, or the placed machine then this one where it names none. Why it
   /// does not read where it is empty, names a machine twice or names one that is neither.
   pub fn order(&self) -> Result<Vec<Ordered>, String> {
+    match &self.order {
+      Some(names) => self.ordered(names),
+      None => Ok(vec![Ordered::Placed, Ordered::Here]),
+    }
+  }
+
+  /// The order a change check over several checkouts walks, first choice first: the machines the settings'
+  /// `combined_order` names, read as `order` is, or the placed machine alone where it names none, so the set
+  /// never falls to this machine.
+  pub fn combined_order(&self) -> Result<Vec<Ordered>, String> {
+    match &self.combined_order {
+      Some(names) => self.ordered(names),
+      None => Ok(vec![Ordered::Placed]),
+    }
+  }
+
+  // The machines named, each by the placed machine's label or this machine's name; why the names do not read
+  // where they are none, name a machine twice or name one that is neither.
+  fn ordered(&self, names: &[String]) -> Result<Vec<Ordered>, String> {
     let words = &LANES.placed;
-    let Some(names) = &self.order else { return Ok(vec![Ordered::Placed, Ordered::Here]) };
 
     if names.is_empty() {
       return Err(words.order_empty.clone());
@@ -1035,11 +1057,18 @@ impl MachinePlacement {
   /// Nothing is made ready where the testbed there is not the live testbed release.
   pub fn ready(&self, checkout: &Path, commit: &str, purpose: BenchFor<'_>) -> Result<ReadyBench, String> {
     self.live_there()?;
-    self.made_ready(checkout, commit, purpose)
+    self.made_ready(checkout, commit, purpose, &[])
   }
 
-  // The bench made ready, the release there taken as already compared.
-  fn made_ready(&self, checkout: &Path, commit: &str, purpose: BenchFor<'_>) -> Result<ReadyBench, String> {
+  // The bench made ready, the release there taken as already compared, no tree laid at or under a place
+  // `benches` names: those are benches of their own, made ready beside it.
+  fn made_ready(
+    &self,
+    checkout: &Path,
+    commit: &str,
+    purpose: BenchFor<'_>,
+    benches: &[String],
+  ) -> Result<ReadyBench, String> {
     let remote = reachable_remote(checkout);
     let mut trees = bmo_testbed_deploy::expansion::outside_roots(checkout, checkout)?;
     // The shared versions' file as the shared checkout's main holds it, laid over that checkout's copy, since
@@ -1076,13 +1105,17 @@ impl MachinePlacement {
     let mut seen = std::collections::HashSet::new();
 
     trees.retain(|tree| seen.insert(tree.place().to_owned()));
-    let places = trees.iter().map(|tree| tree.place().to_owned()).collect::<Vec<String>>();
-
     let path = purpose.bench_place(&self.settings, checkout, &self.home);
+    let (beside, trees): (Vec<BenchTree>, Vec<BenchTree>) = trees.into_iter().partition(|tree| {
+      benches.iter().any(|bench| {
+        *bench != path && (tree.place() == bench || tree.place().starts_with(&format!("{bench}/")))
+      })
+    });
+    let places = trees.iter().map(|tree| tree.place().to_owned()).collect::<Vec<String>>();
     let checkouts = (!known_by_its_shared_copy)
       .then(|| path.clone())
       .into_iter()
-      .chain(trees.iter().map(|tree| tree.place().to_owned()))
+      .chain(trees.iter().chain(&beside).map(|tree| tree.place().to_owned()))
       .collect();
     let heads = trees
       .iter()
@@ -1408,7 +1441,7 @@ impl MachinePlacement {
     let checkout = if found.is_empty() { ask.cwd.clone() } else { PathBuf::from(found) };
     let placed = PlacedRun::stand(ask, &checkout, self.settings.label());
     let commit = git(&checkout, &["rev-parse", "HEAD"]);
-    let bench = match self.made_ready(&checkout, &commit, BenchFor::Run) {
+    let bench = match self.made_ready(&checkout, &commit, BenchFor::Run, &[]) {
       Ok(bench) => bench,
       Err(said) => return Some(dropped(self.settings.label(), &said)),
     };
@@ -1435,6 +1468,91 @@ impl MachinePlacement {
 
     Some(self.run(&bench, &words, true, Some(&placed)))
   }
+
+  /// A change check over several checkouts placed on the machine as one run (docs/boundary.md, 「Placement」):
+  /// the machine waited for and its testbed brought to the live release once, every checkout made ready at its
+  /// own place under the bench root at its `HEAD` with its open files, the trees they read laid beside them once,
+  /// each checkout's declared setup run in its own bench, and the set run in the first checkout's bench as the
+  /// testbed's change check there. None where it did not go, as for one run.
+  fn placed_set(&self, ask: &SetAsk<'_>, to_free_seat: bool) -> Option<u8> {
+    if let Err(code) = self.waited_ready(&ask.run) {
+      return Some(code);
+    }
+
+    if to_free_seat && !self.seat_free(ask.run.lane) {
+      return None;
+    }
+
+    let first = ask.checkouts.first()?;
+    let machine = self.settings.label();
+    let placed = PlacedRun::stand(&ask.run, first, machine);
+    let places: Vec<String> = ask
+      .checkouts
+      .iter()
+      .map(|checkout| self.settings.place_of(BenchFor::Run, checkout, &self.home))
+      .collect();
+    let mut benches = Vec::with_capacity(ask.checkouts.len());
+
+    for checkout in ask.checkouts {
+      let commit = git(checkout, &["rev-parse", "HEAD"]);
+
+      match self.made_ready(checkout, &commit, BenchFor::Run, &places) {
+        Ok(bench) => benches.push(bench),
+        Err(said) => return Some(dropped(machine, &said)),
+      }
+    }
+
+    // The run there knows every bench and every tree laid beside them.
+    let mut known: Vec<String> = Vec::new();
+
+    for one in benches.iter().flat_map(|bench| &bench.checkouts) {
+      if !known.contains(one) {
+        known.push(one.clone());
+      }
+    }
+
+    let knowing = |bench: &ReadyBench| ReadyBench {
+      path: bench.path.clone(),
+      checkouts: known.clone(),
+      heads: vec![],
+    };
+
+    // The first checkout's setup runs with the set; every other one's in its own bench before it.
+    for (checkout, bench) in ask.checkouts.iter().zip(&benches).skip(1) {
+      let declares_setup =
+        Repository::read(checkout).is_ok_and(|repo| !repo.declaration.test.setup.is_empty());
+
+      if declares_setup {
+        let code = self.run(&knowing(bench), &[SETUP_ALONE.to_owned()], true, None);
+
+        if code != 0 {
+          return Some(code);
+        }
+      }
+    }
+
+    let paths: Vec<String> = places.iter().map(|place| path_from(&places[0], place)).collect();
+    let words: Vec<String> =
+      std::iter::once(self.settings.testbed.clone()).chain((ask.words)(&paths)).collect();
+
+    Some(self.run(&knowing(&benches[0]), &words, true, Some(&placed)))
+  }
+}
+
+// The command run after a bench's setup where the setup alone is asked for: one that does nothing.
+const SETUP_ALONE: &str = "true";
+
+/// The path of `to` as seen from `from`, both places under one bench root written with `/`: up from `from` to
+/// where they part, then down to `to`; `.` where they are one place.
+pub fn path_from(from: &str, to: &str) -> String {
+  let from: Vec<&str> = from.split('/').filter(|part| !part.is_empty()).collect();
+  let to: Vec<&str> = to.split('/').filter(|part| !part.is_empty()).collect();
+  let shared = from.iter().zip(&to).take_while(|(one, other)| one == other).count();
+  let parts: Vec<&str> = std::iter::repeat_n("..", from.len() - shared)
+    .chain(to[shared..].iter().copied())
+    .collect();
+
+  if parts.is_empty() { ".".to_owned() } else { parts.join("/") }
 }
 
 impl Placement for MachinePlacement {
@@ -1456,6 +1574,32 @@ impl Placement for MachinePlacement {
         }
         Ordered::Placed => {
           if let Some(code) = self.placed(ask, to_free_seat) {
+            return Some(code);
+          }
+        }
+      }
+    }
+
+    None
+  }
+
+  /// The set walks `combined_order` as a run walks `order`: by default the placed machine alone, which takes it
+  /// whatever it holds, so the set waits in that machine's line and never falls to this one.
+  fn place_set(&self, ask: &SetAsk<'_>) -> Option<u8> {
+    let order = self.settings.combined_order().unwrap_or_else(|_| vec![Ordered::Placed]);
+    let last = order.len().saturating_sub(1);
+
+    for (at, ordered) in order.into_iter().enumerate() {
+      let to_free_seat = at < last;
+
+      match ordered {
+        Ordered::Here => {
+          if !to_free_seat || !lane_full(ask.run.env, ask.run.lane) {
+            return None;
+          }
+        }
+        Ordered::Placed => {
+          if let Some(code) = self.placed_set(ask, to_free_seat) {
             return Some(code);
           }
         }

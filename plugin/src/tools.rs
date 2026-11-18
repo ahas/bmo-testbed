@@ -159,11 +159,24 @@ struct RunInput {
   queue: Option<LaneName>,
 }
 
-/// The checkout whose change is checked, and the commit the change is read from.
+/// The checkout whose change is checked, and the commit the change is read from; or the checkouts of a change
+/// check over several checkouts, each with its own since, read from the checkout the verb runs in.
 #[derive(Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct CheckInput {
   checkout: String,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  since: Option<String>,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  checkouts: Option<Vec<SetCheckout>>,
+}
+
+/// One checkout of a change check over several checkouts: its path, and the commit its change is read from,
+/// its merge base with its declared main branch where none is named.
+#[derive(Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct SetCheckout {
+  path: String,
   #[serde(default, skip_serializing_if = "Option::is_none")]
   since: Option<String>,
 }
@@ -289,12 +302,32 @@ pub fn tools() -> Vec<TestbedTool> {
       "testbed_check",
       &said.testbed_check,
       Calls::Command("bmo-testbed check"),
-      |hands, CheckInput { checkout, since }| async move {
+      |hands,
+       CheckInput {
+         checkout,
+         since,
+         checkouts,
+       }| async move {
         let mut words = vec!["check".to_owned(), "--json".to_owned()];
+        let checkouts = checkouts.unwrap_or_default();
+
+        if since.is_some() && !checkouts.is_empty() {
+          return Err(ToolFailure::Arguments(PLUGIN.lines.since_with_checkouts.clone()));
+        }
 
         if let Some(since) = since {
           words.extend(["--since".to_owned(), since]);
         }
+
+        for one in checkouts {
+          let word = match one.since {
+            Some(since) => format!("{}@{since}", one.path),
+            None => one.path,
+          };
+
+          words.extend(["--checkout".to_owned(), word]);
+        }
+
         verb(hands, checkout, words).await
       },
     ),

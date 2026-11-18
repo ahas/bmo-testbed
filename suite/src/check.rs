@@ -13,8 +13,10 @@ use bmo_testbed_core::declaration::{Repository, Test};
 use bmo_testbed_core::languages::{LANGUAGES, failures_of_log, tally_of_log};
 use bmo_testbed_core::policy::suite::SUITE;
 use bmo_testbed_core::policy::{fill_marks, fill_shown};
+use bmo_testbed_core::queue::now_ms;
 use bmo_testbed_core::silence::Silence;
-use bmo_testbed_core::turn::{Lane, NOT_RUN_EXIT_CODE, TurnAsk, process_env, take_turn};
+use bmo_testbed_core::turn::{Env, Lane, NOT_RUN_EXIT_CODE, TurnAsk, process_env, take_turn};
+use bmo_testbed_core::witness::{RunBegun, RunEnded, RunVerdict, RunWitness};
 use sha2::{Digest, Sha256};
 
 use crate::cargo::cargo_verb_line;
@@ -246,13 +248,33 @@ pub fn plan(repo: &Repository, ask: &CheckAsk) -> Result<CheckPlan, String> {
   })
 }
 
-/// What a call came to: the lines it prints, the code it ends with, and how long its steps waited for their
-/// turns, added up.
+/// What a call came to: the lines it prints, the code it ends with, how long its steps waited for their turns,
+/// added up, and the names of the steps that failed.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Checked {
   pub lines: Vec<String>,
   pub code: u8,
   pub waited_seconds: f64,
+  pub failed: Vec<String>,
+}
+
+// The lines of a call as they are made: kept, and each handed to `say` at once.
+struct Lines<'a> {
+  kept: Vec<String>,
+  say: &'a mut dyn FnMut(&str),
+}
+
+impl Lines<'_> {
+  fn push(&mut self, line: String) {
+    (self.say)(&line);
+    self.kept.push(line);
+  }
+
+  fn extend(&mut self, lines: impl IntoIterator<Item = String>) {
+    for line in lines {
+      self.push(line);
+    }
+  }
 }
 
 /// Every step of the plan run to its end through `run`, each one's output appended to `log`, a step the Cargo
@@ -264,8 +286,25 @@ pub fn run_check(
   log: &Path,
   run: &dyn Fn(&Path, &Step) -> TimedRun,
 ) -> Checked {
+  run_check_saying(root, plan, log, run, &mut |_| {})
+}
+
+/// The check `run_check` runs, each line handed to `say` as it is made: the heading first, each step's line as
+/// the step ends.
+pub fn run_check_saying(
+  root: &Path,
+  plan: &CheckPlan,
+  log: &Path,
+  run: &dyn Fn(&Path, &Step) -> TimedRun,
+  say: &mut dyn FnMut(&str),
+) -> Checked {
   let words = &SUITE.check;
-  let mut lines = vec![fill_shown(
+  let mut lines = Lines {
+    kept: Vec::new(),
+    say,
+  };
+
+  lines.push(fill_shown(
     &words.heading,
     &[
       ("changed", &plan.changed.len()),
@@ -276,8 +315,8 @@ pub fn run_check(
       ("projects", &plan.touched.projects.len()),
       ("tools", &plan.touched.tools.len()),
     ],
-  )];
-  let mut failed = false;
+  ));
+  let mut failed = Vec::new();
   let mut written = String::new();
   let mut waited_seconds = 0.0;
 
@@ -316,7 +355,7 @@ pub fn run_check(
     ));
 
     if done.code != 0 {
-      failed = true;
+      failed.push(step.name.clone());
 
       // The test files' failures are the log verb's to name; every other step's are read out of its own output.
       if !step.tests {
@@ -337,7 +376,7 @@ pub fn run_check(
   }
 
   // The next run of the checkout writes the log afresh, so a failing one is kept apart until another fails.
-  if failed {
+  if !failed.is_empty() {
     let kept = kept_log(log);
 
     if std::fs::copy(log, &kept).is_ok() {
@@ -348,9 +387,120 @@ pub fn run_check(
   lines.push(fill_shown(&words.log, &[("path", &log.display())]));
 
   Checked {
-    lines,
+    lines: lines.kept,
     waited_seconds,
-    code: u8::from(failed),
+    code: u8::from(!failed.is_empty()),
+    failed,
+  }
+}
+
+/// One checkout of a change check over several checkouts: its repository, its plan, the log its own check
+/// writes, and the words its test run is kept under.
+pub struct SetMember {
+  pub repo: Repository,
+  pub plan: CheckPlan,
+  pub log: PathBuf,
+  pub command: String,
+}
+
+/// What a change check over several checkouts came to: the code it ends with, the steps' waits added up, and
+/// the lines naming each failed repository and its failed steps.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SetChecked {
+  pub code: u8,
+  pub waited_seconds: f64,
+  pub lines: Vec<String>,
+}
+
+/// Every checkout's check run in turn through `run`, inside the turn its caller holds (docs/checks.md, 「The
+/// change check over several checkouts」): each checkout's lines handed to `say` as they are made, opened with
+/// its repository's name; each checkout kept as one test run through the witness `witness_of` gives it, its counts
+/// those its own log adds up to; each checkout's log appended to the set's `log` as it ends; then a line for each
+/// failed repository naming its failed steps, the set's log kept apart where any failed, and the set's log.
+pub fn run_set(
+  members: &[SetMember],
+  log: &Path,
+  env: &Env,
+  run: &dyn Fn(&Path, &Step) -> TimedRun,
+  witness_of: &dyn Fn(&Repository) -> Box<dyn RunWitness>,
+  say: &mut dyn FnMut(&str),
+) -> SetChecked {
+  let words = &SUITE.check;
+  let mut written = String::new();
+  let mut lines = Vec::new();
+  let mut waited_seconds = 0.0;
+  let mut any_failed = false;
+
+  let _ = std::fs::write(log, &written);
+
+  for member in members {
+    let repository = member.repo.name();
+    let witness = witness_of(&member.repo);
+    let begun = witness.began(&RunBegun {
+      command: &member.command,
+      checkout: &member.repo.root,
+      log,
+      started_at: now_ms(),
+      env,
+      whole: false,
+    });
+    let checked = run_check_saying(&member.repo.root, &member.plan, &member.log, run, &mut |line| {
+      say(&fill_shown(&words.set_line, &[("repository", &repository), ("line", &line)]));
+    });
+    let own = std::fs::read_to_string(&member.log).unwrap_or_default();
+
+    waited_seconds += checked.waited_seconds;
+    written.push_str(&format!(
+      "{}\n{own}",
+      fill_shown(
+        &words.set_logged,
+        &[("repository", &repository), ("checkout", &member.repo.root.display())]
+      )
+    ));
+    let _ = std::fs::write(log, &written);
+
+    if let Some(id) = begun {
+      let tally = tally_of_log(&LANGUAGES, &own).unwrap_or_default();
+
+      witness.ended(
+        id,
+        &RunEnded {
+          verdict: if checked.code == 0 { RunVerdict::Passed } else { RunVerdict::Failed },
+          passed: tally.pass,
+          failed: tally.fail,
+          skipped: tally.skip,
+          ended_at: now_ms(),
+        },
+      );
+    }
+
+    if !checked.failed.is_empty() {
+      any_failed = true;
+      lines.push(fill_shown(
+        &words.set_failed,
+        &[("repository", &repository), ("steps", &checked.failed.join(&words.set_steps_joiner))],
+      ));
+    }
+  }
+
+  if any_failed {
+    let kept = kept_log(log);
+
+    if std::fs::copy(log, &kept).is_ok() {
+      lines.push(fill_shown(&words.kept, &[("path", &kept.display())]));
+    }
+  }
+
+  lines.push(fill_shown(&words.log, &[("path", &log.display())]));
+
+  for line in &lines {
+    say(line);
+  }
+
+  SetChecked {
+    code: u8::from(any_failed),
+    waited_seconds,
+    lines,
   }
 }
 
@@ -438,6 +588,11 @@ pub fn run_standing(
 /// step is watched for silence, since the check says each one still runs for as long as it runs and so
 /// leaves no silence for a watcher above it to read.
 pub fn run_step(root: &Path, step: &Step) -> TimedRun {
+  let mut env = process_env();
+
+  // A step handed the turn its caller holds takes it as its own.
+  env.extend(step.step.env.iter().cloned());
+
   if !step.tests {
     return spawn_step(
       root,
@@ -453,7 +608,7 @@ pub fn run_step(root: &Path, step: &Step) -> TimedRun {
     lane: Lane::Wide,
     say: &|line| eprintln!("{line}"),
     path: None,
-    env: process_env(),
+    env,
     checkout: root.to_string_lossy().into_owned(),
     poll: None,
     notice_seconds: None,
@@ -489,4 +644,19 @@ pub fn default_log(data_root: &Path, root: &Path) -> PathBuf {
   let hash = format!("{:x}", Sha256::digest(root.to_string_lossy().as_bytes()));
 
   data_root.join("testbed").join(format!("check-{folder}-{}.log", &hash[..8]))
+}
+
+/// Where a change check over several checkouts keeps its one log unless it is named: under the data root's
+/// `testbed/`, named by the set's checkouts in their order, so another set never shares it.
+pub fn default_set_log(data_root: &Path, roots: &[PathBuf]) -> PathBuf {
+  let joined = roots
+    .iter()
+    .map(|root| root.to_string_lossy().into_owned())
+    .collect::<Vec<_>>()
+    .join("\n");
+  let hash = format!("{:x}", Sha256::digest(joined.as_bytes()));
+
+  data_root
+    .join("testbed")
+    .join(fill_shown(&SUITE.check.set_log, &[("hash", &&hash[..8])]))
 }

@@ -175,6 +175,11 @@ pub struct CheckWords {
   pub kept_mark: String,
   pub no_turn: String,
   pub standing: String,
+  pub set_line: String,
+  pub set_logged: String,
+  pub set_failed: String,
+  pub set_steps_joiner: String,
+  pub set_log: String,
 }
 
 #[derive(Debug, Deserialize)]

@@ -239,5 +239,17 @@ async fn mcp_lists_exactly_the_eight_tools_and_calls_them_through() {
   let unread = mcp.call("testbed_run", json!({ "command": [], "checkout": checkout })).await;
 
   assert_eq!(unread["isError"], true);
+
+  // A check naming checkouts takes each one's since beside it, never one since over them all.
+  let both = mcp
+    .call(
+      "testbed_check",
+      json!({ "checkout": checkout, "since": "HEAD", "checkouts": [{ "path": "." }] }),
+    )
+    .await;
+  let error: Value = serde_json::from_str(both["content"][0]["text"].as_str().unwrap()).unwrap();
+
+  assert_eq!(both["isError"], true);
+  assert_eq!(error["code"], "bad-request", "{both}");
   mcp.stop().await;
 }

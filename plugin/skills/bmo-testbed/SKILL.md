@@ -51,7 +51,10 @@ with the same arguments again.
 
 - `testbed_check` runs the change check of a checkout: its quick checks, its declared static steps, and the
   tests its change touches, every step to its end, all in one log. `since` names the commit the change is
-  read from; by default it is where the branch left the main branch.
+  read from; by default it is where the branch left the main branch. A change that spans several
+  repositories is checked once with `checkouts`, each by its `path` and its own `since`: every checkout is
+  planned by its own declaration and the set runs as one run on the placed machine, every line naming its
+  repository and the last lines naming each failed repository and step.
 - `testbed_suite` runs the checkout's whole suite, each unit in a process of its own. It can take many
   minutes; call it once, wait for its answer, and read its log.
 

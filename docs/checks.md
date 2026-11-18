@@ -335,6 +335,50 @@
   check keeps it on the machine it ran on, and its lines, which come back, carry what failed and that path.
 - **It ends 1 where any step failed, 2 where the change could not be read.**
 
+## The change check over several checkouts
+
+- **One call checks a change that spans several repositories:** the `check` verb given a repeated
+  `--checkout`, each naming a checkout by its path, read from the directory the verb runs in, and
+  optionally the commit its change is read since, written after the path and an `@`: `<path>@<rev>`. A
+  word naming a directory that stands is a path with no since; any other word is split at its first `@`,
+  so a revision holding an `@` of its own, such as `HEAD@{1}`, keeps it. A checkout given no since reads
+  its change since its merge base with the main branch its own declaration names, as the check of one
+  checkout does. With no `--checkout` the change check is the one above, over the checkout the verb runs
+  in, and `--checkout` is never given with `--since` or with files.
+- **Every checkout is read before anything runs:** its top level as git names it, its own declaration, and
+  its since resolved to the commit itself. A path that names no checkout, two words naming one checkout,
+  and a since that names no commit end the call 2 with a line naming the word, and nothing runs.
+- **Each checkout is planned by its own declaration,** exactly as the check of one checkout is planned
+  (「The change check」): its quick checks, its declared steps, the formatting and lints of its own Cargo
+  workspace, the test files, crates, projects and tools its change touches. Nothing is planned across them:
+  what one checkout's change touches in another is that other checkout's change only where it is changed
+  there too.
+- **The set runs in one wide seat:** the call takes one turn of the wide lane for the whole set and runs
+  every step of every checkout inside it, the checkouts one after another in the order given, each step
+  of one checkout run in that checkout. The steps that take a turn of their own, the test files and the
+  Cargo verb among them, run inside the set's turn and never wait in the line again. While the turn is
+  waited for, the line says where the call stands every notice; while a step runs, its line every minute,
+  as for one checkout, so the call is never silent while it lasts.
+- **Where it runs is the placed machine alone** (`docs/boundary.md`, 「Placement」, `combined_order`): the
+  whole set goes there as one run, every checkout laid in one bench at the place it has under this
+  machine's home, so the checkouts stand there as they stand to one another here and a path one names to
+  another resolves there as it does here. It waits in that machine's line however long that takes, and
+  runs on this machine only where the placed machine's settings name this machine in `combined_order`.
+- **Every line names its repository:** the heading of each checkout's change, then each step's line as the
+  step ends, printed as it ends, and what failed under a failing step, each opening with the name of the
+  repository its declaration gives. Each checkout writes its own log as the check of one checkout does, and
+  the set writes one log holding every checkout's log in turn, under the data root's `testbed/` named for
+  the set unless `--log` names another.
+- **The last lines name what failed:** a line for each repository with a failed step, naming the
+  repository and every step of it that failed; then, where any failed, the set's log kept apart as one
+  checkout's is, on its `failing log kept:` line; and last the set's `log:` line.
+- **Each repository is one test run in the record** of the machine the steps ran on (`docs/boundary.md`,
+  「The record」): kind `check`, its checkout, its repository's name and its commit, begun once the set's
+  turn came and ended with the counts its own test files and crates came to.
+- **It ends 0 where every step of every checkout passed;** 1 where any failed, or where the placement
+  refuses to run the set here; 2 where a checkout could not be read; and 75 where the set was not run: its
+  turn never came, or the placed machine could not be reached or brought to the live release.
+
 ## Imports a move left behind
 
 - **The `imports` verb** finds every relative import that names nothing, in the files named or in

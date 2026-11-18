@@ -116,6 +116,9 @@ pub struct PlacedWords {
   pub recovered_event: String,
   pub release_failed_event: String,
   pub kept: String,
+  pub set_one_checkout: String,
+  pub set_no_machine: String,
+  pub set_kept: String,
   pub turn_came: String,
 }
 

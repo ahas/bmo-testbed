@@ -315,6 +315,11 @@ server_down = "check: the test database server is not up, so the crates' tests w
 not_enabled = "check: the declaration does not enable {part} ([check] quick)"
 settled = "settled {ledger}: {lowered} files lowered, {kept} still hold Korean"
 unsettled = "korean: {why}"
+# A checkout of a change check over several checkouts that does not read: {word} the word given, {since} the
+# since that names no commit.
+no_checkout = "check: {word} names no checkout"
+twice = "check: {word} names a checkout another --checkout already names"
+no_commit = "check: {word}: {since} names no commit"
 
 # What `check dashes` says: {path} a file, {count} lines, {line} a line's number and {text} it before
 # and after.

@@ -304,6 +304,10 @@ pub struct CheckArgs {
   pub part: Option<CheckPart>,
   #[arg(long, conflicts_with = "files")]
   pub since: Option<String>,
+  /// A checkout of a change check over several checkouts, its since after an `@` where given; named again
+  /// for each.
+  #[arg(long = "checkout", value_name = "PATH[@REV]", conflicts_with_all = ["since", "files"])]
+  pub checkouts: Vec<String>,
   #[arg(long)]
   pub log: Option<PathBuf>,
   #[arg(long)]

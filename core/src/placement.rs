@@ -33,10 +33,32 @@ pub struct PlaceAsk<'a> {
   pub env: &'a Env,
 }
 
+/// A change check over several checkouts asked about before its turn (docs/boundary.md, 「Placement」): the run as
+/// one placed run, its checkouts' top levels in the order given, and the words that run the set elsewhere.
+pub struct SetAsk<'a> {
+  /// The set as one run: the words it was started with, the wide lane, where it was started.
+  pub run: PlaceAsk<'a>,
+  pub checkouts: &'a [PathBuf],
+  /// The testbed's words, after its binary, that run the set there, handed each checkout's path from the first
+  /// checkout's place there, in the order of `checkouts`.
+  pub words: &'a dyn Fn(&[String]) -> Vec<String>,
+}
+
+/// The code a change check over several checkouts ends with where a placement refuses it.
+pub const SET_REFUSED_EXIT_CODE: u8 = 1;
+
 /// Where a run goes.
 pub trait Placement {
   /// The exit code the run ended with where it ran elsewhere, or none where it runs here.
   fn place(&self, ask: &PlaceAsk<'_>) -> Option<u8>;
+
+  /// The exit code a change check over several checkouts ended with where it ran elsewhere or was refused, or
+  /// none where it runs here. A placement carrying one checkout refuses the set, said on a line, and never
+  /// runs it here.
+  fn place_set(&self, _: &SetAsk<'_>) -> Option<u8> {
+    eprintln!("{}", LANES.placed.set_one_checkout);
+    Some(SET_REFUSED_EXIT_CODE)
+  }
 }
 
 /// The placement that keeps every run where it was started.
@@ -46,12 +68,21 @@ impl Placement for Local {
   fn place(&self, _: &PlaceAsk<'_>) -> Option<u8> {
     None
   }
+
+  /// A change check over several checkouts runs on a placed machine alone, and this placement names none.
+  fn place_set(&self, _: &SetAsk<'_>) -> Option<u8> {
+    eprintln!("{}", LANES.placed.set_no_machine);
+    Some(SET_REFUSED_EXIT_CODE)
+  }
 }
 
 /// The placement of a run that reads what only this machine reaches: a variable its checkout's declaration
 /// names, set in its environment. Asked, it says which variable keeps the run here, and keeps it here.
 pub struct KeptHere {
   pub variable: String,
+  /// Whether a change check over several checkouts may stay here too: the placed machine's `combined_order`
+  /// names this machine.
+  pub set_here: bool,
 }
 
 impl KeptHere {
@@ -63,6 +94,7 @@ impl KeptHere {
       .find(|name| env.get(*name).is_some_and(|value| !value.is_empty()))
       .map(|variable| Self {
         variable: variable.clone(),
+        set_here: false,
       })
   }
 }
@@ -71,6 +103,17 @@ impl Placement for KeptHere {
   fn place(&self, _: &PlaceAsk<'_>) -> Option<u8> {
     eprintln!("{}", fill_marks(&LANES.placed.kept, &[("variable", &self.variable)]));
     None
+  }
+
+  /// The set stays here only where the placed machine's `combined_order` names this machine; otherwise it is
+  /// refused, naming the variable that would keep it here.
+  fn place_set(&self, ask: &SetAsk<'_>) -> Option<u8> {
+    if self.set_here {
+      return self.place(&ask.run);
+    }
+
+    eprintln!("{}", fill_marks(&LANES.placed.set_kept, &[("variable", &self.variable)]));
+    Some(SET_REFUSED_EXIT_CODE)
   }
 }
 

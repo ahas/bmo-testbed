@@ -20,6 +20,7 @@ pub struct ToolDescriptions {
 pub struct PluginLines {
   pub bad_arguments: String,
   pub no_command: String,
+  pub since_with_checkouts: String,
   pub no_tool: String,
   pub unstarted: String,
   pub unread: String,

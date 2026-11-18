@@ -31,13 +31,14 @@ testbed_test_run = "One test run and its counts."
 testbed_deployments = "Deployments, newest first."
 testbed_deployment = "One deployment: its steps and the code it stopped for."
 testbed_run = "Run a heavy command through the machine's queue in a checkout; answered with its exit code, log path, wait, time and test run."
-testbed_check = "Run the change check of a checkout: its quick checks, static steps and the tests the change touches."
+testbed_check = "Run the change check of a checkout: its quick checks, static steps and the tests the change touches. Name checkouts to check several repositories at once, each by its path and its own since, in one run on the placed machine."
 testbed_suite = "Run the whole suite of a checkout with change selection."
 
 [lines]
 # {why} is what the arguments reader said.
 bad_arguments = "the arguments do not read: {why}"
 no_command = "the arguments do not read: command names no words"
+since_with_checkouts = "the arguments do not read: since is not given with checkouts, each of which names its own since"
 # {name} is the tool asked for.
 no_tool = "there is no tool {name}"
 # {why} is what starting the verb came to.

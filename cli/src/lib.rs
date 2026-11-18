@@ -39,7 +39,7 @@ use bmo_testbed_suite::crate_tests;
 use bmo_testbed_suite::dependents::CHECKOUTS_VARIABLE;
 
 use crate::classify::{TakesTurn, answer, heavy_command};
-use crate::placement::{HttpPlacement, MachinePlacement, MachineState};
+use crate::placement::{HttpPlacement, MachinePlacement, MachineSettings, MachineState, Ordered};
 use crate::recorded::{Recorded, command_run};
 use crate::words::{
   CargoArgs, CargoWord, ClassifyArgs, CountArgs, CrateTestsWord, DeployArgs, DeployWord, LogArgs,
@@ -69,6 +69,34 @@ pub fn placement_of(env: &Env, dir: &Path) -> Box<dyn Placement> {
 
   match runner.placement {
     Some(endpoint) => Box::new(HttpPlacement { endpoint }),
+    None => Box::new(Local),
+  }
+}
+
+/// The placement of a change check over several checkouts (docs/boundary.md, 「Placement」), chosen as one run's
+/// is: kept here where the environment sets a variable any of the checkouts' declarations names, and then allowed
+/// to stay only where the placed machine's `combined_order` names this machine; else the endpoint the environment
+/// names, the placed machine the settings name, the endpoint the first checkout's declaration names, or the local
+/// one, each answering for the set itself.
+pub fn set_placement_of(env: &Env, checkouts: &[PathBuf]) -> Box<dyn Placement> {
+  let runners: Vec<_> = checkouts
+    .iter()
+    .map(|checkout| Repository::read(checkout).map(|repo| repo.declaration.runner).unwrap_or_default())
+    .collect();
+  let variables: Vec<String> =
+    runners.iter().flat_map(|runner| runner.local_variables.iter().cloned()).collect();
+
+  if let Some(kept) = KeptHere::of(env, &variables) {
+    let set_here = MachineSettings::read(&data_root())
+      .and_then(Result::ok)
+      .and_then(|settings| settings.combined_order().ok())
+      .is_some_and(|order| order.contains(&Ordered::Here));
+
+    return Box::new(KeptHere { set_here, ..kept });
+  }
+
+  match checkouts.first() {
+    Some(first) => placement_of(env, first),
     None => Box::new(Local),
   }
 }
