@@ -48,7 +48,7 @@ use crate::progress::{
 };
 use crate::release::{
   LiveProcess, Preparing, differing_binaries, flip, link_of, live_processes, live_release, logged_before,
-  pinned_detail, place_binaries, prepare, prune, put_link, release_dir, release_holding,
+  pinned_detail, place_binaries, prepare, primary_checkout, prune, put_link, release_dir, release_holding,
 };
 use crate::remove::{git_tree_above, remove_tree};
 use crate::rollback::{
@@ -145,8 +145,8 @@ pub struct DeployAsk {
   pub force_live: bool,
   /// The deployment's own unit, which its progress record names.
   pub unit: Option<String>,
-  /// What the backup upload's unit is started with after `systemd-run`'s own words: its options, then the
-  /// binary's `backups` verb.
+  /// What the backup upload's unit is started with after `systemd-run`'s own words and the working directory
+  /// the run names, the repository's primary checkout: its options, then the binary's `backups` verb.
   pub upload: Option<Vec<String>>,
   /// The testbed's data root whose record the deployment is written into; none writes into none.
   pub record: Option<PathBuf>,
@@ -1580,9 +1580,20 @@ pub async fn deploy(
 
   run.repo = declared;
 
+  // The checkout the deployment was asked from may go while it waits or runs, as a job's does once its work is
+  // merged: from here on the repository is read through its primary checkout (docs/deploy.md, 「The releases」).
+  let primary = primary_checkout(&run.places.source, &|args, cwd| run.git(args, cwd));
+
+  if primary != run.places.source {
+    run.say(&fill_marks(&said.primary, &[("checkout", &primary.to_string_lossy())]));
+  }
+
+  run.places.source = primary;
+
   let checkout = repo;
   let repo = &run.repo;
   let places = &run.places;
+  let source = &places.source;
   let links = unit_links(&places.unit_dir);
   let (relinks, faults) = unit_link_plan(&links, &places.deploy_dir, &tracked, &|path| {
     !tracked.iter().any(|one| one == path) && release.join(path).exists()
@@ -2438,7 +2449,11 @@ pub async fn deploy(
     let line: Vec<String> = ["systemd-run", "--user", "--quiet", "--collect"]
       .into_iter()
       .map(str::to_owned)
-      .chain([format!("--unit={unit}"), format!("--slice={BACKUP_SLICE}")])
+      .chain([
+        format!("--unit={unit}"),
+        format!("--slice={BACKUP_SLICE}"),
+        format!("--working-directory={}", source.display()),
+      ])
       .chain(upload.iter().cloned())
       .collect();
     let started = hands.run(&line, source);

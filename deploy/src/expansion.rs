@@ -129,11 +129,23 @@ fn discard_build_tree(tree: &Path, data_root: &Path, run: CommandRun<'_>) -> Res
 /// Puts the build tree at the commit, made where it is not there yet, with the submodules the commit pins
 /// brought to their pins, and every file the commit moved made new to the clock a build reads. A tree made
 /// from another checkout, or one whose git directory cannot be read, is discharged and made again from the
-/// source, so a checkout the deployment's source has moved away from leaves no stale tree behind.
+/// source, so a checkout the deployment's source has moved away from leaves no stale tree behind. A source
+/// whose own git directory cannot be read says nothing about whose tree it is, so the tree is left as it
+/// stands and nothing is put.
 pub fn put_build_tree(build: &BuildTree<'_>, run: CommandRun<'_>) -> Result<(), String> {
   let tree = &build.tree;
+  let Some(source_dir) = common_dir(build.source, run) else {
+    return Err(fill_shown(
+      &DEPLOY.expansion.source_unread,
+      &[
+        ("tree", &tree.display()),
+        ("commit", &short(build.head)),
+        ("source", &build.source.display()),
+      ],
+    ));
+  };
   let claimed = tree.join(".git").exists();
-  let owned = claimed && worktree_of(tree, build.source, run);
+  let owned = claimed && common_dir(tree, run).is_some_and(|tree_dir| tree_dir == source_dir);
 
   if claimed && !owned {
     discard_build_tree(tree, build.data_root, run)?;

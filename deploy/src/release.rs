@@ -191,6 +191,27 @@ pub fn stands_built(release: &Path, commit: &str, git: GitRun<'_>) -> bool {
     && git(&["rev-parse", "HEAD"], release).out.trim() == commit
 }
 
+/// The repository's primary checkout, which a deployment reads its repository through once it has picked its
+/// commit (docs/deploy.md, 「The releases」): the main worktree of the git directory the checkout shares, or the
+/// checkout itself where git names none that stands, as for a bare repository.
+pub fn primary_checkout(checkout: &Path, git: GitRun<'_>) -> PathBuf {
+  let listed = git(&["worktree", "list", "--porcelain"], checkout);
+  // Git's own porcelain listing: one stanza of `key value` lines for each worktree, the main worktree's first,
+  // opening with `worktree <path>` and holding a line `bare` where the repository has no work tree.
+  let main_stanza = listed.out.split("\n\n").next().unwrap_or_default();
+  let main = main_stanza
+    .lines()
+    .next()
+    .and_then(|line| line.strip_prefix("worktree "))
+    .map(PathBuf::from)
+    .filter(|main| !main_stanza.lines().any(|line| line == "bare") && main.is_dir());
+
+  match main {
+    Some(main) if listed.ok => main,
+    _ => checkout.to_path_buf(),
+  }
+}
+
 /// A release prepared for a commit.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Prepared {

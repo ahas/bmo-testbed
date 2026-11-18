@@ -793,6 +793,37 @@ fn a_build_tree_made_from_another_checkout_is_made_again_from_the_source() {
   assert!(!worktree_of(&tree, &first, &run), "the earlier checkout no longer owns it");
 }
 
+// A source that cannot be read says nothing of whose the build tree is, so the warm tree is never taken away for
+// it.
+#[test]
+fn a_build_tree_is_kept_where_the_checkout_it_was_put_from_is_gone() {
+  use bmo_testbed_deploy::expansion::{put_build_tree, worktree_of};
+
+  let root = tempfile::tempdir().unwrap();
+  let primary = root.path().join("primary");
+  let job = root.path().join("job");
+  let tree = root.path().join("deploy-expand");
+  let run = runner();
+  let git = |args: &[&str], cwd: &Path| {
+    let line: Vec<String> = std::iter::once("git").chain(args.iter().copied()).map(str::to_owned).collect();
+    let ran = run(&line, cwd);
+
+    assert!(ran.ok, "git {}: {}", args.join(" "), ran.out);
+  };
+
+  init_repo(&primary);
+  let one = commit(&primary, "one\n");
+
+  git(&["worktree", "add", "--quiet", "--detach", &job.to_string_lossy(), &one], &primary);
+  put_build_tree(&tree_at(&job, &tree, root.path(), &one), &run).unwrap();
+  git(&["worktree", "remove", "--force", &job.to_string_lossy()], &primary);
+
+  let two = commit(&primary, "two\n");
+  let _ = put_build_tree(&tree_at(&job, &tree, root.path(), &two), &run);
+
+  assert!(worktree_of(&tree, &primary, &run), "the warm build tree stays the repository's");
+}
+
 const DAY_MS: i64 = 24 * 60 * 60 * 1000;
 
 // The places of a deploy root under `root`, as a declaration naming it would lay them.

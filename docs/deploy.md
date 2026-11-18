@@ -64,6 +64,16 @@
   repository it deploys, or puts that unfinished work live. The gate run on this machine, the release
   and the build tree all read these committed trees, and so does the bench on the placed machine
   (「Where a deployment runs」).
+- **Once it has picked its commit, a deployment reads its repository through the repository's primary
+  checkout:** the main worktree of the git directory the checkout it was asked from shares, said on a
+  line naming it where it is another. A job's checkout is a linked worktree, removed once its work is
+  merged, which is often while the deployment asked from it still waits for its deploy root's turn or
+  the line, or runs its gate. Picking the commit reads the checkout it was asked from, its `HEAD` and
+  its open changes among them, before any wait (「What the deploy run does, in order」, step 2). Every
+  later step runs in the primary checkout: the build tree and the committed trees, the release, the
+  prunes, the service manager, the backup and its upload, and the deployment's own process moves into it
+  inside its unit, so nothing it starts inherits a directory that may go. Where git names no main worktree that stands,
+  as for a bare repository, the deployment goes on from the checkout it was asked from.
 - **The trees the workspace names by a path outside the repository — the base libraries and the
   sibling repositories' crates a release build reads — are laid where each manifest names them, as
   links into the committed trees, and so is every tree those trees name in turn.** A tree so named is
@@ -78,8 +88,8 @@
   checkout's copy of it, places under a workspace root above it — reads its inherited fields from
   that root, so the link is laid at the root instead, and the named path resolves through it; every
   tree named inside one workspace shares that one link. A standalone package is linked by itself. The
-  list of trees, and where each one's link goes, is read from the checkout's workspace and the trees
-  beside it, since a worktree reads no manifest until the trees its manifests name stand where they
+  list of trees, and where each one's link goes, is read from the primary checkout's workspace and the
+  trees beside it, since a worktree reads no manifest until the trees its manifests name stand where they
   point; what a link reaches is the committed tree alone. Where a link is to be laid, a link already on its committed
   tree is left as it is, a link pointing elsewhere, onto a checkout's working tree among them, is
   moved onto it, and a folder holding nothing but folders and links, as an earlier laying leaves, is
@@ -110,7 +120,9 @@
 - **A build tree made from a checkout that is no longer the deployment's source is discarded and made
   again.** The tree belongs to the deployment's source only while the common git directory it names is
   that source's. A tree naming another checkout, or one whose git directory cannot be read, is removed
-  through the repository it belongs to, and a new worktree is made from the source at the commit.
+  through the repository it belongs to, and a new worktree is made from the source at the commit. A
+  source whose own git directory cannot be read says nothing about whose tree it is: the build tree is
+  left as it stands, and the deployment stops at its gate, naming the source.
 - **A binary is placed into a release once.** A binary whose bytes equal the previous release's is
   hard-linked to that file; a binary that differs is copied in. What differs is what the deployment
   restarts (「The unit links」).
@@ -474,7 +486,8 @@ flowchart TD
 2. **Pick the commit.** After `git fetch`, take the commit `--commit` names, or the checkout's `HEAD`,
    and check it is on the remote. Read the commit's declaration, and stop where it does not read, names
    the repository otherwise than the checkout's, places the deployment elsewhere or deploys nothing, or
-   where an env file it declares is missing. Check every unit link will still find its unit file. Then
+   where an env file it declares is missing. Check every unit link will still find its unit file. From
+   here on, read the repository through its primary checkout (「The releases」). Then
    take the deploy root's turn once no other deployment of it is under way, stand in the deployment line
    until its turn comes or its bound passes, and read the deployment record
    again, ending there, live, where it names the commit (「The deployment line」). Adopt a deploy tree that
@@ -620,8 +633,8 @@ flowchart TD
     could still roll the deployment back, so that machine never runs a release this one has left. What
     fails there is a warning.
 17. **Start the backup upload,** where the declaration names a remote, as a transient user unit of its
-    own, `bmo-backup-upload-<stamp>`, in `bmo-backup.slice`, running the `backups` verb, and end without
-    waiting for it.
+    own, `bmo-backup-upload-<stamp>`, in `bmo-backup.slice`, running the `backups` verb in the primary
+    checkout (「The releases」), and end without waiting for it.
 
 - **The deployment ends** with its outcome written into the progress record and the testbed's record,
   and only then sends its `deployed` event naming the commit, the flaky tests its gate found, and the

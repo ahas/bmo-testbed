@@ -79,6 +79,7 @@ pub struct RunWords {
   pub line_nobody: String,
   pub root_waiting: String,
   pub root_taken: String,
+  pub primary: String,
   pub retrying: String,
   pub connection_lost: String,
   pub gate_work: String,
@@ -210,6 +211,7 @@ pub struct BootWords {
 #[serde(deny_unknown_fields)]
 pub struct ExpansionWords {
   pub not_placed: String,
+  pub source_unread: String,
   pub not_discarded: String,
   pub not_emptied: String,
   pub failed: String,

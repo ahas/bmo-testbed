@@ -23,6 +23,8 @@ use bmo_testbed_deploy::deployment::{
 };
 use bmo_testbed_deploy::line::DeployLine;
 use bmo_testbed_deploy::progress::DEPLOY_PROGRESS_VARIABLE;
+use bmo_testbed_deploy::release::primary_checkout;
+use bmo_testbed_deploy::run::run_quiet;
 use bmo_testbed_deploy::unit::{
   DEPLOY_SLICE, DeployUnitStart, deploy_unit_name, deploy_unit_of_process, hand_off, this_again,
 };
@@ -556,14 +558,25 @@ pub fn deploy(args: &DeployFlags) -> u8 {
     return hand_off(&start, env.get("PATH").map_or("", String::as_str), &|line| println!("{line}"));
   }
 
+  // Inside its unit the run's own process stands in the repository's primary checkout, so nothing it starts
+  // without a directory of its own inherits a checkout that may go while it runs (docs/deploy.md, 「The
+  // releases」); every path the run names is absolute.
+  if unit.is_some() {
+    let git = |args: &[&str], cwd: &Path| {
+      let line: Vec<String> =
+        std::iter::once("git").chain(args.iter().copied()).map(str::to_owned).collect();
+
+      run_quiet(&line, Some(cwd))
+    };
+    let _ = std::env::set_current_dir(primary_checkout(&repo.root, &git));
+  }
+
   let hook = Hook::of(Some(&repo), &env);
-  // The upload runs in a unit of its own, in the repository, aiming at the backups this run took.
-  let upload: Vec<String> = std::iter::once(format!("--working-directory={}", repo.root.display()))
-    .chain(
-      handed(&places, &env)
-        .into_iter()
-        .map(|(name, value)| format!("--setenv={name}={value}")),
-    )
+  // The upload runs in a unit of its own, in the repository's primary checkout the run names, aiming at the
+  // backups this run took.
+  let upload: Vec<String> = handed(&places, &env)
+    .into_iter()
+    .map(|(name, value)| format!("--setenv={name}={value}"))
     .chain([this_again()[0].clone(), "backups".to_owned()])
     .collect();
   let ask = DeployAsk {

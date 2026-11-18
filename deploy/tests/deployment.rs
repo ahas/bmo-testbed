@@ -146,6 +146,40 @@ impl Gate for Told {
   }
 }
 
+// A gate that says it has begun, then passes once it is let go or its letting go is dropped, as a deployment
+// holding its turn runs a long gate.
+struct HeldGate {
+  begun: std::sync::mpsc::Sender<()>,
+  go: std::sync::Mutex<std::sync::mpsc::Receiver<()>>,
+}
+
+impl Gate for HeldGate {
+  fn pass(&self, _: &GateAsk<'_>) -> GateOutcome {
+    let _ = self.begun.send(());
+    let _ = self.go.lock().unwrap().recv();
+
+    GateOutcome {
+      passed: true,
+      ..GateOutcome::default()
+    }
+  }
+}
+
+// A held gate, the way to hear it has begun, and the way to let it go.
+fn held_gate() -> (HeldGate, std::sync::mpsc::Receiver<()>, std::sync::mpsc::Sender<()>) {
+  let (begun, has_begun) = std::sync::mpsc::channel();
+  let (go, gone) = std::sync::mpsc::channel();
+
+  (
+    HeldGate {
+      begun,
+      go: std::sync::Mutex::new(gone),
+    },
+    has_begun,
+    go,
+  )
+}
+
 // A gate that passes, keeping whether each ask ran its suite, and answering the passed run it is handed as
 // one its own machine's record held.
 #[derive(Default)]
@@ -448,6 +482,26 @@ health = "true"
     let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
 
     runtime.block_on(deploy(&repo, &places, ask, env, gate, hands, &self.hook()))
+  }
+
+  // A deployment asked from the checkout given rather than the scene's own.
+  fn run_from(&self, checkout: &Path, ask: &DeployAsk, gate: &dyn Gate, hands: &Hands) -> u8 {
+    let repo = Repository::read(checkout).unwrap();
+    let places = DeployPlaces::of(&repo, &self.env()).unwrap();
+    let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+
+    runtime.block_on(deploy(&repo, &places, ask, &self.env(), gate, hands, &self.hook()))
+  }
+
+  // A linked worktree of the scene's checkout at its head, as a job's checkout stands beside the primary one.
+  fn job_checkout(&self, name: &str) -> PathBuf {
+    let job = self.at(name);
+
+    must(
+      &["worktree", "add", "--quiet", "--detach", &job.to_string_lossy(), "HEAD"],
+      &self.source,
+    );
+    job
   }
 
   fn run(&self, hands: &Hands) -> u8 {
@@ -1979,6 +2033,116 @@ fn a_deployment_asked_while_one_of_its_repository_waits_for_quiet_waits_for_it_a
     "{later_said}"
   );
   assert_eq!(laid[laid.len() - 2..], [earlier.as_str(), later.as_str()], "{log}");
+}
+
+// "Once it has picked its commit, a deployment reads its repository through the repository's primary checkout":
+// a job's checkout removed while its own deployment runs its gate, and another's removed while its deployment
+// waits behind that one for its deploy root's turn, leave both to go live in turn.
+#[test]
+fn two_deployments_of_one_repository_asked_back_to_back_from_checkouts_removed_meanwhile_both_go_live() {
+  let scene = Scene::new();
+  let first_job = scene.job_checkout("job-1");
+  let earlier = must(&["rev-parse", "HEAD"], &first_job);
+
+  scene.declare("v2", "true");
+
+  let later = scene.push("second");
+  let second_job = scene.job_checkout("job-2");
+  let ask = DeployAsk {
+    root_poll: Some(Duration::from_millis(5)),
+    ..DeployAsk::default()
+  };
+  let (gate, has_begun, go) = held_gate();
+  let (told, heard) = std::sync::mpsc::channel();
+  let given_up = Instant::now() + Duration::from_secs(60);
+  let (scene, ask, gate) = (&scene, &ask, &gate);
+  let (first, second) = (&first_job, &second_job);
+
+  let ((earlier_code, earlier_said), (later_code, later_said)) = std::thread::scope(|scope| {
+    let deploying_earlier = scope.spawn(move || {
+      let hands = Hands::default();
+
+      (scene.run_from(first, ask, gate, &hands), said(&hands))
+    });
+
+    let _ = has_begun.recv_timeout(given_up.saturating_duration_since(Instant::now()));
+
+    let deploying_later = scope.spawn(move || {
+      let hands = Hands {
+        told: Some(told),
+        ..Hands::default()
+      };
+
+      (scene.run_from(second, ask, &Told(true), &hands), said(&hands))
+    });
+
+    heard_until(&heard, &[words_of(&DEPLOY.run.root_waiting)], given_up);
+
+    for job in [first, second] {
+      must(&["worktree", "remove", "--force", &job.to_string_lossy()], &scene.source);
+    }
+
+    drop(go);
+    (deploying_earlier.join().unwrap(), deploying_later.join().unwrap())
+  });
+  let log = std::fs::read_to_string(scene.at("live/deployed.log")).unwrap();
+  let laid: Vec<&str> = log.lines().filter_map(|line| line.split_whitespace().nth(1)).collect();
+
+  assert_eq!(earlier_code, 0, "{earlier_said}");
+  assert_eq!(later_code, 0, "{later_said}");
+  assert!(later_said.contains(words_of(&DEPLOY.run.root_waiting)), "{later_said}");
+  assert_eq!(laid, [earlier.as_str(), later.as_str()], "{log}");
+}
+
+// A deployment asked from a job's checkout waits in the line behind another repository's deployment while that
+// checkout is removed, and goes live once its turn comes.
+#[test]
+fn a_deployment_behind_another_repositorys_in_the_line_goes_live_with_its_checkout_removed_meanwhile() {
+  let scene = Scene::new();
+  let other = Scene::new();
+  let job = scene.job_checkout("job");
+  let line = line_of(&scene, Duration::from_secs(3600));
+  let (gate, has_begun, go) = held_gate();
+  let (told, heard) = std::sync::mpsc::channel();
+  let given_up = Instant::now() + Duration::from_secs(60);
+  let ask = DeployAsk {
+    line: Some(line),
+    ..DeployAsk::default()
+  };
+  let (scene, other, ask, gate, job) = (&scene, &other, &ask, &gate, &job);
+
+  let ((other_code, other_said), (code, lines)) = std::thread::scope(|scope| {
+    let deploying_other = scope.spawn(move || {
+      let hands = Hands::default();
+
+      (other.run_from(&other.source, ask, gate, &hands), said(&hands))
+    });
+
+    let _ = has_begun.recv_timeout(given_up.saturating_duration_since(Instant::now()));
+
+    let deploying = scope.spawn(move || {
+      let hands = Hands {
+        told: Some(told),
+        ..Hands::default()
+      };
+
+      (scene.run_from(job, ask, &Told(true), &hands), said(&hands))
+    });
+
+    heard_until(&heard, &[words_of(&DEPLOY.run.line_waiting)], given_up);
+    must(&["worktree", "remove", "--force", &job.to_string_lossy()], &scene.source);
+    drop(go);
+    (deploying_other.join().unwrap(), deploying.join().unwrap())
+  });
+
+  assert_eq!(other_code, 0, "{other_said}");
+  assert_eq!(code, 0, "{lines}");
+  assert!(lines.contains(words_of(&DEPLOY.run.line_waiting)), "{lines}");
+  assert!(
+    lines.contains(&fill_marks(&DEPLOY.run.primary, &[("checkout", &scene.source.to_string_lossy())])),
+    "{lines}"
+  );
+  assert!(scene.deploy_dir().exists(), "{lines}");
 }
 
 // "A deployment is under way where ... the testbed's record holds it for the repository without an end, and its
