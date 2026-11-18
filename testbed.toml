@@ -16,7 +16,7 @@ setup = ["cd testkit && bun install --frozen-lockfile"]
 [test.database]
 
 [check]
-quick = ["dashes", "language", "layout", "dependencies", "cargo-profile", "shared-versions"]
+quick = ["dashes", "language", "layout", "dependencies", "cargo-profile", "shared-versions", "personal-data"]
 # The text a person reads: the verbs' words in the policy, and the literals of the crates, the hosted tools
 # and the kit.
 people_text = ["policy/*.toml", "*/src/**/*.rs", "tools/*/src/**/*.rs", "testkit/*.ts"]

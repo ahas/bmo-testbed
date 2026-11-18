@@ -486,7 +486,8 @@ fn this_repositorys_own_declaration_reads() {
       QuickCheck::Layout,
       QuickCheck::Dependencies,
       QuickCheck::CargoProfile,
-      QuickCheck::SharedVersions
+      QuickCheck::SharedVersions,
+      QuickCheck::PersonalData
     ]
   );
   assert_eq!(

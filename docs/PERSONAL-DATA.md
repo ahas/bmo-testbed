@@ -16,10 +16,11 @@ or a commit message.
 - **A test's fixtures carry no real person, agent, room or message.** A conversation line a test reads
   is written for the test.
 
-The suite's personal-data test reads every file git tracks or would track for a mail address outside
-the reserved example domains, a person's home path, a telephone number, a token and a private network
-address, and names the file, the line and the kind of each finding, never the value. The neutral forms
-an example writes are not findings: an address in `example.com`, `example.net`, `example.org` or a
-domain ending `.example`, `.test`, `.invalid` or `.localhost`, and a home folder named `user`,
-`tester`, `qa-admin`, `placeholder` or `example`, or one beginning `agent-`. The check carries the
-patterns alone; no list of the values it forbids stands in the repository.
+The `personal-data` quick check, which the declaration enables, reads every file git tracks or would
+track for a mail address outside the reserved example domains, a person's home path, a telephone
+number, a token and a private network address, and names the file, the line and the kind of each
+finding, never the value (`docs/checks.md`, 「The quick checks」). The neutral forms an example writes
+are not findings: an address in `example.com`, `example.net`, `example.org` or a domain ending
+`.example`, `.test`, `.invalid` or `.localhost`, and a home folder named for a role, such as `user`,
+`tester`, `qa-admin`, `placeholder` or `example`. The check carries the patterns alone; no list of the
+values it forbids stands in the repository.
