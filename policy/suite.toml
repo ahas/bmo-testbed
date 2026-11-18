@@ -258,4 +258,13 @@ path_absent = "none"
 # {component} the component, and {code} the exit of the install that did not take.
 installing = "cargo: toolchain {toolchain} holds no {component} on this machine; installing it"
 not_installed = "cargo: installing {component} of toolchain {toolchain} ended with exit {code}"
+# A lock whose path packages were left as it holds them: {lock} the lock, or the folder where Cargo located
+# none, {why} one of the reasons below.
+path_declined = "cargo: {lock}: path packages left as the lock holds them: {why}"
+# {said} Cargo's own line, {why} the system's, {code} Cargo's exit.
+path_unlocated = "Cargo could not locate the workspace offline: {said}"
+path_unread = "the lock could not be read: {why}"
+path_unstarted = "Cargo's offline resolution could not be started: {why}"
+path_unresolved = "Cargo's offline resolution ended with exit {code}: {said}"
+path_beyond = "Cargo's offline resolution would move more than path packages"
 # The test server's stand lock not had: {dir} the server's folder, {seconds} how long it was waited for.

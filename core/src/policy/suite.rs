@@ -199,6 +199,12 @@ pub struct CargoWords {
   pub path_absent: String,
   pub installing: String,
   pub not_installed: String,
+  pub path_declined: String,
+  pub path_unlocated: String,
+  pub path_unread: String,
+  pub path_unstarted: String,
+  pub path_unresolved: String,
+  pub path_beyond: String,
 }
 
 /// What no test unit inherits: the deployment's own variables, which name the live data rather than the

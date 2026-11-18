@@ -351,9 +351,10 @@ bmo-testbed cargo <cargo arguments…>
   before the turn came, and 124 where, holding the turn with its standard output and error both files,
   it wrote nothing to them for the silence limit.
 - Given `--locked` or `--frozen`, runs Cargo on a lock whose path packages are brought to the versions
-  their manifests name, offline, only where no registry or git package moved, says on its standard error
-  which path packages moved, and puts the lock back as it found it once Cargo ends (`docs/deploy.md`,
-  「The Cargo build directory」).
+  their manifests name, offline and fetching no package's source, only where no registry or git package
+  moved, says on its standard error on one line which path packages moved, or why it left them as the lock
+  holds them, and puts the lock back as it found it once Cargo ends (`docs/deploy.md`, 「The Cargo build
+  directory」).
 - Placed first where the machine's placement sends it elsewhere (「Placement」) when its subcommand is
   `test`, `check` or `clippy`, it holds no `--no-run` and no word names an absolute path, and it was
   started outside a held turn, a deployment's or a whole run's unit and a placed machine: it then runs as

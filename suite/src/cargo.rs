@@ -12,7 +12,7 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-use bmo_testbed_core::cargo_lock::{Aligned, align_path_packages};
+use bmo_testbed_core::cargo_lock::{Alignment, align_path_packages};
 use bmo_testbed_core::languages::{Cargo, Language as _, cargo_compiles as compiles};
 use bmo_testbed_core::memory::{MachineHands, MemoryLimits, RunEnd, run_in_turn};
 use bmo_testbed_core::policy::fill_shown;
@@ -180,12 +180,12 @@ fn sccache_on_path() -> Option<PathBuf> {
 /// The lock of the checkout's workspace with its path packages brought to their manifests, held so for as long
 /// as the value lives and put back as it was found once it goes, unless something else has written it since:
 /// for a run whose Cargo commands holding the lock do not all go through the verb.
-pub struct HeldLock(Aligned);
+pub struct HeldLock(Alignment);
 
 impl HeldLock {
-  /// The lock at `root` aligned for the Cargo command `args` and held until the value goes; none where the
-  /// checkout holds no workspace manifest of its own, the command does not hold its lock, or the lock needed
-  /// nothing or could not be aligned (`align_path_packages`).
+  /// The lock at `root` aligned for the Cargo command `args` and held until the value goes, or what the
+  /// alignment came to where it needed nothing or was declined (`align_path_packages`); none where the
+  /// checkout holds no workspace manifest of its own.
   pub fn aligned(root: &Path, args: &[String]) -> Option<Self> {
     if !root.join("Cargo.toml").is_file() {
       return None;
@@ -193,11 +193,11 @@ impl HeldLock {
 
     let invocation = cargo_invocation(root, args);
 
-    align_path_packages(root, args, &|| invocation.program()).map(Self)
+    Some(Self(align_path_packages(root, args, &|| invocation.program())))
   }
 
-  /// The one line that says which path packages moved.
-  pub fn said(&self) -> String {
+  /// The one line that says which path packages moved, or why none was moved; none where nothing needed it.
+  pub fn said(&self) -> Option<String> {
     self.0.said()
   }
 }
@@ -221,13 +221,12 @@ pub fn remove_superseded_after(root: &Path, args: &[String], say: &mut dyn FnMut
   let Some(reporting) = reporting_args(args) else { return };
   let invocation = cargo_invocation(root, &reporting);
   // The command asked about ran on the lock's path packages brought to their manifests and put the lock back,
-  // so the asking holds the lock the same way or Cargo refuses the lock the build itself passed on.
-  let aligned = align_path_packages(root, &reporting, &|| invocation.program());
+  // so the asking holds the lock the same way or Cargo refuses the lock the build itself passed on. What the
+  // alignment came to was said for that command, on the same lock, and is not said again.
+  let alignment = align_path_packages(root, &reporting, &|| invocation.program());
   let asked = invocation.command(root).stdout(Stdio::piped()).stderr(Stdio::piped()).output();
 
-  if let Some(aligned) = &aligned {
-    aligned.put_back();
-  }
+  alignment.put_back();
 
   let asked = match asked {
     Ok(asked) => asked,
@@ -285,10 +284,10 @@ pub fn run_cargo(root: &Path, args: &[String]) -> u8 {
       .envs(widened)
       .envs(watch.variable());
 
-    let aligned = align_path_packages(root, args, &|| invocation.program());
+    let alignment = align_path_packages(root, args, &|| invocation.program());
 
-    if let Some(aligned) = &aligned {
-      eprintln!("{}", aligned.said());
+    if let Some(said) = alignment.said() {
+      eprintln!("{said}");
     }
 
     let ended = match command.spawn() {
@@ -314,9 +313,7 @@ pub fn run_cargo(root: &Path, args: &[String]) -> u8 {
       }
     };
 
-    if let Some(aligned) = &aligned {
-      aligned.put_back();
-    }
+    alignment.put_back();
 
     ended
   };

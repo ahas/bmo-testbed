@@ -924,9 +924,13 @@ flowchart TD
   naming `--locked` or `--frozen`, the Cargo verb lets Cargo resolve the workspace offline and write the
   lock just before the command starts, and keeps what it wrote only where the path packages alone moved:
   every package from a registry or a git source stands in it as it stood, and so does the lock's own
-  format. It then says on one line which path packages moved, from which version to which. Where
-  anything else moved, or Cargo could not resolve offline, the lock is put back byte for byte and the
-  command judges it as it stood, so a registry package's lock is held exactly as `--locked` holds it.
+  format. The resolution is Cargo's update of the workspace with nothing freed to move, which reads the
+  registry's index from the machine's cache and fetches no package's source, so a machine whose cache
+  lacks the source of a package none of its builds compile aligns its lock as every other does. The verb
+  then says on one line which path packages moved, from which version to which. Where anything else
+  moved, or Cargo could not locate the workspace, read its lock or resolve offline, the lock is put back
+  byte for byte, the verb says on one line why it left the path packages as the lock holds them, and the
+  command judges the lock as it stood, so a registry package's lock is held exactly as `--locked` holds it.
   Once the command ends, the lock is put back as it was found, unless something else has written it
   since, so the checkout's tracked files never change under a check and a deployment never finds its
   checkout holding uncommitted changes a check left (「What it refuses」). A lock that already matches

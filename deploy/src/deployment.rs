@@ -1159,17 +1159,15 @@ impl<'a> Laying<'a> {
             lane: Some(Lane::Wide),
           };
           let cargo = || crate::run::command(&ask.command[..1], None);
-          let aligned = align_path_packages(&tree, &ask.command[1..], &cargo);
+          let alignment = align_path_packages(&tree, &ask.command[1..], &cargo);
 
-          if let Some(aligned) = &aligned {
-            self.say(&aligned.said());
+          if let Some(said) = alignment.said() {
+            self.say(&said);
           }
 
           let ran = self.step(&ask);
 
-          if let Some(aligned) = &aligned {
-            aligned.put_back();
-          }
+          alignment.put_back();
 
           if ran.code != 0 {
             return Err(failed_at(&ask.id, &ran));

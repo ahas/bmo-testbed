@@ -653,8 +653,8 @@ fn run_held(
   // It is put back as it was found once the run ends.
   let held_lock = (!crates.is_empty()).then(|| HeldLock::aligned(root, &tests_build)).flatten();
 
-  if let Some(held) = &held_lock {
-    say(&held.said());
+  if let Some(said) = held_lock.as_ref().and_then(HeldLock::said) {
+    say(&said);
   }
 
   // What the run's Rust stands on, built once before any guard is counted, through the repository's Cargo verb,
