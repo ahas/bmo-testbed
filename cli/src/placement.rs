@@ -13,6 +13,7 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
 
 use bmo_testbed_core::declaration::Repository;
+use bmo_testbed_core::events::Hook;
 use bmo_testbed_core::placement::{PlaceAsk, PlacedRun, Placement, lane_full};
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
@@ -23,8 +24,6 @@ use bmo_testbed_core::turn::{
   FRONT_VARIABLE, Lane, NEXT_VARIABLE, NOT_RUN_EXIT_CODE, process_env, stands_at_front, stands_next,
 };
 use bmo_testbed_deploy::expansion::committed_tree;
-use bmo_testbed_deploy::release::built_from;
-use bmo_testbed_deploy::tree::{BUILT_FROM, short};
 use bmo_testbed_suite::crates::checkout_target_name;
 use bmo_testbed_suite::quick::shared_versions::{main_shared_text, shared_checkout};
 use futures_util::StreamExt as _;
@@ -32,6 +31,14 @@ use serde::{Deserialize, Serialize};
 use sse_stream::SseStream;
 
 use crate::words::BINARY;
+
+mod far_release;
+mod machine_hook;
+mod outage;
+
+pub use far_release::{FarWait, LiveRelease, MachineState, PLACED_TESTBED_LOCK, running_deploy_tree};
+pub use machine_hook::{MACHINE_ENV_FILE, machine_hook};
+pub use outage::{OUTAGE_DIR, Outage};
 
 /// The variable naming the placement endpoint over the declaration's.
 pub const PLACEMENT_VARIABLE: &str = "BMO_TESTBED_PLACEMENT";
@@ -863,28 +870,17 @@ pub struct ReadyBench {
 pub struct MachinePlacement {
   pub settings: MachineSettings,
   pub home: PathBuf,
-  /// The running testbed's release, which the testbed there must be built from too; none where this one runs
-  /// from no release, such as a checkout's own build, and then nothing is compared.
-  pub release: Option<OwnRelease>,
-}
-
-/// The release the running testbed stands in: its directory, and the commit it was built from.
-#[derive(Clone, Debug, PartialEq)]
-pub struct OwnRelease {
-  pub dir: PathBuf,
-  pub commit: String,
-}
-
-/// The running binary's release: the directory above its `bin/`, and the commit the `built-from` beside it
-/// names. None where the binary stands in no release.
-pub fn own_release() -> Option<OwnRelease> {
-  let binary = std::env::current_exe().ok()?;
-  let dir = binary.parent()?.parent()?.to_path_buf();
-
-  Some(OwnRelease {
-    commit: built_from(&dir)?,
-    dir,
-  })
+  /// The testbed deploy tree whose live release the testbed there is kept to (docs/boundary.md, 「The placed
+  /// machine」); none where this one runs from no release, such as a checkout's own build, and then nothing is
+  /// compared.
+  pub deploy_tree: Option<PathBuf>,
+  /// The data root, whose `locks/` holds the lock every bringing of the testbed there to a release holds.
+  pub data_root: PathBuf,
+  /// How a run waits for the machine where it does not answer.
+  pub unreached: FarWait,
+  /// Where the machine's own events go: its outage, its return and a testbed there that could not be brought to the
+  /// live release (docs/boundary.md, 「Events」).
+  pub hook: Hook,
 }
 
 /// What words run on the placed machine came to: the code they ended with there, or the connection broken
@@ -896,14 +892,17 @@ pub enum FarEnd {
 }
 
 impl MachinePlacement {
-  /// The placement under a data root for an account's home: none where the settings name no machine or do
-  /// not read, the reason said on a line.
+  /// The placement under a data root for an account's home, its events going to the machine's own hook: none where
+  /// the settings name no machine or do not read, the reason said on a line.
   pub fn named(data_root: &Path, home: &Path) -> Option<Self> {
     match MachineSettings::read(data_root)? {
       Ok(settings) => Some(Self {
         settings,
         home: home.to_path_buf(),
-        release: own_release(),
+        deploy_tree: running_deploy_tree(),
+        data_root: data_root.to_path_buf(),
+        unreached: FarWait::policy(),
+        hook: machine_hook(data_root, &process_env()),
       }),
       Err(why) => {
         eprintln!("{why}");
@@ -1018,168 +1017,24 @@ impl MachinePlacement {
 
   /// Whether the machine answers; what `ssh` said where it does not, on the `unreached` line.
   pub fn reached(&self) -> bool {
-    let probed = self.ssh().arg("true").output();
-
-    if succeeded(&probed) {
-      return true;
-    }
-
-    eprintln!(
-      "{}",
-      fill_marks(&LANES.placed.unreached, &[("machine", self.settings.label()), ("said", &said(&probed))])
-    );
-
-    false
-  }
-
-  /// Whether the testbed there is this one's release (docs/boundary.md, 「The placed machine」): the commit
-  /// the `built-from` beside its binary names, compared with this one's own; the line naming both where they
-  /// differ or none reads there. Nothing is compared where this one runs from no release.
-  pub fn same_release(&self) -> Result<(), String> {
-    let Some(OwnRelease { commit: own, .. }) = &self.release else { return Ok(()) };
-    let words = &LANES.placed;
-    let machine = self.settings.label();
-
-    match self.far_built_from() {
-      Ok(far) if far == *own => Ok(()),
-      Ok(far) => Err(fill_marks(
-        &words.stale,
-        &[("machine", machine), ("far", &short(&far)), ("own", &short(own))],
-      )),
-      Err(said) => Err(fill_marks(
-        &words.unreleased,
-        &[
-          ("machine", machine),
-          ("file", &self.far_built_from_file()),
-          ("said", &said),
-          ("own", &short(own)),
-        ],
-      )),
-    }
-  }
-
-  // The `built-from` beside the testbed binary there.
-  fn far_built_from_file(&self) -> String {
-    Path::new(&self.settings.testbed)
-      .with_file_name(BUILT_FROM)
-      .to_string_lossy()
-      .into_owned()
-  }
-
-  // The commit the `built-from` there names; what reading it said where it names none.
-  fn far_built_from(&self) -> Result<String, String> {
-    let read = self.ssh().arg(format!("cat {}", far_path(&self.far_built_from_file()))).output();
-
-    read
-      .as_ref()
-      .ok()
-      .filter(|done| done.status.success())
-      .map(|done| String::from_utf8_lossy(&done.stdout).trim().to_owned())
-      .filter(|commit| !commit.is_empty())
-      .ok_or_else(|| said(&read))
-  }
-
-  /// The binary of a release the testbed there would run: the file in the release's `bin/` of the name the
-  /// settings' `testbed` ends in; none where the release holds no such file, so it carries no testbed.
-  pub fn testbed_in(&self, release: &Path) -> Option<PathBuf> {
-    Some(release.join(self.testbed_name())).filter(|binary| binary.is_file())
-  }
-
-  // The name the settings' `testbed` ends in, under `bin/`.
-  fn testbed_name(&self) -> String {
-    format!(
-      "bin/{}",
-      Path::new(&self.settings.testbed).file_name().unwrap_or_default().to_string_lossy()
-    )
-  }
-
-  /// The testbed there brought to a release's (docs/boundary.md, 「The placed machine」): the release's
-  /// `binary` written onto the settings' `testbed`, the `built-from` beside it onto the one beside that, last,
-  /// and that `built-from` read back, which must name `commit`. The files written there; the reason where the
-  /// machine is not reached, a file is not written, or what is read back names another commit or none.
-  pub fn bring_testbed(&self, binary: &Path, commit: &str) -> Result<Vec<String>, String> {
-    let words = &LANES.placed;
-    let probed = self.ssh().arg("true").output();
-
-    if !succeeded(&probed) {
-      return Err(fill_marks(&words.testbed_unreached, &[("said", &said(&probed))]));
-    }
-
-    let unwritten =
-      |file: &str, why: &str| fill_marks(&words.testbed_unwritten, &[("file", file), ("said", why)]);
-    let far_testbed = self.settings.testbed.clone();
-    let far_built_from = self.far_built_from_file();
-    let far_bin = Path::new(&far_testbed)
-      .parent()
-      .map(|bin| bin.to_string_lossy().into_owned())
-      .unwrap_or_default();
-
-    if !far_bin.is_empty() {
-      let made = self.ssh().arg(format!("mkdir -p {}", far_path(&far_bin))).output();
-
-      if !succeeded(&made) {
-        return Err(unwritten(&far_bin, &said(&made)));
-      }
-    }
-
-    let (program, options) = self.ssh_program();
-    let written = [
-      (binary.to_path_buf(), &far_testbed, Some("755")),
-      (binary.with_file_name(BUILT_FROM), &far_built_from, None),
-    ];
-
-    for (from, to, mode) in written {
-      let bytes = std::fs::read(&from).map_err(|why| unwritten(to, &why.to_string()))?;
-      let laid = laid_over(program, options, &self.settings.destination, to, &bytes, mode);
-
-      if !succeeded(&laid) {
-        return Err(unwritten(to, &said(&laid)));
-      }
-    }
-
-    match self.far_built_from() {
-      Ok(far) if far == commit => Ok(vec![far_testbed, far_built_from]),
-      Ok(far) => Err(fill_marks(&words.testbed_other, &[("far", &short(&far)), ("own", &short(commit))])),
-      Err(why) => Err(fill_marks(&words.testbed_unread, &[("file", &far_built_from), ("said", &why)])),
-    }
-  }
-
-  /// The testbed there brought to this one's own release before a deployment's bench (docs/deploy.md, 「Where a
-  /// deployment runs」), where it is not that release already, said on a line; the reason naming both commits
-  /// and what the machine answered where it could not be.
-  pub fn brought_to_own(&self) -> Result<(), String> {
-    let (Err(stale), Some(own)) = (self.same_release(), &self.release) else {
-      return Ok(());
-    };
-    let words = &LANES.placed;
-    let binary = self.testbed_in(&own.dir).ok_or_else(|| {
-      fill_marks(
-        &words.own_uncarried,
-        &[("release", &own.dir.to_string_lossy()), ("binary", &self.testbed_name())],
-      )
-    });
-
-    match binary.and_then(|binary| self.bring_testbed(&binary, &own.commit)) {
-      Ok(_) => {
+    match self.answers() {
+      Ok(()) => true,
+      Err(said) => {
         eprintln!(
           "{}",
-          fill_marks(
-            &words.brought_own,
-            &[("machine", self.settings.label()), ("own", &short(&own.commit))]
-          )
+          fill_marks(&LANES.placed.unreached, &[("machine", self.settings.label()), ("said", &said)])
         );
-        Ok(())
+        false
       }
-      Err(why) => Err(fill_marks(&words.unbrought_own, &[("stale", &stale), ("said", &why)])),
     }
   }
 
   /// The bench of a checkout made ready at a commit for `purpose`, its outside trees with it, and the
   /// checkout holding the shared versions the declaration names, found through this machine's registry; the
   /// bench's path there, and the far places of every tree copied, which are that run's checkouts there.
-  /// Nothing is made ready where the testbed there is not this one's release.
+  /// Nothing is made ready where the testbed there is not the live testbed release.
   pub fn ready(&self, checkout: &Path, commit: &str, purpose: BenchFor<'_>) -> Result<ReadyBench, String> {
-    self.same_release()?;
+    self.live_there()?;
     self.made_ready(checkout, commit, purpose)
   }
 
@@ -1534,24 +1389,15 @@ impl MachinePlacement {
     Ok(())
   }
 
-  /// A run placed on the machine: the bench made ready at the checkout's `HEAD` with its open files, and
-  /// the words run there as the testbed's own `run`; the code it ended with there. None where it did not go,
-  /// said on a line: the machine unreached, its testbed another release than this one's, or, for a run that
-  /// goes there only to a seat free now since another machine follows it in the order, every seat of its
-  /// lane there held or waited for.
+  /// A run placed on the machine: the machine waited for and its testbed brought to the live release, the bench
+  /// made ready at the checkout's `HEAD` with its open files, and the words run there as the testbed's own `run`;
+  /// the code it ended with there, or the code of a run not run where the machine did not answer within the wait
+  /// or its testbed could not be brought to the live release. None where it did not go: for a run that goes there
+  /// only to a seat free now since another machine follows it in the order, every seat of its lane there held or
+  /// waited for, said on a line.
   fn placed(&self, ask: &PlaceAsk<'_>, to_free_seat: bool) -> Option<u8> {
-    if !self.reached() {
-      return None;
-    }
-
-    // A testbed there of another release would meet the same command the same way until it is brought to this
-    // release, so the run is this machine's.
-    if let Err(said) = self.same_release() {
-      let machine = self.settings.label();
-
-      eprintln!("{}", fill_marks(&LANES.placed.other_release, &[("machine", machine), ("said", &said)]));
-
-      return None;
+    if let Err(code) = self.waited_ready(ask) {
+      return Some(code);
     }
 
     if to_free_seat && !self.seat_free(ask.lane) {

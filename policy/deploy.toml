@@ -74,9 +74,11 @@ line_say_seconds = 60
 # How long a deployment waits in the deployment line before it goes on beside the holder, in minutes; far past
 # what a whole batch of deployments takes.
 line_bound_minutes = 720
-# The pauses between the tries of a deployment's work on the placed machine whose connection broke under it, in
-# seconds (docs/deploy.md, 「A connection that breaks under the placed machine」); one try more than pauses.
-retry_pauses_seconds = [30, 90, 180]
+# The pause between the tries of a deployment's work on the placed machine that does not answer or whose
+# connection broke under it, in seconds, and the minutes of pauses the tries span (docs/deploy.md, 「A connection
+# that breaks under the placed machine」): one try more than the pauses those minutes hold.
+retry_pause_seconds = 60
+retry_minutes = 30
 
 # What the deploy run says as it goes (docs/deploy.md, 「What the deploy run does, in order」): {commit} a
 # short commit, {release}, {path}, {dir} and {data} places, {unit} and {name} units, {said} and {why}

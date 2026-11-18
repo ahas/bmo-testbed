@@ -8,8 +8,13 @@
 //! placed check from a copy of the shared repository reading them there, a
 //! deployment's bench standing apart from a run's copy of the same tree, its sweep keeping a laid sibling that
 //! shares the deployed repository's root commits while the bench another checkout left goes and the making of
-//! the bench blaming itself naming the tree where a laid sibling does not stand, a testbed there that is not this one's release refused before any bench is made and a run meeting it kept
-//! here, a run whose environment sets a variable its declaration names as this machine's kept here, the
+//! the bench blaming itself naming the tree where a laid sibling does not stand, a testbed there that is not the
+//! live testbed release refused before any bench is made, brought to the live release read at each asking, and a
+//! run meeting one that cannot be brought ending as not run with its event, a machine out of reach waited for and a
+//! run ending as not run with its event once the wait is spent, never running here, one event for each outage and one
+//! for the machine's return, sent to the hook the machine's testbed environment file names, the deployment's gate and build
+//! answering broken for it whether or not they began there, `status` reading the machine's release against the live
+//! one, a run whose environment sets a variable its declaration names as this machine's kept here, the
 //! run standing in its lane here while it lasts, running once the far side says its turn came, that line read
 //! and not passed on, and the `placed` verb there passing its command's output on, telling its own holder
 //! while it comes and ending it whole once it falls silent for the declared limit. The units a release marks
@@ -19,10 +24,10 @@
 //! that one is full. The testbed there brought to
 //! a live release carrying one and read back at its commit, unless the caller keeps it as it stands.
 
-use std::cell::Cell;
 use std::convert::Infallible;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use axum::Router;
 use axum::response::sse::{Event, Sse};
@@ -30,7 +35,8 @@ use axum::routing::{get, post};
 use bmo_testbed_cli::cargo::placed_disk;
 use bmo_testbed_cli::deploy::{PlacedGate, brings_testbed};
 use bmo_testbed_cli::placement::{
-  BenchFor, MachinePlacement, MachineSettings, Ordered, OwnRelease, ReadyBench, reachable_remote,
+  BenchFor, FarWait, MACHINE_ENV_FILE, MachinePlacement, MachineSettings, MachineState, Ordered,
+  ReadyBench, machine_hook, reachable_remote,
 };
 use bmo_testbed_core::events::Hook;
 use bmo_testbed_core::placement::{PlaceAsk, PlacedRun, Placement, read_placed};
@@ -456,26 +462,15 @@ fn the_reachable_remote_follows_a_support_checkouts_main_to_the_remote_it_names(
   assert_eq!(reachable_remote(&support), "");
 }
 
-// "a machine that cannot be reached, or settings that do not read, leave the run here and say so"
+// "A file that does not read is no placement, said on a line"
 #[test]
-fn a_machine_out_of_reach_or_settings_that_do_not_read_leave_the_run_here() {
+fn settings_that_do_not_read_leave_the_run_here() {
   let dir = tempfile::tempdir().unwrap();
   let dir = std::fs::canonicalize(dir.path()).unwrap();
   let repo = dir.join("repo");
-  let refusing = dir.join("refusing-ssh");
 
-  install("#!/bin/sh\necho 'no route to stand' >&2\nexit 255\n", &refusing);
-  settle(&dir, &refusing, "stand");
   checkout(&repo, "testbed = 0\n");
-
-  let here = on_machine(&repo, &dir, &["run", "--adapter", "plain", "--", "sh", "-c", "echo here; exit 4"]);
-  let unreached =
-    fill_marks(&LANES.placed.unreached, &[("machine", "machine-2"), ("said", "no route to stand")]);
-
-  assert_eq!(here.code, 4, "{}\n{}", here.out, here.err);
-  assert!(here.err.contains(&unreached), "{}", here.err);
-  assert!(!dir.join("bench").exists());
-
+  std::fs::create_dir_all(dir.join("env")).unwrap();
   std::fs::write(dir.join("env/placement.toml"), "bench = 3\n").unwrap();
 
   let unsettled = on_machine(&repo, &dir, &["run", "--adapter", "plain", "--", "sh", "-c", "exit 5"]);
@@ -530,10 +525,30 @@ fn a_caller_keeps_its_place_in_the_line_on_the_placed_machine() {
   assert_eq!(neither.code, 12, "{}\n{}", neither.out, neither.err);
 }
 
+// The release of a commit under the directory's testbed deploy tree, `deploy-releases/` beside the link `deploy`,
+// its `bin/built-from` naming the commit and no testbed in it.
+fn release_of(dir: &Path, commit: &str) -> PathBuf {
+  let release = dir.join("deploy-releases").join(&commit[..12]);
+
+  std::fs::create_dir_all(release.join("bin")).unwrap();
+  std::fs::write(release.join("bin/built-from"), format!("{commit}\n")).unwrap();
+  release
+}
+
+// The directory's testbed deploy tree moved onto the release of a commit, made where it does not stand.
+fn go_live(dir: &Path, commit: &str) -> PathBuf {
+  let release = release_of(dir, commit);
+  let link = dir.join("deploy");
+  let _ = std::fs::remove_file(&link);
+
+  std::os::unix::fs::symlink(Path::new("deploy-releases").join(&commit[..12]), &link).unwrap();
+  release
+}
+
 // The placed machine reached through the stand-in `ssh`, its testbed under the directory given with the commit
-// `far` beside it where one is named, and this testbed's own release `own`, standing in `own/` under the directory
-// with nothing in it.
-fn released(dir: &Path, far: Option<&str>, own: Option<&str>) -> MachinePlacement {
+// `far` beside it where one is named, and the directory's testbed deploy tree live on the release of `live` where
+// one is named, with no testbed in it; a run waits for it not at all.
+fn released(dir: &Path, far: Option<&str>, live: Option<&str>) -> MachinePlacement {
   let ssh = dir.join("ssh");
   let bin = dir.join("far/bin");
 
@@ -542,6 +557,10 @@ fn released(dir: &Path, far: Option<&str>, own: Option<&str>) -> MachinePlacemen
 
   if let Some(far) = far {
     std::fs::write(bin.join("built-from"), format!("{far}\n")).unwrap();
+  }
+
+  if let Some(live) = live {
+    go_live(dir, live);
   }
 
   MachinePlacement {
@@ -558,15 +577,26 @@ fn released(dir: &Path, far: Option<&str>, own: Option<&str>) -> MachinePlacemen
       order: None,
     },
     home: dir.to_path_buf(),
-    release: own.map(|commit| OwnRelease {
-      dir: dir.join("own"),
-      commit: commit.to_owned(),
-    }),
+    deploy_tree: live.map(|_| dir.join("deploy")),
+    data_root: dir.join("data"),
+    unreached: FarWait {
+      pause: Duration::ZERO,
+      bound: Duration::ZERO,
+    },
+    hook: Hook {
+      command: None,
+      time: Duration::from_secs(60),
+      repository: None,
+      root: None,
+    },
   }
 }
 
-const OWN: &str = "1111111111111111111111111111111111111111";
+const LIVE: &str = "1111111111111111111111111111111111111111";
 const FAR: &str = "2222222222222222222222222222222222222222";
+const NEWER: &str = "3333333333333333333333333333333333333333";
+// A testbed that runs: it answers its help, as the copied one is asked there.
+const RUNS: &str = "#!/bin/sh\nexit 0\n";
 
 // "where they differ, the run is not run and the deployment's stage fails, on a line naming the machine and
 // both commits"
@@ -578,12 +608,12 @@ fn a_testbed_there_of_another_release_is_refused_naming_both_commits_and_no_benc
 
   checkout(&repo, "testbed = 0\n");
 
-  let machine = released(&dir, Some(FAR), Some(OWN));
+  let machine = released(&dir, Some(FAR), Some(LIVE));
   let commit = git(&repo, &["rev-parse", "HEAD"]);
   let refused = machine.ready(&repo, &commit, BenchFor::Deployment("repo")).map(|bench| bench.path);
   let stale = fill_marks(
     &LANES.placed.stale,
-    &[("machine", "machine-2"), ("far", &FAR[..12]), ("own", &OWN[..12])],
+    &[("machine", "machine-2"), ("far", &FAR[..12]), ("live", &LIVE[..12])],
   );
 
   assert_eq!(refused, Err(stale));
@@ -591,59 +621,89 @@ fn a_testbed_there_of_another_release_is_refused_naming_both_commits_and_no_benc
   assert!(!dir.join("deploy-bench").exists());
 }
 
-// "Where they differ ... the deployment first brings that machine's testbed to the running testbed's own
-// release ... Where that does not take ... the stage fails with nothing changed, its reason naming both commits
-// and what the machine answered"
+// "Where they differ, or no such file reads there, it first brings the testbed there to the live release ... with
+// the live release as the source"; "Where that does not take ... naming both commits and what the machine answered";
+// the copied testbed "run there once, so a copy that does not run there is found at once"
 #[test]
-fn a_testbed_there_of_another_release_is_brought_to_this_one_s_before_a_deployment_s_bench() {
+fn a_testbed_there_of_another_release_is_brought_to_the_live_one_and_a_copy_that_does_not_run_is_refused() {
   let dir = tempfile::tempdir().unwrap();
   let dir = std::fs::canonicalize(dir.path()).unwrap();
-  let machine = released(&dir, Some(FAR), Some(OWN));
+  let machine = released(&dir, Some(FAR), Some(LIVE));
   let far_bin = dir.join("far/bin");
-  let own_bin = dir.join("own/bin");
+  let live_bin = release_of(&dir, LIVE).join("bin");
   let stale = fill_marks(
     &LANES.placed.stale,
-    &[("machine", "machine-2"), ("far", &FAR[..12]), ("own", &OWN[..12])],
+    &[("machine", "machine-2"), ("far", &FAR[..12]), ("live", &LIVE[..12])],
   );
+  let unbrought = |said: &str| fill_marks(&LANES.placed.unbrought, &[("stale", &stale), ("said", said)]);
   let uncarried = fill_marks(
-    &LANES.placed.own_uncarried,
-    &[("release", &dir.join("own").to_string_lossy()), ("binary", "bin/bmo-testbed")],
+    &LANES.placed.live_uncarried,
+    &[
+      ("release", &live_bin.parent().unwrap().to_string_lossy()),
+      ("binary", "bin/bmo-testbed"),
+    ],
   );
 
-  assert_eq!(
-    machine.brought_to_own(),
-    Err(fill_marks(&LANES.placed.unbrought_own, &[("stale", &stale), ("said", &uncarried)]))
-  );
+  assert_eq!(machine.brought_live(), Err(unbrought(&uncarried)));
   assert_eq!(std::fs::read_to_string(far_bin.join("built-from")).unwrap().trim(), FAR);
 
-  std::fs::create_dir_all(&own_bin).unwrap();
-  std::fs::write(own_bin.join("bmo-testbed"), "this testbed").unwrap();
-  std::fs::write(own_bin.join("built-from"), format!("{OWN}\n")).unwrap();
+  install(
+    "#!/bin/sh\necho 'cannot execute binary file' >&2\nexit 126\n",
+    &live_bin.join("bmo-testbed"),
+  );
 
-  assert_eq!(machine.brought_to_own(), Ok(()));
-  assert_eq!(std::fs::read_to_string(far_bin.join("bmo-testbed")).unwrap(), "this testbed");
-  assert_eq!(std::fs::read_to_string(far_bin.join("built-from")).unwrap().trim(), OWN);
-  assert_eq!(machine.same_release(), Ok(()));
+  let unrun = fill_marks(&LANES.placed.testbed_unrun, &[("said", "cannot execute binary file")]);
+
+  assert_eq!(machine.brought_live(), Err(unbrought(&unrun)));
+
+  install(RUNS, &live_bin.join("bmo-testbed"));
+
+  assert_eq!(machine.brought_live(), Ok(()));
+  assert_eq!(std::fs::read_to_string(far_bin.join("bmo-testbed")).unwrap(), RUNS);
+  assert_eq!(std::fs::read_to_string(far_bin.join("built-from")).unwrap().trim(), LIVE);
+  assert_eq!(machine.live_there(), Ok(()));
+}
+
+// "The live release is the one the testbed's deploy tree names now, read at the moment of asking, never the release
+// of the process that asks: a process started from an older release ... sees the newer release live and never
+// brings that machine back to its own"
+#[test]
+fn a_process_that_outlives_its_release_brings_the_machine_to_the_newer_live_one_never_back() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  // The process asking started while LIVE was live, and goes on asking after NEWER went live.
+  let machine = released(&dir, Some(FAR), Some(LIVE));
+  let far_built_from = dir.join("far/bin/built-from");
+
+  install(RUNS, &release_of(&dir, LIVE).join("bin/bmo-testbed"));
+  assert_eq!(machine.brought_live(), Ok(()));
+  assert_eq!(std::fs::read_to_string(&far_built_from).unwrap().trim(), LIVE);
+
+  install(RUNS, &go_live(&dir, NEWER).join("bin/bmo-testbed"));
+  assert_eq!(machine.brought_live(), Ok(()));
+  assert_eq!(std::fs::read_to_string(&far_built_from).unwrap().trim(), NEWER);
+  assert_eq!(machine.brought_live(), Ok(()), "a machine on the live release is left as it stands");
+  assert_eq!(std::fs::read_to_string(&far_built_from).unwrap().trim(), NEWER);
 }
 
 // "where no such file reads there, the run is not run"; "a testbed running from no release compares nothing"
 #[test]
-fn the_same_release_passes_one_naming_none_is_refused_and_none_here_compares_nothing() {
+fn the_live_release_passes_one_naming_none_is_refused_and_none_live_compares_nothing() {
   let dir = tempfile::tempdir().unwrap();
   let dir = std::fs::canonicalize(dir.path()).unwrap();
 
-  assert_eq!(released(&dir, Some(OWN), Some(OWN)).same_release(), Ok(()));
+  assert_eq!(released(&dir, Some(LIVE), Some(LIVE)).live_there(), Ok(()));
 
   std::fs::remove_file(dir.join("far/bin/built-from")).unwrap();
 
-  let unreleased = released(&dir, None, Some(OWN)).same_release().unwrap_err();
+  let unreleased = released(&dir, None, Some(LIVE)).live_there().unwrap_err();
   let file = dir.join("far/bin/built-from");
   let opening =
     fill_marks(&LANES.placed.unreleased, &[("machine", "machine-2"), ("file", &file.to_string_lossy())]);
 
   assert!(unreleased.starts_with(opening.split("{said}").next().unwrap()), "{unreleased}");
-  assert!(unreleased.contains(&OWN[..12]), "{unreleased}");
-  assert_eq!(released(&dir, None, None).same_release(), Ok(()));
+  assert!(unreleased.contains(&LIVE[..12]), "{unreleased}");
+  assert_eq!(released(&dir, None, None).live_there(), Ok(()));
 }
 
 // The deployment's gate on the placed machine, bringing the testbed there to a release where `brings` says so.
@@ -654,7 +714,6 @@ fn bringing(machine: MachinePlacement, brings: bool) -> PlacedGate<'static> {
     here: &Passed,
     checked: true,
     brings_testbed: brings,
-    begun: Cell::new(false),
   }
 }
 
@@ -667,24 +726,21 @@ fn the_testbed_there_is_brought_to_a_release_carrying_one_and_read_back_at_its_c
   let dir = tempfile::tempdir().unwrap();
   let dir = std::fs::canonicalize(dir.path()).unwrap();
   let release = dir.join("release");
-  let settings = released(&dir, None, None).settings;
-  let machine = || MachinePlacement {
-    settings: settings.clone(),
-    home: dir.clone(),
-    release: None,
-  };
+  let machine = || released(&dir, None, None);
   let far_bin = dir.join("far/bin");
 
   // The machine there holds no testbed yet, so its `bin/` is made too.
+  let unmade = machine();
+
   std::fs::remove_dir_all(&far_bin).unwrap();
   std::fs::create_dir_all(release.join("bin")).unwrap();
   install("#!/bin/sh\necho released\n", &release.join("bin/bmo-testbed"));
-  std::fs::write(release.join("bin/built-from"), format!("{OWN}\n")).unwrap();
+  std::fs::write(release.join("bin/built-from"), format!("{LIVE}\n")).unwrap();
 
   let far = |name: &str| far_bin.join(name).to_string_lossy().into_owned();
 
   assert_eq!(
-    bringing(machine(), true).bring_testbed(&release, OWN),
+    bringing(unmade, true).bring_testbed(&release, LIVE),
     Some(("machine-2".to_owned(), Ok(vec![far("bmo-testbed"), far("built-from")])))
   );
 
@@ -704,11 +760,11 @@ fn the_testbed_there_is_brought_to_a_release_carrying_one_and_read_back_at_its_c
     bringing(machine(), true).bring_testbed(&release, FAR),
     Some((
       "machine-2".to_owned(),
-      Err(fill_marks(&LANES.placed.testbed_other, &[("far", &OWN[..12]), ("own", &FAR[..12])]))
+      Err(fill_marks(&LANES.placed.testbed_other, &[("far", &LIVE[..12]), ("live", &FAR[..12])]))
     ))
   );
-  assert_eq!(bringing(machine(), false).bring_testbed(&release, OWN), None);
-  assert_eq!(bringing(machine(), true).bring_testbed(&dir.join("no-release"), OWN), None);
+  assert_eq!(bringing(machine(), false).bring_testbed(&release, LIVE), None);
+  assert_eq!(bringing(machine(), true).bring_testbed(&dir.join("no-release"), LIVE), None);
 
   let refusing = dir.join("refusing-ssh");
   let mut unreached = machine();
@@ -717,7 +773,7 @@ fn the_testbed_there_is_brought_to_a_release_carrying_one_and_read_back_at_its_c
   unreached.settings.ssh = vec![refusing.to_string_lossy().into_owned()];
 
   assert_eq!(
-    bringing(unreached, true).bring_testbed(&release, OWN),
+    bringing(unreached, true).bring_testbed(&release, LIVE),
     Some((
       "machine-2".to_owned(),
       Err(fill_marks(&LANES.placed.testbed_unreached, &[("said", "no route to stand")]))
@@ -983,16 +1039,79 @@ fn a_deployments_bench_refuses_a_dependency_no_repository_holds() {
   assert!(why.contains("no git repository holds it"), "{why}");
 }
 
-// "where they differ, a run, a suite, a change check or a Cargo verb runs here instead"
+// The events the hook was handed, in order: their names, and the payload of the last.
+fn sent(dir: &Path) -> (String, Value) {
+  let payloads = std::fs::read_to_string(dir.join("payloads")).unwrap();
+  let payload = serde_json::from_str(payloads.trim().lines().last().unwrap()).unwrap();
+
+  (std::fs::read_to_string(dir.join("events")).unwrap(), payload)
+}
+
+// "Where that does not take while the machine answers ... a `run`, a suite, a change check or a Cargo verb ends as
+// not run, exit code 75, and sends `placed-release-failed` ...; nothing is run here in its stead"
 #[test]
-fn a_run_meeting_a_testbed_there_of_another_release_is_kept_here_and_no_bench_is_made() {
+fn a_run_whose_machine_cannot_be_brought_to_the_live_release_ends_not_run_and_sends_its_event() {
   let dir = tempfile::tempdir().unwrap();
   let dir = std::fs::canonicalize(dir.path()).unwrap();
   let repo = dir.join("repo");
+  let marker = dir.join("ran-here");
 
   checkout(&repo, "testbed = 0\n");
 
-  let command = vec!["true".to_owned()];
+  let command = vec!["touch".to_owned(), marker.to_string_lossy().into_owned()];
+  let env = Env::new();
+  let ask = PlaceAsk {
+    command: &command,
+    adapter: Some("plain"),
+    lane: Lane::Wide,
+    cwd: repo.clone(),
+    env: &env,
+  };
+  let mut machine = released(&dir, Some(FAR), Some(LIVE));
+
+  machine.hook = writing_hook(&dir);
+
+  // The live release holds no testbed to copy.
+  assert_eq!(machine.place(&ask), Some(NOT_RUN_EXIT_CODE));
+  assert!(!dir.join("bench").exists());
+  assert!(!marker.exists());
+
+  let (events, payload) = sent(&dir);
+
+  assert_eq!(events, "placed-release-failed\n");
+  assert_eq!(payload["detail"]["machine"], "machine-2");
+  assert_eq!(payload["detail"]["live"], LIVE);
+  assert_eq!(payload["detail"]["far"], FAR);
+  assert_eq!(payload["detail"]["command"], json!(command));
+}
+
+// "A placed machine that cannot be reached is waited for ... Once `unreached_wait_minutes` have passed, the run
+// ends as not run, exit code 75 ... and sends `placed-unreachable`", once for the outage however many runs give up
+// on it; the machine answering again ends the outage and sends `placed-recovered` once; the events go to the hook
+// the machine's testbed environment file names, plain or in quotes
+#[test]
+fn an_outage_is_told_once_however_many_runs_give_up_and_its_end_once_to_the_machine_s_hook() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let repo = dir.join("repo");
+  let refusing = dir.join("refusing-ssh");
+  let marker = dir.join("ran-here");
+  let hook = writing_hook(&dir).command.unwrap();
+  let env_file = dir.join("data").join(MACHINE_ENV_FILE);
+
+  checkout(&repo, "testbed = 0\n");
+  install("#!/bin/sh\necho 'no agent attached' >&2\nexit 255\n", &refusing);
+  std::fs::create_dir_all(env_file.parent().unwrap()).unwrap();
+  std::fs::write(&env_file, format!("OTHER=1\nBMO_TESTBED_EVENT_HOOK=\"{hook}\"\n")).unwrap();
+
+  let mut machine = released(&dir, None, None);
+  let answering = machine.settings.ssh.clone();
+
+  machine.settings.ssh = vec![refusing.to_string_lossy().into_owned()];
+  machine.settings.order = Some(vec!["machine-2".to_owned(), LANES.placed.here.clone()]);
+  machine.hook = machine_hook(&machine.data_root, &Env::new());
+
+  let command = vec!["touch".to_owned(), marker.to_string_lossy().into_owned()];
   let env = Env::new();
   let ask = PlaceAsk {
     command: &command,
@@ -1002,8 +1121,195 @@ fn a_run_meeting_a_testbed_there_of_another_release_is_kept_here_and_no_bench_is
     env: &env,
   };
 
-  assert_eq!(released(&dir, Some(FAR), Some(OWN)).place(&ask), None);
-  assert!(!dir.join("bench").exists());
+  assert_eq!(machine.place(&ask), Some(NOT_RUN_EXIT_CODE));
+  assert_eq!(machine.place(&ask), Some(NOT_RUN_EXIT_CODE));
+  assert!(!marker.exists(), "nothing runs here in its stead");
+
+  let (events, payload) = sent(&dir);
+
+  assert_eq!(events, "placed-unreachable\n", "one outage is told once");
+  assert_eq!(payload["detail"]["machine"], "machine-2");
+  assert_eq!(payload["detail"]["said"], "no agent attached");
+  assert!(payload["detail"]["since"].is_string(), "{payload}");
+
+  let since = payload["detail"]["since"].clone();
+
+  machine.settings.ssh = answering;
+  assert_eq!(machine.answers(), Ok(()));
+  assert_eq!(machine.answers(), Ok(()));
+
+  let (events, payload) = sent(&dir);
+
+  assert_eq!(events, "placed-unreachable\nplaced-recovered\n", "its end is told once");
+  assert_eq!(payload["detail"]["since"], since);
+
+  machine.settings.ssh = vec![refusing.to_string_lossy().into_owned()];
+  assert_eq!(machine.place(&ask), Some(NOT_RUN_EXIT_CODE));
+  assert_eq!(
+    sent(&dir).0,
+    "placed-unreachable\nplaced-recovered\nplaced-unreachable\n",
+    "a new outage is told again"
+  );
+}
+
+// An outage that ends before any run gave up on it was never told, so its end is not told either.
+#[test]
+fn an_outage_no_run_gave_up_on_ends_untold() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let refusing = dir.join("refusing-ssh");
+  let mut machine = released(&dir, None, None);
+  let answering = machine.settings.ssh.clone();
+
+  install("#!/bin/sh\necho 'no agent attached' >&2\nexit 255\n", &refusing);
+  machine.hook = writing_hook(&dir);
+  machine.settings.ssh = vec![refusing.to_string_lossy().into_owned()];
+  assert!(machine.answers().is_err());
+
+  machine.settings.ssh = answering;
+  assert_eq!(machine.answers(), Ok(()));
+  assert!(!dir.join("events").exists());
+}
+
+// "the environment's `BMO_TESTBED_EVENT_HOOK`, else the one the machine's testbed environment file names, else
+// none"
+#[test]
+fn the_machine_s_hook_is_the_environment_s_else_its_testbed_environment_file_s() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let file = dir.join(MACHINE_ENV_FILE);
+  let named = |env: &Env| machine_hook(&dir, env).command;
+  let none = Env::new();
+
+  assert_eq!(named(&none), None);
+
+  std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+  std::fs::write(
+    &file,
+    "BMO_CARGO_TARGET_CEILING_GB=300\nBMO_TESTBED_EVENT_HOOK=/opt/tell --to supervisor\n",
+  )
+  .unwrap();
+  assert_eq!(named(&none).as_deref(), Some("/opt/tell --to supervisor"));
+
+  std::fs::write(&file, "BMO_TESTBED_EVENT_HOOK='/opt/tell --to supervisor'\n").unwrap();
+  assert_eq!(named(&none).as_deref(), Some("/opt/tell --to supervisor"));
+
+  let set = Env::from([("BMO_TESTBED_EVENT_HOOK".to_owned(), "/opt/other".to_owned())]);
+
+  assert_eq!(named(&set).as_deref(), Some("/opt/other"));
+}
+
+// "The run asks it again every thirty seconds ... and goes there once it answers"
+#[test]
+fn a_run_waits_for_a_machine_out_of_reach_and_goes_there_once_it_answers() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let ssh = dir.join("ssh");
+  let asked = dir.join("asked");
+  let mut machine = released(&dir, None, None);
+
+  // The machine answers from the fourth time it is asked on.
+  install(
+    &dropping_ssh(&dir, 0).replacen(
+      "shift\n",
+      &format!(
+        "shift\nn=$(( $(cat {asked} 2>/dev/null || echo 0) + 1 ))\necho $n > {asked}\n\
+         if [ $n -le 3 ]; then echo 'no agent attached' >&2; exit 255; fi\n",
+        asked = asked.display()
+      ),
+      1,
+    ),
+    &ssh,
+  );
+  machine.settings.ssh = vec![ssh.to_string_lossy().into_owned()];
+  machine.settings.testbed = env!("CARGO_BIN_EXE_bmo-testbed").to_owned();
+  machine.unreached.bound = Duration::from_secs(60);
+  checkout(&dir.join("repo"), "testbed = 0\n");
+
+  let command = vec!["sh".to_owned(), "-c".to_owned(), "exit 7".to_owned()];
+  let env = Env::new();
+  let ask = PlaceAsk {
+    command: &command,
+    adapter: Some("plain"),
+    lane: Lane::Wide,
+    cwd: dir.join("repo"),
+    env: &env,
+  };
+
+  assert_eq!(machine.place(&ask), Some(7));
+
+  let times: usize = std::fs::read_to_string(&asked).unwrap().trim().parse().unwrap();
+
+  assert!(times > 3, "it was asked {times} times");
+}
+
+// `status` reads the placed machine: "whether it answers, and where it does, the commit its testbed is built from and
+// whether that is this machine's live testbed release"
+#[test]
+fn status_reads_the_machine_s_release_against_the_live_one_and_says_one_out_of_reach() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let state = |machine: &MachinePlacement| machine.state();
+  let current = state(&released(&dir, Some(LIVE), Some(LIVE)));
+
+  assert_eq!(
+    current,
+    MachineState {
+      machine: "machine-2".to_owned(),
+      reached: true,
+      said: None,
+      outage_since: None,
+      release: Some(LIVE.to_owned()),
+      live: Some(LIVE.to_owned()),
+      current: true,
+    }
+  );
+  assert_eq!(
+    current.line(),
+    fill_marks(
+      &LANES.status.machine,
+      &[
+        ("machine", "machine-2"),
+        ("state", &fill_marks(&LANES.status.machine_current, &[("release", &LIVE[..12])])),
+      ]
+    )
+  );
+
+  let behind = state(&released(&dir, Some(FAR), Some(LIVE)));
+
+  assert!(!behind.current && behind.reached, "{behind:?}");
+  assert!(
+    behind.line().ends_with(&fill_marks(
+      &LANES.status.machine_behind,
+      &[("release", &FAR[..12]), ("live", &LIVE[..12])]
+    )),
+    "{}",
+    behind.line()
+  );
+
+  let refusing = dir.join("refusing-ssh");
+  let mut away = released(&dir, Some(LIVE), Some(LIVE));
+
+  install("#!/bin/sh\necho 'no agent attached' >&2\nexit 255\n", &refusing);
+  away.settings.ssh = vec![refusing.to_string_lossy().into_owned()];
+
+  // A run found it away, so an outage stands.
+  assert!(away.answers().is_err());
+
+  let unreached = state(&away);
+  let since = unreached.outage_since.clone().expect("the outage a run began");
+  let outage = fill_marks(&LANES.status.machine_outage, &[("since", &since)]);
+
+  assert!(!unreached.reached && !unreached.current, "{unreached:?}");
+  assert_eq!(unreached.said.as_deref(), Some("no agent attached"));
+  assert!(
+    unreached.line().ends_with(&fill_marks(
+      &LANES.status.machine_unreached,
+      &[("said", "no agent attached"), ("outage", &outage)]
+    )),
+    "{}",
+    unreached.line()
+  );
 }
 
 // "a run whose environment sets a variable its checkout's declaration names in `[runner] local_variables` is
@@ -1575,11 +1881,10 @@ fn a_static_check_the_connection_breaks_under_answers_broken_and_passes_when_ask
   assert_eq!(again.steps[0].code, 0);
 }
 
-// "A machine out of reach before the deployment begins there leaves the gate and the build here"; "Once the
-// deployment has begun there, a try that finds the machine not answering is one more broken try; nothing moves back
-// to the machine the deployment runs on"
+// "A try that finds the machine not answering is one more broken try, whether or not the deployment has begun
+// there; nothing moves to the machine the deployment runs on"
 #[test]
-fn a_machine_that_stops_answering_once_begun_there_answers_broken_rather_than_running_here() {
+fn a_machine_out_of_reach_answers_broken_whether_or_not_begun_there_and_nothing_runs_here() {
   let dir = tempfile::tempdir().unwrap();
   let dir = std::fs::canonicalize(dir.path()).unwrap();
   let refusing = dir.join("refusing-ssh");
@@ -1606,11 +1911,11 @@ fn a_machine_that_stops_answering_once_begun_there_answers_broken_rather_than_ru
 
   fresh.machine.settings.ssh = vec![refusing.to_string_lossy().into_owned()];
 
-  assert!(
-    passed_at(&fresh, &fresh_at).passed,
-    "the gate here stands in before anything began there"
-  );
-  assert_eq!(build(&fresh, &fresh_at), None, "the build goes here before anything began there");
+  let unreached_fresh = passed_at(&fresh, &fresh_at);
+
+  assert!(!unreached_fresh.passed && unreached_fresh.broken, "{unreached_fresh:?}");
+  assert_eq!(unreached_fresh.reason, broke);
+  assert_eq!(build(&fresh, &fresh_at), Some(Err(GateFault::Broken(broke.clone()))));
 
   let mut begun = dropping_gate(&begun_at, 0);
 

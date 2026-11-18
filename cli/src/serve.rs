@@ -15,6 +15,7 @@ use bmo_testbed_record::Record;
 use bmo_testbed_service::{Ground, queue_page, router, watch_queues};
 use serde::Serialize;
 
+use crate::placement::MachineState;
 use crate::words::{McpArgs, ServeArgs};
 
 #[derive(Serialize)]
@@ -49,13 +50,16 @@ struct CloseLineAnswer {
 #[serde(rename_all = "camelCase")]
 struct StatusAnswer {
   queues: bmo_testbed_client::Page<bmo_testbed_client::Queue>,
+  machines: Vec<MachineState>,
   close_line: Option<CloseLineAnswer>,
 }
 
-/// Both lanes as `GET /queues` answers them, then the close line where the caller names one.
-pub fn status_json(env: &Env, close_line: Option<&Path>) -> String {
+/// Both lanes as `GET /queues` answers them, the placed machines as given, then the close line where the caller
+/// names one.
+pub fn status_json(env: &Env, close_line: Option<&Path>, machines: Vec<MachineState>) -> String {
   let answer = StatusAnswer {
     queues: queue_page(env, &PageQuery::default()),
+    machines,
     close_line: close_line.map(read_close_line).map(|line| CloseLineAnswer {
       holder: line.holder.as_ref().map(CloseLineEntry::from),
       waiting: line.waiting.iter().map(CloseLineEntry::from).collect(),

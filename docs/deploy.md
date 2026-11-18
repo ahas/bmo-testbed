@@ -241,37 +241,44 @@
   that machine's own testbed verb in its own turn, and the Cargo release build runs there in that machine's Cargo build root,
   from which the deployment reads the built binaries back over `rsync` into its own build directory
   before it places them. The declared `[build]` steps, which write into the release and read the data
-  root, run where the deployment runs, as does everything after the build. A placed machine that
-  cannot be reached before the deployment has begun there leaves the gate and the build where the
-  deployment runs, said on a line; a bench that cannot be made ready while the machine answers fails the
-  stage; a connection that breaks once the deployment has begun there is tried again (「A connection
-  that breaks under the placed machine」). The flaky tests a placed gate found stay in that machine's
-  record, so the deployment reports none.
-- **The placed machine runs the deploying testbed's own release, or nothing runs there.** Before the
+  root, run where the deployment runs, as does everything after the build. **The gate and the build never
+  run on this machine where the settings name a placed machine:** a placed machine that cannot be
+  reached, before the deployment has begun there or after, is waited for and the work tried again (「A
+  connection that breaks under the placed machine」), and once the tries are spent the stage fails; a
+  bench that cannot be made ready while the machine answers fails the stage. The flaky tests a placed
+  gate found stay in that machine's record, so the deployment reports none.
+- **The placed machine runs this machine's live testbed release, or nothing runs there.** Before the
   bench is made ready, the commit that machine's testbed was built from is read and compared with the
-  commit the running testbed was built from, since an older testbed there would judge the gate by older
-  rules without saying so (`docs/boundary.md`, 「The placed machine」). Where they differ, or that
-  machine's testbed names none, the deployment first brings that machine's testbed to the running
-  testbed's own release, copied and read back as the step after the switch does (below), and says so
-  on a line. Where that does not take, or the caller sets `BMO_TESTBED_PLACEMENT` empty, the stage
-  fails with nothing changed, its reason naming both commits and what the machine answered. A placed
-  machine left on another release, by a copy after the switch that did not take or by a testbed
-  deployed by a release without that step, is so brought to the deploying release by the next
-  deployment of any repository.
+  live testbed release's, the one the testbed's deploy tree names at that moment, since a testbed there
+  of another release would judge the gate by other rules without saying so (`docs/boundary.md`, 「The
+  placed machine」). Where they differ, or that machine's testbed names none, the deployment first brings
+  that machine's testbed to the live release, copied, run there once and read back as the step after the
+  switch does (below), and says so on a line. A deployment running from an older release, one that began
+  before the testbed's own deployment went live, so brings that machine to the newer live release and
+  never back to its own. Where that does not take, or the caller sets `BMO_TESTBED_PLACEMENT` empty, the
+  stage fails with nothing changed, its reason naming both commits and what the machine answered. A
+  placed machine left on another release, by a copy after the switch that did not take or by a machine
+  away at that moment, is so brought to the live release by the next deployment of any repository, and by
+  the next run placed there before it (`docs/testbed.md`, 「A run on another machine」).
 - **A deployment of the testbed brings the placed machine's testbed to its release** once it is live
   (「What the deploy run does, in order」, step 16). A deployment is the testbed's where its release's
   `bin/` holds a file of the name the settings' `testbed` binary ends in. It reads the settings'
   `destination`, `ssh`, `machine` and `testbed`: over that `ssh` it copies the live release's binary
   of that name onto the settings' `testbed` and the release's `bin/built-from` beside it, the
   `built-from` last, each written whole beside its place there and renamed over it, so a testbed
-  running there goes on undisturbed and no half-copied file is read as a match. It then reads that
-  `built-from` back as the gate does and checks that it names the commit just put live. The
-  deployment's line names the machine, the files written there and the commit read back. A machine
-  that cannot be reached, a copy or a read that fails, or a `built-from` that names another commit or
-  none is a warning on a line naming the machine and what it answered: the deployment here stays
-  live, and the next deployment of any repository brings that machine's testbed to its own release
-  before it places anything there (above). Nothing is copied where the settings name no machine, or
-  where the deployment's caller sets `BMO_TESTBED_PLACEMENT` empty.
+  running there goes on undisturbed and no half-copied file is read as a match. Before the `built-from`
+  is written it runs the copied testbed there once, asking its help, so a binary that does not run on
+  that machine is a failure here rather than at the next run, and that machine never names the commit
+  for a testbed that does not run. It then reads that `built-from` back as the gate does and checks that
+  it names the commit just put live. It copies under the same lock as a run that brings that machine to the
+  live release (`docs/testbed.md`, 「A run on another machine」), so the two never write over each other.
+  The deployment's line names the machine, the files written there and the commit read back. A machine
+  that cannot be reached, a copy or a read that fails, a `built-from` that names another commit or
+  none, or a copied testbed that does not run there is a warning on a line naming the machine and what it
+  answered: the deployment here stays live, and the next run or deployment of any repository placed
+  there brings that machine's testbed to the live release before anything runs there (above). Nothing is
+  copied where the settings name no machine, or where the deployment's caller sets `BMO_TESTBED_PLACEMENT`
+  empty.
 - **A passed suite is looked for in each machine's own record,** since a record is per machine and a run
   placed elsewhere is written by the machine it ran on (`docs/boundary.md`, 「The record」). The
   deployment reads its own machine's record first, before the gate is asked or placed, which holds a
@@ -367,13 +374,16 @@ flowchart TD
   not be read back leave the machine not answering. The deployment then says so on a line naming the
   machine, the work and the pause, waits the pause, and runs that work again from its bench: the whole
   gate, or the build with its read-back.
-- **The pauses are the policy's,** 30, 90 and 180 seconds, so the work is tried four times over some five
-  minutes, which outlasts the few minutes a placed machine takes to come back once it has restarted.
-- **A try waits for the placed machine.** Once the deployment has begun there, a try that finds the
-  machine not answering is one more broken try; nothing moves back to the machine the deployment runs
-  on, since the check judged there and the build read back from there are that machine's.
+- **The pause and the tries are the policy's:** a pause of sixty seconds between tries, and as many tries
+  as half an hour of pauses holds, thirty-one, so a machine that drops away for a few minutes, or keeps
+  dropping away and coming back, is waited out, and one away for half an hour fails the stage.
+- **A try waits for the placed machine.** A try that finds the machine not answering is one more broken
+  try, whether or not the deployment has begun there; nothing moves to the machine the deployment runs
+  on, since the check judged there and the build read back from there are that machine's, and the
+  machine that serves is kept apart from the machine that checks and builds.
 - **Once the tries are spent, the stage fails naming the connection:** the machine and how many tries
-  running it broke on. No exit code stands in for it.
+  running it broke on. No exit code stands in for it. The deployment's `deploy-failed` carries that
+  reason, which is how the failure is told.
 - **A failure of the work's own is not tried again:** a check or a suite that fails, or a build that
   fails, ends its stage at once with its own exit code, as the build's line names it.
 - **A run that is no deployment's is not tried again:** it ends as not run, exit code 75 (`docs/testbed.md`,

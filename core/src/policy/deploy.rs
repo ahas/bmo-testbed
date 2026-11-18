@@ -51,7 +51,8 @@ pub struct Numbers {
   pub passed_gate_hours: i64,
   pub line_say_seconds: u64,
   pub line_bound_minutes: u64,
-  pub retry_pauses_seconds: Vec<u64>,
+  pub retry_pause_seconds: u64,
+  pub retry_minutes: u64,
 }
 
 #[derive(Debug, Deserialize)]

@@ -2,7 +2,6 @@
 //! transient unit of its own and run there, its gate answered by the suite crate; and the backups sent away
 //! and rotated, one run at a time. The runs themselves are the deploy crate's; this is the verbs' side.
 
-use std::cell::Cell;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
@@ -168,9 +167,9 @@ impl SuiteGate<'_> {
 /// commit benched there with the checkout's outside trees, in the repository's own deployment bench, the
 /// static check and the suite run there as that machine's own verbs, the suite left out where that machine's
 /// record holds a passed run of the whole suite on the commit, and the Cargo release build run there and
-/// read back. The gate here stands in where the machine cannot be reached before the deployment has begun
-/// there; once it has, work the connection breaks under answers broken, which the run tries again (docs/deploy.md,
-/// 「A connection that breaks under the placed machine」).
+/// read back. Nothing of it runs here: work the machine does not answer for, or the connection breaks under,
+/// answers broken, which the run tries again (docs/deploy.md, 「A connection that breaks under the placed
+/// machine」).
 pub struct PlacedGate<'a> {
   pub machine: MachinePlacement,
   /// The deployed repository's name, which its bench there stands under.
@@ -178,11 +177,9 @@ pub struct PlacedGate<'a> {
   pub here: &'a dyn Gate,
   /// Whether the gate is passed at all; the build goes to the machine either way.
   pub checked: bool,
-  /// Whether the testbed there is brought to this testbed's release before the bench and to a live release that
-  /// carries one; not where the caller set the placement empty (docs/boundary.md, 「The environment」).
+  /// Whether the testbed there is brought to the live testbed release before the bench and to a live release
+  /// that carries one; not where the caller set the placement empty (docs/boundary.md, 「The environment」).
   pub brings_testbed: bool,
-  /// Whether the deployment has begun on the machine: false to begin with, set once the machine answered.
-  pub begun: Cell<bool>,
 }
 
 // What one step the gate ran there came to: its step as the progress record writes it, and whether the connection
@@ -197,17 +194,10 @@ impl PlacedGate<'_> {
     self.machine.settings.testbed.clone()
   }
 
-  // Whether the machine answers for the deployment's work: it does, and the deployment has begun there from now
-  // on; or it does not, and the work goes here where it has not begun there, and is broken where it has.
-  fn reached(&self) -> Reach {
-    if self.machine.reached() {
-      self.begun.set(true);
-      Reach::There
-    } else if self.begun.get() {
-      Reach::Broken
-    } else {
-      Reach::Here
-    }
+  // Whether the machine answers for the deployment's work; where it does not, the work is broken and tried again,
+  // never run here.
+  fn reached(&self) -> bool {
+    self.machine.reached()
   }
 
   // Work there that failed, as the gate's machine left it: broken where that machine no longer answers, the
@@ -224,9 +214,9 @@ impl PlacedGate<'_> {
   }
 
   // The repository's deployment bench there, made ready at the commit once the testbed there is brought to
-  // this one's release, unless the caller keeps it as it stands.
+  // the live testbed release, unless the caller keeps it as it stands.
   fn bench(&self, root: &Path, commit: &str) -> Result<ReadyBench, GateFault> {
-    let made = if self.brings_testbed { self.machine.brought_to_own() } else { Ok(()) };
+    let made = if self.brings_testbed { self.machine.brought_live() } else { Ok(()) };
 
     made
       .and_then(|()| self.machine.ready(root, commit, BenchFor::Deployment(&self.repository)))
@@ -360,23 +350,14 @@ impl PlacedGate<'_> {
   }
 }
 
-// Where the deployment's work on the placed machine goes: there, here, or nowhere since the connection broke.
-enum Reach {
-  There,
-  Here,
-  Broken,
-}
-
 impl Gate for PlacedGate<'_> {
   fn pass(&self, ask: &GateAsk<'_>) -> GateOutcome {
     if !self.checked {
       return self.here.pass(ask);
     }
 
-    match self.reached() {
-      Reach::There => {}
-      Reach::Here => return self.here.pass(ask),
-      Reach::Broken => return self.broken(Vec::new()),
+    if !self.reached() {
+      return self.broken(Vec::new());
     }
 
     let bench = match self.bench(ask.root, ask.commit) {
@@ -409,10 +390,8 @@ impl Gate for PlacedGate<'_> {
   }
 
   fn build(&self, ask: &BuildAsk<'_>) -> Option<Result<(), GateFault>> {
-    match self.reached() {
-      Reach::There => {}
-      Reach::Here => return None,
-      Reach::Broken => return Some(Err(GateFault::Broken(self.machine.broke()))),
+    if !self.reached() {
+      return Some(Err(GateFault::Broken(self.machine.broke())));
     }
 
     let bench = match self.bench(ask.root, ask.commit) {
@@ -504,6 +483,16 @@ fn handed(places: &DeployPlaces, env: &Env) -> Vec<(String, String)> {
   handed
 }
 
+/// The pauses between the tries of a deployment's work on the placed machine (docs/deploy.md, 「A connection that
+/// breaks under the placed machine」): the policy's pause, as many times as the policy's minutes hold it.
+pub fn retry_pauses() -> Vec<Duration> {
+  let numbers = &DEPLOY.numbers;
+  let pause = numbers.retry_pause_seconds.max(1);
+  let pauses = usize::try_from(numbers.retry_minutes * 60 / pause).unwrap_or(usize::MAX);
+
+  vec![Duration::from_secs(pause); pauses]
+}
+
 fn refused(line: &str) -> u8 {
   eprintln!("{}", fill_marks(&DEPLOY.run.refused, &[("why", line)]));
   REFUSED_EXIT_CODE
@@ -590,12 +579,7 @@ pub fn deploy(args: &DeployFlags) -> u8 {
     layer_pin: Some(pinned_layer),
     line: Some(DeployLine::under(&data_root())),
     root_poll: None,
-    retry: DEPLOY
-      .numbers
-      .retry_pauses_seconds
-      .iter()
-      .map(|seconds| Duration::from_secs(*seconds))
-      .collect(),
+    retry: retry_pauses(),
   };
   let suite = SuiteGate {
     repo: &repo,
@@ -608,7 +592,6 @@ pub fn deploy(args: &DeployFlags) -> u8 {
     here,
     checked: !args.no_check,
     brings_testbed: brings_testbed(&env),
-    begun: Cell::new(false),
   });
   let gate: &dyn Gate = placed.as_ref().map_or(here, |placed| placed);
   let runtime = match tokio::runtime::Builder::new_current_thread().enable_all().build() {

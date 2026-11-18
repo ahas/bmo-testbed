@@ -36,6 +36,14 @@ silence_look_seconds = 3
 # one's command line.
 hung_named_processes = 4
 hung_process_chars = 200
+# How often a run placed on a machine that does not answer asks it again, and how long it waits for it before it
+# ends as not run (docs/boundary.md, 「The placed machine」); how long a process waits for the lock every bringing of
+# the placed machine's testbed to the live release holds; and how long `status` gives the placed machine to
+# answer before it says it does not.
+unreached_pause_seconds = 30
+unreached_wait_minutes = 20
+placed_lock_seconds = 300
+status_connect_seconds = 10
 
 # How a command killed for want of memory is run again (docs/testbed.md, 「Memory」): how long it waits
 # before it looks at the memory at all, how many gigabytes have to be available, how often it looks, and
@@ -100,7 +108,7 @@ here = "local"
 order_empty = "order names no machine"
 order_twice = "order names {name} more than once"
 order_unknown = "order names {name}, which is neither the placed machine {machine} nor {here}"
-unreached = "testbed: the placed machine {machine} cannot be reached ({said}); running here"
+unreached = "testbed: the placed machine {machine} cannot be reached ({said})"
 # A run the order sends to the placed machine before another finds every seat of its lane there held or waited
 # for, or no answer saying otherwise; it goes on to this machine, the next in the order.
 full = "testbed: every seat on {machine} is held or waited for; running here"
@@ -123,29 +131,42 @@ trees_gone = "testbed: the deployment's bench on {machine} is missing trees its 
 trees_unread = "testbed: the trees a deployment's bench must hold could not be read on {machine}: {said}"
 setup_failed = "testbed: the setup step {command} failed with code {code}"
 no_registry = "testbed: the run's registry of checkouts could not be written at {file}: {why}"
-# The placed machine's testbed is not this one's release: {machine} the machine, {far} the commit its testbed
-# was built from and {own} the commit this testbed was built from; or no commit reads there, {file} the file
-# asked for and {said} what reading it came to.
-stale = "the testbed on {machine} is the release of {far}, not this testbed's {own}; bring that machine's testbed to {own} before anything runs there"
-unreleased = "the testbed on {machine} names no release ({file}: {said}); bring that machine's testbed to {own} before anything runs there"
-# A run that is no deployment's, kept here because the placed machine's testbed is not this one's release, {said}
-# the `stale` or `unreleased` line.
-other_release = "testbed: not placed on {machine}: {said}; running here"
-# The placed machine's testbed not brought to a release the testbed's deployment put live (docs/deploy.md,
-# 「Where a deployment runs」): the machine that cannot be reached, {said} what `ssh` said; a file that could not
-# be written there, {file} its place there; a `built-from` read back that names none, {file} the file asked for;
-# or one naming {far}, not {own}, the commit put live.
+# The placed machine's testbed is not this machine's live testbed release: {machine} the machine, {far} the commit
+# its testbed was built from and {live} the live release's commit; or no commit reads there, {file} the file asked
+# for and {said} what reading it came to.
+stale = "the testbed on {machine} is the release of {far}, not the live release {live}"
+unreleased = "the testbed on {machine} names no release ({file}: {said}), not the live release {live}"
+# The placed machine's testbed not brought to a release (docs/deploy.md, 「Where a deployment runs」): the machine
+# that cannot be reached, {said} what `ssh` said; a file that could not be written there, {file} its place there; a
+# `built-from` read back that names none, {file} the file asked for; one naming {far}, not {live}, the release
+# brought; a copied testbed that does not run there, {said} what running it said; or the lock every bringing
+# holds, {file} the lock, not had within {seconds} seconds.
 testbed_unreached = "it cannot be reached ({said})"
 testbed_unwritten = "{file} could not be written there: {said}"
 testbed_unread = "{file} read back names no release: {said}"
-testbed_other = "its built-from read back names {far}, not {own}"
-# A deployment's bench, where the placed machine's testbed is not this testbed's release, brings it there first
-# (docs/deploy.md, 「Where a deployment runs」): {machine} the machine, {own} this testbed's release; where that does
-# not take, {stale} the `stale` or `unreleased` line and {said} what the machine answered, or this testbed's
-# release {release} holding no {binary} to copy.
-brought_own = "testbed: brought the testbed on {machine} to this testbed's release {own} before the deployment's bench"
-unbrought_own = "{stale}; it could not be brought there: {said}"
-own_uncarried = "this testbed's release {release} holds no {binary}"
+testbed_other = "its built-from read back names {far}, not {live}"
+testbed_unrun = "the copied testbed does not run there: {said}"
+lock_unheld = "the lock {file} was not had within {seconds}s"
+# The placed machine's testbed brought to the live release before anything runs there (docs/testbed.md, 「A run on
+# another machine」): {machine} the machine, {live} the live release's commit; where that does not take, {stale}
+# the `stale` or `unreleased` line and {said} what the machine answered, or the live release {release} holding no
+# {binary} to copy.
+brought_live = "testbed: brought the testbed on {machine} to the live release {live}"
+unbrought = "{stale}; it could not be brought there: {said}"
+live_uncarried = "the live release {release} holds no {binary}"
+# A run whose placed machine answers but whose testbed could not be brought to the live release, {said} the
+# `unbrought` line; it ends as not run.
+release_failed = "testbed: not run: {said}; nothing runs here in its stead"
+# A run waiting for the placed machine to answer (docs/boundary.md, 「The placed machine」): {machine} the
+# machine, {seconds} how long it has waited, {bound} the most it waits, {said} what `ssh` said; and the run that
+# waited its bound, which ends as not run.
+unreached_waiting = "testbed: waiting for {machine} to answer ({seconds}s so far, at most {bound}s): {said}; nothing runs here meanwhile"
+unreached_gave_up = "testbed: not run: {machine} did not answer for {seconds}s ({said}); run the same command again once it answers"
+# The events a run that ends as not run sends (docs/boundary.md, 「Events」), {machine} the machine.
+unreachable_event = "the placed machine {machine} does not answer, so runs placed there do not run until it does"
+# The placed machine answering again after an outage that was told, {since} when the outage began.
+recovered_event = "the placed machine {machine} answers again, after an outage since {since}"
+release_failed_event = "the testbed on the placed machine {machine} could not be brought to the live release {live}, so a run placed there did not run"
 # A run kept here because its environment sets {variable}, a variable its declaration names as reaching what only
 # this machine reaches.
 kept = "testbed: {variable} names what only this machine reaches; running here"
@@ -207,6 +228,17 @@ next = " (next after the front)"
 placed = "  placed on {machine}{state}: {who}"
 placed_waiting = ", waiting there"
 placed_running = ", running there"
+# The placed machine the settings name (docs/boundary.md, 「`status`」): {machine} its label and {state} one of the
+# states after it, {release} the commit its testbed names, {live} the live testbed release's, {said} what `ssh`
+# said, {outage} the `machine_outage` words where an outage stands, nothing otherwise.
+machine = "the placed machine {machine}: {state}"
+machine_current = "release {release}, current"
+machine_behind = "release {release}, behind the live release {live}"
+machine_unreleased = "its testbed names no release, behind the live release {live}"
+machine_uncompared = "release {release}; this testbed runs from no release, so nothing is compared"
+machine_unreached = "cannot be reached ({said}){outage}"
+# An outage the runs placed there remember, {since} when it began, as `machine_unreached` names it.
+machine_outage = "; out since {since}"
 close_line = "the close line:"
 
 # The `run` verb's refusal of a language it does not know, {name} the name given and {names} the ones

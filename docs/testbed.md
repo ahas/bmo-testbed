@@ -302,15 +302,18 @@ flowchart TD
 
 - **A heavy run that can be placed may run on another machine** before it asks for its turn. Where it
   goes is the machine's placement (`docs/boundary.md`, 「Placement」): the placed machine its settings
-  name, reached over `ssh`, or the placement endpoint's answer; with neither, or one that does not
-  answer, the run stays on the machine it was started on.
+  name, reached over `ssh`, or the placement endpoint's answer; with neither, or an endpoint that does
+  not answer, the run stays on the machine it was started on.
 - **The settings put the machines in order,** this machine among them (`docs/boundary.md`, 「The placed
   machine」, `order`). A run that can be placed goes to the first machine in the order with a seat of its
   lane free now and nobody waiting for one, and falls to the next only where every seat there is held or
   waited for. The last machine in the order takes it whatever it holds, and the run waits in that
-  machine's line. A machine that cannot be reached, or whose testbed is another release than this one's,
-  is passed over the same way, said on a line. So the order alone says which machine's seats are used
-  first, and which machine a run waits on once every machine is full.
+  machine's line. So the order alone says which machine's seats are used first, and which machine a run
+  waits on once every machine is full.
+- **A placed machine is never passed over for being out of reach or behind:** a run that comes to it
+  waits for it to answer and brings its testbed to the live release (below), and where neither can be
+  had it ends as not run rather than running here. What runs on this machine is what the order sends
+  here, never a run that fell back because the placed machine was away.
 - **What can be placed:** a `run` of a heavy command, in either lane, a Bun test, a type check, a
   package script or a browser test among them; a whole run of the suite; `test`, `check` and `clippy`
   through `bmo-testbed cargo`, which run there as the same verb of that machine's testbed; and the change
@@ -332,9 +335,36 @@ flowchart TD
   - a change check with a part named: the quick checks are light, and the static check alone is the part
     a deployment's gate runs in its own bench;
   - the light commands no lane takes, which cost less where they stand than the copy a placed run makes.
-- **A placed machine whose testbed is another release than this one's runs nothing,** so the run goes on
-  to the next machine in the order, said on a line naming both commits; a deployment's gate and build fail
-  their stage instead (`docs/deploy.md`, 「Where a deployment runs」).
+- **The testbed there is brought to this machine's live testbed release before anything runs there.**
+  The live release is the one the testbed's deploy tree names now, read at the moment of asking, never
+  the release of the process that asks: a process started from an older release, such as a deployment
+  that began before the testbed's own deployment went live, sees the newer release live and never brings
+  that machine back to its own. Where the commit the `built-from` beside that machine's testbed names
+  differs from the live release's, or none reads there, the live release's testbed is copied there and
+  run there once, so a copy that does not run there is found at once, and only then its `built-from`,
+  which is read back; it is said on a line naming the machine and the commit. One
+  process of this machine compares and copies at a time, under one lock, the live release read again
+  once the lock is held, so a copy of a release no longer live never lands over a newer one. A testbed
+  running from no release, such as a checkout's own build, compares nothing (`docs/boundary.md`,
+  「The placed machine」).
+- **Where the testbed there cannot be brought to the live release while the machine answers,** the run
+  ends as not run, exit code 75, on a line naming the machine, both commits and what the machine
+  answered, and sends `placed-release-failed` (`docs/boundary.md`, 「Events」); nothing runs here in its
+  stead. A deployment's gate and build fail their stage instead (`docs/deploy.md`, 「Where a deployment
+  runs」).
+- **A placed machine that cannot be reached is waited for.** The run asks it again every thirty seconds,
+  saying on a line each time that it waits, for how long so far and what the machine's `ssh` said, and
+  goes there once it answers. It holds no seat here and starts nothing here meanwhile, so a wait costs
+  this machine the waiting process alone, where the same run here would take a seat and the memory its
+  command needs. The wait is bounded at twenty minutes (the lanes policy's), which outlasts the few
+  minutes a placed machine whose connection drops stays away: then the run ends as not run, exit code 75.
+  A deployment waits by its own rule (`docs/deploy.md`, 「A connection that breaks under the placed
+  machine」).
+- **An outage is told once, and its end once.** The first run that gives up on a machine sends
+  `placed-unreachable`, and the runs that give up after it in the same outage send nothing more; the first
+  process that finds the machine answering again sends `placed-recovered`. Both go to the machine's own
+  hook, the one `env/testbed.env` names where the caller names none (`docs/boundary.md`, 「Events」, 「The
+  placed machine」), and `status` shows when a standing outage began.
 - **There it runs in a bench copy of the caller's checkout under that machine's own testbed:** the
   caller pushes its commit into a clone of the checkout's remote in the bench, the remote a support
   checkout's main checkout names where the support checkout's own is a path on this machine, copies its open files
@@ -363,8 +393,9 @@ flowchart TD
 - **The `status` verb** prints each lane: its width, who holds each seat held and since when, a line
   for each seat, or nobody, and who waits behind them in order, with the front and the next marked, and
   each run this machine placed on another in that lane, waiting or running there; then the close line of
-  the repository it is run in, its holder and who waits behind it. `--json` gives the same as structure
-  (`docs/boundary.md`).
+  the repository it is run in, its holder and who waits behind it; then the placed machine the settings
+  name, whether it answers, the release its testbed is built from and whether that is this machine's live
+  testbed release. `--json` gives the same as structure (`docs/boundary.md`).
 
 ## Languages
 

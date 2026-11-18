@@ -39,7 +39,7 @@ use bmo_testbed_suite::crate_tests;
 use bmo_testbed_suite::dependents::CHECKOUTS_VARIABLE;
 
 use crate::classify::{TakesTurn, answer, heavy_command};
-use crate::placement::{HttpPlacement, MachinePlacement};
+use crate::placement::{HttpPlacement, MachinePlacement, MachineState};
 use crate::recorded::{Recorded, command_run};
 use crate::words::{
   CargoArgs, CargoWord, ClassifyArgs, CountArgs, CrateTestsWord, DeployArgs, DeployWord, LogArgs,
@@ -235,11 +235,22 @@ fn status(json: bool) -> u8 {
   let cwd = std::env::current_dir().unwrap_or_default();
   let close_line = close_line_path(&data_root(), &cwd);
 
+  let env = process_env();
+  // The placed machine the settings name, read over `ssh` (docs/boundary.md, 「`status`」).
+  let machines: Vec<MachineState> = MachinePlacement::named(&data_root(), &home_of(&env))
+    .map(|machine| machine.state())
+    .into_iter()
+    .collect();
+
   if json {
-    println!("{}", serve::status_json(&process_env(), close_line.as_deref()));
+    println!("{}", serve::status_json(&env, close_line.as_deref(), machines));
   } else {
     for line in verb::status_lines(close_line.as_deref()) {
       println!("{line}");
+    }
+
+    for machine in &machines {
+      println!("{}", machine.line());
     }
   }
 
