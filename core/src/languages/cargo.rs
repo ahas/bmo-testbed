@@ -8,6 +8,7 @@ use std::sync::LazyLock;
 use regex::Regex;
 
 use super::{Language, Tally, TestProgress, Widened, names_option, pattern, sum_of};
+use crate::policy::lanes::LANES;
 
 pub struct Cargo;
 
@@ -54,6 +55,36 @@ static RUNNING_LONG: LazyLock<Regex> =
 static RESULT: LazyLock<Regex> = LazyLock::new(|| pattern(r"^test (.+) \.\.\. (?:ok|FAILED|ignored)"));
 static PLACE: LazyLock<Regex> = LazyLock::new(|| pattern(r"^\s+--> (.+)$"));
 static CODED_ERROR: LazyLock<Regex> = LazyLock::new(|| pattern(r"^error\[\w+\]: "));
+
+// The lines the harness kept of a failed test, read from its own `---- <test> stdout ----` section below its
+// result line: from the panic, or the section's first line where nothing panicked, such as a test returning an
+// error, to the first blank line or note, as many as the policy names. None where the harness printed no
+// section for it.
+fn panic_of<'a>(below: &[&'a str], test: &str) -> Vec<&'a str> {
+  let heading = format!("---- {test} stdout ----");
+  let Some(at) = below.iter().position(|line| line.trim_end() == heading) else {
+    return Vec::new();
+  };
+  let section: Vec<&str> = below[at + 1..]
+    .iter()
+    .map(|line| line.trim_end())
+    .take_while(|line| {
+      !line.starts_with("---- ") && *line != "failures:" && !line.starts_with("test result: ")
+    })
+    .collect();
+  let start = section
+    .iter()
+    .position(|line| line.contains(" panicked at "))
+    .or_else(|| section.iter().position(|line| !line.is_empty()))
+    .unwrap_or(section.len());
+
+  section[start..]
+    .iter()
+    .take_while(|line| !line.is_empty() && !line.starts_with("note: "))
+    .take(LANES.numbers.panic_lines)
+    .copied()
+    .collect()
+}
 
 impl Language for Cargo {
   fn name(&self) -> &'static str {
@@ -124,6 +155,7 @@ impl Language for Cargo {
     Some(std::iter::once("--exact".to_owned()).chain(tests.iter().cloned()).collect())
   }
 
+  // A failed test by its name, the lines its panic left standing under it.
   fn failures(&self, log: &str) -> Vec<String> {
     let lines: Vec<&str> = log.split('\n').collect();
 
@@ -132,7 +164,12 @@ impl Language for Cargo {
       .enumerate()
       .filter_map(|(at, line)| {
         if let Some(test) = FAILED_TEST.captures(line) {
-          return Some(test[1].to_owned());
+          return Some(
+            std::iter::once(test[1].to_owned())
+              .chain(panic_of(&lines[at + 1..], &test[1]).iter().map(|said| format!("    {said}")))
+              .collect::<Vec<_>>()
+              .join("\n"),
+          );
         }
 
         // A compiler error, with the place it names on the line under it: one with a code, or one that

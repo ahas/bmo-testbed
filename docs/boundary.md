@@ -274,7 +274,9 @@ bmo-testbed check dashes <file…> [--write]
   waits of its steps added up, and its whole time. Started outside a held turn, a deployment's or a whole
   run's unit and a placed machine, it is placed first where the machine's placement sends it elsewhere
   (「Placement」) and runs there as that testbed's change check with the same `--since`, `--json` and
-  files; `--log` then names nothing here, and the log is that machine's.
+  files; `--log` then names nothing here, and the log is that machine's. Under a failing step it prints
+  what failed in that step's output, and a failing check's log is kept apart beside the log, its path on a
+  line opening `failing log kept:` before the last line, `log:` (`docs/checks.md`, 「The change check」).
 - **`static`** is the static check a deployment's gate passes, alone (`docs/checks.md`, 「The static check」):
   the quick checks, the declared steps the change since the commit reaches, then the workspace's formatting
   and lints, and no test; a declared step that only repeats those formatting and lints is left out, said in

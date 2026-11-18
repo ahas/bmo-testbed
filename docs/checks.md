@@ -294,7 +294,17 @@
   silent for the silence limit is ended as hung, as the static check's are.
 - **All the output goes to one log,** one per checkout under the data root's `testbed/` unless `--log`
   names another, written afresh by every run. What it prints is a line per step with its outcome and times,
-  the first lines a failing static step printed, and the tests' totals and failures.
+  and the tests' totals and failures as the `log` verb reads them where test files ran.
+- **Under a failing step stands what failed,** read out of the step's own output by every language at once,
+  for a crate's tests, a project's or a tool's check and a static step alike: its totals where a language
+  reads them, then what the languages name, each failed test with the lines its panic left under it and each
+  compiler error with its place; where no language names anything, its last lines. As many lines stand as
+  the policy names, and those left to the log are counted in a line of their own. The failing test files'
+  own step is the `log` verb's to name.
+- **A failing check's log is kept apart** beside the log, named as the log is with `failed` before its
+  extension, so the next run of the checkout, which writes the log afresh, leaves it; only the next failing
+  run replaces it. The check says where it is kept on a line before the log's own last line. A placed change
+  check keeps it on the machine it ran on, and its lines, which come back, carry what failed and that path.
 - **It ends 1 where any step failed, 2 where the change could not be read.**
 
 ## Imports a move left behind

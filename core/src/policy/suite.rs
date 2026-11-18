@@ -167,6 +167,11 @@ pub struct CheckWords {
   pub left_out: String,
   pub logged: String,
   pub log: String,
+  pub totals: String,
+  pub more: String,
+  pub earlier: String,
+  pub kept: String,
+  pub kept_mark: String,
   pub no_turn: String,
 }
 

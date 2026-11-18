@@ -11,7 +11,7 @@ use bmo_testbed_core::policy::deploy_steps::DeployStep;
 use bmo_testbed_core::policy::suite::SUITE;
 use bmo_testbed_core::policy::{fill_marks, fill_shown};
 use bmo_testbed_suite::check::{
-  CheckAsk, CheckPlan, default_log, default_since, plan, run_check, run_step,
+  CheckAsk, CheckPlan, Step, default_log, default_since, kept_log, plan, run_check, run_step,
 };
 use bmo_testbed_suite::static_check::{OwnPackages, TimedRun, cargo_format, cargo_lint};
 
@@ -291,9 +291,10 @@ fn a_passing_run_says_each_step_went_through_and_what_the_log_verb_read_of_the_t
   )));
 }
 
-// "the first lines a failing static step printed": as many as the policy names, the rest left to the log
+// "where no language names anything, its last lines", as many as the policy names, those left to the log
+// counted in a line of their own
 #[test]
-fn a_failing_static_step_shows_as_many_of_its_lines_as_the_policy_names() {
+fn a_failing_step_no_language_reads_shows_its_last_lines_and_counts_the_earlier_ones() {
   let (dir, base) = checkout();
   let log = dir.path().join("check.log");
   let shown = SUITE.numbers.check_shown_lines;
@@ -316,8 +317,109 @@ fn a_failing_static_step_shows_as_many_of_its_lines_as_the_policy_names() {
   let faults: Vec<&String> = checked.lines.iter().filter(|line| line.starts_with("  fault ")).collect();
 
   assert_eq!(faults.len(), shown, "{:?}", checked.lines);
-  assert_eq!(faults.last().map(|line| line.as_str()), Some(format!("  fault {shown}").as_str()));
-  assert!(std::fs::read_to_string(&log).unwrap().contains(&format!("fault {}", shown + 5)));
+  assert_eq!(faults[0].as_str(), "  fault 6");
+  assert_eq!(faults.last().map(|line| line.as_str()), Some(format!("  fault {}", shown + 5).as_str()));
+  assert!(
+    checked.lines.contains(&fill_shown(&SUITE.check.earlier, &[("count", &5)])),
+    "{:?}",
+    checked.lines
+  );
+  assert!(std::fs::read_to_string(&log).unwrap().contains("fault 1\n"));
+}
+
+// "its totals where a language reads them, then what the languages name, each failed test with the lines its
+// panic left under it", and the failing log kept apart from the next run's
+#[test]
+fn a_failing_crate_test_step_shows_its_totals_and_failed_tests_and_keeps_its_log_apart() {
+  let (dir, base) = checkout();
+  let log = dir.path().join("check.log");
+  let planned = plan(
+    &repo(dir.path()),
+    &CheckAsk {
+      since: Some(base),
+      files: vec![],
+    },
+  )
+  .unwrap();
+  let tests = [
+    "running 3 tests",
+    "test reads ... ok",
+    "test counts ... FAILED",
+    "test writes ... ok",
+    "",
+    "failures:",
+    "",
+    "---- counts stdout ----",
+    "thread 'counts' panicked at part/tests/count.rs:4:3:",
+    "counted wrong",
+    "",
+    "failures:",
+    "    counts",
+    "",
+    "test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out",
+  ]
+  .join("\n");
+  let failing = |_: &Path, step: &Step| {
+    if step.step.command.iter().any(|word| word.contains("tsc")) {
+      ran(101, &tests)
+    } else {
+      ran(0, "fine\n")
+    }
+  };
+  let checked = run_check(dir.path(), &planned, &log, &failing);
+  let kept = kept_log(&log);
+  let words = &SUITE.check;
+
+  assert_eq!(checked.code, 1);
+  assert!(
+    checked
+      .lines
+      .contains(&fill_shown(&words.totals, &[("pass", &2), ("fail", &1), ("skip", &0)])),
+    "{:?}",
+    checked.lines
+  );
+  let at = checked.lines.iter().position(|line| line == "  counts").expect("the failed test named");
+
+  assert_eq!(
+    checked.lines[at + 1..at + 3],
+    ["      thread 'counts' panicked at part/tests/count.rs:4:3:", "      counted wrong"]
+  );
+  assert!(
+    !checked.lines.iter().any(|line| line.contains("test reads ... ok")),
+    "{:?}",
+    checked.lines
+  );
+  assert_eq!(
+    checked.lines[checked.lines.len() - 2..],
+    [
+      fill_shown(&words.kept, &[("path", &kept.display())]),
+      fill_shown(&words.log, &[("path", &log.display())])
+    ]
+  );
+
+  // The next run passes and writes the log afresh; the kept copy still holds the failure.
+  let passed = run_check(dir.path(), &planned, &log, &|_, _| ran(0, "fine\n"));
+
+  assert_eq!(passed.code, 0);
+  assert!(
+    !passed.lines.iter().any(|line| line.starts_with("failing log kept")),
+    "{:?}",
+    passed.lines
+  );
+  assert!(!std::fs::read_to_string(&log).unwrap().contains("counted wrong"));
+  assert!(std::fs::read_to_string(&kept).unwrap().contains("counted wrong"));
+}
+
+// "named as the log is with `failed` before its extension"
+#[test]
+fn a_kept_log_is_named_as_the_log_with_the_mark_before_its_extension() {
+  let mark = &SUITE.check.kept_mark;
+
+  assert_eq!(
+    kept_log(Path::new("/data/check-a-1.log")),
+    Path::new(&format!("/data/check-a-1.{mark}.log"))
+  );
+  assert_eq!(kept_log(Path::new("/data/check")), Path::new(&format!("/data/check.{mark}")));
 }
 
 #[test]

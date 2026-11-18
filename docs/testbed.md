@@ -289,7 +289,8 @@ flowchart TD
   how many tests passed, failed and were skipped, the seconds it ran, the seconds it waited for its
   turn, and the log. A command that is not a test run says its exit code instead of counts.
 - **Under a failure it prints what failed,** read out of the output by the language that ran it: the
-  failing tests, or a compiler's errors, at most sixty lines.
+  failing tests, each with the lines its panic left under it where the language reads them, or a
+  compiler's errors, at most sixty of them.
 - **The whole output goes to the log,** under `testbed/` in the data root, one file per run, never to
   the caller's screen. Logs older than a week go when the next run starts.
 - **Every heavy command says how long it waited and how long it ran.**
@@ -411,7 +412,10 @@ flowchart TD
   - `cargo`: build, check, clippy, test, bench, doc and nextest; it reads Rust's test harness saying a test
     has been running for over a number of seconds, and a test's `ok`, `FAILED` or `ignored` result line;
     its failed tests are the `FAILED` ones above the harness's `test result:` line, and it runs only
-    named tests by handing them after `--exact`;
+    named tests by handing them after `--exact`. What failed names each failed test with the lines of its
+    own `---- <test> stdout ----` section from the panic, or from the section's first line where nothing
+    panicked, to the first blank line or note, at most as many as the policy names, and each compiler error
+    with the place it names;
   - `node`: package scripts that test, check or build under npm, pnpm, yarn or bun; `node --test`;
     Vitest; Jest. Its test files are named `*.test.js`, `*.test.mjs` and `*.test.cjs`, run by
     `node --test`, and it runs a project's script with `npm run`. Its root configuration is

@@ -22,7 +22,7 @@ fence_move_tries = 40
 # The suite's own test server once started: how far apart it is asked whether it answers, until it does or
 # its unit is no longer coming up.
 server_start_poll_ms = 500
-# How many lines of a failing static step's output the change check prints; the rest is in its log.
+# How many lines the change check prints under a failing step; the rest is in its log.
 check_shown_lines = 40
 
 # The variables no test unit inherits (docs/suite.md, 「What a test unit is handed」): the deployment's own,
@@ -204,6 +204,17 @@ left_out = "ok {name} · left out, the Cargo workspace check's {by} covers it"
 # The heading of a step's output in the log: {command} what it ran.
 logged = "==> {name} ({command}): exit {code}"
 log = "log: {path}"
+# Under a failing step, what its output adds up to where a language reads a total: {pass}, {fail} and {skip}
+# tests.
+totals = "  {pass} passed, {fail} failed, {skip} skipped"
+# Under a failing step's lines where more stand in the log: {count} lines after those shown, of what the
+# languages named, or before them, of its last lines.
+more = "  … {count} more line(s) in the log"
+earlier = "  … {count} earlier line(s) in the log"
+# A failing check's log kept apart from the next run's: {path} the copy. The copy is named as the log with
+# `kept_mark` before its extension.
+kept = "failing log kept: {path}"
+kept_mark = "failed"
 # Why the touched test files did not run: {words} what the turn came to.
 no_turn = "the machine's turn did not come: {words}"
 

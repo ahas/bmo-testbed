@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use bmo_testbed_core::declaration::{Repository, Test};
+use bmo_testbed_core::languages::{LANGUAGES, failures_of_log, tally_of_log};
 use bmo_testbed_core::policy::suite::SUITE;
 use bmo_testbed_core::policy::{fill_marks, fill_shown};
 use bmo_testbed_core::silence::Silence;
@@ -315,15 +316,9 @@ pub fn run_check(
     if done.code != 0 {
       failed = true;
 
-      // The tests' failures are the log verb's to name; a static step's own lines are what tell its fault.
+      // The test files' failures are the log verb's to name; every other step's are read out of its own output.
       if !step.tests {
-        lines.extend(
-          done
-            .output
-            .lines()
-            .take(SUITE.numbers.check_shown_lines)
-            .map(|line| format!("  {line}")),
-        );
+        lines.extend(what_failed(&done.output));
       }
     }
   }
@@ -339,6 +334,15 @@ pub fn run_check(
     lines.extend(read.output.lines().map(str::to_owned));
   }
 
+  // The next run of the checkout writes the log afresh, so a failing one is kept apart until another fails.
+  if failed {
+    let kept = kept_log(log);
+
+    if std::fs::copy(log, &kept).is_ok() {
+      lines.push(fill_shown(&words.kept, &[("path", &kept.display())]));
+    }
+  }
+
   lines.push(fill_shown(&words.log, &[("path", &log.display())]));
 
   Checked {
@@ -346,6 +350,58 @@ pub fn run_check(
     waited_seconds,
     code: u8::from(failed),
   }
+}
+
+// What a failing step's output says failed, as the lines under its step line: its totals where a language
+// reads them, then the first lines of what the languages name, each failed test with its panic and each
+// compiler error; or, where none names anything, its last lines. The lines past the policy's number are counted
+// as left to the log.
+fn what_failed(output: &str) -> Vec<String> {
+  let words = &SUITE.check;
+  let most = SUITE.numbers.check_shown_lines;
+  let named: Vec<String> = failures_of_log(&LANGUAGES, output)
+    .iter()
+    .flat_map(|one| one.split('\n').map(str::to_owned).collect::<Vec<_>>())
+    .collect();
+  let mut lines: Vec<String> = tally_of_log(&LANGUAGES, output)
+    .map(|tally| {
+      fill_shown(&words.totals, &[("pass", &tally.pass), ("fail", &tally.fail), ("skip", &tally.skip)])
+    })
+    .into_iter()
+    .collect();
+  let indented = |line: &String| format!("  {line}");
+
+  if named.is_empty() {
+    let all: Vec<String> = output.trim_end().lines().map(str::to_owned).collect();
+    let earlier = all.len().saturating_sub(most);
+
+    if earlier > 0 {
+      lines.push(fill_shown(&words.earlier, &[("count", &earlier)]));
+    }
+
+    lines.extend(all[earlier..].iter().map(indented));
+  } else {
+    lines.extend(named.iter().take(most).map(indented));
+
+    if named.len() > most {
+      lines.push(fill_shown(&words.more, &[("count", &(named.len() - most))]));
+    }
+  }
+
+  lines
+}
+
+/// Where a failing check's log is kept apart from the next run's: beside it, named as it is with the policy's
+/// mark before its extension.
+pub fn kept_log(log: &Path) -> PathBuf {
+  let mark = &SUITE.check.kept_mark;
+  let stem = log.file_stem().map_or_else(String::new, |stem| stem.to_string_lossy().into_owned());
+  let name = match log.extension() {
+    Some(extension) => format!("{stem}.{mark}.{}", extension.to_string_lossy()),
+    None => format!("{stem}.{mark}"),
+  };
+
+  log.with_file_name(name)
 }
 
 /// One step run in the checkout at `root`: the test files in the machine's wide lane, waiting for its turn as

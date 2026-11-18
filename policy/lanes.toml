@@ -15,8 +15,10 @@ notice_seconds = 30
 poll_milliseconds = 500
 # How often the watch on a harness holding a turn looks whether the harness is still there.
 watch_seconds = 2
-# How many failure lines a run's result keeps, and how many days a run's log is kept.
+# How many failure lines a run's result keeps, how many lines of a failed test's panic stand under its name,
+# and how many days a run's log is kept.
 failure_lines = 60
+panic_lines = 8
 log_keep_days = 7
 # The narrow lane's width: the machine's width divided by this, never less than one.
 narrow_divisor = 4

@@ -17,6 +17,7 @@ pub struct Numbers {
   pub poll_milliseconds: u64,
   pub watch_seconds: u64,
   pub failure_lines: usize,
+  pub panic_lines: usize,
   pub log_keep_days: u64,
   pub narrow_divisor: usize,
   pub seats: usize,

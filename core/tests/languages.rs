@@ -8,6 +8,7 @@ use bmo_testbed_core::languages::{
   Browser, Bun, Cargo, LANGUAGES, Language, Node, PLAIN, Tally, TestProgress, cargo_placeable,
   failures_of_log, language_for, program_words, run_folder, tally_of_log,
 };
+use bmo_testbed_core::policy::lanes::LANES;
 
 fn words(line: &[&str]) -> Vec<String> {
   line.iter().map(|word| (*word).to_owned()).collect()
@@ -242,6 +243,54 @@ fn cargo_sums_every_test_binary_and_names_failed_tests_and_compiler_errors_with_
     ["parse::reads_lines", "error[E0308]: mismatched types (crates/a/src/lib.rs:3:5)"]
   );
   assert_eq!(Cargo.tally("   Compiling a v0.1.0"), None);
+}
+
+// "names each failed test with the lines of its own section from the panic, or from the section's first line
+// where nothing panicked, to the first blank line or note, at most as many as the policy names"
+#[test]
+fn cargo_names_each_failed_test_with_the_lines_its_panic_left_in_its_own_section() {
+  let most = LANES.numbers.panic_lines;
+  let long: Vec<String> = (1..=most + 2).map(|at| format!("line {at}")).collect();
+  let mut text = vec![
+    "test parse::reads_lines ... FAILED",
+    "test parse::writes ... ok",
+    "test parse::returns ... FAILED",
+    "test parse::long ... FAILED",
+    "",
+    "failures:",
+    "",
+    "---- parse::reads_lines stdout ----",
+    "printed before the panic",
+    "thread 'parse::reads_lines' panicked at a/src/lib.rs:3:5:",
+    "assertion `left == right` failed",
+    "  left: 1",
+    "note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace",
+    "",
+    "---- parse::returns stdout ----",
+    "Error: no such file",
+    "",
+    "---- parse::long stdout ----",
+  ];
+
+  text.extend(long.iter().map(String::as_str));
+  text.extend([
+    "",
+    "failures:",
+    "    parse::reads_lines",
+    "",
+    "test result: FAILED. 1 passed; 3 failed;",
+  ]);
+
+  let shown: Vec<String> = long.iter().take(most).map(|line| format!("    {line}")).collect();
+
+  assert_eq!(
+    Cargo.failures(&lines(&text)),
+    [
+      "parse::reads_lines\n    thread 'parse::reads_lines' panicked at a/src/lib.rs:3:5:\n    assertion `left == right` failed\n      left: 1".to_owned(),
+      "parse::returns\n    Error: no such file".to_owned(),
+      std::iter::once("parse::long".to_owned()).chain(shown).collect::<Vec<_>>().join("\n"),
+    ]
+  );
 }
 
 // "claims package scripts that test, check or build, node --test, Vitest and Jest"
