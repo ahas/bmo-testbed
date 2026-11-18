@@ -1,5 +1,5 @@
 //! What the testbed says of the events it sends (docs/boundary.md, 「Events」), each line with the `{name}`
-//! marks its file names.
+//! marks its file names, and what `notice` sends and says (「`notice`」).
 
 use serde::Deserialize;
 
@@ -13,10 +13,35 @@ pub struct EventLines {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct NoticeLines {
+  pub queued: String,
+  pub unfound: String,
+  pub unread: String,
+  pub unreached: String,
+  pub refused: String,
+}
+
+/// How `notice` reaches the receiver's owner notices.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Notice {
+  pub code: String,
+  pub route: String,
+  pub env_file: String,
+  pub address_variable: String,
+  pub token_variable: String,
+  pub seconds: u64,
+  pub quoted_chars: usize,
+  pub lines: NoticeLines,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Events {
   pub version: u64,
   pub hook_seconds: u64,
   pub lines: EventLines,
+  pub notice: Notice,
 }
 
 super::part!(pub EVENTS: Events = "events.toml");

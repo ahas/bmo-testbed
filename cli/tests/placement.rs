@@ -49,7 +49,7 @@ use bmo_testbed_core::turn::{Env, Lane, NOT_RUN_EXIT_CODE, TestbedTurn, TurnAsk,
 use bmo_testbed_deploy::deployment::{BuildAsk, Gate, GateAsk, GateFault, Passed, none_earlier};
 use serde_json::{Value, json};
 
-use crate::stand::{Ran, checkout, git, install, ran, testbed};
+use crate::stand::{Ran, ReceiverStand, checkout, git, install, ran, testbed};
 
 // A stand-in endpoint: what it was asked, and the address it serves on, which ends with the runtime.
 struct Endpoint {
@@ -1145,6 +1145,94 @@ fn a_run_whose_machine_cannot_be_brought_to_the_live_release_ends_not_run_and_se
   assert_eq!(payload["detail"]["live"], LIVE);
   assert_eq!(payload["detail"]["far"], FAR);
   assert_eq!(payload["detail"]["command"], json!(command));
+}
+
+// "Sent once for each live release ... A run that finds the testbed there at the live release clears this, so a
+// failure after it is sent again"
+#[test]
+fn a_release_failure_is_told_once_for_each_live_release_and_again_once_a_run_found_it_brought() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let built_from = dir.join("far/bin/built-from");
+  let command = vec!["true".to_owned()];
+  let env = Env::new();
+  let ask = PlaceAsk {
+    command: &command,
+    adapter: Some("plain"),
+    lane: Lane::Wide,
+    cwd: dir.clone(),
+    env: &env,
+  };
+  let mut machine = released(&dir, Some(FAR), Some(LIVE));
+  let events = || std::fs::read_to_string(dir.join("events")).unwrap();
+
+  machine.hook = writing_hook(&dir);
+
+  // The live release holds no testbed to copy, so the testbed there is never brought.
+  assert_eq!(machine.waited_ready(&ask), Err(NOT_RUN_EXIT_CODE));
+  assert_eq!(machine.waited_ready(&ask), Err(NOT_RUN_EXIT_CODE));
+  assert_eq!(events(), "placed-release-failed\n", "one live release's failure is told once");
+
+  go_live(&dir, NEWER);
+  assert_eq!(machine.waited_ready(&ask), Err(NOT_RUN_EXIT_CODE));
+  assert_eq!(events(), "placed-release-failed\n".repeat(2), "a newer live release's is told again");
+
+  std::fs::write(&built_from, format!("{NEWER}\n")).unwrap();
+  assert_eq!(machine.waited_ready(&ask), Ok(()));
+  std::fs::write(&built_from, format!("{FAR}\n")).unwrap();
+  assert_eq!(machine.waited_ready(&ask), Err(NOT_RUN_EXIT_CODE));
+  assert_eq!(
+    events(),
+    "placed-release-failed\n".repeat(3),
+    "a failure after the testbed was brought is told again"
+  );
+}
+
+// "Where neither names a hook, the placed machine's events go to the owner's supervisor": through `notice`, an
+// outage reaches the receiver's owner notices as one notice however many runs give up on it, and its end as one more
+#[test]
+fn an_outage_and_its_end_reach_the_owner_s_supervisor_as_one_notice_each_through_notice() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let refusing = dir.join("refusing-ssh");
+  let receiver = ReceiverStand::answering(201);
+  let mut machine = released(&dir, None, None);
+  let answering = machine.settings.ssh.clone();
+
+  install("#!/bin/sh\necho 'no agent attached' >&2\nexit 255\n", &refusing);
+  receiver.written_under(&machine.data_root, "stand-token");
+  // The binary's own `notice`, on the test's data root and on no receiver the test's environment names.
+  machine.hook.command = Some(format!(
+    "env -u RECEIVER_ADDRESS -u RECEIVER_TOKEN BMO_DATA_DIR='{}' '{}' notice",
+    machine.data_root.display(),
+    env!("CARGO_BIN_EXE_bmo-testbed")
+  ));
+  machine.settings.ssh = vec![refusing.to_string_lossy().into_owned()];
+
+  let command = vec!["true".to_owned()];
+  let env = Env::new();
+  let ask = PlaceAsk {
+    command: &command,
+    adapter: Some("plain"),
+    lane: Lane::Wide,
+    cwd: dir.clone(),
+    env: &env,
+  };
+  let codes = || receiver.noticed().iter().map(|one| one.body["code"].clone()).collect::<Vec<_>>();
+
+  assert_eq!(machine.waited_ready(&ask), Err(NOT_RUN_EXIT_CODE));
+  assert_eq!(machine.waited_ready(&ask), Err(NOT_RUN_EXIT_CODE));
+  assert_eq!(codes(), [json!("testbed:placed-unreachable")], "one outage is one notice");
+  assert_eq!(receiver.noticed()[0].body["detail"]["machine"], "machine-2");
+
+  machine.settings.ssh = answering;
+  assert_eq!(machine.waited_ready(&ask), Ok(()));
+  assert_eq!(machine.waited_ready(&ask), Ok(()));
+  assert_eq!(
+    codes(),
+    [json!("testbed:placed-unreachable"), json!("testbed:placed-recovered")],
+    "its end is one notice more"
+  );
 }
 
 // "A placed machine that cannot be reached is waited for ... Once `unreached_wait_minutes` have passed, the run

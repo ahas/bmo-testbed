@@ -47,6 +47,7 @@ pub enum Verb {
   Backup(BackupArgs),
   Serve(ServeArgs),
   Mcp(McpArgs),
+  Notice(NoticeArgs),
   /// The nouns `bmo` dispatches to this binary, one a line.
   Nouns,
   /// The platform's names for the suite verbs.
@@ -419,6 +420,13 @@ pub struct McpArgs {
   pub token: String,
 }
 
+/// `notice`: the event a hook is handed, by its name.
+#[derive(Debug, Args)]
+pub struct NoticeArgs {
+  #[arg(value_parser = named)]
+  pub event: String,
+}
+
 // A usage of the policy with the binary's name and numbers filled in.
 fn usage(text: &str) -> String {
   fill_marks(
@@ -497,6 +505,7 @@ pub fn read(args: impl IntoIterator<Item = OsString>) -> Result<Words, clap::Err
     })
     .mut_subcommand("serve", |verb| verb.override_help(usage(&said.serve)))
     .mut_subcommand("mcp", |verb| verb.override_help(usage(&said.mcp)))
+    .mut_subcommand("notice", |verb| verb.override_help(usage(&said.notice)))
     .mut_subcommand("test", |verb| {
       verb
         .mut_subcommand("suite", |word| word.override_help(usage(&said.suite)))

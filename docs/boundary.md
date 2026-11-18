@@ -454,6 +454,30 @@ bmo-testbed mcp [--service <url>] [--token <token>]
   where `--token` names none; the running tools start this same binary's verbs.
 - Exits 0 when the harness closes the session, and 1 where it ends in a failure.
 
+### `notice`
+
+```
+bmo-testbed notice <event>
+```
+
+- Tells the owner's supervisor of an event, taken as a hook takes it (「Events」): the event's name the
+  word, its payload on standard input. It is the placed machine's hook where none is named, and any hook
+  setting may name it.
+- **The event goes to the receiver's owner notices,** `POST /owner/notices` (the receiver's `docs/api.md`,
+  「Notices」), which queues it for the agent that answers the owner's private room. Its `code` is
+  `testbed:` and the event's name, the payload's fields standing beside it. The receiver keeps one notice
+  of a code waiting, so a newer notice of the same event replaces one not yet said, and it reads
+  `testbed` off the code as the notice's publisher.
+- **The receiver is found as its own tools find it:** `RECEIVER_ADDRESS` and `RECEIVER_TOKEN` from the
+  environment, else from `<data root>/env/receiver.env`, which the receiver writes as it is deployed.
+  Each is read out of that file as the machine's hook is read out of its own (「Events」), and nothing
+  else of the file. The token goes into the request's authorization and nowhere else.
+- The receiver is given the policy's twenty seconds to answer.
+- Exits 0 once the receiver answers that the notice is queued. Exits 1 where the receiver is not found,
+  does not answer or refuses: the reason goes on a line, then the event's line as an event with no hook
+  writes it, so the event still stands wherever the verb's standard error goes. Exits 2 where the payload
+  is not one JSON object.
+
 ### The nouns `bmo` serves
 
 `bmo-testbed nouns` prints the nouns `bmo` dispatches to this binary, one a line, each the words a
@@ -502,6 +526,8 @@ verb's own name, and each noun takes what that verb takes.
 | `BMO_TESTBED_PLACED` | the turn, `placed` | Set by `placed` for the run it starts: `1`. A run finding it is never placed again |
 | `BMO_TESTBED_CHECKOUTS` | `dependents`, `deploy`, `prune`, `check shared-versions`, the hosted deploy tool | The machine's registry of checkouts, over the data root's `testbed/checkouts.toml` |
 | `BMO_TESTBED_EVENT_HOOK` | every verb that sends events | The event hook, over the declaration's, and the hook for a verb run outside a repository |
+| `RECEIVER_ADDRESS` | `notice` | The receiver's base address, over the one `<data root>/env/receiver.env` names |
+| `RECEIVER_TOKEN` | `notice` | The receiver's bearer token, over the one `<data root>/env/receiver.env` names |
 | `BMO_SUITE_MEMORY_GB` | the suite | The fence's memory ceiling |
 | `BMO_TEST_POSTGRES` | the suite, `template`, `scratch-database` | The test database server's address; set by the suite for every process it starts |
 | `BMO_TEST_TEMPLATE` | a consumer's code under test | Set by the suite where migrations are declared: the template whose pool a file claims its slot from |
@@ -555,6 +581,17 @@ keep (`docs/deploy.md`, 「The unit links」).
   (`docs/deploy.md`, 「The Cargo build directory」). The testbed reads that one variable out of the file as
   the service manager reads it, the last line assigning it, its value trimmed and a value in quotes
   unquoted, and nothing else of the file. No declaration's hook takes them.
+- **Where neither names a hook, the placed machine's events go to the owner's supervisor:** the hook is
+  then the running testbed binary's own `notice` (「`notice`」); a program that calls the placement in its
+  own process, such as a test harness, has none, and the event is its line. An outage of the placed machine, or its testbed
+  left behind the live release, stops every run placed there, and only the owner can act on it. The
+  route that tells him is the receiver's owner notices, the one route the platform keeps for a system
+  notice to the owner: it queues the notice until his supervisor's session can take it, rather than
+  handing it to a session that may be at rest, and the supervisor says it in his room (the receiver's
+  `docs/voiced-notices.md`, 「Delivery」). It needs only the receiver's own token, which the receiver
+  writes for every process of the machine, so no secret stands in the testbed's code, policy or
+  settings. The receiver is named here only as the platform's queue of notices to the owner, by its fixed
+  API, and nothing of any repository stands with it.
 - **The hook never changes a verb's outcome.** It is waited for up to the policy's time, sixty seconds;
   one still running then has its process group ended, and one that fails or overruns is said on a line
   and the verb goes on. A hook that reaches a peer which is down therefore holds a verb a minute at
@@ -589,7 +626,7 @@ keep (`docs/deploy.md`, 「The unit links」).
   | `cargo-target-over-ceiling` | `bytes` (what the directory holds once the prune's enforcement is done), `ceiling_bytes`, `holders`, each with `path`, `by` (`build-lock` for a profile directory whose build lock a build holds, `deployment` for the directory of a running deployment's checkout or build tree, `program` for a checkout's directory a program built there runs from, `deployment-checkout` for a deployment's checkout, which the directory's ceiling never removes from) and `bytes`. Sent only where the enforcement could not bring the directory under its ceiling |
   | `placed-unreachable` | `machine` (the placed machine's label), `since` (when the outage began, RFC 3339), `command` (the words of the run that told it), `waited_seconds`, `said` (what `ssh` said last). Sent once for each outage, by the first run that waited its bound for the placed machine to answer and ends as not run (「The placed machine」) |
   | `placed-recovered` | `machine`, `since` (when the outage began). Sent once the placed machine answers again after an outage `placed-unreachable` told, by the one process that finds it so |
-  | `placed-release-failed` | `machine`, `command`, `live` (the live testbed release's commit), `far` (the commit the testbed there names, or null), `said` (what bringing it came to). Sent by a run whose placed machine answers but whose testbed could not be brought to the live release, which ends as not run |
+  | `placed-release-failed` | `machine`, `command`, `live` (the live testbed release's commit), `far` (the commit the testbed there names, or null), `said` (what bringing it came to). Sent once for each live release, by the first run whose placed machine answers but whose testbed could not be brought to that release; that run and every one after it ends as not run. A run that finds the testbed there at the live release clears this, so a failure after it is sent again (「The placed machine」) |
   | `placed-disk-low` | `machine` (the placed machine's label), `floor_bytes`, `disks`, each with `path` (as the settings name it), `source` (the filesystem's source, the drive itself for a WSL drive mount) and `free_bytes` |
   | `disk-trim-failed` | `path` (the build directory the trim was run on), `said` |
   | `full-suite-failed` | `head`, `log`, `step` (the failing setup or static step, or null), `failures`, each with `unit` and `package` |
@@ -861,8 +898,9 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   this machine compares and brings at a time, under the lock `placed-testbed.lock` under the data root's
   `locks/`, reading the live release again once it holds the lock. Where that does not take while the
   machine answers, a deployment fails its stage, and a `run`, a suite, a change check or a Cargo verb
-  ends as not run, exit code 75, and sends `placed-release-failed`, each naming both commits and what the
-  machine answered; nothing is run here in its stead. A deployment whose caller sets
+  ends as not run, exit code 75, and sends `placed-release-failed` where no run sent it for that live
+  release (below), each naming both commits and what the machine answered; nothing is run here in its
+  stead. A deployment whose caller sets
   `BMO_TESTBED_PLACEMENT` empty brings nothing and fails its stage where the releases differ. A testbed
   running from no release, such as a checkout's own build, compares nothing.
 - **The testbed's own deployment brings that machine's testbed to its release.** Once the release is
@@ -957,6 +995,11 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   machine answering again takes the outage away, and sends `placed-recovered` where it had been told; an
   outage no run gave up on ends untold. Each mark is made only where it does not stand and taken away
   whole, so of the processes racing over one, one alone sends each event.
+- **A testbed there that could not be brought to the live release is remembered too,** under the data
+  root's `testbed/placed-release-failed/`: one file for the machine and the live release's commit, made
+  by the first run that cannot bring it there. That run sends `placed-release-failed`; the runs after it
+  that fail on the same release send nothing more. A run that finds the testbed there at the live
+  release takes the machine's files away, so a later failure is told again.
 
 ### The placement endpoint
 

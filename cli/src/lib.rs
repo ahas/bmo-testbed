@@ -9,8 +9,10 @@ pub mod check;
 pub mod classify;
 pub mod dependents;
 pub mod deploy;
+pub mod env_file;
 pub mod full;
 pub mod imports;
+pub mod notice;
 pub mod nouns;
 pub mod own;
 pub mod placement;
@@ -411,6 +413,7 @@ pub fn main(args: impl IntoIterator<Item = OsString>) -> u8 {
     Verb::Backup(args) => backup::backup(&args.word),
     Verb::Serve(args) => serve::serve(&args, &data_root(), process_env()),
     Verb::Mcp(args) => serve::mcp(&args),
+    Verb::Notice(args) => notice::notice(&args.event),
     Verb::Nouns => print_nouns(),
     Verb::Test(args) => run_test(args),
   }

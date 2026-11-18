@@ -17,7 +17,7 @@ use bmo_testbed_deploy::tree::{BUILT_FROM, short};
 use serde::Serialize;
 use serde_json::json;
 
-use super::outage::Outage;
+use super::outage::{Outage, ReleaseFailure};
 use super::{MachinePlacement, far_path, laid_over, said, succeeded};
 
 /// The lock every bringing of the placed machine's testbed to a release holds, under the data root's `locks/`.
@@ -344,7 +344,10 @@ impl MachinePlacement {
     loop {
       let unanswered = match self.answers() {
         Ok(()) => match self.brought_live() {
-          Ok(()) => return Ok(()),
+          Ok(()) => {
+            ReleaseFailure::of(&self.data_root, self.settings.label()).cleared();
+            return Ok(());
+          }
           Err(why) => match self.answers() {
             Ok(()) => return Err(self.release_failed(ask, &why)),
             Err(said) => said,
@@ -408,13 +411,18 @@ impl MachinePlacement {
     NOT_RUN_EXIT_CODE
   }
 
-  // A run whose machine answers but whose testbed could not be brought to the live release: its line, its event,
-  // and the code of a run not run.
+  // A run whose machine answers but whose testbed could not be brought to the live release: its line, the event
+  // where no run told this release's failure before, and the code of a run not run.
   fn release_failed(&self, ask: &PlaceAsk<'_>, why: &str) -> u8 {
     let machine = self.settings.label();
     let live = self.live().map(|live| live.commit);
 
     println!("{}", fill_marks(&LANES.placed.release_failed, &[("said", why)]));
+
+    if !ReleaseFailure::of(&self.data_root, machine).first_to_tell(live.as_deref().unwrap_or("none")) {
+      return NOT_RUN_EXIT_CODE;
+    }
+
     self.hook.send(&Event {
       name: "placed-release-failed",
       commit: None,

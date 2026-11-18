@@ -358,8 +358,8 @@ flowchart TD
   「The placed machine」).
 - **Where the testbed there cannot be brought to the live release while the machine answers,** the run
   ends as not run, exit code 75, on a line naming the machine, both commits and what the machine
-  answered, and sends `placed-release-failed` (`docs/boundary.md`, 「Events」); nothing runs here in its
-  stead. A deployment's gate and build fail their stage instead (`docs/deploy.md`, 「Where a deployment
+  answered, and sends `placed-release-failed` once for that live release (`docs/boundary.md`, 「Events」);
+  nothing runs here in its stead. A deployment's gate and build fail their stage instead (`docs/deploy.md`, 「Where a deployment
   runs」).
 - **A placed machine that cannot be reached is waited for.** The run asks it again every thirty seconds,
   saying on a line each time that it waits, for how long so far and what the machine's `ssh` said, and
@@ -372,8 +372,9 @@ flowchart TD
 - **An outage is told once, and its end once.** The first run that gives up on a machine sends
   `placed-unreachable`, and the runs that give up after it in the same outage send nothing more; the first
   process that finds the machine answering again sends `placed-recovered`. Both go to the machine's own
-  hook, the one `env/testbed.env` names where the caller names none (`docs/boundary.md`, 「Events」, 「The
-  placed machine」), and `status` shows when a standing outage began.
+  hook, the one `env/testbed.env` names where the caller names none, and where neither names one, to the
+  owner's supervisor as a notice through the receiver (`docs/boundary.md`, 「Events」, 「The placed
+  machine」, 「`notice`」). `status` shows when a standing outage began.
 - **There it runs in a bench copy of the caller's checkout under that machine's own testbed:** the
   caller pushes its commit into a clone of the checkout's remote in the bench, the remote a support
   checkout's main checkout names where the support checkout's own is a path on this machine, copies its open files

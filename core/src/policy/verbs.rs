@@ -29,6 +29,7 @@ pub struct UsageWords {
   pub crate_tests: String,
   pub serve: String,
   pub mcp: String,
+  pub notice: String,
 }
 
 #[derive(Debug, Deserialize)]

@@ -92,7 +92,7 @@ impl Hook {
     let said = &EVENTS.lines;
     let payload = self.payload(event);
     let Some(command) = &self.command else {
-      eprintln!("{}", fill_marks(&said.unhooked, &[("event", event.name), ("payload", &payload)]));
+      eprintln!("{}", unhooked_line(event.name, &payload));
       return;
     };
     let failed =
@@ -136,6 +136,11 @@ impl Hook {
       Err(why) => failed(&why),
     }
   }
+}
+
+/// The line an event no hook took is written as: its name and its payload, one line of JSON.
+pub fn unhooked_line(event: &str, payload: &str) -> String {
+  fill_marks(&EVENTS.lines.unhooked, &[("event", event), ("payload", payload)])
 }
 
 // The hook handed its payload and waited for on a thread of its own, so the payload written into a pipe the

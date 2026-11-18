@@ -37,8 +37,8 @@ mod machine_hook;
 mod outage;
 
 pub use far_release::{FarWait, LiveRelease, MachineState, PLACED_TESTBED_LOCK, running_deploy_tree};
-pub use machine_hook::{MACHINE_ENV_FILE, machine_hook};
-pub use outage::{OUTAGE_DIR, Outage};
+pub use machine_hook::{MACHINE_ENV_FILE, machine_hook, notice_hook};
+pub use outage::{OUTAGE_DIR, Outage, RELEASE_FAILED_DIR, ReleaseFailure};
 
 /// The variable naming the placement endpoint over the declaration's.
 pub const PLACEMENT_VARIABLE: &str = "BMO_TESTBED_PLACEMENT";

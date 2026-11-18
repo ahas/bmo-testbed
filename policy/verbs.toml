@@ -34,6 +34,7 @@ backup    the machine's databases and data folders backed up to its destinations
           restore drill: backup snapshot, backup media, backup drill and backup prune
 serve     the HTTP service: the record and the lanes, read-only behind a token
 mcp       the harness plugin's MCP server, on standard input and output
+notice    an event a hook is handed, told to the owner's supervisor through the receiver
 nouns     the nouns `bmo` dispatches to this binary, one a line
 test      the platform's names for the suite verbs: test suite, test count, test log,
           test template and test full
@@ -286,6 +287,16 @@ checkout named.
 
 --service  the HTTP service's address (default BMO_TESTBED_SERVICE, else http://{listen})
 --token    the service's bearer token (default BMO_TESTBED_TOKEN)"""
+notice = """
+usage: {verb} notice <event>
+
+Tells the owner's supervisor of an event, taken as a hook takes it (docs/boundary.md): the event's
+name the word, its payload as one JSON object on standard input. The event is queued at the
+receiver's owner notices, the receiver found through RECEIVER_ADDRESS and RECEIVER_TOKEN, else the
+data root's env/receiver.env. It is the placed machine's event hook where none is named.
+
+Exits 0 once the notice is queued, 1 where the receiver is not found, does not answer or refuses,
+the event then written on standard error, and 2 where the payload does not read."""
 
 # What `classify` answers: `light`, or `heavy` with {language} the language that claims the command
 # and, on the line after it, `instead` with {testbed} the running binary and {words} the command's words.

@@ -39,6 +39,10 @@ pub fn testbed(dir: &Path, data: &Path, args: &[&str]) -> Command {
     .env_remove("BMO_TESTBED_CALLED_FROM")
     .env_remove("BMO_TESTBED_CHECKOUTS")
     .env_remove("BMO_DEPLOY_UNIT")
+    // An event the binary under test sends reaches no hook and no receiver but one its test names.
+    .env_remove("BMO_TESTBED_EVENT_HOOK")
+    .env_remove("RECEIVER_ADDRESS")
+    .env_remove("RECEIVER_TOKEN")
     .stdin(Stdio::null())
     .stdout(Stdio::piped())
     .stderr(Stdio::piped());
@@ -109,5 +113,77 @@ pub fn until(what: &str, condition: impl Fn() -> bool, within: Duration) {
   while !condition() {
     assert!(began.elapsed() < within, "never came: {what}");
     std::thread::sleep(Duration::from_millis(20));
+  }
+}
+
+/// One owner notice a stand-in receiver was handed: the authorization it carried and its body.
+#[derive(Clone, Debug)]
+pub struct Noticed {
+  pub authorization: String,
+  pub body: serde_json::Value,
+}
+
+/// A stand-in receiver answering `POST /owner/notices` with `status` and the row it would have queued: what it was
+/// handed, and the address it serves on, which ends with the runtime.
+pub struct ReceiverStand {
+  _runtime: tokio::runtime::Runtime,
+  pub address: String,
+  noticed: std::sync::Arc<std::sync::Mutex<Vec<Noticed>>>,
+}
+
+impl ReceiverStand {
+  pub fn answering(status: u16) -> Self {
+    use axum::http::{HeaderMap, StatusCode};
+
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+      .worker_threads(1)
+      .enable_all()
+      .build()
+      .unwrap();
+    let listener = runtime.block_on(tokio::net::TcpListener::bind("127.0.0.1:0")).unwrap();
+    let address = format!("http://{}", listener.local_addr().unwrap());
+    let noticed = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let keeping = std::sync::Arc::clone(&noticed);
+    let status = StatusCode::from_u16(status).unwrap();
+    let app = axum::Router::new().route(
+      "/owner/notices",
+      axum::routing::post(move |headers: HeaderMap, axum::Json(body): axum::Json<serde_json::Value>| {
+        let authorization = headers
+          .get("authorization")
+          .and_then(|value| value.to_str().ok())
+          .unwrap_or_default()
+          .to_owned();
+        let mut kept = keeping.lock().unwrap();
+
+        kept.push(Noticed {
+          authorization,
+          body,
+        });
+
+        let id = kept.len();
+
+        async move { (status, axum::Json(serde_json::json!({ "id": id }))) }
+      }),
+    );
+
+    runtime.spawn(async move { axum::serve(listener, app).await });
+    Self {
+      _runtime: runtime,
+      address,
+      noticed,
+    }
+  }
+
+  /// The notices handed so far, in order.
+  pub fn noticed(&self) -> Vec<Noticed> {
+    self.noticed.lock().unwrap().clone()
+  }
+
+  /// The receiver's own env file written under a data root, naming this stand and the token.
+  pub fn written_under(&self, data_root: &Path, token: &str) {
+    let file = data_root.join("env/receiver.env");
+
+    std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+    std::fs::write(file, format!("RECEIVER_ADDRESS={}\nRECEIVER_TOKEN={token}\n", self.address)).unwrap();
   }
 }
