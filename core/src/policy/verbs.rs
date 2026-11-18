@@ -91,6 +91,7 @@ pub struct CheckWords {
   pub no_checkout: String,
   pub twice: String,
   pub no_commit: String,
+  pub not_ancestor: String,
 }
 
 #[derive(Debug, Deserialize)]

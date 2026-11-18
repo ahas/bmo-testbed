@@ -227,6 +227,8 @@ standing = "check: {name} still running ({seconds}s so far)"
 # the set's log; the line naming a failed repository and its failed {steps}, joined; and the set's log file
 # named by `set_log` with {hash} the set's own.
 set_line = "{repository}: {line}"
+# Said on standard error once the set's one turn came: {count} the checkouts, {words} what the turn came to.
+set_turn = "check: {count} checkout(s) in one wide seat: {words}"
 set_logged = "==== {repository} ({checkout})"
 set_failed = "check FAILED: {repository}: {steps}"
 set_steps_joiner = ", "

@@ -320,6 +320,7 @@ unsettled = "korean: {why}"
 no_checkout = "check: {word} names no checkout"
 twice = "check: {word} names a checkout another --checkout already names"
 no_commit = "check: {word}: {since} names no commit"
+not_ancestor = "check: {word}: {since} is not an ancestor of the checkout's HEAD, and a placed bench holds the history of HEAD alone"
 
 # What `check dashes` says: {path} a file, {count} lines, {line} a line's number and {text} it before
 # and after.

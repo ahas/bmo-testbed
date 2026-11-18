@@ -347,7 +347,9 @@
   in, and `--checkout` is never given with `--since` or with files.
 - **Every checkout is read before anything runs:** its top level as git names it, its own declaration, and
   its since resolved to the commit itself. A path that names no checkout, two words naming one checkout,
-  and a since that names no commit end the call 2 with a line naming the word, and nothing runs.
+  a since that names no commit, and a since that is not an ancestor of the checkout's `HEAD`, which a
+  placed bench could never read since it holds the history of `HEAD` alone, end the call 2 with a line
+  naming the word, and nothing runs.
 - **Each checkout is planned by its own declaration,** exactly as the check of one checkout is planned
   (「The change check」): its quick checks, its declared steps, the formatting and lints of its own Cargo
   workspace, the test files, crates, projects and tools its change touches. Nothing is planned across them:
@@ -357,16 +359,19 @@
   every step of every checkout inside it, the checkouts one after another in the order given, each step
   of one checkout run in that checkout. The steps that take a turn of their own, the test files and the
   Cargo verb among them, run inside the set's turn and never wait in the line again. While the turn is
-  waited for, the line says where the call stands every notice; while a step runs, its line every minute,
-  as for one checkout, so the call is never silent while it lasts.
+  waited for, the line says where the call stands every notice; once it came, a line says how many
+  checkouts the one seat holds and what the turn came to; while a step runs, its line every minute, as for
+  one checkout, so the call is never silent while it lasts.
 - **Where it runs is the placed machine alone** (`docs/boundary.md`, 「Placement」, `combined_order`): the
   whole set goes there as one run, every checkout laid in one bench at the place it has under this
   machine's home, so the checkouts stand there as they stand to one another here and a path one names to
   another resolves there as it does here. It waits in that machine's line however long that takes, and
   runs on this machine only where the placed machine's settings name this machine in `combined_order`.
-- **Every line names its repository:** the heading of each checkout's change, then each step's line as the
-  step ends, printed as it ends, and what failed under a failing step, each opening with the name of the
-  repository its declaration gives. Each checkout writes its own log as the check of one checkout does, and
+- **Every line of a checkout's check names its repository:** the heading of its change, each step's line
+  as the step ends, printed as it ends, what failed under a failing step, the line a running step says every
+  minute, and its own log's line, each opening with the name of the repository its declaration gives. The
+  set's own lines name none: where its turn stands, the last lines below, and what the placement says.
+  Each checkout writes its own log as the check of one checkout does, and
   the set writes one log holding every checkout's log in turn, under the data root's `testbed/` named for
   the set unless `--log` names another.
 - **The last lines name what failed:** a line for each repository with a failed step, naming the

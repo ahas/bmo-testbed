@@ -176,6 +176,7 @@ pub struct CheckWords {
   pub no_turn: String,
   pub standing: String,
   pub set_line: String,
+  pub set_turn: String,
   pub set_logged: String,
   pub set_failed: String,
   pub set_steps_joiner: String,

@@ -291,8 +291,9 @@ bmo-testbed check dashes <file…> [--write]
 - **`--checkout`**, given once or more, is the change check over several checkouts (`docs/checks.md`,
   「The change check over several checkouts」): each checkout read from the directory the verb runs in, its
   since after an `@` where given, each planned by its own declaration and the set run in one wide seat, every
-  line opening with its repository's name and the last lines naming each failed repository and its failed
-  steps. It is never given with `--since` or files. It exits 1 where any step failed or the placement
+  line of a checkout's check, its minute line among them, opening with its repository's name and the last
+  lines naming each failed repository and its failed steps; a since that is not an ancestor of its checkout's
+  `HEAD` is refused, exit 2. It is never given with `--since` or files. It exits 1 where any step failed or the placement
   refuses the set, 2 where a checkout does not read, and 75 where the set was not run. Started outside a
   held turn, a deployment's or a whole run's unit and a placed machine, it goes where the placed machine's
   `combined_order` sends it (「Placement」) and runs there as that testbed's change check over the same

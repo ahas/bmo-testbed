@@ -135,6 +135,11 @@ fn read_checkouts(words: &[String], base: &Path) -> Result<Vec<(Repository, Stri
       return Err(fill_marks(&said.no_commit, &[("word", word), ("since", &named)]));
     };
 
+    // A placed bench holds the history of the checkout's HEAD alone, so a since off it could never be read there.
+    if git_lines(&repo.root, &["merge-base", "--is-ancestor", &commit, "HEAD"]).is_err() {
+      return Err(fill_marks(&said.not_ancestor, &[("word", word), ("since", &named)]));
+    }
+
     read.push((repo, commit));
   }
 
@@ -273,19 +278,30 @@ fn set_here(read: Vec<(Repository, String)>, log: Option<PathBuf>, json: bool, e
     return NOT_RUN_EXIT_CODE;
   }
 
-  // Every step runs inside the set's one turn.
+  eprintln!(
+    "{}",
+    fill_shown(&SUITE.check.set_turn, &[("count", &members.len()), ("words", &turn.words())])
+  );
+
+  // Every step runs inside the set's one turn, and says it still runs under its repository's name.
   let held: Vec<(String, String)> =
     turn.held_variable().map(|(name, value)| (name.to_owned(), value)).into_iter().collect();
   let every = Duration::from_secs(SUITE.numbers.check_standing_seconds);
+  let names: Vec<(PathBuf, String)> =
+    members.iter().map(|member| (member.repo.root.clone(), member.repo.name())).collect();
   let checked = run_set(
     &members,
     &log,
     env,
     &|root, step| {
       let mut step = step.clone();
+      let repository = names.iter().find(|(known, _)| known == root).map_or("", |(_, name)| name.as_str());
+      let standing = |line: &str| {
+        eprintln!("{}", fill_shown(&SUITE.check.set_line, &[("repository", &repository), ("line", &line)]));
+      };
 
       step.step.env.extend(held.iter().cloned());
-      run_standing(&step, every, &|line| eprintln!("{line}"), || run_step(root, &step))
+      run_standing(&step, every, &standing, || run_step(root, &step))
     },
     &|repo| {
       Box::new(Recorded {

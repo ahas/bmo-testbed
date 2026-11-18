@@ -172,6 +172,7 @@ fn a_set_plans_each_checkout_by_its_own_declaration_and_since_and_names_what_fai
   let lines: Vec<&str> = done.out.lines().collect();
 
   assert_eq!(done.code, 1, "{}\n{}", done.out, done.err);
+  assert!(done.err.contains("check: 2 checkout(s) in one wide seat: "), "{}", done.err);
   assert!(lines.contains(&&*format!("alpha: check: 2 path(s) changed (since {alpha_base}); 0 test file(s), 0 crate(s) tested, 0 checked, 0 project check(s), 0 tool check(s)")), "{}", done.out);
   assert!(lines.contains(&&*format!("beta: check: 1 path(s) changed (since {beta_since}); 0 test file(s), 0 crate(s) tested, 0 checked, 0 project check(s), 0 tool check(s)")), "{}", done.out);
   assert_ne!(beta_since, beta_base);
@@ -205,8 +206,8 @@ fn a_set_plans_each_checkout_by_its_own_declaration_and_since_and_names_what_fai
   assert_eq!(of("beta").state, TestRunState::Failed);
 }
 
-// "a path naming no checkout, two words naming one checkout and a since naming no commit end the call 2 before
-// anything runs, and --checkout is never given with --since or files"
+// "a path naming no checkout, two words naming one checkout, a since naming no commit and a since off HEAD's
+// history end the call 2 before anything runs, and --checkout is never given with --since or files"
 #[test]
 fn a_checkout_that_does_not_read_refuses_the_set_before_anything_runs() {
   let dir = tempfile::tempdir().unwrap();
@@ -215,6 +216,9 @@ fn a_checkout_that_does_not_read_refuses_the_set_before_anything_runs() {
 
   checkout(&repo, "testbed = 0\n");
   std::fs::create_dir_all(dir.join("plain")).unwrap();
+  git(&repo, &["switch", "-q", "-c", "side"]);
+  git(&repo, &["commit", "-q", "--allow-empty", "-m", "off main"]);
+  git(&repo, &["switch", "-q", "main"]);
 
   for (given, said) in [
     (
@@ -228,6 +232,10 @@ fn a_checkout_that_does_not_read_refuses_the_set_before_anything_runs() {
     (
       &["check", "--checkout", ".@no-such-commit"],
       ".@no-such-commit: no-such-commit names no commit",
+    ),
+    (
+      &["check", "--checkout", ".@side"],
+      ".@side: side is not an ancestor of the checkout's HEAD",
     ),
     (&["check", "--checkout", ".", "--since", "HEAD"], ""),
     (&["check", "--checkout", ".", "a.ts"], ""),
