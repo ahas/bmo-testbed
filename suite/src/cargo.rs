@@ -99,6 +99,8 @@ fn clippy_wrapper(root: &Path, cargo_home: &str) -> PathBuf {
 /// there by Cargo.
 pub fn cargo_invocation(root: &Path, args: &[String]) -> CargoInvocation {
   let mut env = cargo_environment(root);
+
+  env.extend(build_cache(&process_env(), sccache_on_path().as_deref()));
   let cargo_home = env
     .iter()
     .find(|(name, _)| name == "CARGO_HOME")
@@ -130,6 +132,45 @@ pub fn cargo_invocation(root: &Path, args: &[String]) -> CargoInvocation {
       .collect(),
     env,
   }
+}
+
+/// Cargo's variables that set incremental state for the development and the test profile, over what a
+/// manifest's profiles say. The one variable that sets it for every profile is left alone: the compile cache
+/// refuses to run under it.
+pub const INCREMENTAL_VARIABLES: [&str; 2] =
+  ["CARGO_PROFILE_DEV_INCREMENTAL", "CARGO_PROFILE_TEST_INCREMENTAL"];
+
+/// Cargo's variable naming the program every compiler call goes through.
+pub const WRAPPER_VARIABLE: &str = "RUSTC_WRAPPER";
+
+const CACHE_PROGRAM: &str = "sccache";
+
+/// What a build is given so that it compiles as little as it must, as the Cargo Book states both: the
+/// incremental state Cargo keeps by default in the development and test profiles, set over the manifest's own
+/// word, and the compile cache its 「Shared cache」 names, where the machine has it at `cache`, so that a
+/// dependency compiled in one checkout is not compiled again in another. The release profile is left as the
+/// manifest states it, and a caller's own setting of a variable is kept.
+pub fn build_cache(env: &Env, cache: Option<&Path>) -> Vec<(String, String)> {
+  let mut set: Vec<(String, String)> = INCREMENTAL_VARIABLES
+    .iter()
+    .filter(|name| !env.contains_key(**name))
+    .map(|name| ((*name).to_owned(), "true".to_owned()))
+    .collect();
+
+  if let Some(cache) = cache.filter(|_| !env.contains_key(WRAPPER_VARIABLE)) {
+    set.push((WRAPPER_VARIABLE.to_owned(), cache.to_string_lossy().into_owned()));
+  }
+
+  set
+}
+
+// The compile cache's program, where the search path holds one.
+fn sccache_on_path() -> Option<PathBuf> {
+  let path = std::env::var_os("PATH")?;
+
+  std::env::split_paths(&path)
+    .map(|dir| dir.join(CACHE_PROGRAM))
+    .find(|candidate| candidate.is_file())
 }
 
 /// The lock of the checkout's workspace with its path packages brought to their manifests, held so for as long

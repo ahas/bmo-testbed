@@ -189,7 +189,9 @@
   `[profile.dev.package."*"]` and `[profile.test.package."*"]` with `debug = false`, and
   `[profile.release]` with `debug = false` and `strip = "debuginfo"`. A setting left out or set otherwise
   is named with what it should be; a repository with no root `Cargo.toml` has nothing to hold. Setting
-  them is each repository's own change.
+  them is each repository's own change. The profiles state what a build typed outside
+  the verb keeps; the Cargo verb turns incremental state on over them for the development and test profiles
+  (`docs/deploy.md`, 「The Cargo build directory」).
 - **`shared-versions`:** the repository's Cargo manifests and lock, and the packages its package manifests
   vendor, hold to the shared versions, as bmo-chat's `docs/conventions.md`, 「Shared versions」, states the
   rule. It reads files alone and runs no Cargo and no package manager.

@@ -63,3 +63,34 @@ fn a_command_compiles_past_a_toolchain_and_the_options_before_it_and_a_reading_v
   assert!(!compiles(&words(&["metadata", "--no-deps"])));
   assert!(!compiles(&[]));
 }
+
+// "the Cargo verb sets CARGO_PROFILE_DEV_INCREMENTAL and CARGO_PROFILE_TEST_INCREMENTAL to true ..., unless its
+// caller already names them", and "the verb names it as RUSTC_WRAPPER ... a caller that names RUSTC_WRAPPER
+// keeps its own, and a machine without the program builds as it always did".
+#[test]
+fn a_build_keeps_incremental_state_in_its_development_profiles_and_goes_through_the_machine_s_compile_cache()
+ {
+  use bmo_testbed_suite::cargo::{INCREMENTAL_VARIABLES, WRAPPER_VARIABLE, build_cache};
+
+  let set = |name: &str, value: &str| (name.to_owned(), value.to_owned());
+  let none = std::collections::HashMap::new();
+  let cache = std::path::Path::new("/opt/tools/sccache");
+  let incremental = INCREMENTAL_VARIABLES.map(|name| set(name, "true"));
+
+  assert_eq!(build_cache(&none, None), incremental);
+  assert_eq!(
+    build_cache(&none, Some(cache)),
+    [
+      incremental[0].clone(),
+      incremental[1].clone(),
+      set(WRAPPER_VARIABLE, "/opt/tools/sccache")
+    ]
+  );
+
+  let own: std::collections::HashMap<String, String> =
+    [set(INCREMENTAL_VARIABLES[0], "false"), set(WRAPPER_VARIABLE, "other")]
+      .into_iter()
+      .collect();
+
+  assert_eq!(build_cache(&own, Some(cache)), [incremental[1].clone()]);
+}

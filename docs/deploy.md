@@ -834,6 +834,21 @@ flowchart TD
   Cargo holds one lock over a build directory for the whole of a build, so a directory of its own is
   what lets the checkouts' builds run side by side, each in its own seat. Each checkout compiles its
   dependencies once in its own directory, and builds after its first keep them.
+- **A development or test build keeps incremental state,** as Cargo's own default for those profiles
+  does. The Cargo verb sets `CARGO_PROFILE_DEV_INCREMENTAL` and `CARGO_PROFILE_TEST_INCREMENTAL` to `true`,
+  over the profiles' own `incremental = false`, unless its caller already names them. A checkout is built
+  again after each small change, a deployment's bench after each commit, and with the state kept the crate
+  that changed is compiled in a fraction of the time. The state stands in the checkout's directory, one
+  session a crate, and the prune takes it back from a working checkout once it has stood unchanged for its
+  span. The release profile stays as the manifest states it, and the one variable that sets incremental
+  state for every profile is never set, since the compile cache refuses to run under it.
+- **A dependency compiled in one checkout is not compiled again in another** where the machine has the
+  compile cache the Cargo Book names for sharing built dependencies between workspaces, `sccache`, on its
+  search path: the verb names it as `RUSTC_WRAPPER`. The cache keeps what is compiled without incremental
+  state, which is every dependency from a registry, and passes the workspace's own crates through. A
+  caller that names `RUSTC_WRAPPER` keeps its own, and a machine without the program builds as it always
+  did. The cache is the program's own, in its own directory and under its own size limit; each checkout's
+  directory still holds the units its builds stand on.
 - **Every build goes through the Cargo verb,** which sets the build directory for whatever checkout it
   runs in, a scratch clone as much as a repository of the umbrella. A build typed outside the verb,
   plain `cargo`, lands in the checkout's own `target/` and shares nothing; such a `target/` is a
