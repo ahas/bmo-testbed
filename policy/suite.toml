@@ -254,4 +254,8 @@ path_aligned = "cargo: {lock}: path packages brought to their manifests: {moves}
 path_moved = "{name} {from} -> {to}"
 # The version of a path package not in the lock on that side.
 path_absent = "none"
+# A toolchain a Cargo command names that holds no component the command runs: {toolchain} the toolchain,
+# {component} the component, and {code} the exit of the install that did not take.
+installing = "cargo: toolchain {toolchain} holds no {component} on this machine; installing it"
+not_installed = "cargo: installing {component} of toolchain {toolchain} ended with exit {code}"
 # The test server's stand lock not had: {dir} the server's folder, {seconds} how long it was waited for.

@@ -178,18 +178,19 @@ unreachable_event = "the placed machine {machine} does not answer, so runs place
 # The placed machine answering again after an outage that was told, {since} when the outage began.
 recovered_event = "the placed machine {machine} answers again, after an outage since {since}"
 release_failed_event = "the testbed on the placed machine {machine} could not be brought to the live release {live}, so a run placed there did not run"
-# A run kept here because its environment sets {variable}, a variable its declaration names as reaching what only
-# this machine reaches.
-kept = "testbed: {variable} names what only this machine reaches; running here"
+# A run kept here by {named}: a variable its declaration names as reaching what only this machine reaches, set
+# in its environment, or a file its declaration names so, which its checkout holds.
+kept = "testbed: {named} names what only this machine reaches; running here"
 # A run kept here because it was started in {dir}, a folder its checkout ignores, which a bench copy would not
 # hold (docs/boundary.md, 「Placement」).
 ignored_dir = "testbed: {dir} is ignored in its checkout, so a bench copy would not hold it; running here"
 # A change check over several checkouts refused by a placement that cannot run it on the placed machine
 # (docs/boundary.md, 「Placement」): one carrying one checkout, one naming no placed machine, and one kept here by
-# {variable} while the placed machine's combined_order does not name this machine.
+# {named}, a variable or a file as `kept` says, while the placed machine's combined_order does not name this
+# machine.
 set_one_checkout = "testbed: this placement carries one checkout, so a change check over several checkouts does not run; it runs on a placed machine alone"
 set_no_machine = "testbed: the settings name no placed machine, so a change check over several checkouts does not run; it runs on a placed machine alone"
-set_kept = "testbed: {variable} names what only this machine reaches, and the placed machine's combined_order does not name this machine, so a change check over several checkouts does not run"
+set_kept = "testbed: {named} names what only this machine reaches, and the placed machine's combined_order does not name this machine, so a change check over several checkouts does not run"
 # The line a testbed run on a placed machine writes on standard error each time a turn it takes comes there; the
 # machine that placed it reads it off the run's output, takes the run for running there, and does not pass it on
 # (docs/boundary.md, 「A run placed elsewhere stands here too」). Both machines run one release, so they read it

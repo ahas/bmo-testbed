@@ -123,9 +123,15 @@ impl OwnPackages {
 }
 
 /// The formatting of the repository's own packages, through the Cargo verb, which runs it at once since it
-/// compiles nothing. No path dependency is followed, so a sibling repository's files are never read.
-pub fn cargo_format(own: &OwnPackages) -> CheckStep {
-  let args: Vec<String> = ["fmt", "--check"].into_iter().map(str::to_owned).chain(own.args(&[])).collect();
+/// compiles nothing, on the toolchain the declaration names for it where it names one. No path dependency is
+/// followed, so a sibling repository's files are never read.
+pub fn cargo_format(own: &OwnPackages, toolchain: Option<&str>) -> CheckStep {
+  let args: Vec<String> = toolchain
+    .map(|name| format!("+{name}"))
+    .into_iter()
+    .chain(["fmt", "--check"].into_iter().map(str::to_owned))
+    .chain(own.args(&[]))
+    .collect();
 
   CheckStep::own(DeployStep::CargoFormat, cargo_verb_line(&args))
 }
@@ -257,7 +263,9 @@ pub fn static_steps(repo: &Repository, changed: Option<&[String]>) -> Vec<CheckS
   let mut steps = own_steps(repo, changed, own.is_some());
 
   if let Some(own) = own {
-    steps.extend([cargo_format(&own), cargo_lint(&own)]);
+    let toolchain = repo.declaration.check.format_toolchain.as_deref();
+
+    steps.extend([cargo_format(&own, toolchain), cargo_lint(&own)]);
   }
 
   steps

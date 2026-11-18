@@ -77,9 +77,11 @@ impl Placement for Local {
 }
 
 /// The placement of a run that reads what only this machine reaches: a variable its checkout's declaration
-/// names, set in its environment. Asked, it says which variable keeps the run here, and keeps it here.
+/// names, set in its environment, or a file it names, which the checkout holds. Asked, it says which variable or
+/// file keeps the run here, and keeps it here.
 pub struct KeptHere {
-  pub variable: String,
+  /// The variable or the file, as the declaration names it.
+  pub named: String,
   /// Whether a change check over several checkouts may stay here too: the placed machine's `combined_order`
   /// names this machine.
   pub set_here: bool,
@@ -93,26 +95,35 @@ impl KeptHere {
       .iter()
       .find(|name| env.get(*name).is_some_and(|value| !value.is_empty()))
       .map(|variable| Self {
-        variable: variable.clone(),
+        named: variable.clone(),
         set_here: false,
       })
+  }
+
+  /// The placement of a run whose checkout holds one of the files named, each found where `resolved` puts it,
+  /// the first of them it holds, a link to a file counting as the file; none where it holds none.
+  pub fn holding(files: &[PathBuf], resolved: impl Fn(&Path) -> PathBuf) -> Option<Self> {
+    files.iter().find(|file| resolved(file).is_file()).map(|file| Self {
+      named: file.to_string_lossy().into_owned(),
+      set_here: false,
+    })
   }
 }
 
 impl Placement for KeptHere {
   fn place(&self, _: &PlaceAsk<'_>) -> Option<u8> {
-    eprintln!("{}", fill_marks(&LANES.placed.kept, &[("variable", &self.variable)]));
+    eprintln!("{}", fill_marks(&LANES.placed.kept, &[("named", &self.named)]));
     None
   }
 
   /// The set stays here only where the placed machine's `combined_order` names this machine; otherwise it is
-  /// refused, naming the variable that would keep it here.
+  /// refused, naming the variable or the file that would keep it here.
   fn place_set(&self, ask: &SetAsk<'_>) -> Option<u8> {
     if self.set_here {
       return self.place(&ask.run);
     }
 
-    eprintln!("{}", fill_marks(&LANES.placed.set_kept, &[("variable", &self.variable)]));
+    eprintln!("{}", fill_marks(&LANES.placed.set_kept, &[("named", &self.named)]));
     Some(SET_REFUSED_EXIT_CODE)
   }
 }

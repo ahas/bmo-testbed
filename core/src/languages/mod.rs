@@ -14,7 +14,9 @@ mod node;
 
 pub use browser::Browser;
 pub use bun::Bun;
-pub use cargo::{Cargo, compiles as cargo_compiles, placeable as cargo_placeable};
+pub use cargo::{
+  Cargo, compiles as cargo_compiles, named_component as cargo_named_component, placeable as cargo_placeable,
+};
 pub use node::Node;
 
 /// What a run's output adds up to.

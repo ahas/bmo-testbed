@@ -311,6 +311,9 @@ pub struct Check {
   pub shared_versions: Option<SharedVersions>,
   #[serde(default = "Check::main")]
   pub main: String,
+  /// The Rust toolchain, as rustup names it, the Cargo workspace's formatting runs on; none runs it on the
+  /// account's default one.
+  pub format_toolchain: Option<String>,
   /// `[[check.step]]`, in order.
   #[serde(rename = "step", default)]
   pub steps: Vec<CheckStep>,
@@ -532,6 +535,10 @@ pub struct Runner {
   /// The variables naming what only the machine a run starts on reaches; one set keeps the run there.
   #[serde(default)]
   pub local_variables: Vec<String>,
+  /// The files, from the root, that the checkout holds apart from git and that name what only the machine a
+  /// run starts on reaches; one the checkout holds keeps the run there.
+  #[serde(default)]
+  pub local_files: Vec<PathBuf>,
 }
 
 /// `[events]`: where events go.
@@ -641,6 +648,12 @@ impl Declaration {
 
     if self.test.test_timeout_seconds == Some(0) {
       return Some(("test.test_timeout_seconds", why.no_test_limit.clone()));
+    }
+
+    if let Some(toolchain) = &self.check.format_toolchain
+      && (toolchain.is_empty() || toolchain.contains(char::is_whitespace) || toolchain.starts_with('+'))
+    {
+      return Some(("check.format_toolchain", fill_marks(&why.bad_toolchain, &[("name", toolchain)])));
     }
 
     for quick in &self.check.quick {

@@ -5,8 +5,8 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use bmo_testbed_core::languages::{
-  Browser, Bun, Cargo, LANGUAGES, Language, Node, PLAIN, Tally, TestProgress, cargo_placeable,
-  failures_of_log, language_for, program_words, run_folder, tally_of_log,
+  Browser, Bun, Cargo, LANGUAGES, Language, Node, PLAIN, Tally, TestProgress, cargo_named_component,
+  cargo_placeable, failures_of_log, language_for, program_words, run_folder, tally_of_log,
 };
 use bmo_testbed_core::policy::lanes::LANES;
 
@@ -176,6 +176,20 @@ fn cargo_claims_what_compiles_and_nothing_that_only_reads() {
   assert!(!claims(&Cargo, "cargo", &["fmt", "--check"]));
   assert!(!claims(&Cargo, "cargo", &["metadata"]));
   assert!(!claims(&Cargo, "cargo", &["run"]));
+}
+
+// "the toolchain a Cargo command names with its leading `+`, and the component of that toolchain its subcommand
+// runs that a toolchain may be installed without: formatting's rustfmt"
+#[test]
+fn cargo_names_the_component_a_command_on_a_named_toolchain_runs() {
+  let named = |args: &[&str]| {
+    cargo_named_component(&words(args)).map(|(toolchain, component)| (toolchain.to_owned(), component))
+  };
+
+  assert_eq!(named(&["+nightly", "fmt", "--check"]), Some(("nightly".to_owned(), "rustfmt")));
+  assert_eq!(named(&["fmt", "--check"]), None);
+  assert_eq!(named(&["+nightly", "test"]), None);
+  assert_eq!(named(&["+", "fmt"]), None);
 }
 
 // "it reads Rust's test harness saying a test has been running for over a number of seconds, and a test's

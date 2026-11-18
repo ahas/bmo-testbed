@@ -49,13 +49,13 @@ use crate::words::{
 };
 
 /// The placement a run started in a directory asks: kept here where its environment sets a variable the
-/// directory's declaration names as this machine's, else the endpoint the environment names, the placed machine
-/// the settings name, the endpoint the declaration names, or the local one. A declaration that does not read
-/// names nothing.
+/// directory's declaration names as this machine's or its checkout holds a file the declaration names so, else
+/// the endpoint the environment names, the placed machine the settings name, the endpoint the declaration
+/// names, or the local one. A declaration that does not read names nothing.
 pub fn placement_of(env: &Env, dir: &Path) -> Box<dyn Placement> {
-  let runner = Repository::read(dir).map(|repo| repo.declaration.runner).unwrap_or_default();
+  let repo = Repository::read(dir).ok();
 
-  if let Some(kept) = KeptHere::of(env, &runner.local_variables) {
+  if let Some(kept) = kept_here(env, repo.as_ref()) {
     return Box::new(kept);
   }
 
@@ -69,26 +69,34 @@ pub fn placement_of(env: &Env, dir: &Path) -> Box<dyn Placement> {
     return Box::new(machine);
   }
 
-  match runner.placement {
+  match repo.and_then(|repo| repo.declaration.runner.placement) {
     Some(endpoint) => Box::new(HttpPlacement { endpoint }),
     None => Box::new(Local),
   }
 }
 
-/// The placement of a change check over several checkouts (docs/boundary.md, 「Placement」), chosen as one run's
-/// is: kept here where the environment sets a variable any of the checkouts' declarations names, and then allowed
-/// to stay only where the placed machine's `combined_order` names this machine; else the endpoint the environment
-/// names, the placed machine the settings name, the endpoint the first checkout's declaration names, or the local
-/// one, each answering for the set itself.
-pub fn set_placement_of(env: &Env, checkouts: &[PathBuf]) -> Box<dyn Placement> {
-  let runners: Vec<_> = checkouts
-    .iter()
-    .map(|checkout| Repository::read(checkout).map(|repo| repo.declaration.runner).unwrap_or_default())
-    .collect();
-  let variables: Vec<String> =
-    runners.iter().flat_map(|runner| runner.local_variables.iter().cloned()).collect();
+// What keeps a run of the repository here: a variable its declaration names as this machine's, set in the
+// environment, else a file it names so, which its checkout holds. A declaration that does not read names
+// nothing.
+fn kept_here(env: &Env, repo: Option<&Repository>) -> Option<KeptHere> {
+  let repo = repo?;
+  let runner = &repo.declaration.runner;
 
-  if let Some(kept) = KeptHere::of(env, &variables) {
+  KeptHere::of(env, &runner.local_variables)
+    .or_else(|| KeptHere::holding(&runner.local_files, |file| repo.path(file, env)))
+}
+
+/// The placement of a change check over several checkouts (docs/boundary.md, 「Placement」), chosen as one run's
+/// is: kept here where the environment sets a variable any of the checkouts' declarations names, or a checkout
+/// holds a file its declaration names, and then allowed to stay only where the placed machine's
+/// `combined_order` names this machine; else the endpoint the environment names, the placed machine the
+/// settings name, the endpoint the first checkout's declaration names, or the local one, each answering for
+/// the set itself.
+pub fn set_placement_of(env: &Env, checkouts: &[PathBuf]) -> Box<dyn Placement> {
+  let repos: Vec<Option<Repository>> =
+    checkouts.iter().map(|checkout| Repository::read(checkout).ok()).collect();
+
+  if let Some(kept) = repos.iter().find_map(|repo| kept_here(env, repo.as_ref())) {
     let set_here = MachineSettings::read(&data_root())
       .and_then(Result::ok)
       .and_then(|settings| settings.combined_order().ok())

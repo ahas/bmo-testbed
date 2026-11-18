@@ -58,6 +58,8 @@ needs_data_root = "a deploy root needs its data root"
 half_database = "the migrations and the migrate command are named together or not at all"
 no_silence = "a silence limit is at least one second"
 no_test_limit = "a per-test limit is at least one second"
+# {name} is the toolchain named.
+bad_toolchain = "a format toolchain is one name rustup knows, without a leading +, and \"{name}\" is none"
 # {id} is the id two steps share.
 duplicate_step = "two steps are named {id}"
 # {name} is the crate an exception to the shared versions is for.

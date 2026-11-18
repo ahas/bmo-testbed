@@ -16,8 +16,9 @@
 - **What keys ask of each other is held as the file is read,** and a declaration breaking it is
   refused naming the key: a language or a quick check the testbed has no member for, a quick check
   without the input it reads, an exception to the shared versions naming neither a line nor a version or
-  with no reason, a deploy root without its data root, a test database naming only one of its migrations
-  and its migrate command, a silence limit of no seconds, and two steps of one table under the same id.
+  with no reason, a format toolchain that is not one name, a deploy root without its data root, a test
+  database naming only one of its migrations and its migrate command, a silence limit of no seconds, and
+  two steps of one table under the same id.
   Whether a path exists is asked by the verb that reads it, not here.
 
 ## The top level
@@ -83,6 +84,7 @@ make their own databases names neither, and its tests are handed the server alon
 | `language_ledger` | path | none | The ledger of lines holding letters that are not English allowed per code file; required by `language`. `korean_ledger` names the same key, and a declaration naming both is refused |
 | `base_libraries` | list of strings | `[]` | The dependencies from other repositories the `dependencies` check allows beside registry ones |
 | `upstreams` | list of strings | `[]` | The same upstream repositories as the top level, for a declaration that keeps its dependency words here; both lists are read |
+| `format_toolchain` | string | none | The Rust toolchain, as rustup names it, such as `nightly`, that the Cargo workspace's formatting runs on, for a `rustfmt.toml` whose options only that toolchain's rustfmt knows; none runs it on the account's default toolchain. One name, written without the leading `+` (`docs/checks.md`, 「The static check」) |
 | `main` | string | `main` | The main branch, the default base of a change, and in the repository holding the shared versions the branch the `shared-versions` check reads them from; its head is read as 「The main branch's head」 below says |
 
 ### The main branch's head
@@ -221,6 +223,7 @@ screen declares no such table.
 |---|---|---|---|
 | `placement` | URL | none | The placement endpoint (`docs/boundary.md`, 「Placement」); `BMO_TESTBED_PLACEMENT` overrides it, and none runs every run where it was started |
 | `local_variables` | list of strings | `[]` | The variables this repository's runs read that name what only the machine they start on reaches, such as the address of a server on its loopback; a run whose environment sets one to a value that is not empty is never placed elsewhere |
+| `local_files` | list of paths | `[]` | The files, kept out of git, that this repository's runs read and that name what only the machine they start on reaches, such as a test environment pointing at servers on its loopback; a run started in a checkout holding one, a link to a file counting as the file, is never placed elsewhere |
 
 ## `[events]`: where events go
 

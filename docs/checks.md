@@ -90,6 +90,12 @@
   and runs at once. `--locked` holds the lock's registry and git packages as they stand; its path
   packages, a sibling repository's crates among them, are first brought to the versions their manifests
   name (`docs/deploy.md`, 「The Cargo build directory」), so a sibling's new version never fails it.
+  - **The formatting runs on the toolchain the declaration names for it,** `[check] format_toolchain`
+    (`docs/declaration.md`), as `cargo +<toolchain> fmt --check`, and on the account's default toolchain
+    where it names none. A `rustfmt.toml` using options only a nightly rustfmt knows is read whole by that
+    rustfmt alone: a stable one passes over them with a warning and formats otherwise, so such a repository
+    names a nightly toolchain there. A machine whose rustup lacks the toolchain or its rustfmt is given
+    them first (`docs/testbed.md`, 「Languages」), so every machine a check runs on formats alike.
   - **Both judge the repository's own packages and no other:** the whole workspace where every member
     stands inside the repository's root, and otherwise each member inside it, named. Formatting never
     follows a path dependency, so a sibling repository's crate the workspace names, and the workspace
@@ -287,7 +293,8 @@
   stays with the close.
 - **Its static steps are the static check's,** asked of the same place with the change it reads, so the
   two never check differently (「The static check」): the enabled quick checks, the declared steps the
-  change reaches, and, where the change marks a crate, the Cargo workspace's `cargo fmt --check` and
+  change reaches, and, where the change marks a crate, the Cargo workspace's `cargo fmt --check`, on the
+  toolchain the declaration names for it, and
   `cargo clippy --all-targets --locked` with every warning an error over the repository's own packages,
   through the Cargo verb in the shared build directory.
   - **The lints are its type check:** they check every crate as they lint it, so no `cargo check` runs

@@ -184,7 +184,29 @@ mod which_steps_a_change_owes {
     let steps = check_steps(&space.repo(), Some(&start));
 
     assert_eq!(ids(&steps), [DeployStep::Quick.name(), "types", "cargo format", "cargo lint"]);
-    assert_eq!(steps[2..], [cargo_format(&OwnPackages::Workspace), cargo_lint(&OwnPackages::Workspace)]);
+    assert_eq!(
+      steps[2..],
+      [cargo_format(&OwnPackages::Workspace, None), cargo_lint(&OwnPackages::Workspace)]
+    );
+  }
+
+  // "`format_toolchain`: the Rust toolchain, as rustup names it, the Cargo workspace's formatting runs on"
+  #[test]
+  fn the_workspace_s_formatting_runs_on_the_toolchain_the_declaration_names_for_it() {
+    let space = Space::with(&[
+      ("testbed.toml", "testbed = 0\n\n[check]\nformat_toolchain = \"nightly\"\n"),
+      ("Cargo.toml", "[workspace]\nresolver = \"3\"\nmembers = [\"crates/*\"]\n"),
+      (
+        "crates/alpha/Cargo.toml",
+        "[package]\nname = \"alpha\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+      ),
+      ("crates/alpha/src/lib.rs", "pub fn one() -> u8 { 1 }\n"),
+    ]);
+    let steps = check_steps(&space.repo(), None);
+    let format = cargo_format(&OwnPackages::Workspace, Some("nightly"));
+
+    assert_eq!(format.command[1..], ["cargo", "+nightly", "fmt", "--check"]);
+    assert_eq!(steps, [format, cargo_lint(&OwnPackages::Workspace)]);
   }
 
   // "a run with no range and one that cannot be read owe every step"
@@ -581,7 +603,10 @@ mod the_gate_judges_the_repository_alone {
     let own = OwnPackages::among(&reaching);
 
     assert_eq!(own, OwnPackages::Named(vec!["app".to_owned(), "tool".to_owned()]));
-    assert_eq!(cargo_format(&own).command[1..], ["cargo", "fmt", "--check", "-p", "app", "-p", "tool"]);
+    assert_eq!(
+      cargo_format(&own, None).command[1..],
+      ["cargo", "fmt", "--check", "-p", "app", "-p", "tool"]
+    );
     assert_eq!(
       cargo_lint(&own).command[1..],
       [
@@ -603,8 +628,8 @@ mod the_gate_judges_the_repository_alone {
       ["cargo", "clippy", "--workspace", "--all-targets", "--locked", "--", "-D", "warnings"]
     );
     // The lint step runs in no lane of its own, so it is watched for silence itself; the formatting is not.
-    assert!(cargo_lint(&own).watched && !cargo_format(&own).watched);
-    assert_eq!(cargo_format(&OwnPackages::Workspace).command[1..], ["cargo", "fmt", "--check"]);
+    assert!(cargo_lint(&own).watched && !cargo_format(&own, None).watched);
+    assert_eq!(cargo_format(&OwnPackages::Workspace, None).command[1..], ["cargo", "fmt", "--check"]);
     assert!(!OwnPackages::Named(Vec::new()).any());
   }
 }

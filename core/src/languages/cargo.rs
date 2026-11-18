@@ -28,6 +28,19 @@ fn subcommand(args: &[String]) -> Option<&str> {
     .map(String::as_str)
 }
 
+/// The toolchain a Cargo command names with its leading `+`, and the component of that toolchain its
+/// subcommand runs that a toolchain may be installed without: formatting's rustfmt. None for a command naming
+/// no toolchain or running no such component.
+pub fn named_component(args: &[String]) -> Option<(&str, &'static str)> {
+  let toolchain = args.first()?.strip_prefix('+').filter(|name| !name.is_empty())?;
+  let component = match subcommand(args)? {
+    "fmt" => "rustfmt",
+    _ => return None,
+  };
+
+  Some((toolchain, component))
+}
+
 /// Whether a Cargo command compiles, its subcommand read past a `+toolchain` and the options before it.
 pub fn compiles(args: &[String]) -> bool {
   subcommand(args).is_some_and(|sub| COMPILING.contains(&sub))

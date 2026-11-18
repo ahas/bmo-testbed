@@ -87,6 +87,8 @@ fn a_checkout_with_no_declaration_has_every_default_and_its_directorys_name() {
   assert!(declaration.deploy.gate);
   assert!(declaration.deploy.backup.is_none());
   assert_eq!(declaration.runner.placement, None);
+  assert!(declaration.runner.local_files.is_empty());
+  assert_eq!(declaration.check.format_toolchain, None);
   assert_eq!((declaration.events.hook.clone(), declaration.events.timeout_seconds), (None, None));
 }
 
@@ -169,6 +171,7 @@ language_ledger = "docs/ledger.json"
 base_libraries = ["shared-library"]
 upstreams = ["beside-upstream"]
 main = "trunk"
+format_toolchain = "nightly"
 
 [[check.step]]
 id = "types"
@@ -227,6 +230,7 @@ keep = 2
 
 [runner]
 placement = "http://placement.invalid/place"
+local_files = [".env.local"]
 
 [events]
 hook = "example-events"
@@ -288,6 +292,8 @@ timeout_seconds = 5
   );
   assert_eq!(declaration.deploy.backup.as_ref().unwrap().keep, 2);
   assert_eq!(declaration.runner.placement.as_deref(), Some("http://placement.invalid/place"));
+  assert_eq!(declaration.runner.local_files, [PathBuf::from(".env.local")]);
+  assert_eq!(declaration.check.format_toolchain.as_deref(), Some("nightly"));
   assert_eq!(declaration.events.timeout_seconds, Some(5));
 }
 
@@ -570,4 +576,15 @@ fn a_silence_limit_of_no_seconds_is_refused_naming_the_key() {
 
   assert!(refusal.contains("test.silence_seconds"), "{refusal}");
   assert!(refusal.contains("at least one second"), "{refusal}");
+}
+
+// "a format toolchain that is no single name rustup knows" is refused naming the key
+#[test]
+fn a_format_toolchain_that_is_no_single_name_is_refused_naming_the_key() {
+  for broken in ["", "+nightly", "nightly 2026"] {
+    let refusal = refused(&declared(&format!("[check]\nformat_toolchain = \"{broken}\"\n")));
+
+    assert!(refusal.contains("check.format_toolchain"), "{refusal}");
+    assert!(refusal.contains(&format!("\"{broken}\" is none")), "{refusal}");
+  }
 }

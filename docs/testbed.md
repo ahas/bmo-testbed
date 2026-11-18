@@ -336,6 +336,9 @@ flowchart TD
     machine's line, and a deployment's own heavy work goes to the placed machine by its own rule
     (below);
   - a run started on a placed machine, which is never placed again;
+  - a run started in a checkout holding a file its declaration names as reaching what only this machine
+    reaches, `[runner] local_files`, such as a test environment kept out of git that points at servers
+    on this machine's loopback, since the copy carries no file git ignores and the servers stand here;
   - a run whose environment sets a variable the checkout's declaration names as reaching what only this
     machine reaches, the address of a console standing on this machine's loopback among them, since a
     placed run carries none of the caller's environment;
@@ -466,6 +469,13 @@ flowchart TD
   - for a language that runs package scripts, the command that runs a project's script;
   - for a language whose toolchain a machine installs apart from the repository, the command that says
     which toolchain it is, which the `toolchain` verb runs (`docs/boundary.md`, 「`toolchain`」);
+  - for a language whose commands may name a toolchain of their own, the toolchain a command names and the
+    component of it the command runs that a toolchain may be installed without. Before such a command
+    runs, the machine's toolchain installer is asked whether that component runs on that toolchain, with
+    its own installing on demand held off so the asking changes nothing, and where it does not, the
+    toolchain is installed with its minimal profile and that component alone, said on a line before it
+    and on another where the install fails, the command then left to say why it cannot run. A machine
+    with no installer is left as it stands;
   - for a language of a package workspace, its root configuration, the files at the repository's root
     a change to which reaches every package, and the name of its lockfile, which marks a folder
     carrying it beside a package manifest as a project of its own (`docs/checks.md`, 「Which tests a
@@ -485,7 +495,8 @@ flowchart TD
     named tests by handing them after `--exact`. What failed names each failed test with the lines of its
     own `---- <test> stdout ----` section from the panic, or from the section's first line where nothing
     panicked, to the first blank line or note, at most as many as the policy names, and each compiler error
-    with the place it names;
+    with the place it names. A command names its toolchain with a leading `+`, and `fmt` runs that
+    toolchain's rustfmt;
   - `node`: package scripts that test, check or build under npm, pnpm, yarn or bun; `node --test`;
     Vitest; Jest. Its test files are named `*.test.js`, `*.test.mjs` and `*.test.cjs`, run by
     `node --test`, and it runs a project's script with `npm run`. Its root configuration is

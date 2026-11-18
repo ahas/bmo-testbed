@@ -855,7 +855,7 @@ fn a_service_checkout_s_change_runs_exactly_what_its_own_declaration_and_layout_
     assert_eq!(planned.steps[1].step.covered_by, Some(DeployStep::CargoLint), "{file}");
     assert_eq!(
       planned.steps[2..4].iter().map(|step| step.step.clone()).collect::<Vec<_>>(),
-      [cargo_format(&OwnPackages::Workspace), cargo_lint(&OwnPackages::Workspace)],
+      [cargo_format(&OwnPackages::Workspace, None), cargo_lint(&OwnPackages::Workspace)],
       "{file}"
     );
     assert_eq!(planned.touched.checked_crates, ["service"], "{file}");

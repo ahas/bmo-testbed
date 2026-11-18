@@ -25,6 +25,7 @@ use crate::crates::{
 };
 use crate::own_binary::testbed_line;
 use crate::superseded::{Builds, remove_superseded, reporting_args};
+use crate::toolchain::provide_named_component;
 
 // How `cargo clippy` hands its driver the lint arguments: each one followed by this mark, in one variable the
 // driver reads and Cargo tracks.
@@ -254,6 +255,8 @@ pub fn remove_superseded_after(root: &Path, args: &[String], say: &mut dyn FnMut
 /// own process group, so a terminal's interrupt still reaches it; a hung one is ended with every process
 /// under it.
 pub fn run_cargo(root: &Path, args: &[String]) -> u8 {
+  provide_named_component(args, &mut |line| eprintln!("{line}"));
+
   let invocation = cargo_invocation(root, args);
 
   let compiling = compiles(args);

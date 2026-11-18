@@ -358,6 +358,9 @@ bmo-testbed cargo <cargo arguments…>
   `test`, `check` or `clippy`, it holds no `--no-run` and no word names an absolute path, and it was
   started outside a held turn, a deployment's or a whole run's unit and a placed machine: it then runs as
   the `cargo` verb of the testbed there, and its output and exit code are that run's.
+- Given a toolchain with a leading `+` and a subcommand whose program that toolchain may be installed
+  without, `fmt`'s rustfmt, first gives the toolchain that component where the machine's rustup lacks it
+  (`docs/testbed.md`, 「Languages」), saying so on its standard error.
 
 ### `prune`
 
@@ -581,11 +584,12 @@ verb's own name, and each noun takes what that verb takes.
 - `[test]` with `[test.database]`: the languages, files, fence and setup of the suite, the sibling
   trees its tests read, and the silence limit of every command run for the repository;
 - `[projects]` and `[tools]`: units found by their own files;
-- `[check]` with `[[check.step]]`: the quick checks enabled and their inputs, and the static steps;
+- `[check]` with `[[check.step]]`: the quick checks enabled and their inputs, the toolchain the
+  workspace's formatting runs on, and the static steps;
 - `[build]` with `[[build.step]]`: the release build;
 - `[deploy]` with `[[deploy.step]]`, `[deploy.console]` and `[deploy.backup]`: the deploy tree, data root,
   env links, units, health, declared steps, the console screen the deployment probes and backups;
-- `[runner]`: the placement endpoint and the variables that keep a run here;
+- `[runner]`: the placement endpoint and the variables and files that keep a run here;
 - `[events]`: the event hook.
 
 Units are declared by their files: every unit file the `deploy.units` globs find that carries an
@@ -857,6 +861,10 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   machine's loopback address among them, only this machine reaches. The variables a repository's runs
   read are that repository's to name, so the platform's own addresses every session carries keep
   nothing here.
+- **A run started in a checkout holding a file its declaration names in `[runner] local_files` is never
+  placed,** said on a line naming the file. The copy carries no file git ignores, and what such a file
+  names, a test environment pointing at servers on this machine's loopback among them, only this machine
+  reaches.
 - **A run started in a folder the bench copy leaves out is never placed,** said on a line naming the
   folder: one git names as ignored in its checkout, or one inside such a folder, which the copy
   (「The placed machine」) does not carry, so the bench would not hold the folder the command runs in. A
@@ -884,7 +892,8 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   other placement refuses the set, exit code 1, on a line saying why, and runs nothing: the placement
   endpoint, whose request carries one checkout; a testbed whose settings name no placed machine; and a run
   whose environment sets a variable one of the checkouts' declarations names in `[runner]
-  local_variables`, the line naming the variable, unless the placed machine's `combined_order` names
+  local_variables`, or a checkout holding a file its declaration names in `[runner] local_files`, the line
+  naming the variable or the file, unless the placed machine's `combined_order` names
   `local`, where the set stays here as such a run does.
 - **The set is laid in one bench and run there by one `ssh` command:** every checkout made ready at its own
   place under the bench root, its commit with its open files over it, and every tree any of them reads by a

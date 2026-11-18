@@ -1736,7 +1736,30 @@ fn a_run_setting_a_variable_its_declaration_names_as_this_machines_stays_here() 
       .env("HOME", &dir)
       .env("CONSOLE_URL", "http://127.0.0.1:1"),
   );
-  let kept = fill_marks(&LANES.placed.kept, &[("variable", "CONSOLE_URL")]);
+  let kept = fill_marks(&LANES.placed.kept, &[("named", "CONSOLE_URL")]);
+
+  assert_eq!(here.code, 6, "{}\n{}", here.out, here.err);
+  assert!(here.err.contains(&kept), "{}", here.err);
+  assert!(!dir.join("bench").exists());
+}
+
+// "a run started in a checkout holding a file its declaration names in `[runner] local_files` is never placed,
+// said on a line naming the file"
+#[test]
+fn a_run_in_a_checkout_holding_a_file_its_declaration_names_as_this_machines_stays_here() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let repo = dir.join("repo");
+  let ssh = dir.join("ssh");
+
+  install(SSH, &ssh);
+  settle(&dir, &ssh, "stand");
+  checkout(&repo, "testbed = 0\n\n[runner]\nlocal_files = [\".env.local\"]\n");
+  std::fs::write(repo.join(".env.local"), "SERVICE_URL=http://127.0.0.1:1\n").unwrap();
+
+  let here =
+    ran(testbed(&repo, &dir, &["run", "--adapter", "plain", "--", "sh", "-c", "exit 6"]).env("HOME", &dir));
+  let kept = fill_marks(&LANES.placed.kept, &[("named", ".env.local")]);
 
   assert_eq!(here.code, 6, "{}\n{}", here.out, here.err);
   assert!(here.err.contains(&kept), "{}", here.err);
@@ -2448,7 +2471,7 @@ fn a_set_is_refused_by_every_placement_that_would_run_it_here() {
 
   assert_eq!(kept.code, 1, "{}\n{}", kept.out, kept.err);
   assert!(
-    kept.err.contains(&fill_marks(&LANES.placed.set_kept, &[("variable", "STAND_LOCAL")])),
+    kept.err.contains(&fill_marks(&LANES.placed.set_kept, &[("named", "STAND_LOCAL")])),
     "{}",
     kept.err
   );
@@ -2463,7 +2486,7 @@ fn a_set_is_refused_by_every_placement_that_would_run_it_here() {
 
   assert_eq!(here.code, 0, "{}\n{}", here.out, here.err);
   assert!(
-    here.err.contains(&fill_marks(&LANES.placed.kept, &[("variable", "STAND_LOCAL")])),
+    here.err.contains(&fill_marks(&LANES.placed.kept, &[("named", "STAND_LOCAL")])),
     "{}",
     here.err
   );

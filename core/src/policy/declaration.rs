@@ -77,6 +77,7 @@ pub struct WhyWords {
   pub half_database: String,
   pub no_silence: String,
   pub no_test_limit: String,
+  pub bad_toolchain: String,
   pub duplicate_step: String,
   pub no_reason: String,
   pub empty_exception: String,
