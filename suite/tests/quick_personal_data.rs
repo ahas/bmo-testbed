@@ -55,6 +55,8 @@ fn a_documentation_address_a_role_s_home_and_a_public_or_loopback_address_stand(
     joined(&["refuses ", "fc", "00", "::", "/7"]),
     joined(&["key ", "gh", "p_", &"a1".repeat(12)]),
     joined(&["Authorization: ", "Bearer ", &"a1".repeat(12)]),
+    joined(&["patches/some-package", "@", "2", ".", "10", ".4.patch"]),
+    joined(&["some-package==", "10", ".4.0.35"]),
   ];
 
   for line in standing {

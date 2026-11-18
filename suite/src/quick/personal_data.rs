@@ -85,6 +85,24 @@ fn is_unit_name(words: &PersonalDataWords, found: &str) -> bool {
   words.unit_suffixes.iter().any(|suffix| found.ends_with(suffix.as_str()))
 }
 
+// Whether a mail-shaped match is a package named with its version, as a manifest and a lock write one: what
+// follows the sign opens with two numbers and a point between them, which no domain does.
+fn is_versioned_name(found: &str) -> bool {
+  let Some((_, after)) = found.rsplit_once('@') else { return false };
+  let mut parts = after.split('.');
+  let numeric = |part: Option<&str>| {
+    part.is_some_and(|part| !part.is_empty() && part.bytes().all(|one| one.is_ascii_digit()))
+  };
+
+  numeric(parts.next()) && numeric(parts.next())
+}
+
+// Whether an address-shaped match is a version written after an equals sign, as a pinned requirement writes
+// one.
+fn is_pinned_version(line: &str, found: &regex::Match<'_>) -> bool {
+  line[..found.start()].ends_with('=')
+}
+
 // Whether a match stands inside a longer number, as the digits of a fraction do: a digit or a point touches
 // it on either side.
 fn is_part_of_a_number(line: &str, found: &regex::Match<'_>) -> bool {
@@ -147,7 +165,7 @@ fn kept(
   }
 
   if kind == words.mail_kind {
-    !is_documentation_address(words, found) && !is_unit_name(words, found)
+    !is_documentation_address(words, found) && !is_unit_name(words, found) && !is_versioned_name(found)
   } else if kind == words.telephone_kind {
     !is_part_of_a_number(line, at)
   } else if kind == words.token_kind {
@@ -161,7 +179,7 @@ fn kept(
   } else if kind == words.home_kind {
     !is_neutral_home(words, found) && !is_inside_a_path(line, at)
   } else if kind == words.network_kind {
-    is_private_address(found) && !is_reserved_block(words, line, at)
+    is_private_address(found) && !is_reserved_block(words, line, at) && !is_pinned_version(line, at)
   } else {
     true
   }

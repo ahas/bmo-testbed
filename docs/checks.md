@@ -197,8 +197,9 @@
   number, a token and a private network address. A finding names the file, the line and the kind, never
   the value.
   - **What stands:** a mail address in the space kept for documents (`example.com`, `.test` and their
-    kin); a unit of the service manager written as a template and its instance, which has a mailbox's
-    shape; a home path whose folder names a role, such as `user`; digits that stand inside a longer number,
+    kin); a unit of the service manager written as a template and its instance, and a package named
+    with its version, which both have a mailbox's shape; a version pinned after an equals sign, which has
+    an address's; a home path whose folder names a role, such as `user`; digits that stand inside a longer number,
     as a fraction's do, and have a telephone number's shape; a folder named `home` or `Users` under
     another folder, which is no account's home; a token written all in lowercase, which is a
     placeholder somebody typed, a generated secret being mixed case; an address of no private network, the
