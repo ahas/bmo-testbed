@@ -940,6 +940,32 @@ fn a_deployments_bench_lays_each_dependency_at_its_main_head_never_its_working_t
   assert_eq!(std::fs::read_to_string(copied.join("src/lib.rs")).unwrap(), "pub fn half_written(\n");
 }
 
+// "The list of trees is read off Cargo's word from the workspace at the commit deployed, never from a checkout's
+// working tree": a checkout left behind the deployed commit, which adds a path dependency, still has that
+// dependency laid beside the deployment's bench.
+#[test]
+fn a_deployments_bench_lays_the_dependency_its_commit_adds_where_the_checkout_stands_behind() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let base = dir.join("base");
+  let consumer = dir.join("consumer");
+
+  package_checkout(&base, "base", None);
+  package_checkout(&consumer, "consumer", None);
+  package_on(&consumer, "consumer", Some("../base"));
+
+  let deployed = git(&consumer, &["rev-parse", "HEAD"]);
+
+  git(&consumer, &["checkout", "-q", "--detach", "HEAD~1"]);
+
+  let machine = released(&dir, None, None);
+  let bench = machine.ready(&consumer, &deployed, BenchFor::Deployment("consumer")).unwrap();
+  let laid = dir.join("deploy-bench/consumer/base");
+
+  assert!(bench.checkouts.contains(&laid.to_string_lossy().into_owned()), "{:?}", bench.checkouts);
+  assert_eq!(git(&laid, &["rev-parse", "HEAD"]), git(&base, &["rev-parse", "main"]));
+}
+
 // "Each repository's deployments keep one bench there, at one path, whichever of the repository's checkouts a
 // deployment is taken from"; "A bench another checkout of the repository left there goes ... The trees laid
 // beside the bench are other repositories', whose roots differ, and stay."

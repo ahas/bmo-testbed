@@ -23,7 +23,7 @@ use bmo_testbed_core::silence::{Heard, Silence, pass_on};
 use bmo_testbed_core::turn::{
   FRONT_VARIABLE, Lane, NEXT_VARIABLE, NOT_RUN_EXIT_CODE, process_env, stands_at_front, stands_next,
 };
-use bmo_testbed_deploy::expansion::committed_tree;
+use bmo_testbed_deploy::expansion::{committed_tree, outside_roots, outside_roots_at};
 use bmo_testbed_suite::crates::checkout_target_name;
 use bmo_testbed_suite::quick::shared_versions::{main_shared_text, shared_checkout};
 use futures_util::StreamExt as _;
@@ -1070,7 +1070,16 @@ impl MachinePlacement {
     benches: &[String],
   ) -> Result<ReadyBench, String> {
     let remote = reachable_remote(checkout);
-    let mut trees = bmo_testbed_deploy::expansion::outside_roots(checkout, checkout)?;
+    // A deployment's bench lays the trees its commit's workspace names, never the checkout's working tree's
+    // (docs/deploy.md, 「The releases」); a run's lays what the checkout names as it stands.
+    let mut trees = match purpose {
+      BenchFor::Deployment(_) => {
+        let git = |line: &[String], cwd: &Path| bmo_testbed_deploy::run::run_quiet(line, Some(cwd));
+
+        outside_roots_at(checkout, checkout, commit, &self.data_root, &git)?
+      }
+      BenchFor::Run => outside_roots(checkout, checkout)?,
+    };
     // The shared versions' file as the shared checkout's main holds it, laid over that checkout's copy, since
     // the copy is its working tree and the run there reads the copy as it stands.
     let mut laid = Vec::new();

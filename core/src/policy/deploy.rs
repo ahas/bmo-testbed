@@ -213,6 +213,8 @@ pub struct ExpansionWords {
   pub not_placed: String,
   pub source_unread: String,
   pub not_discarded: String,
+  pub reading_not_made: String,
+  pub reading_not_removed: String,
   pub not_emptied: String,
   pub failed: String,
   pub no_addresses: String,

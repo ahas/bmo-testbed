@@ -87,11 +87,20 @@
   workspace share one. A tree that is a member of another Cargo workspace — one Cargo, asked from the
   checkout's copy of it, places under a workspace root above it — reads its inherited fields from
   that root, so the link is laid at the root instead, and the named path resolves through it; every
-  tree named inside one workspace shares that one link. A standalone package is linked by itself. The
-  list of trees, and where each one's link goes, is read from the primary checkout's workspace and the
-  trees beside it, since a worktree reads no manifest until the trees its manifests name stand where they
-  point; what a link reaches is the committed tree alone. Where a link is to be laid, a link already on its committed
-  tree is left as it is, a link pointing elsewhere, onto a checkout's working tree among them, is
+  tree named inside one workspace shares that one link. A standalone package is linked by itself.
+- **The list of trees is read off Cargo's word from the workspace at the commit deployed,** never from a
+  checkout's working tree, which may stand at another commit, behind main among them, and miss a path
+  dependency the commit adds. A worktree reads no manifest until the trees its manifests name stand
+  where they point, so the list is read from a detached worktree of the commit made beside the primary
+  checkout for the reading and taken away once it is read, named after the checkout's folder and the
+  commit behind a leading dot, a leftover of a reading cut off taken away first: there, the paths the
+  commit's manifests name reach what they reach from the checkout. The reading holds the commit's own
+  files, its submodules left out, since a workspace's members stand in the repository itself, and a
+  commit with no Cargo manifest at its root is read for nothing. The trees those trees name in turn, and where each one's
+  link goes, are read from the trees beside the checkout. A tree that is no worktree of the checkout's
+  repository names no commit of it, and is read from the checkout as it stands. What a link reaches is
+  the committed tree alone. Where a link is to be laid, a link already on its committed tree is left as
+  it is, a link pointing elsewhere, onto a checkout's working tree among them, is
   moved onto it, and a folder holding nothing but folders and links, as an earlier laying leaves, is
   replaced; any other tree standing there is left as it is.
 - **The committed trees stand in `deploy-trees/`,** one detached worktree for each repository holding

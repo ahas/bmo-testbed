@@ -275,6 +275,10 @@ not_placed = "{tree} could not be put at {commit}: {said}"
 # A source whose git directory does not read, which leaves the build tree as it stands.
 source_unread = "{tree} could not be put at {commit}: the checkout {source} it is put from reads as no git repository, so the build tree is left as it stands"
 not_discarded = "the build tree {tree}, made from another checkout, could not be removed: {why}"
+# The detached worktree of a commit a deployment reads its workspace from beside the checkout (docs/deploy.md,
+# 「The releases」): {at} the reading, {commit} the short commit, {checkout} the checkout it stands beside.
+reading_not_made = "the workspace of {commit} could not be read beside {checkout}: {said}"
+reading_not_removed = "the reading of a commit's workspace at {at} could not be taken away: {why}"
 not_emptied = "could not empty {at} for its submodule: {why}"
 # A git step that failed, followed by what it said.
 failed = "{what}: {said}"

@@ -269,6 +269,41 @@ fn a_dependency_inside_the_tree_and_a_tree_with_no_workspace_are_left_alone() {
   laid.lay(&plain, &checkout).unwrap();
 }
 
+// "The list of trees is read off Cargo's word from the workspace at the commit deployed, never from a checkout's
+// working tree ... taken away once it is read": the primary checkout left behind the commit a build tree stands
+// on, which adds a path dependency, and that dependency is laid all the same.
+#[test]
+fn a_dependency_the_commit_adds_is_laid_where_the_checkout_stands_behind_it() {
+  let root = tempfile::tempdir().unwrap();
+  let text = root.path().join("workspace/base/text");
+  let other = root.path().join("workspace/base/other");
+  let checkout = root.path().join("workspace/services/app");
+  let tree = root.path().join("run/deploy-expand");
+  let laid = Laid::under(root.path());
+
+  package(&text, "bmo-text");
+  committed(&text);
+  package(&other, "other");
+  committed(&other);
+  app_on(&checkout, &[("bmo-text", "../../base/text")]);
+  let behind = committed(&checkout);
+  app_on(&checkout, &[("bmo-text", "../../base/text"), ("other", "../../base/other")]);
+  let ahead = committed(&checkout);
+
+  git_in(&checkout, &["checkout", "-q", "--detach", &behind]);
+  git_in(&checkout, &["worktree", "add", "-q", "--detach", &tree.to_string_lossy(), &ahead]);
+  laid.lay(&tree, &checkout).unwrap();
+
+  assert_eq!(
+    symlink(&root.path().join("base/other")),
+    Some(laid.committed_for(&other, &checkout)),
+    "the tree the commit names stands beside the build tree, though the checkout's working tree names none"
+  );
+  assert!(reads(&tree));
+  assert_eq!(names(&root.path().join("workspace/services")), ["app"], "the reading is taken away");
+  assert!(!git_in(&checkout, &["worktree", "list"]).contains(".app.at-"));
+}
+
 // A package whose dependencies are the trees at the paths the manifest names, one name to a path.
 fn app_on(dir: &Path, dependencies: &[(&str, &str)]) {
   let named: String = dependencies

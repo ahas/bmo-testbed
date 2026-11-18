@@ -309,6 +309,82 @@ pub fn outside_roots(tree: &Path, checkout: &Path) -> Result<Vec<PathBuf>, Strin
   Ok(kept)
 }
 
+/// The trees outside the repository its workspace names at a commit, as `outside_roots` reads them, read from
+/// a detached worktree of the commit made beside the checkout for the reading and taken away after it
+/// (docs/deploy.md, 「The releases」): a tree's own manifests resolve nothing until the trees they name stand,
+/// and beside the checkout the paths the commit's manifests name reach what they reach from the checkout. A
+/// commit with no Cargo manifest at its root names none. `tree` is the tree a failure names.
+pub fn outside_roots_at(
+  tree: &Path,
+  checkout: &Path,
+  commit: &str,
+  data_root: &Path,
+  run: CommandRun<'_>,
+) -> Result<Vec<PathBuf>, String> {
+  // A commit carrying no Cargo manifest at its root names no tree to read a workspace for.
+  if !git(run, &["cat-file", "-e", &format!("{commit}:Cargo.toml")], checkout).ok {
+    return Ok(Vec::new());
+  }
+
+  let name = checkout.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default();
+  let reading = checkout.with_file_name(format!(".{name}.at-{}", short(commit)));
+
+  take_reading_away(&reading, checkout, data_root, run)?;
+  // A reading taken away by hand is still registered, and git refuses a second worktree under its name.
+  git(run, &["worktree", "prune"], checkout);
+
+  let added = git(
+    run,
+    &["worktree", "add", "--quiet", "--detach", &reading.to_string_lossy(), commit],
+    checkout,
+  );
+
+  if !added.ok {
+    let _ = take_reading_away(&reading, checkout, data_root, run);
+
+    return Err(fill_shown(
+      &DEPLOY.expansion.reading_not_made,
+      &[
+        ("commit", &short(commit)),
+        ("checkout", &checkout.display()),
+        ("said", &first_chars(&added.out, DEPLOY.numbers.quoted_chars)),
+      ],
+    ));
+  }
+
+  // The reading holds the commit's own files, its submodules left out: a workspace's members stand in the
+  // repository itself, and bringing a submodule would clone it again for a reading of manifests alone.
+  let read = outside_roots(tree, &reading);
+  let taken_away = take_reading_away(&reading, checkout, data_root, run);
+  let roots = read?;
+
+  taken_away.map(|()| roots)
+}
+
+// A reading of a commit's workspace taken away through the repository it was made from, so its registration
+// goes with it; what git cannot take away goes through the guarded removal. A reading not there is gone already.
+fn take_reading_away(
+  reading: &Path,
+  checkout: &Path,
+  data_root: &Path,
+  run: CommandRun<'_>,
+) -> Result<(), String> {
+  if std::fs::symlink_metadata(reading).is_err() {
+    return Ok(());
+  }
+
+  git(run, &["worktree", "remove", "--force", &reading.to_string_lossy()], checkout);
+
+  if std::fs::symlink_metadata(reading).is_ok() {
+    remove_tree(reading, data_root).map_err(|why| {
+      fill_shown(&DEPLOY.expansion.reading_not_removed, &[("at", &reading.display()), ("why", &why)])
+    })?;
+    git(run, &["worktree", "prune"], checkout);
+  }
+
+  Ok(())
+}
+
 /// The committed trees beside the deploy tree: one detached worktree for each repository holding a tree
 /// the workspace names outside the repository, which the release and the build tree read such a tree from.
 pub fn committed_trees(deploy_dir: &Path) -> PathBuf {
@@ -411,8 +487,16 @@ pub fn lay_outside_trees(
   run: CommandRun<'_>,
 ) -> Result<Vec<String>, String> {
   let mut heads = Vec::new();
+  // A release and the build tree are worktrees of the checkout's repository at the commit they stand on, whose
+  // workspace is what names their trees; a tree that is none names no commit of it.
+  let head = git(run, &["rev-parse", "HEAD"], tree);
+  let roots = if head.ok && worktree_of(tree, checkout, run) {
+    outside_roots_at(tree, checkout, head.out.trim(), store.data_root, run)?
+  } else {
+    outside_roots(tree, checkout)?
+  };
 
-  for source in outside_roots(tree, checkout)? {
+  for source in roots {
     let Some(relative) = upward(checkout, &source) else {
       continue;
     };
