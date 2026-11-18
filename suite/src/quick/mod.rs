@@ -17,6 +17,7 @@ pub mod dependencies;
 pub mod files;
 pub mod language;
 pub mod layout;
+pub mod personal_data;
 pub mod shared_packages;
 pub mod shared_versions;
 pub mod source;
@@ -183,6 +184,18 @@ pub fn dependencies_check(repo: &Repository) -> Checked {
   )
 }
 
+/// The personal-data check over every file of the checkout, with what the declaration allows.
+pub fn personal_data_check(repo: &Repository) -> Checked {
+  let found =
+    personal_data::checkout_personal_data(&repo.root, &repo.declaration.check.personal_data_allowed);
+
+  Checked::of(
+    QuickCheck::PersonalData.name(),
+    &found.findings,
+    &counted(&QUICK_CHECKS.personal_data.clean, found.paths),
+  )
+}
+
 /// One quick check over the checkout, whether or not the declaration enables it.
 pub fn quick_check(check: QuickCheck, repo: &Repository, env: &Env) -> Checked {
   match check {
@@ -193,6 +206,7 @@ pub fn quick_check(check: QuickCheck, repo: &Repository, env: &Env) -> Checked {
     QuickCheck::Dependencies => dependencies_check(repo),
     QuickCheck::CargoProfile => cargo_profile_check(repo),
     QuickCheck::SharedVersions => shared_versions_check(repo, env),
+    QuickCheck::PersonalData => personal_data_check(repo),
   }
 }
 

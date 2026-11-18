@@ -271,7 +271,7 @@ bmo-testbed template make|drop|sweep <name>
 bmo-testbed check [--since <commit>] [--log <path>] [--json] [<file…>]
 bmo-testbed check quick
 bmo-testbed check static [--since <commit>]
-bmo-testbed check wording|layout|dependencies|cargo-profile|shared-versions
+bmo-testbed check wording|layout|dependencies|cargo-profile|personal-data|shared-versions
 bmo-testbed check shared-versions --report
 bmo-testbed check language [--kinds] [--settle] [<prefix>]
 bmo-testbed check dashes <file…> [--write]

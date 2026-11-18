@@ -192,6 +192,17 @@
   them is each repository's own change. The profiles state what a build typed outside
   the verb keeps; the Cargo verb turns incremental state on over them for the development and test profiles
   (`docs/deploy.md`, 「The Cargo build directory」).
+- **`personal-data`:** no file of the checkout holds personal data. Every file git tracks or would track
+  is read a line at a time for the forms the policy names: a mail address, a home path, a telephone
+  number, a token and a private network address. A finding names the file, the line and the kind, never
+  the value.
+  - **What stands:** a mail address in the space kept for documents (`example.com`, `.test` and their
+    kin); a home path whose folder names a role, such as `user`; an address of no private network, the
+    loopback among them; and a finding whose matched text holds a string the declaration's
+    `personal_data_allowed` names.
+  - **One check for every repository.** The forms and what they let stand are the testbed's policy, so a
+    repository keeps no copy of them and no test of its own for this; what differs in one repository is
+    its `personal_data_allowed`.
 - **`shared-versions`:** the repository's Cargo manifests and lock, and the packages its package manifests
   vendor, hold to the shared versions, as bmo-chat's `docs/conventions.md`, 「Shared versions」, states the
   rule. It reads files alone and runs no Cargo and no package manager.

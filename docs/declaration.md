@@ -74,9 +74,10 @@ make their own databases names neither, and its tests are handed the server alon
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `quick` | list of strings | `[]` | The quick checks run: any of `wording`, `dashes`, `language` (or `korean`, the same check), `layout`, `dependencies`, `cargo-profile`, `shared-versions` |
+| `quick` | list of strings | `[]` | The quick checks run: any of `wording`, `dashes`, `language` (or `korean`, the same check), `layout`, `dependencies`, `cargo-profile`, `shared-versions`, `personal-data` |
 | `wording_document` | path | none | The document holding the banned terms and their allowed uses; required by `wording` |
 | `wording_files` | list of globs | every file | The files `wording` holds to the document |
+| `personal_data_allowed` | list of strings | `[]` | What `personal-data` lets stand in this repository: a finding whose matched text holds one of these is none |
 | `people_text` | list of globs | `[]` | The files whose literals are text for a person; read by `dashes` |
 | `language_ledger` | path | none | The ledger of lines holding letters that are not English allowed per code file; required by `language`. `korean_ledger` names the same key, and a declaration naming both is refused |
 | `base_libraries` | list of strings | `[]` | The dependencies from other repositories the `dependencies` check allows beside registry ones |

@@ -243,6 +243,7 @@ pub enum QuickCheck {
   Dependencies,
   CargoProfile,
   SharedVersions,
+  PersonalData,
 }
 
 impl QuickCheck {
@@ -252,7 +253,12 @@ impl QuickCheck {
     match self {
       Self::Wording => Some(("wording_document", check.wording_document.as_deref())),
       Self::Language => Some(("language_ledger", check.language_ledger.as_deref())),
-      Self::Dashes | Self::Layout | Self::Dependencies | Self::CargoProfile | Self::SharedVersions => None,
+      Self::Dashes
+      | Self::Layout
+      | Self::Dependencies
+      | Self::CargoProfile
+      | Self::SharedVersions
+      | Self::PersonalData => None,
     }
   }
 
@@ -266,6 +272,7 @@ impl QuickCheck {
       Self::Dependencies => "dependencies",
       Self::CargoProfile => "cargo-profile",
       Self::SharedVersions => "shared-versions",
+      Self::PersonalData => "personal-data",
     }
   }
 }
@@ -287,6 +294,10 @@ pub struct Check {
   pub language_ledger: Option<PathBuf>,
   #[serde(default)]
   pub base_libraries: Vec<String>,
+  /// What `personal-data` lets stand in this repository: a finding whose matched text holds one of these
+  /// is none.
+  #[serde(default)]
+  pub personal_data_allowed: Vec<String>,
   /// The same upstream repositories as the top level, for a declaration that keeps its dependency words
   /// together; a declaration naming both adds them.
   #[serde(default)]

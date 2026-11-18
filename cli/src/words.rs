@@ -324,6 +324,7 @@ pub enum CheckPart {
   Layout,
   Dependencies,
   CargoProfile,
+  PersonalData,
   /// The manifests and locks held to the shared versions; `--report` holds every checkout of the
   /// machine's registry to them instead.
   SharedVersions {
@@ -438,6 +439,7 @@ pub fn read(args: impl IntoIterator<Item = OsString>) -> Result<Words, clap::Err
     "layout",
     "dependencies",
     "cargo-profile",
+    "personal-data",
     "shared-versions",
     "language",
     "dashes",

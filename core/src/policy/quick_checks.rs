@@ -18,6 +18,28 @@ pub struct QuickChecks {
   pub shared_versions: SharedVersionsWords,
   pub layout: Layout,
   pub dependencies: Dependencies,
+  pub personal_data: PersonalDataWords,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PersonalDataWords {
+  pub clean: String,
+  pub hit: String,
+  pub mail_kind: String,
+  pub home_kind: String,
+  pub network_kind: String,
+  pub documentation_domains: Vec<String>,
+  pub documentation_suffixes: Vec<String>,
+  pub neutral_homes: Vec<String>,
+  pub forms: Vec<PersonalDataForm>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PersonalDataForm {
+  pub kind: String,
+  pub pattern: String,
 }
 
 #[derive(Debug, Deserialize)]

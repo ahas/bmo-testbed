@@ -206,3 +206,112 @@ foreign = "{manifest}: {name} comes from another repository ({source}) and is no
 foreign_dev = "{manifest}: {name} comes from another repository ({source}) and is neither a declared base library nor the test kit"
 # The testbed's test kit, which a consumer may take as a dev-dependency (docs/boundary.md, 「The crates」).
 test_kit = ["@bmo-testbed/testkit", "bmo-testbed-test-support", "bmo-testbed-scratch-database"]
+
+# The personal-data check (docs/checks.md, 「The quick checks」). A finding names the file, the line and the kind,
+# never the value.
+[personal_data]
+clean = "none over {count} files"
+hit = "{path}:{line}: {kind}"
+# The kinds whose findings the check lets stand for a reason of their own: a mail address in the space kept
+# for documents, a home folder named for a role, and an address of no private network.
+mail_kind = "a mail address"
+home_kind = "a home path"
+network_kind = "a private network address"
+# The domains RFC 2606 and RFC 6761 keep for documents: an address there names no person and no machine.
+documentation_domains = ["example.com", "example.net", "example.org", "localhost"]
+documentation_suffixes = [".example", ".test", ".invalid", ".localhost"]
+# Home folders that name a role and no person.
+neutral_homes = ["user", "pc", "tester", "qa-admin", "placeholder", "example", "name", "you"]
+
+# The forms a line is read for. Each is written so that this file is no sample of what it looks for.
+[[personal_data.forms]]
+kind = "a mail address"
+pattern = '[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}'
+
+[[personal_data.forms]]
+kind = "a home path"
+pattern = '(?:/home|/root|/Users)/[A-Za-z0-9._-]+'
+
+[[personal_data.forms]]
+kind = "a home path"
+pattern = '[A-Za-z]:[\\/]Users[\\/][A-Za-z0-9._-]+'
+
+[[personal_data.forms]]
+kind = "a telephone number"
+pattern = '\b01[016789][-\s]?\d{3,4}[-\s]?\d{4}\b'
+
+[[personal_data.forms]]
+kind = "a telephone number"
+pattern = '\b0(?:2|[3-6][1-5])[-\s]?\d{3,4}[-\s]?\d{4}\b'
+
+[[personal_data.forms]]
+kind = "a telephone number"
+pattern = '\+\d{1,3}[-\s]\d{2,4}[-\s]\d{3,4}[-\s]\d{4}\b'
+
+[[personal_data.forms]]
+kind = "a telephone number"
+pattern = '\b\d{3}-\d{3}-\d{4}\b'
+
+[[personal_data.forms]]
+kind = "a telephone number"
+pattern = '\(\d{3}\)\s*\d{3}-\d{4}'
+
+[[personal_data.forms]]
+kind = "a token"
+pattern = '\bgh[pousr]_[A-Za-z0-9]{20,}\b'
+
+[[personal_data.forms]]
+kind = "a token"
+pattern = '\bgithub_pat_[A-Za-z0-9_]{20,}\b'
+
+[[personal_data.forms]]
+kind = "a token"
+pattern = '\bglpat-[A-Za-z0-9_-]{20,}\b'
+
+[[personal_data.forms]]
+kind = "a token"
+pattern = '\bAKIA[0-9A-Z]{16}\b'
+
+[[personal_data.forms]]
+kind = "a token"
+pattern = '\bxox[abprs]-[A-Za-z0-9-]{10,}\b'
+
+[[personal_data.forms]]
+kind = "a token"
+pattern = '\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{16,}\b'
+
+[[personal_data.forms]]
+kind = "a token"
+pattern = '\bsk-[A-Za-z0-9_-]{20,}\b'
+
+[[personal_data.forms]]
+kind = "a token"
+pattern = '\bAIza[0-9A-Za-z_-]{35}\b'
+
+[[personal_data.forms]]
+kind = "a token"
+pattern = '\bnpm_[A-Za-z0-9]{36}\b'
+
+[[personal_data.forms]]
+kind = "a token"
+pattern = '\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b'
+
+[[personal_data.forms]]
+kind = "a token"
+pattern = '-----BEGIN [A-Z ]*PRIVATE KEY-----'
+
+[[personal_data.forms]]
+kind = "a token"
+pattern = '\bBearer\s+[A-Za-z0-9._~+/-]{20,}=*\b'
+
+[[personal_data.forms]]
+kind = "a private network address"
+pattern = '\b\d{1,3}(?:\.\d{1,3}){3}\b'
+
+[[personal_data.forms]]
+kind = "a private network address"
+pattern = '(?i)\b(?:fc|fd)[0-9a-f]{2}:[0-9a-f:]{2,}'
+
+[[personal_data.forms]]
+kind = "a private network address"
+pattern = '(?i)\bfe[89ab][0-9a-f]:[0-9a-f:]{2,}'

@@ -184,6 +184,7 @@ pub fn checked_part(part: CheckPart, repo: &Repository, env: &Env, base: &Path) 
     CheckPart::Dependencies => QuickCheck::Dependencies,
     CheckPart::Language { .. } => QuickCheck::Language,
     CheckPart::CargoProfile => QuickCheck::CargoProfile,
+    CheckPart::PersonalData => QuickCheck::PersonalData,
     CheckPart::SharedVersions { .. } => QuickCheck::SharedVersions,
     CheckPart::Dashes { .. } => QuickCheck::Dashes,
   };
