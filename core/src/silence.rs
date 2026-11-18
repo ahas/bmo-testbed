@@ -412,6 +412,41 @@ pub fn pass_on(mut from: impl Read, mut to: impl Write) {
   }
 }
 
+/// `work` done while `say` is handed how many seconds it has run, from a thread of its own, at the end of
+/// every `every` in which `heard` did not grow: a caller whose run stands on another machine, and burns next
+/// to nothing here while it waits, still says it runs, and says nothing more while the run's output comes
+/// (docs/testbed.md, 「A run on another machine」).
+pub fn said_while_quiet<T>(
+  every: Duration,
+  heard: &AtomicU64,
+  say: &(dyn Fn(u64) + Sync),
+  work: impl FnOnce() -> T,
+) -> T {
+  let started = Instant::now();
+  let (ran, ended) = mpsc::channel::<()>();
+
+  std::thread::scope(|scope| {
+    scope.spawn(move || {
+      let mut last = heard.load(Ordering::Relaxed);
+
+      while let Err(RecvTimeoutError::Timeout) = ended.recv_timeout(every) {
+        let now = heard.load(Ordering::Relaxed);
+
+        if now == last {
+          say(started.elapsed().as_secs());
+        }
+
+        last = now;
+      }
+    });
+
+    let done = work();
+
+    drop(ran);
+    done
+  })
+}
+
 /// A command run with its standard output and error passed on to this process's own as they come, every byte
 /// counted as the command writing and the holder above this process told while bytes come, and ended as hung
 /// once nothing of it has moved for `silence`'s limit; `what` names it on the hung line.

@@ -3,6 +3,7 @@
 //! and rotated, one run at a time. The runs themselves are the deploy crate's; this is the verbs' side.
 
 use std::path::Path;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use bmo_testbed_client::{PageQuery, TestRun, TestRunState};
@@ -231,7 +232,7 @@ impl PlacedGate<'_> {
   // run.
   fn step(&self, bench: &ReadyBench, name: &str, words: &[String], setup: bool) -> FarStep {
     let started = Instant::now();
-    let ended = self.machine.run_there(bench, words, setup, None);
+    let ended = self.machine.run_there(bench, words, setup, None, &Arc::default());
     let (code, broken) = match ended {
       FarEnd::Ended(code) => (i64::from(code), false),
       FarEnd::Broken => (i64::from(NOT_RUN_EXIT_CODE), true),

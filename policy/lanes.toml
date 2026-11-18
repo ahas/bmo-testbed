@@ -38,12 +38,14 @@ hung_named_processes = 4
 hung_process_chars = 200
 # How often a run placed on a machine that does not answer asks it again, and how long it waits for it before it
 # ends as not run (docs/boundary.md, 「The placed machine」); how long a process waits for the lock every bringing of
-# the placed machine's testbed to the live release holds; and how long `status` gives the placed machine to
-# answer before it says it does not.
+# the placed machine's testbed to the live release holds; how long `status` gives the placed machine to
+# answer before it says it does not; and how often a placed run whose output has not come back says it still
+# runs there (docs/testbed.md, 「A run on another machine」).
 unreached_pause_seconds = 30
 unreached_wait_minutes = 20
 placed_lock_seconds = 300
 status_connect_seconds = 10
+placed_standing_seconds = 60
 
 # How a command killed for want of memory is run again (docs/testbed.md, 「Memory」): how long it waits
 # before it looks at the memory at all, how many gigabytes have to be available, how often it looks, and
@@ -53,7 +55,7 @@ status_connect_seconds = 10
 settle_seconds = 30
 needed_gigabytes = 6
 poll_seconds = 5
-notice_seconds = 600
+notice_seconds = 60
 runs = 4
 
 [waiting]
@@ -94,6 +96,9 @@ uncopied = "the checkout's open files could not be copied: {said}"
 unread = "its run could not be read: {why}"
 no_result = "its run ended with no result"
 running = "testbed: running on {machine} in {bench}"
+# Said every `placed_standing_seconds` in which none of a placed run's output came back: {machine} the machine,
+# {seconds} how long since the run went there.
+still_running = "testbed: still running on {machine} ({seconds}s so far)"
 # The placed machine the settings name (docs/boundary.md, 「The placed machine」): its settings file that does
 # not read, {file} the file and {why} what it came to; the machine that cannot be reached, {said} what `ssh`
 # said; an outside tree that could not be copied; a file that could not be laid over a copied tree, {file} its

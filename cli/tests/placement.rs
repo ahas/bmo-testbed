@@ -1697,7 +1697,7 @@ fn the_placed_run_is_running_once_the_far_side_says_its_turn_came() {
   let wide = lock_path(&env, Lane::Wide);
 
   assert_eq!(read_placed(&wide)[0].entry.since, None);
-  assert_eq!(placement.run(&bench, &command, false, Some(&placed)), 4);
+  assert_eq!(placement.run(&bench, &command, false, Some(&placed), &Default::default()), 4);
   assert!(read_placed(&wide)[0].entry.since.is_some());
 }
 

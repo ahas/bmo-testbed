@@ -228,7 +228,8 @@
   - It is a cluster of the user's own under `~/.local/state/bmo-test-postgres`, reached through a
     socket only the user can open. The first run that asks for it makes it; a run that finds it not
     answering starts it as the transient user unit `bmo-test-postgres` in `bmo-suite.slice`, which
-    outlives the run.
+    outlives the run. A run that finds another making or starting it waits for that one, however long
+    it takes, saying once a minute that it waits.
   - What it holds is thrown away with every test, so it waits for no disk, and it takes three hundred
     connections. It is made with the `C` collation, and so is every database in it.
   - The suite names it in `BMO_TEST_POSTGRES` for every process it starts. Naming another address

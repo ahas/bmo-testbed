@@ -26,6 +26,8 @@ server_start_poll_ms = 500
 check_shown_lines = 40
 # How often the change check says a step it runs still runs, in seconds.
 check_standing_seconds = 60
+# How often a run waiting for another to stand the test server up says it still waits, in seconds.
+stand_waiting_seconds = 60
 
 # The variables no test unit inherits (docs/suite.md, 「What a test unit is handed」): the deployment's own,
 # naming the live data root, the backups, the deployment record and the markers of the run underneath it. A
@@ -120,6 +122,8 @@ no_runtime = "no runtime directory is named, so the user's service manager canno
 no_socket = "the runtime directory {runtime} holds no socket of the user's service manager"
 # The test database (docs/suite.md, 「The test database」).
 server_down = "database: the test server is not up: {why}"
+# Said every `stand_waiting_seconds` while another run stands the test server up, {seconds} the wait so far.
+stand_waiting = "database: waiting for another run to stand the test server up ({seconds}s so far)"
 on_postgres = "database: the database tests run on PostgreSQL, each file on a clone of {template}"
 template_stands = "database: the template stands"
 template_failed = "database: the template could not be made: {why}"

@@ -15,6 +15,7 @@ pub struct Numbers {
   pub server_start_poll_ms: u64,
   pub check_shown_lines: usize,
   pub check_standing_seconds: u64,
+  pub stand_waiting_seconds: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -96,6 +97,7 @@ pub struct LineWords {
   pub no_runtime: String,
   pub no_socket: String,
   pub server_down: String,
+  pub stand_waiting: String,
   pub on_postgres: String,
   pub template_stands: String,
   pub template_failed: String,

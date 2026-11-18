@@ -6,6 +6,7 @@
 use std::path::{Path, PathBuf};
 
 use bmo_testbed_core::declaration::Repository;
+use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::suite::SUITE;
 use bmo_testbed_core::queue::{LockWait, now_ms, take_lock};
 
@@ -162,8 +163,22 @@ pub fn test_server_up() -> Result<(), String> {
 
   std::fs::create_dir_all(&dir).map_err(|why| why.to_string())?;
 
-  // Another run standing the server up is waited out, however long it takes.
-  let mut wait_on = |_: Option<&str>| -> Option<i64> { Some(now_ms() + 1000) };
+  // Another run standing the server up is waited out, however long it takes, said once a minute.
+  let began = now_ms();
+  let every = i64::try_from(SUITE.numbers.stand_waiting_seconds * 1000).unwrap_or(i64::MAX);
+  let mut said_at = began;
+  let mut wait_on = |_: Option<&str>| -> Option<i64> {
+    let now = now_ms();
+
+    if now - said_at >= every {
+      let seconds = ((now - began) / 1000).to_string();
+
+      eprintln!("{}", fill_marks(&SUITE.lines.stand_waiting, &[("seconds", &seconds)]));
+      said_at = now;
+    }
+
+    Some(now + 1000)
+  };
   let wait = LockWait {
     wait_on: Some(&mut wait_on),
     ..LockWait::default()

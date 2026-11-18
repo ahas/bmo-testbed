@@ -10,7 +10,8 @@ use std::io::{BufRead as _, BufReader, Read, Write as _};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::sync::Arc;
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 
 use bmo_testbed_core::declaration::Repository;
 use bmo_testbed_core::events::Hook;
@@ -19,7 +20,7 @@ use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::policy::prune::PRUNE;
 use bmo_testbed_core::policy::quick_checks::QUICK_CHECKS;
-use bmo_testbed_core::silence::{Heard, Silence, pass_on};
+use bmo_testbed_core::silence::{Heard, Silence, pass_on, said_while_quiet};
 use bmo_testbed_core::turn::{
   FRONT_VARIABLE, Lane, NEXT_VARIABLE, NOT_RUN_EXIT_CODE, process_env, stands_at_front, stands_next,
 };
@@ -527,7 +528,13 @@ impl HttpPlacement {
   }
 
   // The run read off its stream: its output to standard error, its result line to standard output.
-  async fn streamed(client: &reqwest::Client, machine: &str, run: &str, placed: &PlacedRun) -> u8 {
+  async fn streamed(
+    client: &reqwest::Client,
+    machine: &str,
+    run: &str,
+    placed: &PlacedRun,
+    heard: &AtomicU64,
+  ) -> u8 {
     let said = &LANES.placed;
     let opened = client.get(run).send().await.and_then(reqwest::Response::error_for_status);
     let response = match opened {
@@ -539,6 +546,8 @@ impl HttpPlacement {
     while let Some(event) = events.next().await {
       let Ok(event) = event else { break };
       let data = event.data.unwrap_or_default();
+
+      heard.fetch_add(1, Ordering::Relaxed);
 
       match event.event.as_deref() {
         Some(OUTPUT_EVENT) if says_turn_came(data.as_bytes()) => placed.turn_came(),
@@ -557,7 +566,7 @@ impl HttpPlacement {
     dropped(machine, &said.no_result)
   }
 
-  async fn placed(&self, ask: &PlaceAsk<'_>) -> Option<u8> {
+  async fn placed(&self, ask: &PlaceAsk<'_>, heard: &AtomicU64) -> Option<u8> {
     let found = git(&ask.cwd, &["rev-parse", "--show-toplevel"]);
     let checkout = if found.is_empty() { ask.cwd.clone() } else { PathBuf::from(found) };
     let remote = reachable_remote(&checkout);
@@ -603,7 +612,7 @@ impl HttpPlacement {
           fill_marks(&LANES.placed.running, &[("machine", &machine), ("bench", &bench.path)])
         );
 
-        Some(Self::streamed(&client, &machine, &run, &placed).await)
+        Some(Self::streamed(&client, &machine, &run, &placed, heard).await)
       }
       Err(why) => local(&why),
     }
@@ -617,8 +626,10 @@ impl Placement for HttpPlacement {
     }
 
     let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().ok()?;
+    let heard = AtomicU64::new(0);
 
-    runtime.block_on(self.placed(ask))
+    // The endpoint names the machine only once it answers, so the line names the endpoint.
+    standing(&self.endpoint, &heard, || runtime.block_on(self.placed(ask, &heard)))
   }
 }
 
@@ -1370,22 +1381,30 @@ impl MachinePlacement {
 
   /// The words run in the bench through the `placed` verb, as `run_there` runs them; the code they ended with,
   /// 75 where the connection broke, said on the `dropped` line.
-  pub fn run(&self, bench: &ReadyBench, words: &[String], setup: bool, placed: Option<&PlacedRun>) -> u8 {
-    match self.run_there(bench, words, setup, placed) {
+  pub fn run(
+    &self,
+    bench: &ReadyBench,
+    words: &[String],
+    setup: bool,
+    placed: Option<&PlacedRun>,
+    heard: &Arc<AtomicU64>,
+  ) -> u8 {
+    match self.run_there(bench, words, setup, placed, heard) {
       FarEnd::Ended(code) => code,
       FarEnd::Broken => dropped(self.settings.label(), &LANES.placed.broken),
     }
   }
 
   /// The words run in the bench through the `placed` verb, the output and the result this process's, the
-  /// placed run standing here, where one does, marked running once its turn there came: the code they ended
-  /// with there, or the connection broken under them.
+  /// placed run standing here, where one does, marked running once its turn there came, and every byte that
+  /// comes back counted into `heard`: the code they ended with there, or the connection broken under them.
   pub fn run_there(
     &self,
     bench: &ReadyBench,
     words: &[String],
     setup: bool,
     placed: Option<&PlacedRun>,
+    heard: &Arc<AtomicU64>,
   ) -> FarEnd {
     let said = &LANES.placed;
     let line = self.placed_line(bench, words, setup);
@@ -1397,12 +1416,11 @@ impl MachinePlacement {
 
     // The far side's `placed` verb ends a command there that falls silent; this side passes the output on, and
     // tells its own holder while it comes.
-    let count = Arc::new(AtomicU64::new(0));
     let look = Silence::default().look;
     let started = self.ssh().arg(line).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn();
     let status = started.and_then(|mut child| {
-      let far_output = child.stdout.take().map(|out| Heard::new(out, Arc::clone(&count), look));
-      let far_errors = child.stderr.take().map(|errors| Heard::new(errors, Arc::clone(&count), look));
+      let far_output = child.stdout.take().map(|out| Heard::new(out, Arc::clone(heard), look));
+      let far_errors = child.stderr.take().map(|errors| Heard::new(errors, Arc::clone(heard), look));
 
       std::thread::scope(|scope| {
         if let Some(far_output) = far_output {
@@ -1504,8 +1522,16 @@ impl MachinePlacement {
   /// the code it ended with there, or the code of a run not run where the machine did not answer within the wait
   /// or its testbed could not be brought to the live release. None where it did not go: for a run that goes there
   /// only to a seat free now since another machine follows it in the order, every seat of its lane there held or
-  /// waited for, said on a line.
+  /// waited for, said on a line. From the moment it goes there it says it still runs every minute none of its
+  /// output came back.
   fn placed(&self, ask: &PlaceAsk<'_>, to_free_seat: bool) -> Option<u8> {
+    let heard = Arc::new(AtomicU64::new(0));
+
+    standing(self.settings.label(), &heard, || self.placed_heard(ask, to_free_seat, &heard))
+  }
+
+  // The run placed as `placed` places it, every byte of its output that comes back counted into `heard`.
+  fn placed_heard(&self, ask: &PlaceAsk<'_>, to_free_seat: bool, heard: &Arc<AtomicU64>) -> Option<u8> {
     if let Err(code) = self.waited_ready(ask) {
       return Some(code);
     }
@@ -1546,15 +1572,23 @@ impl MachinePlacement {
       words.extend(ask.command.iter().cloned());
     }
 
-    Some(self.run(&bench, &words, true, Some(&placed)))
+    Some(self.run(&bench, &words, true, Some(&placed), heard))
   }
 
   /// A change check over several checkouts placed on the machine as one run (docs/boundary.md, 「Placement」):
   /// the machine waited for and its testbed brought to the live release once, every checkout made ready at its
   /// own place under the bench root at its `HEAD` with its open files, the trees they read laid beside them once,
   /// each checkout's declared setup run in its own bench, and the set run in the first checkout's bench as the
-  /// testbed's change check there. None where it did not go, as for one run.
+  /// testbed's change check there. None where it did not go, as for one run. It says it still runs as one run
+  /// does.
   fn placed_set(&self, ask: &SetAsk<'_>, to_free_seat: bool) -> Option<u8> {
+    let heard = Arc::new(AtomicU64::new(0));
+
+    standing(self.settings.label(), &heard, || self.placed_set_heard(ask, to_free_seat, &heard))
+  }
+
+  // The set placed as `placed_set` places it, every byte of its output that comes back counted into `heard`.
+  fn placed_set_heard(&self, ask: &SetAsk<'_>, to_free_seat: bool, heard: &Arc<AtomicU64>) -> Option<u8> {
     if let Err(code) = self.waited_ready(&ask.run) {
       return Some(code);
     }
@@ -1604,7 +1638,7 @@ impl MachinePlacement {
         Repository::read(checkout).is_ok_and(|repo| !repo.declaration.test.setup.is_empty());
 
       if declares_setup {
-        let code = self.run(&knowing(bench), &[SETUP_ALONE.to_owned()], true, None);
+        let code = self.run(&knowing(bench), &[SETUP_ALONE.to_owned()], true, None, heard);
 
         if code != 0 {
           return Some(code);
@@ -1616,8 +1650,23 @@ impl MachinePlacement {
     let words: Vec<String> =
       std::iter::once(self.settings.testbed.clone()).chain((ask.words)(&paths)).collect();
 
-    Some(self.run(&knowing(&benches[0]), &words, true, Some(&placed)))
+    Some(self.run(&knowing(&benches[0]), &words, true, Some(&placed), heard))
   }
+}
+
+// `work`, a run placed on `machine`, done while a line says it still runs there at the end of every
+// `placed_standing_seconds` in which none of its output came back into `heard` (docs/testbed.md, 「A run on
+// another machine」).
+fn standing<T>(machine: &str, heard: &AtomicU64, work: impl FnOnce() -> T) -> T {
+  let every = Duration::from_secs(LANES.numbers.placed_standing_seconds);
+  let say = |seconds: u64| {
+    eprintln!(
+      "{}",
+      fill_marks(&LANES.placed.still_running, &[("machine", machine), ("seconds", &seconds.to_string())])
+    );
+  };
+
+  said_while_quiet(every, heard, &say, work)
 }
 
 // The command run after a bench's setup where the setup alone is asked for: one that does nothing.

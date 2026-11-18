@@ -227,7 +227,8 @@ flowchart TD
 - **The caller passes a placed run's output on the same way,** and while bytes come over the connection it
   touches the file its own holder handed it in `BMO_TESTBED_HEARD`. It ends nothing itself: a placed
   command that holds its output back, a `run` writing to its log there or a check whose step still runs, is
-  heard only by the watches on that machine.
+  heard only by the watches on that machine, and the caller says once a minute that it still runs there
+  (「A run on another machine」).
 - **A hung command is ended whole:** its process group where it heads one, and every process under it, are
   sent a TERM, and whatever still stands ten seconds later a KILL.
 - **It says so in one line,** `testbed:` first, naming the command, where its output went, the limit and
@@ -258,7 +259,7 @@ flowchart TD
   or a test. A deployment's seat is a seat beside the held ones like any other.
 - **A command the kernel killed for want of memory runs again,** at most four runs in all: before each
   further run the testbed waits at least thirty seconds, then until six gigabytes are free, however long
-  that takes, saying every ten minutes that it still waits. The Cargo
+  that takes, saying every minute that it still waits. The Cargo
   verb and a declared check step that asks for it do so (`docs/declaration.md`); a plain `run` does
   not. A command ended as hung is not run again, since it would hang again.
 - **A failed run during which a fence it stands in reached its own ceiling is not run again,** whether
@@ -372,6 +373,15 @@ flowchart TD
   minutes a placed machine whose connection drops stays away: then the run ends as not run, exit code 75.
   A deployment waits by its own rule (`docs/deploy.md`, 「A connection that breaks under the placed
   machine」).
+- **A placed run says it still runs while nothing comes back.** From the moment a run goes to the placed
+  machine until it ends there, every minute in which no byte of its output came over the connection, the
+  caller says on standard error that it still runs there and for how long so far: through the wait for the
+  machine to answer, the lock and the copy that bring its testbed to the live release, the copies that make
+  its bench ready, its wait for its turn there and a command there that holds its output back, such as a
+  `run` writing to its log there. A caller waiting on another machine burns next to nothing here, so
+  without the line a watcher of its output could not tell it from a hung one. A run whose output keeps
+  coming back says nothing more. The line says nothing of the run's health: a hung command is ended by the
+  watches there (「A holder whose command falls silent lets go」).
 - **An outage is told once, and its end once.** The first run that gives up on a machine sends
   `placed-unreachable`, and the runs that give up after it in the same outage send nothing more; the first
   process that finds the machine answering again sends `placed-recovered`. Both go to the machine's own

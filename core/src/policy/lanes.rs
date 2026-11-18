@@ -31,6 +31,7 @@ pub struct Numbers {
   pub unreached_wait_minutes: u64,
   pub placed_lock_seconds: u64,
   pub status_connect_seconds: u64,
+  pub placed_standing_seconds: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -78,6 +79,7 @@ pub struct PlacedWords {
   pub unread: String,
   pub no_result: String,
   pub running: String,
+  pub still_running: String,
   pub unsettled: String,
   pub negative_floor: String,
   pub here: String,

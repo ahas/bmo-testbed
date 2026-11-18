@@ -5,12 +5,13 @@
 use std::os::unix::process::CommandExt as _;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::queue::process_alive;
-use bmo_testbed_core::silence::{HUNG_EXIT_CODE, Output, Silence, Watch};
+use bmo_testbed_core::silence::{HUNG_EXIT_CODE, Output, Silence, Watch, said_while_quiet};
 
 fn short() -> Silence {
   Silence {
@@ -149,4 +150,32 @@ fn output_that_is_not_all_files_is_not_watched() {
 
   assert!(watch.variable().is_none());
   assert_eq!((waited.code(), waited.hung), (Some(0), None));
+}
+
+// "every minute in which no byte of its output came over the connection, the caller says on standard error that
+// it still runs there": a caller whose run's output keeps coming says nothing, and once it stops coming the line
+// comes at the end of the next quiet stretch, naming how long the work has run.
+#[test]
+fn a_quiet_stretch_is_said_and_a_heard_one_is_not() {
+  let heard = AtomicU64::new(0);
+  let (tell, said) = std::sync::mpsc::channel::<u64>();
+  let say = move |seconds: u64| {
+    let _ = tell.send(seconds);
+  };
+
+  // The output comes every millisecond across four stretches, so only a stall of the whole stretch could read
+  // as quiet.
+  let came = said_while_quiet(Duration::from_millis(50), &heard, &say, || {
+    for _ in 0..200 {
+      heard.fetch_add(1, Ordering::Relaxed);
+      std::thread::sleep(Duration::from_millis(1));
+    }
+
+    let while_heard = said.try_recv().ok();
+    let once_quiet = said.recv_timeout(Duration::from_secs(10)).ok();
+
+    (while_heard, once_quiet)
+  });
+
+  assert_eq!(came, (None, Some(0)), "nothing while the output comes, the line once it stops");
 }
