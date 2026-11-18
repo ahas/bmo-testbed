@@ -34,6 +34,9 @@ pub fn testbed(dir: &Path, data: &Path, args: &[&str]) -> Command {
     .env_remove("BMO_TESTBED_NEXT")
     .env_remove("BMO_TESTBED_PLACEMENT")
     .env_remove("BMO_TESTBED_PLACED")
+    // The folder a testbed running the tests was called from is that run's, and a binary under test stands
+    // in the folder its test gives it.
+    .env_remove("BMO_TESTBED_CALLED_FROM")
     .env_remove("BMO_TESTBED_CHECKOUTS")
     .env_remove("BMO_DEPLOY_UNIT")
     .stdin(Stdio::null())
