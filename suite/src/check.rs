@@ -6,6 +6,8 @@
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::mpsc::{self, RecvTimeoutError};
+use std::time::{Duration, Instant};
 
 use bmo_testbed_core::declaration::{Repository, Test};
 use bmo_testbed_core::languages::{LANGUAGES, failures_of_log, tally_of_log};
@@ -404,11 +406,46 @@ pub fn kept_log(log: &Path) -> PathBuf {
   log.with_file_name(name)
 }
 
+/// A step run through `run` while `say` is handed a line saying it still runs every `every` (docs/checks.md,
+/// 「The change check」), from a thread of its own that ends with the step.
+pub fn run_standing(
+  step: &Step,
+  every: Duration,
+  say: &(dyn Fn(&str) + Sync),
+  run: impl FnOnce() -> TimedRun,
+) -> TimedRun {
+  let started = Instant::now();
+  let (ran, ended) = mpsc::channel::<()>();
+
+  std::thread::scope(|scope| {
+    scope.spawn(move || {
+      while let Err(RecvTimeoutError::Timeout) = ended.recv_timeout(every) {
+        let seconds = started.elapsed().as_secs();
+
+        say(&fill_shown(&SUITE.check.standing, &[("name", &step.name), ("seconds", &seconds)]));
+      }
+    });
+
+    let done = run();
+
+    drop(ran);
+    done
+  })
+}
+
 /// One step run in the checkout at `root`: the test files in the machine's wide lane, waiting for its turn as
-/// every test run does and not run where it never came, every other step as the static check runs it.
+/// every test run does and not run where it never came, every other step as the static check runs it. Every
+/// step is watched for silence, since the check says each one still runs for as long as it runs and so
+/// leaves no silence for a watcher above it to read.
 pub fn run_step(root: &Path, step: &Step) -> TimedRun {
   if !step.tests {
-    return spawn_step(root, &step.step);
+    return spawn_step(
+      root,
+      &CheckStep {
+        watched: true,
+        ..step.step.clone()
+      },
+    );
   }
 
   let turn = take_turn(&TurnAsk {

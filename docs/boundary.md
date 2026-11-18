@@ -271,7 +271,8 @@ bmo-testbed check dashes <file…> [--write]
 - With no part named, the change check (`docs/checks.md`, 「The change check」): exits 1 where any step
   failed, 2 where the change could not be read. **`--json`** prints its lines on standard error
   instead, and on standard output one command run (「Members」) once the check has ended: its log, the
-  waits of its steps added up, and its whole time. Started outside a held turn, a deployment's or a whole
+  waits of its steps added up, and its whole time. While a step runs, a line naming it and how long it has
+  run is printed on standard error once a minute, with or without `--json`. Started outside a held turn, a deployment's or a whole
   run's unit and a placed machine, it is placed first where the machine's placement sends it elsewhere
   (「Placement」) and runs there as that testbed's change check with the same `--since`, `--json` and
   files; `--log` then names nothing here, and the log is that machine's. Under a failing step it prints

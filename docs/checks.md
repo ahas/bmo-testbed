@@ -290,8 +290,15 @@
     file under the crate's `tests/` names by a path through it or by a `#[path]` attribute, is shared, and
     runs the crate's tests whole; so does a changed file under `tests/` that is neither, such as a
     fixture or a helper of per-file targets.
-- **Every step runs to its end**, and the heavy ones wait for the testbed's turn; a heavy one that falls
-  silent for the silence limit is ended as hung, as the static check's are.
+- **Every step runs to its end**, and the heavy ones wait for the testbed's turn. Every step, a declared
+  one that runs where it stands among them, is watched for silence and ended as hung once it writes nothing
+  for the silence limit.
+- **While a step runs it says so** on standard error, once a minute by the policy: the step's name and how
+  long it has run. A step's own output is taken into its log, and a step waiting for its turn or run on the
+  placed machine writes next to nothing here, so without the line the check would stand silent for as long
+  as the step lasts, and a caller watching its output could not tell it from a hung one. The line says
+  nothing of the step's health, which is why every step is watched for silence: a silent step is ended by
+  the check itself, never left to a watcher above it, which hears the check speak all the while.
 - **All the output goes to one log,** one per checkout under the data root's `testbed/` unless `--log`
   names another, written afresh by every run. What it prints is a line per step with its outcome and times,
   and the tests' totals and failures as the `log` verb reads them where test files ran.

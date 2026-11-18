@@ -14,6 +14,7 @@ pub struct Numbers {
   pub fence_move_tries: u32,
   pub server_start_poll_ms: u64,
   pub check_shown_lines: usize,
+  pub check_standing_seconds: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -173,6 +174,7 @@ pub struct CheckWords {
   pub kept: String,
   pub kept_mark: String,
   pub no_turn: String,
+  pub standing: String,
 }
 
 #[derive(Debug, Deserialize)]

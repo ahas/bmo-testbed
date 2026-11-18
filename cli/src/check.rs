@@ -3,16 +3,17 @@
 //! the suite crate's; this is the verb's side of them.
 
 use std::path::{Path, PathBuf};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use bmo_testbed_core::answer::{Cut, cap_items};
 use bmo_testbed_core::declaration::{QuickCheck, Repository};
 use bmo_testbed_core::placement::{PlaceAsk, runs_here};
 use bmo_testbed_core::policy::fill_marks;
+use bmo_testbed_core::policy::suite::SUITE;
 use bmo_testbed_core::policy::verbs::VERBS;
 use bmo_testbed_core::turn::{Env, Lane, process_env};
 use bmo_testbed_core::verb::{REFUSED_EXIT_CODE, data_root};
-use bmo_testbed_suite::check::{CheckAsk, default_log, plan, run_check, run_step};
+use bmo_testbed_suite::check::{CheckAsk, default_log, plan, run_check, run_standing, run_step};
 use bmo_testbed_suite::quick::language::{language_report, settle};
 use bmo_testbed_suite::quick::shared_versions::shared_versions_report;
 use bmo_testbed_suite::quick::{Checked, enabled_checks, quick_check};
@@ -130,7 +131,10 @@ fn change(
     let _ = std::fs::create_dir_all(dir);
   }
 
-  let checked = run_check(&repo.root, &plan, &log, &run_step);
+  let every = Duration::from_secs(SUITE.numbers.check_standing_seconds);
+  let checked = run_check(&repo.root, &plan, &log, &|root, step| {
+    run_standing(step, every, &|line| eprintln!("{line}"), || run_step(root, step))
+  });
 
   for line in &checked.lines {
     if json {

@@ -24,6 +24,8 @@ fence_move_tries = 40
 server_start_poll_ms = 500
 # How many lines the change check prints under a failing step; the rest is in its log.
 check_shown_lines = 40
+# How often the change check says a step it runs still runs, in seconds.
+check_standing_seconds = 60
 
 # The variables no test unit inherits (docs/suite.md, 「What a test unit is handed」): the deployment's own,
 # naming the live data root, the backups, the deployment record and the markers of the run underneath it. A
@@ -217,6 +219,9 @@ kept = "failing log kept: {path}"
 kept_mark = "failed"
 # Why the touched test files did not run: {words} what the turn came to.
 no_turn = "the machine's turn did not come: {words}"
+# Said on standard error every `check_standing_seconds` while a step runs: {name} the step, {seconds} how long
+# it has run.
+standing = "check: {name} still running ({seconds}s so far)"
 
 # What the cargo verb says of the units a passed build superseded (docs/deploy.md, 「The Cargo build
 # directory」): {why} what a call came to, {code} and {said} Cargo's exit and its last line, {count} units of

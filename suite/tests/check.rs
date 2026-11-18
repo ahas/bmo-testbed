@@ -11,9 +11,9 @@ use bmo_testbed_core::policy::deploy_steps::DeployStep;
 use bmo_testbed_core::policy::suite::SUITE;
 use bmo_testbed_core::policy::{fill_marks, fill_shown};
 use bmo_testbed_suite::check::{
-  CheckAsk, CheckPlan, Step, default_log, default_since, kept_log, plan, run_check, run_step,
+  CheckAsk, CheckPlan, Step, default_log, default_since, kept_log, plan, run_check, run_standing, run_step,
 };
-use bmo_testbed_suite::static_check::{OwnPackages, TimedRun, cargo_format, cargo_lint};
+use bmo_testbed_suite::static_check::{CheckStep, OwnPackages, TimedRun, cargo_format, cargo_lint};
 
 fn write(root: &Path, file: &str, text: &str) {
   let path = root.join(file);
@@ -408,6 +408,50 @@ fn a_failing_crate_test_step_shows_its_totals_and_failed_tests_and_keeps_its_log
   );
   assert!(!std::fs::read_to_string(&log).unwrap().contains("counted wrong"));
   assert!(std::fs::read_to_string(&kept).unwrap().contains("counted wrong"));
+}
+
+// "While a step runs it says so on standard error, once a minute by the policy: the step's name and how long it
+// has run."
+#[test]
+fn a_running_step_is_said_to_run_on_until_it_ends() {
+  let step = Step {
+    name: "crate tests".to_owned(),
+    step: CheckStep {
+      id: "tests".to_owned(),
+      dir: ".".into(),
+      command: vec!["true".to_owned()],
+      env: vec![],
+      lane: None,
+      retry_out_of_memory: false,
+      watched: false,
+      covered_by: None,
+    },
+    tests: false,
+  };
+  let (heard, said) = std::sync::mpsc::channel::<String>();
+  let say = move |line: &str| {
+    let _ = heard.send(line.to_owned());
+  };
+
+  // The step runs until it has been said to run twice, so the lines come while it runs and not after.
+  let done = run_standing(&step, std::time::Duration::from_millis(5), &say, || {
+    for _ in 0..2 {
+      let line = said
+        .recv_timeout(std::time::Duration::from_secs(10))
+        .expect("a line while the step runs");
+
+      assert!(
+        (0..60).any(|seconds| {
+          line == fill_shown(&SUITE.check.standing, &[("name", &"crate tests"), ("seconds", &seconds)])
+        }),
+        "the line names the step and how long it has run: {line}"
+      );
+    }
+
+    ran(0, "fine\n")
+  });
+
+  assert_eq!(done, ran(0, "fine\n"), "the step's own run is what it comes to");
 }
 
 // "named as the log is with `failed` before its extension"
