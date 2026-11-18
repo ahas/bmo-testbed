@@ -97,6 +97,40 @@ fn is_part_of_a_number(line: &str, found: &regex::Match<'_>) -> bool {
     || (next == Some('.') && after.next().is_some_and(|one| one.is_ascii_digit()))
 }
 
+// Whether a home-shaped match is the tail of a longer path, a folder named `home` or `Users` somewhere under
+// another, rather than the root's own: a path character touches it from before.
+fn is_inside_a_path(line: &str, found: &regex::Match<'_>) -> bool {
+  line[..found.start()]
+    .chars()
+    .next_back()
+    .is_some_and(|one| one.is_ascii_alphanumeric() || matches!(one, '.' | '_' | '-'))
+}
+
+// Whether a private address names a whole block kept for private networks rather than a host in one: the
+// block's own first address, or the bare prefix of an IPv6 one, written with its length after it.
+fn is_reserved_block(words: &PersonalDataWords, line: &str, found: &regex::Match<'_>) -> bool {
+  let rest = &line[found.end()..];
+  let length_follows = rest
+    .strip_prefix('/')
+    .is_some_and(|after| after.starts_with(|one: char| one.is_ascii_digit()));
+  let address = found.as_str();
+
+  if !length_follows {
+    return false;
+  }
+
+  if address.contains(':') {
+    return address.ends_with("::");
+  }
+
+  let octets: Vec<u8> = address.split('.').filter_map(|part| part.parse().ok()).collect();
+
+  octets.len() == 4
+    && octets[2] == 0
+    && octets[3] == 0
+    && words.reserved_blocks.iter().any(|block| block[0] == octets[0] && block[1] == octets[1])
+}
+
 // Whether what a form found is a finding: not what the policy lets stand for its kind, nor anything the
 // declaration allows.
 fn kept(
@@ -117,9 +151,9 @@ fn kept(
   } else if kind == words.telephone_kind {
     !is_part_of_a_number(line, at)
   } else if kind == words.home_kind {
-    !is_neutral_home(words, found)
+    !is_neutral_home(words, found) && !is_inside_a_path(line, at)
   } else if kind == words.network_kind {
-    is_private_address(found)
+    is_private_address(found) && !is_reserved_block(words, line, at)
   } else {
     true
   }

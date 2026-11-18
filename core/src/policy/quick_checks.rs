@@ -34,6 +34,7 @@ pub struct PersonalDataWords {
   pub documentation_suffixes: Vec<String>,
   pub neutral_homes: Vec<String>,
   pub unit_suffixes: Vec<String>,
+  pub reserved_blocks: Vec<[u8; 2]>,
   pub forms: Vec<PersonalDataForm>,
 }
 

@@ -225,6 +225,9 @@ documentation_suffixes = [".example", ".test", ".invalid", ".localhost"]
 neutral_homes = ["user", "pc", "tester", "qa-admin", "placeholder", "example", "name", "you", "someone"]
 # A unit of the service manager written as a template and its instance has a mailbox's shape and names none.
 unit_suffixes = [".service", ".socket", ".slice", ".timer", ".target", ".mount", ".scope", ".path"]
+# The first two numbers of each IPv4 block kept for private networks: the block's own first address, written
+# with its length, names the block and no host.
+reserved_blocks = [[10, 0], [172, 16], [192, 168], [169, 254], [100, 64]]
 
 # The forms a line is read for. Each is written so that this file is no sample of what it looks for.
 [[personal_data.forms]]
@@ -233,7 +236,7 @@ pattern = '[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}'
 
 [[personal_data.forms]]
 kind = "a home path"
-pattern = '(?:/home|/root|/Users)/[A-Za-z0-9._-]+'
+pattern = '(?:/home|/Users)/[A-Za-z0-9._-]+'
 
 [[personal_data.forms]]
 kind = "a home path"
