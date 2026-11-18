@@ -1,9 +1,9 @@
 [Unit]
-Description=Prune of the shared Cargo build directory, every six hours
+Description=Prune of the shared Cargo build directory, every two hours
 # docs/deploy.md, 「The Cargo build directory」.
 
 [Timer]
-OnCalendar=*-*-* 05,11,17,23:10:00
+OnCalendar=*-*-* 01/2:10:00
 Persistent=true
 RandomizedDelaySec=600
 

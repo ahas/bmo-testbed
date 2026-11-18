@@ -879,7 +879,7 @@ flowchart TD
   place, with the generation it was built in. The removal takes Cargo's build lock only where no build
   holds it at that moment, leaving what it found to the next build otherwise; it stands in no queue of
   its own, and never fails its build.
-- **The prune,** the `prune` verb, run every six hours by `bmo-cargo-prune.timer` in `bmo-upkeep.slice`,
+- **The prune,** the `prune` verb, run every two hours by `bmo-cargo-prune.timer` in `bmo-upkeep.slice`,
   holding Cargo's own build lock in every profile directory of the build root and of each checkout's
   directory, and standing at the front of each lock's line, never in the testbed's, removes:
   - from a profile directory standing at the build root itself, a unit of a checkout's own crates no live
