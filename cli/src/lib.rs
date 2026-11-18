@@ -7,6 +7,7 @@ pub mod backup;
 pub mod cargo;
 pub mod check;
 pub mod classify;
+pub mod close_line;
 pub mod dependents;
 pub mod deploy;
 pub mod env_file;
@@ -416,6 +417,7 @@ pub fn main(args: impl IntoIterator<Item = OsString>) -> u8 {
       u8::from(lane_full(&process_env(), lane))
     }
     Verb::Status(args) => status(args.json),
+    Verb::CloseLine(args) => close_line::close_line(&args),
     Verb::Classify(args) => classify(args),
     Verb::Suite(args) => suite::suite(args),
     Verb::Dependents(args) => dependents::dependents(&args),

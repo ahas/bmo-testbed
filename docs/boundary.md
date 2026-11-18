@@ -160,6 +160,28 @@ bmo-testbed status [--json | --free [--narrow]]
   machine its order does not name last asks that machine this, of the run's lane, before the run goes
   (「Placement」).
 
+### `close-line`
+
+```
+bmo-testbed close-line --checkout <path>…
+```
+
+- **Holds the close line of each named checkout's repository** (`docs/testbed.md`, 「The close line」) for a
+  close run outside the testbed, from the moment every line is its own until its standard input ends. A path is
+  read from the directory the verb runs in, given once for each checkout; checkouts of one repository stand in
+  its one line once.
+- **The lines are taken one after another in the order of their lock files' names,** whatever order the
+  checkouts are named in, each waited for however long the line takes, the waiting said every thirty seconds
+  on standard error as a close waiting for its line says it.
+- **Once every line is held** it prints one line on standard output naming how many it holds and their
+  checkouts, and holds them until its standard input is closed or ends; it then lets every line go and exits 0.
+- **The lines are held by its process alone,** so they go the moment it ends, however it ends. Its harness's
+  process, named in `CLAUDE_PID`, is watched as a close's is: once it is gone the verb is ended and its lines
+  go with it.
+- Exits 0 once it has let its lines go, 75 where its harness went away before every line came, the lines it
+  already held let go and nothing printed on standard output, and 2 where no checkout is given or a path names
+  no checkout of a git repository, the line naming the path.
+
 ### `classify`
 
 ```

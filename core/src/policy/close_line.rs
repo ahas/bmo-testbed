@@ -31,8 +31,18 @@ pub struct StretchWords {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct HoldWords {
+  pub held: String,
+  pub joiner: String,
+  pub not_a_checkout: String,
+  pub gone: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CloseLine {
   pub line: LineWords,
+  pub hold: HoldWords,
   pub numbers: LineNumbers,
   pub stretch: StretchWords,
 }

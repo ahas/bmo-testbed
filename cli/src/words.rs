@@ -29,6 +29,7 @@ pub enum Verb {
   Placed(PlacedArgs),
   CrateTests(CrateTestsArgs),
   Status(StatusArgs),
+  CloseLine(CloseLineArgs),
   Classify(ClassifyArgs),
   Suite(SuiteArgs),
   Dependents(DependentsArgs),
@@ -226,6 +227,14 @@ pub struct StatusArgs {
   /// With `--free`, ask the narrow lane instead.
   #[arg(long, requires = "free")]
   pub narrow: bool,
+}
+
+/// `close-line`: the close lines of the named checkouts' repositories, held until standard input ends.
+#[derive(Debug, Args)]
+pub struct CloseLineArgs {
+  /// A checkout whose repository's close line is held, given once for each.
+  #[arg(long = "checkout", value_name = "PATH", required = true, value_parser = named)]
+  pub checkouts: Vec<String>,
 }
 
 #[derive(Debug, Args)]
@@ -492,6 +501,7 @@ pub fn read(args: impl IntoIterator<Item = OsString>) -> Result<Words, clap::Err
         })
     })
     .mut_subcommand("status", |verb| verb.override_help(usage(&said.status)))
+    .mut_subcommand("close-line", |verb| verb.override_help(usage(&said.close_line)))
     .mut_subcommand("classify", |verb| verb.override_help(usage(&said.classify)))
     .mut_subcommand("suite", |verb| verb.override_help(usage(&said.suite)))
     .mut_subcommand("dependents", |verb| verb.override_help(usage(&said.dependents)))

@@ -11,6 +11,7 @@ placed    the far side of a run placed on this machine: the setup, then the comm
 crate-tests  the suite's own: a crate's test binaries written down as Cargo runs them, or run
           from that record
 status    each lane and the repository's close line: who holds it, and who waits behind
+close-line  the close lines of the named checkouts' repositories, held until standard input ends
 classify  whether a shell line holds a heavy command started outside the testbed
 suite     the repository's units, every one or those a change reaches
 dependents  the checkouts that build on this repository, listed or each one's suite run
@@ -64,6 +65,18 @@ Each lane: its width, who holds the turn and since when, and who waits behind it
 close line of the repository it is run in (docs/testbed.md).
 
 --json  the same as one JSON object (docs/boundary.md)"""
+close_line = """
+usage: {verb} close-line --checkout <path>…
+
+Holds the close line of each named checkout's repository for a close run outside the testbed. It
+takes the lines one after another in the order of their lock files' names, waiting for each however
+long the line takes and saying where it stands on standard error; once every line is held it prints
+one line on standard output and holds them until its standard input ends, then lets them go.
+
+--checkout  a checkout whose repository's close line is held, given once for each
+
+Where the harness it runs for goes away before every line comes, it lets go what it holds and ends
+with exit code 75."""
 classify = """
 usage: {verb} classify [--json] [--takes-turn <command>]… <shell line>
 

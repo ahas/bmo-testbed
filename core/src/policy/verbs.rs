@@ -9,6 +9,7 @@ pub struct UsageWords {
   pub binary: String,
   pub run: String,
   pub status: String,
+  pub close_line: String,
   pub classify: String,
   pub suite: String,
   pub dependents: String,

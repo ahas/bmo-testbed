@@ -173,6 +173,10 @@ flowchart TD
   which one holds the line.
 - What a close does inside its turn is its consumer's; the testbed supplies the line, the hold on the
   wide lane and the status.
+- **A close run outside the testbed holds its line through the `close-line` verb** (`docs/boundary.md`), whose
+  process holds the line until the close lets it go, so the line goes the moment that process ends.
+- **Several lines are taken in one order,** the order of their lock files' names, whatever order a holder
+  names them in, so two holders of lines they share never each hold a line the other waits for.
 
 ## Waiting never fails a command
 
