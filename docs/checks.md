@@ -200,8 +200,9 @@
     kin); a unit of the service manager written as a template and its instance, which has a mailbox's
     shape; a home path whose folder names a role, such as `user`; digits that stand inside a longer number,
     as a fraction's do, and have a telephone number's shape; a folder named `home` or `Users` under
-    another folder, which is no account's home; an address of no private network, the loopback among
-    them; a whole block kept for private networks, written as its first address and its length; and a finding whose matched text holds a string the declaration's
+    another folder, which is no account's home; a token written all in lowercase, which is a
+    placeholder somebody typed, a generated secret being mixed case; an address of no private network, the
+    loopback among them; a whole block kept for private networks, written as its first address and its length; and a finding whose matched text holds a string the declaration's
     `personal_data_allowed` names.
   - **One check for every repository.** The forms and what they let stand are the testbed's policy, so a
     repository keeps no copy of them and no test of its own for this; what differs in one repository is
