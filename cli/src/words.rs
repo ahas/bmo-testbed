@@ -189,6 +189,9 @@ pub struct PlacedArgs {
   /// A checkout the run knows on this machine: the bench and the trees copied beside it.
   #[arg(long = "checkout", value_name = "PATH")]
   pub checkouts: Vec<String>,
+  /// The folder of the bench the command runs in, from the bench's top.
+  #[arg(long, value_name = "PATH")]
+  pub dir: Option<String>,
   /// The command, after `--`.
   #[arg(last = true, required = true, num_args = 1..)]
   pub command: Vec<String>,

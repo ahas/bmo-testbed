@@ -338,6 +338,8 @@ flowchart TD
   - a run whose environment sets a variable the checkout's declaration names as reaching what only this
     machine reaches, the address of a console standing on this machine's loopback among them, since a
     placed run carries none of the caller's environment;
+  - a run started in a folder its checkout ignores, said on a line naming it, since the bench copy
+    leaves ignored files out and would not hold the folder the command runs in;
   - a Cargo verb whose output this machine reads afterwards: a build, a run or any other subcommand that
     is not `test`, `check` or `clippy`, a `--no-run`, and words naming an absolute path, which would
     point elsewhere there;
@@ -382,6 +384,12 @@ flowchart TD
   repository to its own place under the bench root; the checkout's setup then runs there, and the
   command in that machine's own turn, on its own seats and its own memory gate. Its output and its
   one result line come back to the caller.
+- **The command runs where the caller stands in its checkout:** a run started in a folder below the
+  checkout's top runs in the same folder of the bench, so a package script, a test path or a language
+  read from that folder means there what it means here; the setup still runs at the bench's top. A
+  suite, a change check and a Cargo verb start from the checkout's top here, and so they do there.
+  Where the bench holds no such folder, the run does not run there and says so on a line
+  naming the folder (`docs/boundary.md`, 「`placed`」).
 - **A deployment's gate and its Cargo release build go to the placed machine** the settings name,
   whatever the order says (`docs/deploy.md`, 「Where a deployment runs」), so the machine that serves is
   not the machine that checks and builds.

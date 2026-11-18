@@ -166,11 +166,20 @@ fn watched(command: &mut Command, what: &str, silence: Silence) -> Option<i32> {
 }
 
 /// The far side of a placed run (docs/boundary.md, 「`placed`」): the declared setup where asked, then the
-/// words run as a command of their own, marked so the run is never placed again, each watched for the bench's
-/// silence; its code.
+/// words run as a command of their own in the folder `--dir` names, marked so the run is never placed again,
+/// each watched for the bench's silence; its code, or the refusal said where the bench holds no such folder.
 fn placed(args: PlacedArgs) -> u8 {
   let said = &LANES.placed;
   let cwd = std::env::current_dir().unwrap_or_default();
+  let within = match &args.dir {
+    Some(dir) if !cwd.join(dir).is_dir() => {
+      eprintln!("{}", fill_marks(&said.no_dir, &[("bench", &cwd.to_string_lossy()), ("dir", dir)]));
+      return REFUSED_EXIT_CODE;
+    }
+    Some(dir) => cwd.join(dir),
+    None => cwd.clone(),
+  };
+
   // The checkouts this run knows: a registry of its own, written for it and taken away as it ends.
   let registry = placed_registry(&data_root(), &args.checkouts);
   let registry = match &registry {
@@ -217,7 +226,7 @@ fn placed(args: PlacedArgs) -> u8 {
   };
   let mut command = Command::new(program);
 
-  command.args(rest).current_dir(&cwd).stdin(Stdio::null());
+  command.args(rest).current_dir(&within).stdin(Stdio::null());
   handed(&mut command);
 
   watched(&mut command, &args.command.join(" "), silence)

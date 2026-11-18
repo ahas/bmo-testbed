@@ -14,7 +14,9 @@
 //! run ending as not run with its event once the wait is spent, never running here, one event for each outage and one
 //! for the machine's return, sent to the hook the machine's testbed environment file names, the deployment's gate and build
 //! answering broken for it whether or not they began there, `status` reading the machine's release against the live
-//! one, a run whose environment sets a variable its declaration names as this machine's kept here, the
+//! one, a run whose environment sets a variable its declaration names as this machine's kept here, a run from a
+//! folder below the checkout's top running in that folder there and one from a folder the checkout ignores kept
+//! here, the `placed` verb refusing a folder the bench does not hold, the
 //! run standing in its lane here while it lasts, running once the far side says its turn came, that line read
 //! and not passed on, and the `placed` verb there passing its command's output on, telling its own holder
 //! while it comes and ending it whole once it falls silent for the declared limit. The units a release marks
@@ -154,6 +156,14 @@ fn an_answer_of_local_runs_here_and_the_endpoint_is_told_the_run() {
   assert_eq!(asked[0]["checkout"], git(&repo, &["rev-parse", "--show-toplevel"]));
   assert_eq!(asked[0]["remote"], "");
   assert_eq!((asked[0]["front"].clone(), asked[0]["next"].clone()), (json!(false), json!(false)));
+  assert_eq!(asked[0]["directory"], "");
+
+  // A run started in a folder below the top names the folder from the top.
+  let folder = repo.join("studio/client");
+
+  std::fs::create_dir_all(&folder).unwrap();
+  placed(&folder, dir.path(), &local.base, &["run", "--", "sh", "-c", "exit 0"]);
+  assert_eq!(local.asked.lock().unwrap()[1]["directory"], "studio/client");
 }
 
 // "an endpoint that does not answer, or answers what does not read, leaves the run here, said on a line"
@@ -303,6 +313,68 @@ fn a_machine_the_settings_name_runs_the_command_in_a_bench_there() {
       .starts_with("placed-checkouts-"))
   );
   assert!(!bench.join("ignored.txt").exists());
+}
+
+// "a run started in a folder below the checkout's top runs in the same folder of the bench", its setup at the
+// bench's top; "a run started in a folder its checkout ignores is never placed, said on a line naming the folder"
+#[test]
+fn a_run_placed_from_a_folder_runs_in_that_folder_there_and_one_from_an_ignored_folder_stays_here() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let repo = dir.join("repo");
+  let ssh = dir.join("ssh");
+
+  install(SSH, &ssh);
+  settle(&dir, &ssh, "stand");
+  checkout(&repo, "testbed = 0\n\n[test]\nsetup = [\"pwd > set-up.txt\"]\n");
+  std::fs::write(repo.join(".gitignore"), "build/\nset-up.txt\nwhere.txt\n").unwrap();
+  std::fs::create_dir_all(repo.join("studio/client")).unwrap();
+  std::fs::create_dir_all(repo.join("build/out")).unwrap();
+
+  let folder = repo.join("studio/client");
+  let done = on_machine(&folder, &dir, &["run", "--adapter", "plain", "--", "sh", "-c", "pwd > where.txt"]);
+  let bench = dir.join("bench/repo");
+
+  assert_eq!(done.code, 0, "{}\n{}", done.out, done.err);
+  assert_eq!(
+    std::fs::read_to_string(bench.join("studio/client/where.txt")).expect("the command ran in the folder"),
+    format!("{}\n", bench.join("studio/client").display())
+  );
+  assert_eq!(
+    std::fs::read_to_string(bench.join("set-up.txt")).unwrap(),
+    format!("{}\n", bench.display())
+  );
+
+  let ignored = repo.join("build/out");
+  let here =
+    on_machine(&ignored, &dir, &["run", "--adapter", "plain", "--", "sh", "-c", "pwd > where.txt"]);
+  let kept = fill_marks(&LANES.placed.ignored_dir, &[("dir", &ignored.to_string_lossy())]);
+
+  assert_eq!(here.code, 0, "{}\n{}", here.out, here.err);
+  assert!(here.err.contains(&kept), "{}", here.err);
+  assert!(ignored.join("where.txt").exists());
+  assert!(!bench.join("build").exists());
+}
+
+// "Where the bench holds no such folder, nothing runs and the verb exits 2 on a line naming it."
+#[test]
+fn the_placed_verb_refuses_a_folder_the_bench_does_not_hold() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let repo = dir.join("repo");
+
+  checkout(&repo, "testbed = 0\n");
+
+  let done = ran(&mut testbed(
+    &repo,
+    &dir,
+    &["placed", "--dir", "gone", "--", "sh", "-c", "touch ran.txt"],
+  ));
+  let refused = fill_marks(&LANES.placed.no_dir, &[("bench", &repo.to_string_lossy()), ("dir", "gone")]);
+
+  assert_eq!(done.code, 2, "{}", done.err);
+  assert!(done.err.contains(&refused), "{}", done.err);
+  assert!(!repo.join("ran.txt").exists());
 }
 
 // "The commit its `--since` names is resolved here and handed over as the commit itself, since a name such as
@@ -1543,6 +1615,7 @@ fn the_placed_run_is_running_once_the_far_side_says_its_turn_came() {
     path: dir.to_string_lossy().into_owned(),
     checkouts: Vec::new(),
     heads: Vec::new(),
+    within: String::new(),
   };
   // A stand-in `ssh` whose far side says its turn came and ends, whatever line it is handed.
   install(

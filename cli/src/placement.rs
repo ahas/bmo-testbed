@@ -61,6 +61,7 @@ struct Asked<'a> {
   remote: String,
   commit: String,
   command: &'a [String],
+  directory: String,
   lane: Lane,
   front: bool,
   next: bool,
@@ -111,6 +112,31 @@ fn git(dir: &Path, args: &[&str]) -> String {
     .filter(|done| done.status.success())
     .map(|done| String::from_utf8_lossy(&done.stdout).trim().to_owned())
     .unwrap_or_default()
+}
+
+/// Where a directory stands in its checkout: its path from the checkout's top with `/` between its parts, empty
+/// at the top or outside any checkout. A run started there runs in the same folder of a bench copy.
+fn place_in_checkout(dir: &Path) -> String {
+  git(dir, &["rev-parse", "--show-prefix"]).trim_end_matches('/').to_owned()
+}
+
+/// Whether a run stays here for the directory it was started in: one its checkout ignores, which a bench copy
+/// leaves out and so would not hold; said on a line naming it.
+fn kept_outside_copy(ask: &PlaceAsk<'_>) -> bool {
+  let ignored = Command::new("git")
+    .args(["check-ignore", "-q", "."])
+    .current_dir(&ask.cwd)
+    .stdin(Stdio::null())
+    .stdout(Stdio::null())
+    .stderr(Stdio::null())
+    .status()
+    .is_ok_and(|status| status.success());
+
+  if ignored {
+    eprintln!("{}", fill_marks(&LANES.placed.ignored_dir, &[("dir", &ask.cwd.to_string_lossy())]));
+  }
+
+  ignored
 }
 
 /// The remote a bench on another machine clones: the checkout's `origin`, and where that names a repository on
@@ -511,6 +537,7 @@ impl HttpPlacement {
       remote: remote.clone(),
       commit: git(&checkout, &["rev-parse", "HEAD"]),
       command: ask.command,
+      directory: place_in_checkout(&ask.cwd),
       lane: ask.lane,
       front: stands_at_front(ask.env),
       next: stands_next(ask.env),
@@ -556,6 +583,10 @@ impl HttpPlacement {
 
 impl Placement for HttpPlacement {
   fn place(&self, ask: &PlaceAsk<'_>) -> Option<u8> {
+    if kept_outside_copy(ask) {
+      return None;
+    }
+
     let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().ok()?;
 
     runtime.block_on(self.placed(ask))
@@ -880,11 +911,13 @@ pub fn main_checkout_place(checkout: &Path) -> PathBuf {
 }
 
 /// A bench made ready: its path on the placed machine, the checkouts a run there knows, the bench and every tree
-/// copied beside it, and the heads of the committed trees laid beside it, none for a run's.
+/// copied beside it, the heads of the committed trees laid beside it, none for a run's, and the folder of the
+/// bench the words run in, from its top, empty for the top itself.
 pub struct ReadyBench {
   pub path: String,
   pub checkouts: Vec<String>,
   pub heads: Vec<String>,
+  pub within: String,
 }
 
 /// The placed machine, a member of the placement type: every run goes there over `ssh`, as the testbed's
@@ -1153,6 +1186,7 @@ impl MachinePlacement {
       path,
       checkouts,
       heads,
+      within: String::new(),
     })
   }
 
@@ -1282,6 +1316,11 @@ impl MachinePlacement {
 
     if setup {
       line.push_str(" --setup");
+    }
+
+    if !bench.within.is_empty() {
+      line.push_str(" --dir ");
+      line.push_str(&quoted(&bench.within));
     }
 
     for checkout in &bench.checkouts {
@@ -1451,7 +1490,10 @@ impl MachinePlacement {
     let placed = PlacedRun::stand(ask, &checkout, self.settings.label());
     let commit = git(&checkout, &["rev-parse", "HEAD"]);
     let bench = match self.made_ready(&checkout, &commit, BenchFor::Run, &[]) {
-      Ok(bench) => bench,
+      Ok(bench) => ReadyBench {
+        within: place_in_checkout(&ask.cwd),
+        ..bench
+      },
       Err(said) => return Some(dropped(self.settings.label(), &said)),
     };
     let mut words = vec![self.settings.testbed.clone()];
@@ -1524,6 +1566,7 @@ impl MachinePlacement {
       path: bench.path.clone(),
       checkouts: known.clone(),
       heads: vec![],
+      within: String::new(),
     };
 
     // The first checkout's setup runs with the set; every other one's in its own bench before it.
@@ -1569,6 +1612,10 @@ impl Placement for MachinePlacement {
   /// takes it whatever it holds. A placed machine that does not take it passes it on to the next, and a run
   /// no machine took stays here.
   fn place(&self, ask: &PlaceAsk<'_>) -> Option<u8> {
+    if kept_outside_copy(ask) {
+      return None;
+    }
+
     let order = self.settings.order().unwrap_or_default();
     let last = order.len().saturating_sub(1);
 

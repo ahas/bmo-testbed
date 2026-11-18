@@ -131,6 +131,9 @@ trees_gone = "testbed: the deployment's bench on {machine} is missing trees its 
 trees_unread = "testbed: the trees a deployment's bench must hold could not be read on {machine}: {said}"
 setup_failed = "testbed: the setup step {command} failed with code {code}"
 no_registry = "testbed: the run's registry of checkouts could not be written at {file}: {why}"
+# The `placed` verb asked to run its command in {dir}, a folder the bench {bench} does not hold
+# (docs/boundary.md, 「`placed`」).
+no_dir = "testbed: the bench {bench} holds no folder {dir}, where the run was started in its checkout, so it does not run"
 # The placed machine's testbed is not this machine's live testbed release: {machine} the machine, {far} the commit
 # its testbed was built from and {live} the live release's commit; or no commit reads there, {file} the file asked
 # for and {said} what reading it came to.
@@ -170,6 +173,9 @@ release_failed_event = "the testbed on the placed machine {machine} could not be
 # A run kept here because its environment sets {variable}, a variable its declaration names as reaching what only
 # this machine reaches.
 kept = "testbed: {variable} names what only this machine reaches; running here"
+# A run kept here because it was started in {dir}, a folder its checkout ignores, which a bench copy would not
+# hold (docs/boundary.md, 「Placement」).
+ignored_dir = "testbed: {dir} is ignored in its checkout, so a bench copy would not hold it; running here"
 # A change check over several checkouts refused by a placement that cannot run it on the placed machine
 # (docs/boundary.md, 「Placement」): one carrying one checkout, one naming no placed machine, and one kept here by
 # {variable} while the placed machine's combined_order does not name this machine.

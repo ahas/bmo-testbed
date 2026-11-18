@@ -20,7 +20,7 @@ members = [
 
 # One version for the whole repository, over the boundary docs/boundary.md states.
 [workspace.package]
-version = "0.1.0-rev.55"
+version = "0.1.0-rev.56"
 edition = "2024"
 publish = false
 license = "MIT"

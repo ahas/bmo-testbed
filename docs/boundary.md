@@ -75,7 +75,7 @@ bmo-testbed run [--narrow] [--adapter <name>] [--json] -- <command…>
 ### `placed`
 
 ```
-bmo-testbed placed [--setup] [--checkout <path>…] -- <command…>
+bmo-testbed placed [--setup] [--checkout <path>…] [--dir <path>] -- <command…>
 ```
 
 - The far side of a placed run (「Placement」): run in the bench by the placing machine over `ssh`.
@@ -83,6 +83,10 @@ bmo-testbed placed [--setup] [--checkout <path>…] -- <command…>
   bench holds what its check and its run read; a step that fails exits 75 with a line naming it. It then
   runs the words as a command of its own, with `BMO_TESTBED_PLACED` set so the run is never placed
   again, and ends with that command's exit code; the command's output is this verb's.
+- **`--dir` names the folder of the bench the command runs in,** from the bench's top with `/` between its
+  parts: the folder the caller was started in, from its checkout's top. The setup steps still run at the
+  bench's top. Where the bench holds no such folder, nothing runs and the verb exits 2 on a line naming
+  it.
 - **It watches what it runs for silence** (`docs/testbed.md`, 「A holder whose command falls silent lets
   go」): the setup steps and the command pass their output on through pipes it counts, and are handed
   `BMO_TESTBED_HEARD`. A command that writes nothing for the bench's silence limit is ended whole and
@@ -94,7 +98,7 @@ bmo-testbed placed [--setup] [--checkout <path>…] -- <command…>
   written exits 75.
 - The words are a whole command line: `bmo-testbed suite --again`, `bmo-testbed cargo build …`, or
   any program. A testbed verb among them takes its own turn here.
-- Exits 2 where its words do not read (no `--`, no command).
+- Exits 2 where its words do not read (no `--`, no command) or the bench holds no folder `--dir` names.
 
 ### `crate-tests`
 
@@ -851,6 +855,10 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   machine's loopback address among them, only this machine reaches. The variables a repository's runs
   read are that repository's to name, so the platform's own addresses every session carries keep
   nothing here.
+- **A run started in a folder its checkout ignores is never placed,** said on a line naming the folder: a
+  bench copy leaves ignored files out, so it would not hold the folder the command runs in. A run placed
+  from any other folder runs in the same folder of the bench (`docs/testbed.md`, 「A run on another
+  machine」), the `placed` verb's `--dir` and the endpoint's `directory` naming it.
 - **The runs that can be placed** are a `run`, a `suite`, the change check and the Cargo verb's `test`,
   `check` and `clippy` (`docs/testbed.md`, 「A run on another machine」, which also names the runs that
   stay here and why).
@@ -1034,6 +1042,7 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   | `remote` | string | The checkout's reachable remote (「The placed machine」), empty where it has none |
   | `commit` | string | The checkout's `HEAD` |
   | `command` | list of strings | The command's words |
+  | `directory` | string | The folder the command runs in, from the checkout's top with `/` between its parts; empty at the top |
   | `lane` | string | `wide` or `narrow` |
   | `front`, `next` | booleans | Where the caller stands |
 
@@ -1050,10 +1059,10 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
 - **The caller makes the bench ready** the way it does for a placed machine, at the path the answer
   names, its open files copied over.
 - **The run address is an event stream,** asked once the bench is ready, which runs the bench's
-  declared setup and the command in that machine's own turn. Each `output` event's data is one line of
-  the run's output, which the caller writes to its standard error; one `result` event's data is one
-  JSON object with `line`, the testbed's result line, which the caller writes to its standard output,
-  and `code`, the exit code it ends with.
+  declared setup at the bench's top and the command in the folder `directory` names, in that machine's
+  own turn. Each `output` event's data is one line of the run's output, which the caller writes to its
+  standard error; one `result` event's data is one JSON object with `line`, the testbed's result line,
+  which the caller writes to its standard output, and `code`, the exit code it ends with.
 - **Anything else is local:** one whose connection is refused or breaks, an error, or an answer that
   does not read. The caller waits for the endpoint's answer however long it takes. The caller says so
   on a line and runs here.
