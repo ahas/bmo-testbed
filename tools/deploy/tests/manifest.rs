@@ -104,7 +104,7 @@ fn the_schema_states_the_arguments_the_executable_reads() {
 
   assert_eq!(schema["type"], "object");
   assert_eq!(schema["additionalProperties"], false);
-  assert_eq!(properties, ["attach", "commit", "dry_run", "repository", "why"]);
+  assert_eq!(properties, ["attach", "commit", "dry_run", "first", "repository", "why"]);
   assert_eq!(schema["required"], json!(["repository", "commit", "why"]));
   assert_eq!(
     schema["properties"]["commit"]["pattern"],

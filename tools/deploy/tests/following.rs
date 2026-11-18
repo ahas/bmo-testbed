@@ -95,6 +95,7 @@ impl Stand {
       env: env(self.dir.path(), &self.bin, &self.registry),
       testbed: self.bin.join("bmo-testbed"),
       poll: Duration::from_millis(10),
+      asker: None,
     }
   }
 
@@ -176,6 +177,7 @@ fn asked(attach: Option<bool>) -> Arguments {
     why: "Ship the queue fix".to_owned(),
     dry_run: None,
     attach,
+    first: None,
   }
 }
 

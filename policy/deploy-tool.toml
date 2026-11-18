@@ -43,6 +43,9 @@ unasked = "{unit} could not be asked whether it is still active: {why}"
 journal_unread = "its journal could not be read: {why}"
 # What the verb itself came to, {said} what it wrote.
 refused = "the deploy verb refused: {said}"
+# A waiting deployment of the commit the call would raise to first (docs/deploy.md, 「The hosted deploy tool」):
+# {unit} its unit, {said} what the raise said.
+not_raised = "the deployment waiting as {unit} could not be raised to first: {said}"
 failed = "the deploy verb ended with exit code {code}: {said}"
 # The exit code of a verb a signal ended.
 no_code = "none, a signal ended it"

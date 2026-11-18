@@ -13,6 +13,7 @@ use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::turn::{Env, process_env};
 use bmo_testbed_core::verb::{REFUSED_EXIT_CODE, data_root};
 use bmo_testbed_deploy::deployment::DeployPlaces;
+use bmo_testbed_deploy::line::{DeployLine, RootTurn, waiting_ticket};
 use bmo_testbed_deploy::tree::{DeployRecord, read_deploy_record};
 use bmo_testbed_deploy::unit::{DEPLOY_UNIT_MARKER, DEPLOY_UNIT_PREFIX};
 use bmo_testbed_record::{Record, record_path};
@@ -51,6 +52,9 @@ pub struct Arguments {
   pub dry_run: Option<bool>,
   #[serde(default)]
   pub attach: Option<bool>,
+  /// Why the deployment goes first in the deployment line, where it does.
+  #[serde(default)]
+  pub first: Option<String>,
 }
 
 /// The arguments read off a call, or why they do not read.
@@ -59,7 +63,16 @@ pub fn read_arguments(arguments: &Value) -> Result<Arguments, String> {
   let read: Arguments = serde_json::from_value(arguments.clone())
     .map_err(|why| fill_marks(&said.arguments, &[("why", &why.to_string())]))?;
 
-  for (argument, value) in [("repository", &read.repository), ("commit", &read.commit), ("why", &read.why)]
+  let first = read.first.as_ref();
+
+  for (argument, value) in [
+    ("repository", Some(&read.repository)),
+    ("commit", Some(&read.commit)),
+    ("why", Some(&read.why)),
+    ("first", first),
+  ]
+  .into_iter()
+  .filter_map(|(argument, value)| value.map(|value| (argument, value)))
   {
     if value.trim().is_empty() {
       return Err(fill_marks(&said.empty, &[("argument", argument)]));
@@ -93,6 +106,8 @@ pub struct Ground {
   pub env: Env,
   pub testbed: PathBuf,
   pub poll: Duration,
+  /// Who the call is asked by, the session record's holder, named as who marks a deployment first.
+  pub asker: Option<String>,
 }
 
 impl Ground {
@@ -105,6 +120,7 @@ impl Ground {
       env: process_env(),
       testbed: release.unwrap_or_else(|| PathBuf::from(TESTBED)),
       poll: Duration::from_secs(DEPLOY_TOOL.numbers.poll_seconds),
+      asker: None,
     }
   }
 
@@ -407,6 +423,47 @@ fn under_way(repository: &str, commit: &str, ground: &Ground) -> Option<Deployme
   (newest.state == DeploymentState::Running && of_commit(&newest, commit)).then_some(newest)
 }
 
+// The deployment waiting as the unit raised to first by the deploy verb's `deploy first`, then followed to its
+// end as a deployment the call started would be; or why the raise was refused.
+fn raise_and_follow(
+  unit: &str,
+  why: &str,
+  root: &Path,
+  commit: &str,
+  places: &DeployPlaces,
+  ground: &Ground,
+) -> Answer {
+  let said = &DEPLOY_TOOL.lines;
+  // The record's last event is taken before the raise, so none of the deployment's is missed.
+  let mut course = Course::before_start(&ground.record());
+  let mut verb = ground.command(&ground.testbed);
+
+  verb
+    .args(["deploy".to_owned(), "first".to_owned(), unit.to_owned(), format!("--why={why}")])
+    .args(ground.asker.as_deref().map(|asker| format!("--by={asker}")))
+    .current_dir(root);
+
+  let ran = match verb.output() {
+    Ok(ran) => ran,
+    Err(why) => {
+      return Answer::error(fill_marks(
+        &said.not_started,
+        &[("binary", &ground.testbed.to_string_lossy()), ("why", &why.to_string())],
+      ));
+    }
+  };
+
+  if !ran.status.success() {
+    let said_there =
+      what_it_said(&String::from_utf8_lossy(&ran.stdout), &String::from_utf8_lossy(&ran.stderr));
+
+    return Answer::error(fill_marks(&said.not_raised, &[("unit", unit), ("said", &said_there)]));
+  }
+
+  course.run_in(unit);
+  follow(course, Begun::Attached, commit, places, ground)
+}
+
 /// One call: the commit put live from the checkout the registry names for the repository, and what came of
 /// it.
 pub fn deploy(arguments: &Arguments, ground: &Ground) -> Answer {
@@ -427,6 +484,7 @@ pub fn deploy(arguments: &Arguments, ground: &Ground) -> Answer {
   };
   let commit = arguments.commit.trim();
   let dry_run = arguments.dry_run.unwrap_or(false);
+  let first = arguments.first.as_deref().map(str::trim);
 
   if arguments.attach.unwrap_or(false) {
     return attach(&repo.name(), commit, &places, ground);
@@ -434,6 +492,27 @@ pub fn deploy(arguments: &Arguments, ground: &Ground) -> Answer {
 
   if !dry_run && let Some(running) = under_way(&repo.name(), commit, ground) {
     return follow(Course::of(&ground.record(), running), Begun::Attached, commit, &places, ground);
+  }
+
+  // A deployment of the commit already waiting, for its deploy root's turn or in the line, is raised and
+  // followed rather than asked again behind itself.
+  if !dry_run && let Some(why) = first {
+    let line = DeployLine::under(&ground.data_root()).lock;
+    let turn = RootTurn::under(&places.deploy_root).lock;
+
+    if let Some(waiting) = waiting_ticket(&[&line, &turn], &repo.name(), commit)
+      && let Some(unit) = &waiting.unit
+    {
+      // One marked first already only needs following.
+      if waiting.first.is_some() {
+        let mut course = Course::before_start(&ground.record());
+
+        course.run_in(unit);
+        return follow(course, Begun::Attached, commit, &places, ground);
+      }
+
+      return raise_and_follow(unit, why, &repo.root, commit, &places, ground);
+    }
   }
 
   let before = read_deploy_record(&places.record);
@@ -449,6 +528,8 @@ pub fn deploy(arguments: &Arguments, ground: &Ground) -> Answer {
       format!("--message={}", arguments.why.trim()),
     ])
     .args(dry_run.then_some("--dry-run"))
+    .args(first.map(|why| format!("--first={why}")))
+    .args(first.and(ground.asker.as_deref()).map(|asker| format!("--by={asker}")))
     .current_dir(&repo.root);
 
   let ran = match verb.output() {

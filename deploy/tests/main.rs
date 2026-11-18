@@ -7,6 +7,7 @@ mod boot;
 mod console;
 mod deployment;
 mod expansion;
+mod line;
 mod own_units;
 mod progress;
 mod release;

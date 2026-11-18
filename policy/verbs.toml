@@ -212,7 +212,7 @@ and exits 1 where it failed; a second run meeting one at work is refused with 2.
 
 --due  start only where no run started since that time of day, local time"""
 deploy = """
-usage: {verb} deploy [--commit <sha>] [--message <why>] [--dry-run] [--no-check] [--before-start <command>] [--force-live]
+usage: {verb} deploy [--commit <sha>] [--message <why>] [--dry-run] [--no-check] [--before-start <command>] [--force-live] [--first <why> [--by <who>]]
 
 Puts a commit of the repository live (docs/deploy.md): the checkout's HEAD, or the commit named,
 gated by the static check and the suite, backed up, built into a release of its own, flipped onto,
@@ -226,7 +226,21 @@ deployment's unit it starts one, prints its name and how to read its journal, an
 --no-check      leave the gate out, where the caller already ran it
 --before-start  a command run between the bot service's stop and its start
 --force-live    go on at once past the declared quiet command where work stands under way, cutting it,
-                or where it could not tell"""
+                or where it could not tell
+--first         go ahead of every deployment waiting in the deployment line, never ahead of the one
+                holding it, for the English reason given
+--by            who marks it first; the account this runs as where none is named"""
+deploy_first = """
+usage: {verb} deploy first <unit> --why <why> [--by <who>]
+
+Raises a deployment waiting for its deploy root's turn or in the deployment line to first, by its unit
+(docs/deploy.md, 「The deployment line」): it goes next once the deployment holding the line lets go,
+after those marked first before it. Prints one line naming the unit, who and why, and exits 0; exits 2
+for a unit that is not a running deployment unit, one past the line, the one holding it, and one
+already first.
+
+--why  why it goes first, in English
+--by   who raises it; the account this runs as where none is named"""
 backups = """
 usage: {verb} backups
 

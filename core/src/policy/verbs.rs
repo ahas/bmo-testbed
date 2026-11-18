@@ -23,6 +23,7 @@ pub struct UsageWords {
   pub prune: String,
   pub full: String,
   pub deploy: String,
+  pub deploy_first: String,
   pub backups: String,
   pub backup: String,
   pub placed: String,

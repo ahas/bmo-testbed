@@ -37,8 +37,8 @@ impl RunWords {
   }
 }
 
-// How long ago a moment was, as the status says it; nothing for a moment not known.
-fn age(at: i64, now: i64) -> String {
+/// How long ago a moment was, as the status says it; nothing for a moment not known.
+pub fn age(at: i64, now: i64) -> String {
   if at > 0 {
     fill_marks(&LANES.status.age, &[("seconds", &(((now - at) as f64) / 1000.0).round().to_string())])
   } else {

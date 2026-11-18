@@ -279,6 +279,12 @@ fn status(json: bool) -> u8 {
       println!("{line}");
     }
 
+    let line = bmo_testbed_deploy::line::DeployLine::under(&data_root());
+
+    for line in bmo_testbed_deploy::line::status_lines(&line.lock, bmo_testbed_core::queue::now_ms()) {
+      println!("{line}");
+    }
+
     for machine in &machines {
       println!("{}", machine.line());
     }
@@ -351,6 +357,7 @@ fn run_deploy(args: DeployArgs) -> u8 {
   match args.word {
     Some(DeployWord::Commit(flags)) => deploy::deploy(&flags),
     Some(DeployWord::Backups) => deploy::backups(),
+    Some(DeployWord::First(args)) => deploy::raise_first(&args),
     None => deploy::deploy(&args.flags),
   }
 }

@@ -126,7 +126,10 @@ bmo-testbed status [--json | --free [--narrow]]
   saying nobody, its waiters in order with their age and their front and next marks, and a `placed on`
   line for each run this machine placed elsewhere in that lane (「Placement」, 「A run placed elsewhere
   stands here too」), naming the machine, whether it waits or runs there and since when; then the close
-  line of the repository it is run in; then a line for the placed machine the settings name, where they
+  line of the repository it is run in; then the deployment line: a `holding it:` line naming the
+  deployment holding it, or one saying nobody, and its waiting deployments in the order the line will
+  serve them, each naming its repository, commit and unit, how long ago it asked, and `first, by <who>:
+  <why>` where it is marked first; then a line for the placed machine the settings name, where they
   name one: whether it answers, with when its outage began where one stands, and where it does, the
   commit its testbed is built from and whether that is this machine's live testbed release, `current` or
   `behind` naming the live one. Exits 0.
@@ -139,6 +142,13 @@ bmo-testbed status [--json | --free [--narrow]]
     `current` (whether `release` is `live`);
   - `closeLine`: the repository's close line, with `holder` (a close entry or null) and `waiting` (a
     list of close entries, in the order they will be served), or null outside a repository.
+  - `deployLine`: the deployment line, with `holder` (a deployment ticket or null) and `waiting` (a
+    list of deployment tickets, in the order they will be served).
+- **A deployment ticket** carries `words` (what the line names it by, its repository, short commit and
+  unit), `repository`, `commit` (the short commit), `unit` (null where the deployment runs in none),
+  `askedAt` (epoch milliseconds), `pid`, and `first`: null, or `by`, `why` and `at` (epoch milliseconds)
+  of the mark that put it first. A ticket a testbed of an earlier revision stood carries its `words` and
+  `pid` alone, every other field null.
 - **A close entry** carries `scope`, `checkout`, `askedAt`, `heldAt` and `pid` as a queue entry does.
 - **`--free`** prints nothing and exits 0 where a seat of this machine's wide lane is free now with nobody
   waiting for one, else 1; with `--narrow`, the same of the narrow lane. A machine that places a run on a
@@ -380,7 +390,8 @@ bmo-testbed full [--due <HH:MM>]
 ### `deploy`
 
 ```
-bmo-testbed deploy [--commit <sha>] [--message <why>] [--dry-run] [--no-check] [--before-start <command>] [--force-live]
+bmo-testbed deploy [--commit <sha>] [--message <why>] [--dry-run] [--no-check] [--before-start <command>] [--force-live] [--first <why> [--by <who>]]
+bmo-testbed deploy first <unit> --why <why> [--by <who>]
 ```
 
 - Puts the commit live (`docs/deploy.md`). `--message` is the reason the deploy is made, written into
@@ -399,6 +410,15 @@ bmo-testbed deploy [--commit <sha>] [--message <why>] [--dry-run] [--no-check] [
   tell, instead of waiting for it to answer 0 (`docs/deploy.md`, 「What the deploy run does, in order」),
   saying what it answered. A `quiet` that could not tell, left unforced, fails the deployment once it
   repeats the policy's number of asks running.
+  `--first` marks the deployment first in the deployment line, with the English reason given: it goes
+  ahead of every deployment waiting there, never ahead of the one holding it, and those marked first
+  go in the order they were marked (`docs/deploy.md`, 「The deployment line」). `--by` names who marked
+  it, the account the verb runs as where none is given.
+- `deploy first` raises a deployment already waiting, before the line or in it, to first, by its unit,
+  with the English reason `--why` gives and who `--by` names, the account the verb runs as where none is
+  given. It prints one line naming the unit, who and why, and exits 0. It refuses with 2 a unit that is
+  not a running deployment unit, one the testbed's record already holds, the one holding the line and
+  one already marked first.
 
 ### `backups`
 
@@ -796,9 +816,12 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   「Placed tools」): the tool `deploy`, whose one entry `testbed/deploy` is shown to a session whose
   record holds the capability `deploy`, and which puts a commit live for a session `deploy` refuses
   (`docs/deploy.md`, 「The hosted deploy tool」). It serves no resources.
-- **Its arguments** are `repository`, `commit` and `why`, strings and required, and `dry_run` and
-  `attach`, booleans; its input schema, beside its manifest, takes no other. `attach` starts nothing and
-  answers the outcome of the newest deployment of the commit the testbed's record holds.
+- **Its arguments** are `repository`, `commit` and `why`, strings and required, `dry_run` and
+  `attach`, booleans, and `first`, a string; its input schema, beside its manifest, takes no other.
+  `attach` starts nothing and answers the outcome of the newest deployment of the commit the testbed's
+  record holds. `first` marks the deployment first in the deployment line with that reason, the
+  session record's `holderName` as who; where a deployment of the same repository and commit already
+  waits, the call raises it and follows it instead of starting another.
 - **Its answer** is text. A deployment that went live answers a first line beginning `live:`, naming the
   commit and its subject. A deployment that did not, a refusal and arguments that do not read answer the
   same text marked as an error, `isError`. A dry run answers what the verb said.

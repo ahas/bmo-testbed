@@ -386,6 +386,31 @@ flowchart TD
   it says so on a line naming the holder and goes on beside it, outside the line. The bound stands far
   past what a whole batch of deployments takes, so only a holder that has stopped coming to an end is
   passed.
+- **A deployment marked first goes ahead of every deployment waiting in the line, never ahead of the
+  one holding it.** The deploy verb's `--first <why>` marks it, and so does the hosted tool's `first`
+  (「The hosted deploy tool」). It stands in the line ahead of every unmarked deployment waiting there, so
+  it takes the line next once the deployment holding it lets go; the holder runs on uncut, since the line
+  goes to one holder at a time and is handed on only when that one lets go. Deployments marked first
+  stand among themselves in the order they were marked. The mark orders the line alone: a deployment
+  still waiting for its deploy root's turn waits there first come, as before, and stands first once it
+  reaches the line.
+- **A deployment already waiting is raised to first** by `deploy first <unit> --why <why>`, naming its
+  unit, the one name a waiting deployment has, since it has written nothing into the testbed's record
+  yet. The raise leaves a mark for the unit beside the line's lock, `deploy-line.first/<unit>.json`
+  under the same `locks/`. The deployment reads it as it waits and moves itself ahead at once, marked
+  first in the order of the raise; one still waiting for its deploy root's turn reads it as it reaches
+  the line. A raise is refused, with nothing left behind, for a unit that is not a running deployment
+  unit, one the testbed's record already holds, since that one has passed the line, the one holding the
+  line, and one already marked first.
+- **Every first mark says who marked it and why.** Who is the `--by` given, else the account the verb
+  runs as; the hosted tool names the session's holder. Why is the English reason given. The deployment
+  says both on a line once it is marked, its waiting lines name them, and `status` shows them beside
+  its ticket.
+- **`status` lists the line,** after the lanes and the close line (`docs/boundary.md`, 「`status`」): the
+  deployment holding it, and every deployment waiting, in the order the line will serve them, each with
+  its repository, its commit, its unit, how long ago it asked and its first mark where it has one.
+  The holder's ticket says it holds the line, so the one holding it is named even where a deployment
+  marked first stands ahead of its ticket.
 
 ## A connection that breaks under the placed machine
 
@@ -429,13 +454,15 @@ flowchart TD
   | `why` | string, required | Why the deploy is made, in English, handed to the verb as `--message` |
   | `dry_run` | boolean, optional | Say what the deployment would do, changing nothing and starting no unit |
   | `attach` | boolean, optional | Start nothing: answer the outcome of the newest deployment of the commit the record holds, following it to its end where it still runs |
+| `first` | string, optional | Mark the deployment first in the deployment line, with this English reason, the session's holder named as who marked it (「The deployment line」). Where a deployment of the same repository and commit already waits, for its deploy root's turn or in the line, the call raises that one and follows it instead of starting another |
 
 - **The checkout comes from the machine's registry** (`docs/suite.md`, 「The dependents of a major
   change」): the file `BMO_TESTBED_CHECKOUTS` names, or `checkouts.toml` under the `testbed/` of the
   data root `BMO_DATA_DIR` names, which the tool host hands every call from the session's record. Each
   checkout the registry lists has its declaration read, and the one whose `name` is the repository asked
   for, a leading `bmo-` taken off both, is the checkout.
-- **It runs the verb in that checkout** with the commit, the reason and `--dry-run` where asked, its
+- **It runs the verb in that checkout** with the commit, the reason, `--dry-run` where asked, and
+  `--first` with `--by` naming the session record's `holderName` where `first` is given, its
   environment the call's with `CLAUDE_PID` and `BMO_DEPLOY_UNIT` taken out, so the verb starts its unit
   as it does for any caller outside a harness. The binary is the one of the release the tool is placed
   from, its `bin/bmo-testbed`, or `bmo-testbed` on the path where the tool runs from anywhere else.
@@ -452,6 +479,10 @@ flowchart TD
   - **The unit is asked as well,** every turn, whether it is still active. Where it has ended and the
     record holds no deployment of it, since a run that cannot write the record goes on without it, the
     deployment record under the repository's deploy root is judged instead.
+- **It raises a deployment already waiting** where `first` is given and a deployment of the same
+  repository and commit stands waiting, for its deploy root's turn or in the line: the call raises it
+  as `deploy first` does, by the unit its ticket names, and follows it as it would its own, starting
+  nothing; one marked first already is followed as it stands.
 - **It attaches to a deployment already under way.** Where the record's newest deployment of the
   repository is still running and is of the commit asked for, the call runs no verb and follows that
   deployment as it would its own. With `attach`, the call starts nothing whatever that deployment's

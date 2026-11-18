@@ -246,6 +246,8 @@ machine_unreached = "cannot be reached ({said}){outage}"
 # An outage the runs placed there remember, {since} when it began, as `machine_unreached` names it.
 machine_outage = "; out since {since}"
 close_line = "the close line:"
+# The deployment line's heading (docs/deploy.md, 「The deployment line」).
+deploy_line = "the deployment line:"
 
 # The `run` verb's refusal of a language it does not know, {name} the name given and {names} the ones
 # there are.

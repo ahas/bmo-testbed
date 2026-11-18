@@ -99,6 +99,25 @@ pub struct DeployFlags {
   pub before_start: Option<String>,
   #[arg(long)]
   pub force_live: bool,
+  /// Mark the deployment first in the deployment line, with this English reason.
+  #[arg(long, value_parser = named)]
+  pub first: Option<String>,
+  /// Who marks it first; the account the verb runs as where none is named.
+  #[arg(long, value_parser = named, requires = "first")]
+  pub by: Option<String>,
+}
+
+/// `deploy first`: a waiting deployment raised to first in the deployment line, by its unit.
+#[derive(Debug, Args)]
+pub struct FirstArgs {
+  #[arg(value_parser = named)]
+  pub unit: String,
+  /// Why it goes first, in English.
+  #[arg(long, value_parser = named)]
+  pub why: String,
+  /// Who raises it; the account the verb runs as where none is named.
+  #[arg(long, value_parser = named)]
+  pub by: Option<String>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -107,6 +126,8 @@ pub enum DeployWord {
   Commit(DeployFlags),
   /// The backups a deployment took, sent away and rotated.
   Backups,
+  /// A waiting deployment raised to first in the deployment line.
+  First(FirstArgs),
 }
 
 /// `backup` and the word naming what it does (docs/backup.md).
@@ -494,6 +515,7 @@ pub fn read(args: impl IntoIterator<Item = OsString>) -> Result<Words, clap::Err
         .override_help(usage(&said.deploy))
         .mut_subcommand("commit", |word| word.override_help(usage(&said.deploy)))
         .mut_subcommand("backups", |word| word.override_help(usage(&said.backups)))
+        .mut_subcommand("first", |word| word.override_help(usage(&said.deploy_first)))
     })
     .mut_subcommand("backups", |verb| verb.override_help(usage(&said.backups)))
     .mut_subcommand("backup", |verb| {

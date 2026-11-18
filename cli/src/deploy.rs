@@ -5,7 +5,7 @@
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use bmo_testbed_client::{TestRun, TestRunState};
+use bmo_testbed_client::{PageQuery, TestRun, TestRunState};
 use bmo_testbed_core::declaration::Repository;
 use bmo_testbed_core::events::{Event, Hook};
 use bmo_testbed_core::policy::deploy::DEPLOY;
@@ -21,16 +21,18 @@ use bmo_testbed_deploy::deployment::{
   BuildAsk, DeployAsk, DeployPlaces, Gate, GateAsk, GateFault, GateFooting, GateOutcome, GateStep,
   LaidUnits, Machine, Passed, SuitePassed, deploy as deploy_run, passed_before,
 };
-use bmo_testbed_deploy::line::DeployLine;
+use bmo_testbed_deploy::line::{DeployLine, FirstMark, RaiseAsk, raise_first as raise_first_in_line};
 use bmo_testbed_deploy::progress::DEPLOY_PROGRESS_VARIABLE;
 use bmo_testbed_deploy::release::primary_checkout;
 use bmo_testbed_deploy::run::run_quiet;
 use bmo_testbed_deploy::unit::{
-  DEPLOY_SLICE, DeployUnitStart, deploy_unit_name, deploy_unit_of_process, hand_off, this_again,
+  DEPLOY_SLICE, DEPLOY_UNIT_PREFIX, DeployUnitStart, deploy_unit_name, deploy_unit_of_process, hand_off,
+  this_again,
 };
 use bmo_testbed_deploy::upload::{
   AwsHands, BackupNames, Remote, send_backups, upload_failed_detail, upload_failed_summary,
 };
+use bmo_testbed_record::Record;
 use bmo_testbed_suite::once_more::run_judged;
 use bmo_testbed_suite::quick::shared_versions::find_shared;
 use bmo_testbed_suite::run::{SuiteAsk, SuiteWords, ask_of};
@@ -41,7 +43,7 @@ use crate::home_of;
 use crate::placement::{BenchFor, FarEnd, MachinePlacement, PLACEMENT_VARIABLE, ReadyBench};
 use crate::recorded::suite_record;
 use crate::suite::repository;
-use crate::words::{BINARY, DeployFlags};
+use crate::words::{BINARY, DeployFlags, FirstArgs};
 
 /// The gate a deployment passes: the declared static check over the range from what was live, then the
 /// suite over the same range, what failed run once more, unless the deployment left the suite out; nothing
@@ -591,6 +593,7 @@ pub fn deploy(args: &DeployFlags) -> u8 {
     record: Some(data_root()),
     layer_pin: Some(pinned_layer),
     line: Some(DeployLine::under(&data_root())),
+    first: args.first.as_deref().map(|why| FirstMark::now(&who(args.by.as_deref(), &env), why)),
     root_poll: None,
     retry: retry_pauses(),
   };
@@ -613,6 +616,61 @@ pub fn deploy(args: &DeployFlags) -> u8 {
   };
 
   runtime.block_on(deploy_run(&repo, &places, &ask, &env, gate, &Machine, &hook))
+}
+
+// Who marks a deployment first: the one named, else the account the verb runs as.
+fn who(named: Option<&str>, env: &Env) -> String {
+  named
+    .map(str::to_owned)
+    .or_else(|| env.get("USER").filter(|user| !user.is_empty()).cloned())
+    .unwrap_or_else(|| DEPLOY.run.raise_who.clone())
+}
+
+// Whether the testbed's record holds a deployment run in the unit, read newest first and no further back than
+// the moment the unit's name carries, since its deployment begins its record after it.
+fn recorded_in(record: &Record, unit: &str) -> Result<bool, String> {
+  let since = unit.strip_prefix(DEPLOY_UNIT_PREFIX).and_then(|at| at.parse::<i64>().ok()).unwrap_or(0);
+  let mut query = PageQuery::default();
+
+  loop {
+    let page = record.deployments(&query)?;
+
+    if page.items.iter().any(|deployment| deployment.unit_name.as_deref() == Some(unit)) {
+      return Ok(true);
+    }
+
+    match page.items.last() {
+      Some(last) if page.more && last.started_at >= since => query.after = Some(last.id),
+      _ => return Ok(false),
+    }
+  }
+}
+
+/// `deploy first`: a waiting deployment raised to first in the deployment line by its unit (docs/deploy.md,
+/// 「The deployment line」); a refusal exits 2.
+pub fn raise_first(args: &FirstArgs) -> u8 {
+  let env = process_env();
+  let line = DeployLine::under(&data_root());
+  let running = |unit: &str| {
+    unit.starts_with(DEPLOY_UNIT_PREFIX)
+      && run_quiet(&["systemctl", "--user", "is-active", "--quiet", unit].map(str::to_owned), None).ok
+  };
+  let recorded = |unit: &str| Record::open(&data_root()).and_then(|record| recorded_in(&record, unit));
+  let raised = raise_first_in_line(&RaiseAsk {
+    line: &line.lock,
+    unit: &args.unit,
+    mark: FirstMark::now(&who(args.by.as_deref(), &env), &args.why),
+    running: &running,
+    recorded: &recorded,
+  });
+
+  match raised {
+    Ok(line) => {
+      println!("{line}");
+      0
+    }
+    Err(why) => refused(&why),
+  }
 }
 
 /// `backups`: every backup not yet confirmed sent and read back, the rotation after it, one run at a time;

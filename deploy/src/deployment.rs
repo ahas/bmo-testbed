@@ -42,7 +42,7 @@ use crate::expansion::{
   BuildTree, TreeStore, bring_submodules, build_target, committed_trees, expansion_tree, lay_outside_trees,
   put_build_tree,
 };
-use crate::line::{DeployLine, RootTurn};
+use crate::line::{DeployLine, DeployTicket, FirstMark, RootTurn};
 use crate::progress::{
   DeployRun, DeployStart, Outcome, Part, Stage, begin_deploy, deploy_progress_at, deploy_progress_path,
 };
@@ -157,6 +157,9 @@ pub struct DeployAsk {
   /// The deployment line the run stands in from its gate to the end of its build (docs/deploy.md, 「The
   /// deployment line」); none stands in none.
   pub line: Option<DeployLine>,
+  /// The mark putting the deployment first in the line, who made it and why (docs/deploy.md, 「The deployment
+  /// line」); none stands it first come.
+  pub first: Option<FirstMark>,
   /// How often a deployment waiting for its deploy root's turn looks (docs/deploy.md, 「The deployment
   /// line」); none is the lanes' pace. A test sets it short.
   pub root_poll: Option<Duration>,
@@ -1620,11 +1623,10 @@ pub async fn deploy(
   // progress record is begun so two deployments of one repository never write one record at once; then what
   // the deployment before it put live, read again (docs/deploy.md, 「The deployment line」). A run carrying on
   // the one whose unit it stands in takes no turn of its own: that run holds it.
-  let holder = format!(
-    "{} {shown}{}",
-    repo.name(),
-    ask.unit.as_deref().map(|unit| format!(" ({unit})")).unwrap_or_default()
-  );
+  let ticket = DeployTicket {
+    first: ask.first.clone(),
+    ..DeployTicket::asked(&repo.name(), &shown, ask.unit.as_deref())
+  };
   let carried =
     deploy_progress_at(&places.progress).is_some_and(|standing| standing.carried_in(ask.unit.as_deref()));
   let _root_turn = (!carried)
@@ -1634,10 +1636,10 @@ pub async fn deploy(
         ..RootTurn::under(&places.deploy_root)
       };
 
-      turn.take(&holder, &|line| run.say(line))
+      turn.take(&ticket, &|line| run.say(line))
     })
     .flatten();
-  let line = ask.line.as_ref().and_then(|line| line.take(&holder, &|line| run.say(line)));
+  let line = ask.line.as_ref().and_then(|line| line.take(&ticket, &|line| run.say(line)));
 
   run.previous = read_deploy_record(&places.record);
 

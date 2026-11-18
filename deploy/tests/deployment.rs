@@ -24,7 +24,7 @@ use bmo_testbed_deploy::deployment::{
   release_build, version_major, workspace_binaries,
 };
 use bmo_testbed_deploy::expansion::committed_tree;
-use bmo_testbed_deploy::line::DeployLine;
+use bmo_testbed_deploy::line::{DeployLine, DeployTicket, FirstMark};
 use bmo_testbed_deploy::progress::{Outcome, read_deploy_progress};
 use bmo_testbed_deploy::release::{LiveProcess, release_dir};
 use bmo_testbed_deploy::run::{Ran, run_quiet};
@@ -1875,6 +1875,14 @@ fn a_build_that_fails_there_is_not_tried_again_and_names_its_own_exit_code() {
   assert!(!said(&hands).contains("trying again"), "{}", said(&hands));
 }
 
+// The ticket of a deployment that asked earlier, named by its words alone.
+fn earlier_ticket() -> DeployTicket {
+  DeployTicket {
+    words: "an earlier deployment".to_owned(),
+    ..DeployTicket::default()
+  }
+}
+
 // The scene's own deployment line, its waits said every few milliseconds, with the bound given.
 fn line_of(scene: &Scene, bound: Duration) -> DeployLine {
   DeployLine {
@@ -1892,7 +1900,7 @@ fn line_of(scene: &Scene, bound: Duration) -> DeployLine {
 fn a_deployment_that_must_wait_in_the_line_ends_live_once_its_turn_comes() {
   let scene = Scene::new();
   let line = line_of(&scene, Duration::from_secs(3600));
-  let held = line.take("an earlier deployment", &|_| {}).unwrap();
+  let held = line.take(&earlier_ticket(), &|_| {}).unwrap();
   let (told, heard) = std::sync::mpsc::channel();
   let ask = DeployAsk {
     line: Some(line),
@@ -1927,6 +1935,24 @@ fn a_deployment_that_must_wait_in_the_line_ends_live_once_its_turn_comes() {
   assert!(scene.deploy_dir().exists(), "{lines}");
 }
 
+// "The deploy verb's `--first <why>` marks it"; "The deployment says both on a line once it is marked": the
+// mark the run is asked with stands its ticket first and is said with who and why.
+#[test]
+fn a_deployment_asked_first_says_who_marked_it_and_why_and_ends_live() {
+  let scene = Scene::new();
+  let hands = Hands::default();
+  let ask = DeployAsk {
+    line: Some(line_of(&scene, Duration::from_secs(3600))),
+    first: Some(FirstMark::now("ops", "the paint fix is urgent")),
+    ..DeployAsk::default()
+  };
+  let code = scene.run_with(&ask, &Told(true), &hands, &scene.env());
+  let marked = fill_marks(&DEPLOY.run.first_marked, &[("by", "ops"), ("why", "the paint fix is urgent")]);
+
+  assert_eq!(code, 0, "{}", said(&hands));
+  assert!(said(&hands).contains(&marked), "{marked}\n{}", said(&hands));
+}
+
 // "Once it has waited the policy's minutes ... it says so on a line naming the holder and goes on beside it,
 // outside the line"
 #[test]
@@ -1934,7 +1960,7 @@ fn a_deployment_whose_wait_in_the_line_passes_its_bound_goes_on_beside_the_holde
   let scene = Scene::new();
   let hands = Hands::default();
   let line = line_of(&scene, Duration::ZERO);
-  let _held = line.take("an earlier deployment", &|_| {}).unwrap();
+  let _held = line.take(&earlier_ticket(), &|_| {}).unwrap();
   let ask = DeployAsk {
     line: Some(line),
     ..DeployAsk::default()

@@ -8,7 +8,8 @@
 //! ahead of its own; the ticket stays while the lock is held and goes on release. A ticket's name sorts
 //! by when it was stood and ends with the process standing it; a front ticket's name opens with a mark
 //! sorting ahead of every time, and a next ticket's with one sorting behind the front's and ahead of every
-//! time. A ticket's file holds the name its taker stands under.
+//! time. A ticket's file holds the name its taker stands under. A taker waiting for one lock may be moved to
+//! the front while it waits: it stands a front ticket of that moment, then lets its old one go.
 //!
 //! A lane of several seats is several such locks sharing the first one's queue (docs/testbed.md, 「The
 //! turn」). A taker that has its seat marks its ticket seated, a line of its own under the name, and a seated
@@ -170,8 +171,12 @@ fn ticket_ahead(queue: &Path, ticket: &str, pass_seated: bool) -> Option<String>
 }
 
 /// Asked once a wait has run out, with the name of the taker it waits behind: a later moment to wait until,
-/// in milliseconds since the epoch, or none to give up.
+/// in milliseconds since the epoch, one already passed waiting a look more, or none to give up.
 pub type WaitOn<'a> = &'a mut dyn FnMut(Option<&str>) -> Option<i64>;
+
+/// Asked at every look while the ticket stands behind the front: the name to stand under from now on, where
+/// the taker is to stand at the front, behind every front ticket stood before it; none to keep its place.
+pub type Raise<'a> = &'a mut dyn FnMut() -> Option<String>;
 
 /// How a taker waits for the lock.
 #[derive(Default)]
@@ -185,6 +190,9 @@ pub struct LockWait<'a> {
   pub rank: Rank,
   /// How often a queued taker looks; a test sets it short.
   pub poll: Option<Duration>,
+  /// Asked at every look while the taker stands behind the front, where it may be moved there while it
+  /// waits for one lock; a lane's seats keep each ticket where it stood.
+  pub raise: Option<Raise<'a>>,
 }
 
 /// The lock as its taker holds it, let go when this is dropped: the descriptor closed and the ticket taken
@@ -199,6 +207,12 @@ impl HeldLock {
   /// The lock file held.
   pub fn path(&self) -> &Path {
     &self.path
+  }
+
+  /// The holder's ticket marked seated, so a listing of the queue tells the ticket holding the lock from those
+  /// waiting, wherever the holder's ticket sorts among them.
+  pub fn mark_seated(&self) {
+    mark_seated(&self.ticket);
   }
 }
 
@@ -217,14 +231,20 @@ fn try_flock(path: &Path) -> Option<File> {
   taken.then_some(file)
 }
 
+// A look's pace in milliseconds, as a deadline counts it.
+fn poll_ms(poll: Duration) -> i64 {
+  i64::try_from(poll.as_millis()).unwrap_or(i64::MAX)
+}
+
 /// The lock, or none where it could not be had within the wait.
 pub fn take_lock(path: &Path, wait_seconds: f64, mut wait: LockWait<'_>) -> Option<HeldLock> {
   let _ = OpenOptions::new().append(true).create(true).open(path);
 
   let queue = queue_dir_of(path);
   let _ = std::fs::create_dir_all(&queue);
-  let ticket = ticket_name(wait.rank);
-  let ticket_path = queue.join(&ticket);
+  let mut ticket = ticket_name(wait.rank);
+  let mut ticket_path = queue.join(&ticket);
+  let mut rank = wait.rank;
   let poll = wait.poll.unwrap_or(Duration::from_millis(LANES.numbers.poll_milliseconds));
   let mut deadline = now_ms() + (wait_seconds.max(0.0) * 1000.0) as i64;
 
@@ -234,6 +254,20 @@ pub fn take_lock(path: &Path, wait_seconds: f64, mut wait: LockWait<'_>) -> Opti
   // waiting on it: a taker blocked inside flock would be handed the lock by the kernel over a ticket stood
   // ahead of it meanwhile.
   loop {
+    // A taker moved to the front stands a front ticket of the moment, then lets its old one go, so it is never
+    // out of the queue meanwhile.
+    if rank != Rank::Front
+      && let Some(holder) = wait.raise.as_mut().and_then(|raise| raise())
+    {
+      let raised = ticket_name(Rank::Front);
+      let raised_path = queue.join(&raised);
+
+      if std::fs::write(&raised_path, &holder).is_ok() {
+        let _ = std::fs::remove_file(&ticket_path);
+        (ticket, ticket_path, rank) = (raised, raised_path, Rank::Front);
+      }
+    }
+
     let ahead = ticket_ahead(&queue, &ticket, false);
 
     if ahead.is_none()
@@ -250,9 +284,11 @@ pub fn take_lock(path: &Path, wait_seconds: f64, mut wait: LockWait<'_>) -> Opti
       let named = ahead.as_deref().filter(|name| !name.is_empty());
       let later = wait.wait_on.as_mut().and_then(|wait_on| wait_on(named));
 
+      // A moment the answer named has passed where answering took longer than it allowed: the taker still
+      // waits, a look at least before it is asked again; only none gives up.
       match later {
-        Some(later) if later > now_ms() => deadline = later,
-        _ => {
+        Some(later) => deadline = later.max(now_ms() + poll_ms(poll)),
+        None => {
           let _ = std::fs::remove_file(&ticket_path);
 
           return None;
@@ -373,9 +409,10 @@ pub fn take_seats(seats: &[PathBuf], wait_seconds: f64, mut wait: SeatWait<'_>) 
       let named = ahead.as_deref().filter(|name| !name.is_empty());
       let later = wait.lock.wait_on.as_mut().and_then(|wait_on| wait_on(named));
 
+      // As for one lock: a moment already passed still waits, only none gives up.
       match later {
-        Some(later) if later > now_ms() => deadline = later,
-        _ => {
+        Some(later) => deadline = later.max(now_ms() + poll_ms(poll)),
+        None => {
           let _ = std::fs::remove_file(&ticket_path);
 
           return None;

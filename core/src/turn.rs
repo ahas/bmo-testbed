@@ -610,6 +610,7 @@ pub fn take_turn(ask: &TurnAsk<'_>) -> TestbedTurn {
           Rank::Ordinary
         },
         poll: ask.poll,
+        ..LockWait::default()
       },
       deployment_seat: Some(&front_seat),
       front,

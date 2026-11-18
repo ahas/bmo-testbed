@@ -3,8 +3,10 @@
 //! deployment record judged, with stand-ins for the testbed binary and the service manager on the path.
 
 use std::path::Path;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
+use bmo_testbed_core::policy::deploy::DEPLOY;
+use bmo_testbed_deploy::line::{DeployLine, DeployTicket};
 use bmo_testbed_deploy::tree::DeployRecord;
 use deploy_tool::{Arguments, Ground, deploy, outcome, release_testbed, unit_of};
 use serde_json::json;
@@ -143,6 +145,102 @@ fn the_verb_runs_in_the_checkout_and_its_live_record_is_answered() {
   assert_eq!(logged(dir.path(), "harness"), "none none");
 }
 
+// "and `--first` with `--by` naming the session record's `holderName` where `first` is given"
+#[test]
+fn a_call_marked_first_hands_the_verb_its_reason_and_the_sessions_holder() {
+  let dir = tempfile::tempdir().unwrap();
+  let bin = dir.path().join("bin");
+  let root = checkout(dir.path(), "agency", "bmo-agency");
+  let at = registry(dir.path(), &[&root]);
+  let written = record(COMMIT, "Fix the queue", "Ship the queue fix", "2026-10-30T10:00:00");
+  let asked = json!({
+    "repository": "agency",
+    "commit": "0123456789ab",
+    "why": "Ship the queue fix",
+    "first": "the paint fix is urgent",
+  });
+
+  testbed(&bin, &going_live(&record_path(dir.path(), "agency"), &written));
+  ended_unit(&bin);
+
+  let ran = tool(&call(asked).to_string(), &env(dir.path(), &bin, &at));
+
+  assert_eq!(ran.answer()["isError"], false, "{}", text(&ran.answer()));
+  assert_eq!(
+    logged(dir.path(), "words").lines().collect::<Vec<_>>(),
+    [
+      "deploy",
+      "--commit=0123456789ab",
+      "--message=Ship the queue fix",
+      "--first=the paint fix is urgent",
+      "--by=chat"
+    ]
+  );
+}
+
+// "It raises a deployment already waiting where `first` is given ... and follows it as it would its own,
+// starting nothing"
+#[test]
+fn a_call_marked_first_raises_the_waiting_deployment_of_its_commit_and_follows_it() {
+  let dir = tempfile::tempdir().unwrap();
+  let bin = dir.path().join("bin");
+  let root = checkout(dir.path(), "agency", "bmo-agency");
+  let at = registry(dir.path(), &[&root]);
+  let written = record(COMMIT, "Fix the queue", "Ship the queue fix", "2026-10-30T10:00:00");
+  let line = DeployLine {
+    lock: dir.path().join("data/locks/deploy-line.lock"),
+    bound: Duration::from_secs(3600),
+    say_every: Duration::from_millis(5),
+    poll: Some(Duration::from_millis(5)),
+  };
+  let waiting = DeployTicket::asked("bmo-agency", "0123456789ab", Some("bmo-deploy-1793328193818"));
+  let holder = line.take(&DeployTicket::asked("bmo-other", "fedcba987654", None), &|_| {}).unwrap();
+  let asked = json!({
+    "repository": "agency",
+    "commit": "0123456789ab",
+    "why": "Ship the queue fix",
+    "first": "the paint fix is urgent",
+  });
+
+  testbed(&bin, &going_live(&record_path(dir.path(), "agency"), &written));
+  ended_unit(&bin);
+
+  let ran = std::thread::scope(|scope| {
+    let (told, heard) = std::sync::mpsc::channel();
+
+    scope.spawn(|| {
+      let say = move |said: &str| {
+        let _ = told.send(said.to_owned());
+      };
+
+      drop(line.take(&waiting, &say));
+    });
+
+    let given_up = Instant::now() + Duration::from_secs(60);
+    let waits = DEPLOY.run.line_waiting.split('{').next().unwrap_or_default();
+    let stood =
+      std::iter::from_fn(|| heard.recv_timeout(given_up.saturating_duration_since(Instant::now())).ok())
+        .any(|said| said.contains(waits));
+    let ran = tool(&call(asked).to_string(), &env(dir.path(), &bin, &at));
+
+    drop(holder);
+    assert!(stood, "the deployment of the commit waits in the line");
+    ran
+  });
+
+  assert_eq!(ran.answer()["isError"], false, "{}", text(&ran.answer()));
+  assert_eq!(
+    logged(dir.path(), "words").lines().collect::<Vec<_>>(),
+    [
+      "deploy",
+      "first",
+      "bmo-deploy-1793328193818",
+      "--why=the paint fix is urgent",
+      "--by=chat"
+    ]
+  );
+}
+
 // "a deployment whose record does not name the commit answers an error with the unit's journal"
 #[test]
 fn a_deployment_that_did_not_go_live_answers_its_journal() {
@@ -238,6 +336,7 @@ fn the_unit_is_waited_on_while_it_is_active() {
     why: "Ship it".to_owned(),
     dry_run: None,
     attach: None,
+    first: None,
   };
   let count = dir.path().join("asked");
 
@@ -262,6 +361,7 @@ fn the_unit_is_waited_on_while_it_is_active() {
     env: env(dir.path(), &bin, &at),
     testbed: bin.join("bmo-testbed"),
     poll: Duration::from_millis(10),
+    asker: None,
   };
   let answer = deploy(&asked, &ground);
 

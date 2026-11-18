@@ -115,6 +115,22 @@ root_taken = "the deployment of this repository under way ended; its turn came a
 # The repository read through its primary checkout rather than the one the deployment was asked from
 # (docs/deploy.md, 「The releases」): {checkout} the primary checkout.
 primary = "reading the repository through its primary checkout {checkout}"
+# A first mark (docs/deploy.md, 「The deployment line」): {by} who marked the deployment, {why} the English reason,
+# {words} the line's words for the deployment, {unit} its unit.
+first_named = "{words}, first by {by}: {why}"
+first_marked = "marked first in the deployment line by {by}: {why}"
+first_raised = "raised to first in the deployment line by {by}: {why}"
+line_first = "; marked first by {by}: {why}"
+raise_done = "{unit} raised to first in the deployment line by {by}: {why}"
+raise_unit = "{unit} names no deployment unit"
+raise_holding = "{unit} holds the deployment line, so nothing goes before it"
+raise_already = "{unit} is marked first already"
+raise_not_running = "{unit} is no running deployment unit, so nothing waits under it"
+raise_past = "{unit} has passed the deployment line, so there is nothing to raise"
+raise_unread = "whether {unit} has passed the deployment line could not be read: {why}"
+raise_unwritten = "the first mark of {unit} could not be written: {why}"
+# Who marked a deployment first where nobody is named and the account the verb runs as reads as none.
+raise_who = "the account at this machine"
 # The connection to the placed machine broke under the deployment's work there (docs/deploy.md, 「A connection that
 # breaks under the placed machine」): {said} the line naming the machine, {work} the work, {seconds} the pause,
 # {next} the try about to begin and {tries} every try there is, or {tries} the tries it broke on running.

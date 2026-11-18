@@ -17,7 +17,7 @@ fn run_in(dir: &Path, args: &[&str]) -> Ran {
   ran(&mut testbed(dir, dir, args))
 }
 
-// The lanes as the status prints them with nobody holding either, the wide one's waiting lines after it.
+// The status with nobody holding either lane or the deployment line, the wide lane's waiting lines after it.
 fn lanes(waiting: &[String]) -> Vec<String> {
   let said = &LANES.status;
   let env = process_env();
@@ -33,6 +33,7 @@ fn lanes(waiting: &[String]) -> Vec<String> {
         .into_iter()
         .chain(if at == 0 { waiting.to_vec() } else { Vec::new() })
     })
+    .chain([said.deploy_line.clone(), nobody.clone()])
     .collect()
 }
 

@@ -31,7 +31,15 @@ pub fn answer(handed: &Handed, ground: &Ground) -> Result<Value, String> {
         Answer::error(fill_marks(&said.other_entry, &[("ours", &DEPLOY_TOOL.entry), ("asked", entry)]))
       } else {
         match read_arguments(arguments) {
-          Ok(arguments) => deploy(&arguments, ground),
+          Ok(arguments) => {
+            // Who marks a deployment first is the session's holder, as its record names it.
+            let asked_by = Ground {
+              asker: handed.session["holderName"].as_str().map(str::to_owned),
+              ..ground.clone()
+            };
+
+            deploy(&arguments, &asked_by)
+          }
           Err(why) => Answer::error(why),
         }
       };

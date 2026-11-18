@@ -175,6 +175,7 @@ pub struct StatusWords {
   pub machine_unreached: String,
   pub machine_outage: String,
   pub close_line: String,
+  pub deploy_line: String,
 }
 
 #[derive(Debug, Deserialize)]

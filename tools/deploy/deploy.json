@@ -25,6 +25,11 @@
     "attach": {
       "type": ["boolean", "null"],
       "description": "Start nothing: answer the outcome of the newest deployment of this repository and commit the testbed's record holds, waiting for it to end where it still runs. Use it after a call the tool host's stop ended."
+    },
+    "first": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "description": "Put the deployment first in the deployment line, with this reason in English: it goes ahead of every deployment waiting there, never ahead of the one holding the line, and deployments marked first go in the order they were marked. The session's holder is recorded as who marked it. Where a deployment of this repository and commit is already waiting, it is raised to first and followed instead of starting another."
     }
   }
 }

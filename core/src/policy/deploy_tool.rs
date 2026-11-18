@@ -33,6 +33,7 @@ pub struct Lines {
   pub unasked: String,
   pub journal_unread: String,
   pub refused: String,
+  pub not_raised: String,
   pub failed: String,
   pub no_code: String,
   pub no_unit: String,

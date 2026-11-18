@@ -23,7 +23,7 @@ fn lock_in(dir: &Path) -> PathBuf {
   dir.join("testbed.lock")
 }
 
-fn waiting(rank: Rank, name: &str) -> LockWait<'static> {
+fn waiting<'a>(rank: Rank, name: &str) -> LockWait<'a> {
   LockWait {
     holder: name.to_owned(),
     rank,

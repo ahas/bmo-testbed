@@ -212,6 +212,7 @@ pub fn take_close_line(ask: &CloseLineAsk<'_>) -> Option<CloseTurn> {
       wait_on: Some(&mut wait_on),
       rank: Rank::Ordinary,
       poll: ask.poll,
+      ..LockWait::default()
     },
   )?;
   let record = CloseEntry {
