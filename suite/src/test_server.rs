@@ -148,6 +148,38 @@ fn ran(command: &mut Command) -> Result<String, String> {
 /// The server the suite tests on, answering: where it is the suite's own and does not answer, made where it
 /// was never made and started as a transient user unit that outlives the run. Another server the
 /// environment names is taken as it stands.
+/// A wait for another run standing the test server up (docs/suite.md, 「The test database」), which says so once
+/// every `every` milliseconds of it; the moments are handed in, so a test sets them.
+pub struct StandWait {
+  began: i64,
+  every: i64,
+  said_at: i64,
+}
+
+impl StandWait {
+  /// A wait begun at `began`, in milliseconds since the epoch.
+  pub fn new(began: i64, every: i64) -> Self {
+    Self {
+      began,
+      every,
+      said_at: began,
+    }
+  }
+
+  /// The line the wait says at `now`, where a whole `every` has passed since it last said one; none otherwise.
+  pub fn line_at(&mut self, now: i64) -> Option<String> {
+    if now - self.said_at < self.every {
+      return None;
+    }
+
+    self.said_at = now;
+
+    let seconds = ((now - self.began) / 1000).to_string();
+
+    Some(fill_marks(&SUITE.lines.stand_waiting, &[("seconds", &seconds)]))
+  }
+}
+
 pub fn test_server_up() -> Result<(), String> {
   if test_postgres() != own_test_postgres() {
     return Ok(());
@@ -164,17 +196,13 @@ pub fn test_server_up() -> Result<(), String> {
   std::fs::create_dir_all(&dir).map_err(|why| why.to_string())?;
 
   // Another run standing the server up is waited out, however long it takes, said once a minute.
-  let began = now_ms();
   let every = i64::try_from(SUITE.numbers.stand_waiting_seconds * 1000).unwrap_or(i64::MAX);
-  let mut said_at = began;
+  let mut standing = StandWait::new(now_ms(), every);
   let mut wait_on = |_: Option<&str>| -> Option<i64> {
     let now = now_ms();
 
-    if now - said_at >= every {
-      let seconds = ((now - began) / 1000).to_string();
-
-      eprintln!("{}", fill_marks(&SUITE.lines.stand_waiting, &[("seconds", &seconds)]));
-      said_at = now;
+    if let Some(line) = standing.line_at(now) {
+      eprintln!("{line}");
     }
 
     Some(now + 1000)

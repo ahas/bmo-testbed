@@ -548,6 +548,7 @@ verb's own name, and each noun takes what that verb takes.
 | `BMO_TESTBED_TOKEN` | `serve`, `mcp` | The HTTP service's bearer token |
 | `BMO_TESTBED_SERVICE` | `mcp` | The HTTP service's address the reading tools call |
 | `BMO_TESTBED_PLACEMENT` | `run`, `suite`, `deploy` | The placement endpoint, over the settings and the declaration. Set empty for `deploy`, the testbed's deployment leaves the placed machine's testbed as it stands (`docs/deploy.md`, 「Where a deployment runs」) |
+| `BMO_TESTBED_PLACED_STANDING_MS` | every placed run | How often a placed run whose output has not come back says it still runs there, in milliseconds, over the lane policy's; anything that is not a positive whole number means the policy's |
 | `BMO_TESTBED_PLACED` | the turn, `placed` | Set by `placed` for the run it starts: `1`. A run finding it is never placed again |
 | `BMO_TESTBED_CHECKOUTS` | `dependents`, `deploy`, `prune`, `check shared-versions`, the hosted deploy tool | The machine's registry of checkouts, over the data root's `testbed/checkouts.toml` |
 | `BMO_TESTBED_EVENT_HOOK` | every verb that sends events | The event hook, over the declaration's, and the hook for a verb run outside a repository |

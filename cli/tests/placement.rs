@@ -39,7 +39,7 @@ use bmo_testbed_cli::cargo::placed_disk;
 use bmo_testbed_cli::deploy::{PlacedGate, brings_testbed};
 use bmo_testbed_cli::placement::{
   BenchFor, FarWait, MACHINE_ENV_FILE, MachinePlacement, MachineSettings, MachineState, Ordered,
-  ReadyBench, machine_hook, reachable_remote,
+  ReadyBench, STANDING_VARIABLE, machine_hook, reachable_remote,
 };
 use bmo_testbed_core::events::Hook;
 use bmo_testbed_core::placement::{PlaceAsk, PlacedRun, Placement, read_placed};
@@ -50,6 +50,7 @@ use bmo_testbed_core::policy::verbs::VERBS;
 use bmo_testbed_core::queue::process_alive;
 use bmo_testbed_core::turn::{Env, Lane, NOT_RUN_EXIT_CODE, TestbedTurn, TurnAsk, lock_path, take_turn};
 use bmo_testbed_deploy::deployment::{BuildAsk, Gate, GateAsk, GateFault, Passed, none_earlier};
+use futures_util::StreamExt as _;
 use serde_json::{Value, json};
 
 use crate::stand::{Ran, ReceiverStand, checkout, git, install, ran, testbed};
@@ -64,6 +65,12 @@ struct Endpoint {
 // An endpoint answering `answer` to every run, `{base}` in it standing for its own address, and serving the
 // run's stream as the events given.
 fn endpoint(answer: Value, events: Vec<(&'static str, String)>) -> Endpoint {
+  endpoint_quiet(answer, events, Duration::ZERO)
+}
+
+// An endpoint as `endpoint` is, whose run's stream stays quiet for `quiet` before its events, as a run there
+// whose command writes to its log does.
+fn endpoint_quiet(answer: Value, events: Vec<(&'static str, String)>, quiet: Duration) -> Endpoint {
   let runtime = tokio::runtime::Builder::new_multi_thread()
     .worker_threads(1)
     .enable_all()
@@ -90,11 +97,16 @@ fn endpoint(answer: Value, events: Vec<(&'static str, String)>) -> Endpoint {
         let events = events.clone();
 
         async move {
-          Sse::new(futures_util::stream::iter(
-            events
-              .into_iter()
-              .map(|(name, data)| Ok::<_, Infallible>(Event::default().event(name).data(data))),
-          ))
+          let quiet = futures_util::stream::once(tokio::time::sleep(quiet))
+            .filter_map(|()| std::future::ready(None::<Result<Event, Infallible>>));
+
+          Sse::new(
+            quiet.chain(futures_util::stream::iter(
+              events
+                .into_iter()
+                .map(|(name, data)| Ok::<_, Infallible>(Event::default().event(name).data(data))),
+            )),
+          )
         }
       }),
     );
@@ -221,6 +233,46 @@ fn a_run_placed_elsewhere_runs_in_a_bench_and_ends_with_the_code_its_stream_give
   assert_eq!(remote.asked.lock().unwrap()[0]["command"], json!(["cargo", "test"]));
 }
 
+// Whether the error stream says the run still runs on `machine`, at any of the seconds a test's run lasts.
+fn says_still_running(err: &str, machine: &str) -> bool {
+  (0..30).any(|seconds| {
+    err.contains(&fill_marks(
+      &LANES.placed.still_running,
+      &[("machine", machine), ("seconds", &seconds.to_string())],
+    ))
+  })
+}
+
+// "every minute in which no byte of its output came over the connection, the caller says on standard error that
+// it still runs there": through the endpoint, a run whose stream stays quiet for several of the test's short
+// minutes is said to run on there, the line naming the endpoint, and ends with its stream's code.
+#[test]
+fn a_run_placed_through_the_endpoint_whose_stream_stays_quiet_says_it_still_runs() {
+  let dir = tempfile::tempdir().unwrap();
+  let repo = dir.path().join("repo");
+  let ssh = dir.path().join("ssh");
+  let result = "testbed: ok in 1s (waited 0s), cargo: 1 passed, 0 failed, 0 skipped; log: /x.log";
+  let remote = endpoint_quiet(
+    bench_answer(dir.path(), &ssh),
+    vec![("result", json!({ "line": result, "code": 0 }).to_string())],
+    Duration::from_millis(400),
+  );
+
+  install(SSH, &ssh);
+  checkout(&repo, "testbed = 0\n");
+
+  let place = format!("{}/place", remote.base);
+  let done = ran(
+    testbed(&repo, dir.path(), &["run", "--", "cargo", "test"])
+      .env("BMO_TESTBED_PLACEMENT", &place)
+      .env(STANDING_VARIABLE, "50"),
+  );
+
+  assert_eq!(done.code, 0, "{}\n{}", done.out, done.err);
+  assert_eq!(done.out, format!("{result}\n"));
+  assert!(says_still_running(&done.err, &place), "{}", done.err);
+}
+
 // "a stream that ends with no result, or a bench that cannot be made ready, ends the run as not run"
 #[test]
 fn a_run_dropped_before_its_result_ends_as_not_run() {
@@ -269,6 +321,31 @@ fn settle(dir: &Path, ssh: &Path, destination: &str) {
 // A run of the binary in a checkout under the directory as the account's home, placed by the settings.
 fn on_machine(repo: &Path, dir: &Path, args: &[&str]) -> Ran {
   ran(testbed(repo, dir, args).env("HOME", dir).env_remove("BMO_TESTBED_PLACEMENT"))
+}
+
+// "every minute in which no byte of its output came over the connection, the caller says on standard error that
+// it still runs there": a run on the machine the settings name whose command there writes to its log and says
+// nothing for several of the test's short minutes is said to run on there.
+#[test]
+fn a_run_on_the_placed_machine_whose_output_does_not_come_back_says_it_still_runs() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let repo = dir.join("repo");
+  let ssh = dir.join("ssh");
+
+  install(SSH, &ssh);
+  settle(&dir, &ssh, "stand");
+  checkout(&repo, "testbed = 0\n");
+
+  let done = ran(
+    testbed(&repo, &dir, &["run", "--adapter", "plain", "--", "sh", "-c", "sleep 0.4"])
+      .env("HOME", &dir)
+      .env_remove("BMO_TESTBED_PLACEMENT")
+      .env(STANDING_VARIABLE, "50"),
+  );
+
+  assert_eq!(done.code, 0, "{}\n{}", done.out, done.err);
+  assert!(says_still_running(&done.err, "machine-2"), "{}", done.err);
 }
 
 // "the placed machine the settings name runs the command in a bench there, set up first, and its code and

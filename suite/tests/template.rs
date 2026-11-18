@@ -2,12 +2,13 @@
 //! statement, a sweep takes only what no run still stands on, and a template is made once by the declared
 //! migrate command, with its functions and its note, and dropped with its pool.
 
+use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::suite::SUITE;
 use bmo_testbed_suite::template::{
   connect, drop_set, execute, is_database_name, is_made_note, make_once, orphaned, pool_held, standing,
   superseded,
 };
-use bmo_testbed_suite::test_server::{pool_prefix, test_server_up};
+use bmo_testbed_suite::test_server::{StandWait, pool_prefix, test_server_up};
 use sqlx::Connection as _;
 
 fn words(given: &[&str]) -> Vec<String> {
@@ -139,4 +140,19 @@ async fn a_migrate_command_that_fails_leaves_no_template() {
   assert!(!standing(&mut server, &name).await.unwrap());
   assert!(!standing(&mut server, &format!("{name}_making")).await.unwrap());
   server.close().await.unwrap();
+}
+
+// "A run that finds another making or starting it waits for that one, however long it takes, saying once a
+// minute that it waits": the wait says nothing before a whole minute of it has passed, then once for each
+// minute, naming how long it has waited.
+#[test]
+fn a_wait_for_another_run_standing_the_server_up_is_said_once_a_minute() {
+  let began = 1_000_000;
+  let mut wait = StandWait::new(began, 60_000);
+  let said = |seconds: &str| Some(fill_marks(&SUITE.lines.stand_waiting, &[("seconds", seconds)]));
+
+  assert_eq!(wait.line_at(began + 59_999), None);
+  assert_eq!(wait.line_at(began + 60_000), said("60"));
+  assert_eq!(wait.line_at(began + 61_000), None);
+  assert_eq!(wait.line_at(began + 121_000), said("121"));
 }

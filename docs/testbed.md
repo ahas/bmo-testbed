@@ -374,7 +374,8 @@ flowchart TD
   A deployment waits by its own rule (`docs/deploy.md`, 「A connection that breaks under the placed
   machine」).
 - **A placed run says it still runs while nothing comes back.** From the moment a run goes to the placed
-  machine until it ends there, every minute in which no byte of its output came over the connection, the
+  machine until it ends there, every minute in which no byte of its output came over the connection (the
+  lanes policy's, or the milliseconds `BMO_TESTBED_PLACED_STANDING_MS` names for a test), the
   caller says on standard error that it still runs there and for how long so far: through the wait for the
   machine to answer, the lock and the copy that bring its testbed to the live release, the copies that make
   its bench ready, its wait for its turn there and a command there that holds its output back, such as a

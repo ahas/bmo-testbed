@@ -1654,11 +1654,19 @@ impl MachinePlacement {
   }
 }
 
+/// The variable naming how often a placed run whose output has not come back says it still runs, in
+/// milliseconds, over the lanes policy's; a test sets it short.
+pub const STANDING_VARIABLE: &str = "BMO_TESTBED_PLACED_STANDING_MS";
+
 // `work`, a run placed on `machine`, done while a line says it still runs there at the end of every
 // `placed_standing_seconds` in which none of its output came back into `heard` (docs/testbed.md, 「A run on
 // another machine」).
 fn standing<T>(machine: &str, heard: &AtomicU64, work: impl FnOnce() -> T) -> T {
-  let every = Duration::from_secs(LANES.numbers.placed_standing_seconds);
+  let every = std::env::var(STANDING_VARIABLE)
+    .ok()
+    .and_then(|given| given.parse::<u64>().ok())
+    .filter(|ms| *ms > 0)
+    .map_or_else(|| Duration::from_secs(LANES.numbers.placed_standing_seconds), Duration::from_millis);
   let say = |seconds: u64| {
     eprintln!(
       "{}",
