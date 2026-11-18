@@ -135,7 +135,9 @@ sweep  every other template made more than a day ago whose pool no living proces
        pool, and every scratch database whose process is gone"""
 check = """
 usage: {verb} check [--since <commit> | <file…>] [--log <path>] [--json]
+       {verb} check --checkout <path>[@<rev>]… [--log <path>] [--json]
        {verb} check quick | wording | layout | dependencies | cargo-profile | personal-data | shared-versions
+       {verb} check static [--since <commit>]
        {verb} check shared-versions --report
        {verb} check language [--kinds] [--settle] [<prefix>]
        {verb} check dashes <file…> [--write]
@@ -149,7 +151,18 @@ testbed/ unless --log names another; --json prints its lines on standard error, 
 output one command run once it has ended. Exits 1 where a step failed and 2 where the change
 could not be read.
 
+--checkout, named once for each checkout and never with --since or files, checks a change that
+spans several checkouts in one call: each path is read from the directory the verb runs in, its
+change since the commit after an @ where given and since its merge base with its main branch
+otherwise, each planned by its own declaration, the set run on the placed machine in one wide seat,
+every line of a checkout's check opening with its repository's name, and the last lines naming each
+failed repository and its failed steps (docs/checks.md). Exits 2 where a checkout could not be
+read, before anything runs, and 75 where the set was not run.
+
 quick         every quick check the declaration enables
+static        the static check a deployment's gate passes, alone: the quick checks, the declared
+              steps the change since --since reaches, then the workspace's formatting and lints; no
+              test runs
 wording, layout, dependencies, cargo-profile, personal-data, shared-versions, language  that check alone
 shared-versions --report  every checkout of the machine's registry held to the shared versions, each
               with its own exceptions, a line each; changes nothing
