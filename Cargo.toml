@@ -118,3 +118,10 @@ debug = false
 [profile.release]
 debug = false
 strip = "debuginfo"
+
+# The core crate's policy types are read by serde's derived readers, one of them over a hundred fields wide;
+# at the third optimisation level LLVM's SLP vectorizer spends minutes on such a reader, superlinear in its
+# fields, and a deployment's release build falls silent long enough to be ended as hung. The second level
+# leaves that vectorizer out, and nothing in the core crate is bound by its speed.
+[profile.release.package.bmo-testbed-core]
+opt-level = 2
