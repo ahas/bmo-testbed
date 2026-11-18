@@ -88,9 +88,10 @@ bmo-testbed placed [--setup] [--checkout <path>…] -- <command…>
   `BMO_TESTBED_HEARD`. A command that writes nothing for the bench's silence limit is ended whole and
   the verb exits 124 with the hung line; a setup step ended so fails as any setup step does, exit 75.
 - **The checkouts the run knows are the ones `--checkout` names:** the bench and the trees copied beside
-  it. They stand in a registry written for this run alone under the data root's `testbed/`, handed to
-  the setup and the command as `BMO_TESTBED_CHECKOUTS`, and taken away as the run ends; with none named,
-  the run reads this machine's own registry. A registry that cannot be written exits 75.
+  it, as 「The placed machine」 names them. They stand in a registry written for this run alone under the
+  data root's `testbed/`, handed to the setup and the command as `BMO_TESTBED_CHECKOUTS`, and taken away
+  as the run ends; with none named, the run reads this machine's own registry. A registry that cannot be
+  written exits 75.
 - The words are a whole command line: `bmo-testbed suite --again`, `bmo-testbed cargo build …`, or
   any program. A testbed verb among them takes its own turn here.
 - Exits 2 where its words do not read (no `--`, no command).
@@ -839,7 +840,12 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   as that checkout's main branch holds it, whole or not at all, so no copy, its own or another run's
   copying the same tree, puts the working tree's file there; a placed run reads it as it stands
   (`docs/checks.md`, 「The quick checks」, `shared-versions`). The bench and
-  every tree laid beside it are the checkouts the run there knows (「`placed`」). A step that fails ends the run as
+  every tree laid beside it are the checkouts the run there knows (「`placed`」), but for a checkout that is
+  itself one of the repository holding the shared versions, its declaration giving that repository's name:
+  the run knows that repository once, by the copy of the checkout found through this machine's registry,
+  and the bench is among its checkouts only where it is that copy. A worker's copy of that repository
+  therefore reads the file as the primary checkout's main branch holds it, as it does here, and is never a
+  second checkout declaring the name. A step that fails ends the run as
   not run, exit code 75, with a line naming the step and what it said.
 - **A deployment's bench stands apart** from every run's and from every other repository's deployment:
   its checkout and each tree laid beside it stand under the folder of the deployed repository's name

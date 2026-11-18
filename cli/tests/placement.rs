@@ -4,7 +4,8 @@
 //! and the run's output and result come back off its stream. On the placed machine the settings name: the
 //! bench made ready over the same stand-in, from the remote that machine can reach or empty where it can reach
 //! none, the run the testbed's `placed` verb there, a machine that cannot be reached, or settings that do not
-//! read, leaving the run here, the shared versions laid over their copy as their main branch holds them, a
+//! read, leaving the run here, the shared versions laid over their copy as their main branch holds them and a
+//! placed check from a copy of the shared repository reading them there, a
 //! deployment's bench standing apart from a run's copy of the same tree, its sweep keeping a laid sibling that
 //! shares the deployed repository's root commits while the bench another checkout left goes and the making of
 //! the bench blaming itself naming the tree where a laid sibling does not stand, a testbed there that is not this one's release refused before any bench is made and a run meeting it kept
@@ -365,6 +366,53 @@ fn the_shared_versions_are_laid_over_their_copy_as_their_main_branch_holds_them(
       .to_string_lossy()
       .starts_with("shared-versions.toml."))
   );
+}
+
+// "the run knows that repository once, by the copy of the checkout found through this machine's registry ...
+// A worker's copy of that repository therefore reads the file as the primary checkout's main branch holds it":
+// a placed check run from a worktree of the shared repository, its own file changed and not reading, passes.
+#[test]
+fn a_placed_check_from_a_copy_of_the_shared_repository_reads_the_primary_checkouts_file() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let shared = dir.join("shared");
+  let copy = dir.join("shared-w2");
+  let ssh = dir.join("ssh");
+
+  install(SSH, &ssh);
+  settle(&dir, &ssh, "stand");
+  checkout(
+    &shared,
+    "testbed = 0\nname = \"shared-base\"\n\n[check]\nquick = [\"shared-versions\"]\n\n[check.shared_versions]\n\
+     repository = \"shared-base\"\n",
+  );
+  std::fs::write(shared.join("shared-versions.toml"), "[snapshot]\nrt = \"1.0.0\"\n").unwrap();
+  git(&shared, &["add", "."]);
+  git(&shared, &["commit", "-q", "-m", "pin"]);
+  git(&shared, &["worktree", "add", "-q", "--detach", &copy.to_string_lossy()]);
+  std::fs::write(copy.join("shared-versions.toml"), "[snapshot\n").unwrap();
+  std::fs::create_dir_all(dir.join("testbed")).unwrap();
+  std::fs::write(
+    dir.join("testbed/checkouts.toml"),
+    format!("checkouts = [{:?}]\n", shared.to_string_lossy()),
+  )
+  .unwrap();
+
+  let done = on_machine(
+    &copy,
+    &dir,
+    &[
+      "run",
+      "--adapter",
+      "plain",
+      "--",
+      env!("CARGO_BIN_EXE_bmo-testbed"),
+      "check",
+      "shared-versions",
+    ],
+  );
+
+  assert_eq!(done.code, 0, "{}\n{}", done.out, done.err);
 }
 
 // "a bench whose checkout's remote the machine there cannot read is made empty and handed the commit"

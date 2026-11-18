@@ -207,7 +207,10 @@
     answer where main has it. A checkout that is no git repository, or whose main branch does not hold the
     file, is the check's one fault. The one exception is a placed run handed its checkouts (`docs/boundary.md`,
     「The placed machine」): there the copies are the caller's, which lays the file over its copy as the
-    caller's main holds it, so the run reads the file as it stands in the copy.
+    caller's main holds it, so the run reads the file as it stands in the copy. A placed run of a worker's
+    copy of the shared repository itself knows that repository by the primary checkout's copy alone, so the
+    bench of the worker's copy is no second checkout declaring the name (`docs/boundary.md`, 「The placed
+    machine」).
   - **What it leaves out:** a manifest, a lock or a package manifest one of the globs of the declaration's
     `[check.shared_versions] exclude` reaches is not read at all, so a fork's upstream folders, which the
     repository neither builds nor may rewrite, stand outside the check while its own files stay under it.

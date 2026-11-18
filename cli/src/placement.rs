@@ -1190,11 +1190,16 @@ impl MachinePlacement {
     // The shared versions' file as the shared checkout's main holds it, laid over that checkout's copy, since
     // the copy is its working tree and the run there reads the copy as it stands.
     let mut laid = Vec::new();
+    // A checkout of the repository holding the shared versions is that repository, known once by the copy of
+    // the checkout the registry finds: the bench is listed only where it is that copy, so a worker's copy is
+    // never a second checkout giving the name (docs/boundary.md, 「The placed machine」).
+    let mut known_by_its_shared_copy = false;
 
-    if let Some(shared) =
-      Repository::read(checkout).ok().and_then(|repo| repo.declaration.check.shared_versions)
+    if let Ok(repo) = Repository::read(checkout)
+      && let Some(shared) = &repo.declaration.check.shared_versions
     {
       let there = shared_checkout(&shared.repository, &process_env())?;
+      known_by_its_shared_copy = repo.name() == shared.repository;
       let file = &QUICK_CHECKS.shared_versions.file;
 
       laid.push((
@@ -1219,7 +1224,9 @@ impl MachinePlacement {
     let places = trees.iter().map(|tree| tree.place().to_owned()).collect::<Vec<String>>();
 
     let path = purpose.bench_place(&self.settings, checkout, &self.home);
-    let checkouts = std::iter::once(path.clone())
+    let checkouts = (!known_by_its_shared_copy)
+      .then(|| path.clone())
+      .into_iter()
       .chain(trees.iter().map(|tree| tree.place().to_owned()))
       .collect();
     let heads = trees
