@@ -19,6 +19,7 @@ use bmo_testbed_suite::quick::shared_versions::shared_versions_report;
 use bmo_testbed_suite::quick::{Checked, enabled_checks, quick_check};
 use bmo_testbed_suite::static_check::{check_steps, run_static_check, spawn_step};
 use bmo_testbed_suite::test_server::test_server_up;
+use bmo_testbed_suite::workspace::git_lines;
 
 use crate::own::{called_from, run_own};
 use crate::placement_of;
@@ -59,8 +60,9 @@ fn placed_change(
 
   let mut command = vec![BINARY.to_owned(), "check".to_owned()];
 
+  // The commit named here, as the commit itself: the bench there holds none of this checkout's references.
   if let Some(since) = since {
-    command.extend(["--since".to_owned(), since.to_owned()]);
+    command.extend(["--since".to_owned(), resolved_commit(&repo.root, since)]);
   }
 
   if json {
@@ -76,6 +78,15 @@ fn placed_change(
     cwd: called_from(),
     env,
   })
+}
+
+// The commit a name resolves to in the checkout; the name as given where it resolves to none, which the check it
+// is handed to then refuses.
+fn resolved_commit(root: &Path, named: &str) -> String {
+  git_lines(root, &["rev-parse", "--verify", "--quiet", &format!("{named}^{{commit}}")])
+    .ok()
+    .and_then(|lines| lines.into_iter().next())
+    .unwrap_or_else(|| named.to_owned())
 }
 
 // The static check a deployment's gate passes, alone: the steps the change since the commit reaches, each run

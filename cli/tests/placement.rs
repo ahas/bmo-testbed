@@ -305,6 +305,41 @@ fn a_machine_the_settings_name_runs_the_command_in_a_bench_there() {
   assert!(!bench.join("ignored.txt").exists());
 }
 
+// "The commit its `--since` names is resolved here and handed over as the commit itself, since a name such as
+// `origin/main` names a commit only in this checkout"
+#[test]
+fn a_placed_change_check_is_handed_the_commit_its_since_names_rather_than_the_name() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let repo = dir.join("repo");
+  let ssh = dir.join("ssh");
+  let line = dir.join("placed-line");
+
+  // The `placed` line is written down and ends there; every other line runs as `SSH` runs it.
+  install(
+    &SSH.replacen(
+      "shift\nexec",
+      &format!(
+        "shift\ncase \"$*\" in *\" placed \"*) echo \"$*\" > {}; exit 0 ;; esac\nexec",
+        line.display()
+      ),
+      1,
+    ),
+    &ssh,
+  );
+  settle(&dir, &ssh, "stand");
+  checkout(&repo, "testbed = 0\n");
+  git(&repo, &["branch", "base"]);
+
+  let base = git(&repo, &["rev-parse", "base"]);
+  let done = on_machine(&repo, &dir, &["check", "--since", "base"]);
+  let handed = std::fs::read_to_string(&line).expect("the check was placed");
+
+  assert_eq!(done.code, 0, "{}\n{}", done.out, done.err);
+  assert!(handed.contains(&format!(" --since {base}")), "{handed}");
+  assert!(!handed.contains(" --since base"), "{handed}");
+}
+
 // "a bench whose place stands as a plain folder, a tree an earlier run copied there, is made a repository in it"
 #[test]
 fn a_bench_whose_place_stands_as_a_copied_folder_is_made_a_repository_there() {

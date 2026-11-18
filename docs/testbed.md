@@ -319,7 +319,9 @@ flowchart TD
   through `bmo-testbed cargo`, which run there as the same verb of that machine's testbed; and the change
   check, `bmo-testbed check` with no part named, which is placed whole and runs there as that machine's
   own change check over the same commit and open files, its steps in that machine's turn, its log staying
-  on that machine and named in the lines that come back.
+  on that machine and named in the lines that come back. The commit its `--since` names is resolved here
+  and handed over as the commit itself, since a name such as `origin/main` names a commit only in this
+  checkout and the bench there holds none of its references.
 - **What stays here, whatever the order says:**
   - a run started inside a turn already held, since its holder's seat is here and it stands in it;
   - a run inside a deployment's or a whole run's unit, since those hold their own place in this
