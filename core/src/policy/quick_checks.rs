@@ -30,6 +30,7 @@ pub struct PersonalDataWords {
   pub home_kind: String,
   pub telephone_kind: String,
   pub token_kind: String,
+  pub bearer_word: String,
   pub network_kind: String,
   pub documentation_domains: Vec<String>,
   pub documentation_suffixes: Vec<String>,

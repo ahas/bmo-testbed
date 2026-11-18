@@ -25,6 +25,7 @@ fn each_form_is_found_on_its_line_and_named_by_its_kind_without_its_value() {
     (joined(&["call ", "010", "-1234", "-5678"]), "a telephone number"),
     (joined(&["key ", "gh", "p_", &"aB1".repeat(8)]), "a token"),
     (joined(&["-----BEGIN ", "RSA ", "PRIVATE KEY", "-----"]), "a token"),
+    (joined(&["Authorization: ", "Bearer ", &"aB1".repeat(8)]), "a token"),
     (joined(&["host ", "192", ".", "168", ".0.7"]), "a private network address"),
     (joined(&["host ", "192", ".", "168", ".0.7", "/24"]), "a private network address"),
     (joined(&["host ", "fd", "12", ":", "3456::1"]), "a private network address"),
@@ -53,6 +54,7 @@ fn a_documentation_address_a_role_s_home_and_a_public_or_loopback_address_stand(
     joined(&["refuses ", "10", ".0.0.0", "/8 and ", "192", ".", "168", ".0.0", "/16"]),
     joined(&["refuses ", "fc", "00", "::", "/7"]),
     joined(&["key ", "gh", "p_", &"a1".repeat(12)]),
+    joined(&["Authorization: ", "Bearer ", &"a1".repeat(12)]),
   ];
 
   for line in standing {

@@ -151,8 +151,13 @@ fn kept(
   } else if kind == words.telephone_kind {
     !is_part_of_a_number(line, at)
   } else if kind == words.token_kind {
-    // A generated secret is mixed case; a token written all in lowercase is a placeholder somebody typed.
-    found.chars().any(|one| one.is_ascii_uppercase())
+    // A generated secret is mixed case; a token written all in lowercase is a placeholder somebody typed. The
+    // word a bearer value is written after is no part of the value.
+    found
+      .strip_prefix(words.bearer_word.as_str())
+      .unwrap_or(found)
+      .chars()
+      .any(|one| one.is_ascii_uppercase())
   } else if kind == words.home_kind {
     !is_neutral_home(words, found) && !is_inside_a_path(line, at)
   } else if kind == words.network_kind {
