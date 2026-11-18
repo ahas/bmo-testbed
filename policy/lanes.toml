@@ -118,6 +118,9 @@ unreached = "testbed: the placed machine {machine} cannot be reached ({said})"
 # for, or no answer saying otherwise; it goes on to this machine, the next in the order.
 full = "testbed: every seat on {machine} is held or waited for; running here"
 tree_uncopied = "the tree {tree} could not be copied: {said}"
+# A tree the declaration's [test] sibling_trees names that does not stand here: {tree} the path as written and
+# {why} what reading it said.
+sibling_absent = "the sibling tree {tree} the declaration names does not stand here: {why}"
 file_unlaid = "the file {file} could not be laid there: {said}"
 unfetched = "the binaries could not be read back from {machine}: {said}"
 broken = "the connection to it broke"

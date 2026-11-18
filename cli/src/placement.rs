@@ -1160,8 +1160,21 @@ impl MachinePlacement {
     // the checkout the registry finds: the bench is listed only where it is that copy, so a worker's copy is
     // never a second checkout giving the name (docs/boundary.md, 「The placed machine」).
     let mut known_by_its_shared_copy = false;
+    let repo = Repository::read(checkout).ok();
 
-    if let Ok(repo) = Repository::read(checkout)
+    // The trees its tests read by a path no manifest names, laid as a tree a manifest names is.
+    for sibling in repo.iter().flat_map(|repo| &repo.declaration.test.sibling_trees) {
+      let tree = std::fs::canonicalize(checkout.join(sibling)).map_err(|why| {
+        fill_marks(
+          &LANES.placed.sibling_absent,
+          &[("tree", &sibling.to_string_lossy()), ("why", &why.to_string())],
+        )
+      })?;
+
+      trees.push(tree);
+    }
+
+    if let Some(repo) = &repo
       && let Some(shared) = &repo.declaration.check.shared_versions
     {
       let there = shared_checkout(&shared.repository, &process_env())?;

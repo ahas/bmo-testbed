@@ -600,6 +600,42 @@ fn the_shared_versions_are_laid_over_their_copy_as_their_main_branch_holds_them(
   );
 }
 
+// "each tree the declaration's `[test] sibling_trees` names by a path from the checkout ... a test opening a file
+// in a neighbouring checkout reads what it reads here rather than whatever an earlier run left at that place. A
+// sibling tree that does not stand here fails the step, naming it."
+#[test]
+fn a_sibling_tree_the_tests_read_is_laid_over_what_an_earlier_run_left_and_one_absent_is_not_run() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let repo = dir.join("repo");
+  let sibling = dir.join("sibling");
+  let ssh = dir.join("ssh");
+  let copy = dir.join("bench/sibling");
+  let reads = "cmp ../sibling/releases/pinned.tgz ../sibling/releases/expected.tgz";
+
+  install(SSH, &ssh);
+  settle(&dir, &ssh, "stand");
+  checkout(&repo, "testbed = 0\n\n[test]\nsibling_trees = [\"../sibling\"]\n");
+
+  let absent = on_machine(&repo, &dir, &["run", "--adapter", "plain", "--", "sh", "-c", reads]);
+
+  assert_eq!(absent.code, i32::from(NOT_RUN_EXIT_CODE), "{}\n{}", absent.out, absent.err);
+  assert!(absent.out.contains("../sibling"), "{}", absent.out);
+
+  checkout(&sibling, "testbed = 0\nname = \"sibling-base\"\n");
+  std::fs::create_dir_all(sibling.join("releases")).unwrap();
+  std::fs::write(sibling.join("releases/pinned.tgz"), "the release").unwrap();
+  std::fs::write(sibling.join("releases/expected.tgz"), "the release").unwrap();
+  // What an earlier run left at the sibling's place there.
+  std::fs::create_dir_all(copy.join("releases")).unwrap();
+  std::fs::write(copy.join("releases/pinned.tgz"), "an earlier build").unwrap();
+
+  let done = on_machine(&repo, &dir, &["run", "--adapter", "plain", "--", "sh", "-c", reads]);
+
+  assert_eq!(done.code, 0, "{}\n{}", done.out, done.err);
+  assert_eq!(std::fs::read_to_string(copy.join("releases/pinned.tgz")).unwrap(), "the release");
+}
+
 // "the run knows that repository once, by the copy of the checkout found through this machine's registry ...
 // A worker's copy of that repository therefore reads the file as the primary checkout's main branch holds it":
 // a placed check run from a worktree of the shared repository, its own file changed and not reading, passes.

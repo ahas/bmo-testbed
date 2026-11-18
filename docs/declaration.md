@@ -41,6 +41,7 @@
 | `silence_seconds` | integer | 600, the lane policy's | How long a command run for the repository may write nothing before it is ended as hung: a run, a check's step, a suite's unit, the Cargo verb, a deployment's step, and a placed run on the machine it runs on (`docs/testbed.md`, 「A holder whose command falls silent lets go」). At least 1 |
 | `memory_gb` | integer | 12 | The fence's memory ceiling, which `BMO_SUITE_MEMORY_GB` overrides |
 | `setup` | list of commands | `[]` | Run in order to set up a fresh tree: the checkout a deployment's gate reads, a release, the daily whole run's tree, a bench copy on another machine |
+| `sibling_trees` | list of paths | `[]` | The trees outside the repository its tests read by a path no manifest names, such as a file a test opens in a neighbouring checkout, each a path from the repository's root. A bench on a placed machine lays each beside it as it lays a tree the workspace reads by a path (`docs/boundary.md`, 「The placed machine」); a run here reads them where they stand |
 
 ### `[test.database]`: the test database
 

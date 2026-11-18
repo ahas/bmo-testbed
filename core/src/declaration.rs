@@ -121,6 +121,10 @@ pub struct Test {
   pub memory_gb: u64,
   #[serde(default)]
   pub setup: Vec<String>,
+  /// The trees outside the repository its tests read by a path no manifest names, each a path from the
+  /// repository's root; a bench on a placed machine lays each beside it.
+  #[serde(default)]
+  pub sibling_trees: Vec<PathBuf>,
   /// The test database, where the repository's tests use PostgreSQL.
   pub database: Option<Database>,
 }

@@ -578,8 +578,8 @@ verb's own name, and each noun takes what that verb takes.
 
 - `testbed`: the major targeted;
 - `upstreams`: the repositories this one builds on, by their declared names;
-- `[test]` with `[test.database]`: the languages, files, fence and setup of the suite, and the silence
-  limit of every command run for the repository;
+- `[test]` with `[test.database]`: the languages, files, fence and setup of the suite, the sibling
+  trees its tests read, and the silence limit of every command run for the repository;
 - `[projects]` and `[tools]`: units found by their own files;
 - `[check]` with `[[check.step]]`: the quick checks enabled and their inputs, and the static steps;
 - `[build]` with `[[build.step]]`: the release build;
@@ -964,9 +964,12 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   every tree outside the repository the checkout's workspace reads by a path, for a deployment the
   workspace at the deployed commit, read as a deployment here reads it, the base libraries and
   the sibling crates among them, each tree those name in turn followed until none is new
-  (`docs/deploy.md`, 「The releases」), and the checkout holding the shared versions the declaration
-  names, found through this machine's registry, each at its own place under the bench root, so a path a manifest
-  names resolves there as it does here and the quick checks find what they read. For a run it copies
+  (`docs/deploy.md`, 「The releases」), each tree the declaration's `[test] sibling_trees` names by a
+  path from the checkout, and the checkout holding the shared versions the declaration names, found
+  through this machine's registry, each at its own place under the bench root, so a path a manifest names
+  resolves there as it does here, the quick checks find what they read, and a test opening a file in a
+  neighbouring checkout reads what it reads here rather than whatever an earlier run left at that place. A
+  sibling tree that does not stand here fails the step, naming it. For a run it copies
   each tree as it stands, the same way as the open files but for what the copy there keeps, which is
   what git ignores in the tree here, since the copy holds no repository; a tree no git repository holds
   fails the step, since no ignore rules say what to leave out of it. For a deployment it lays no working tree: the
