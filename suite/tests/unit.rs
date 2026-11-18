@@ -124,11 +124,20 @@ fn a_crate_s_test_named_as_running_past_the_limit_ends_its_unit() {
 }
 
 // "without its result": a test named as running long whose result follows ends nothing, and the unit runs on.
+// Both lines come in one write and the limit stands a little past the minute the first names, so the result is
+// heard before the limit is met however the machine is loaded; the pause after it outlasts that margin, so a
+// result left unheard would still end the unit.
 #[test]
 fn a_test_named_as_running_long_whose_result_follows_ends_nothing() {
-  let ran = run_unit(&crate_unit(
-    "echo 'test a::slow has been running for over 60 seconds'; echo 'test a::slow ... ok'; sleep 0.3; echo done",
-  ));
+  let mut unit = crate_unit(
+    "printf 'test a::slow has been running for over 60 seconds\\ntest a::slow ... ok\\n'; sleep 0.4; echo done",
+  );
+
+  if let Some(per_test) = unit.per_test.as_mut() {
+    per_test.limit = Duration::from_millis(60_200);
+  }
+
+  let ran = run_unit(&unit);
 
   assert_eq!(ran.code, 0, "{}", ran.output);
   assert!(ran.output.ends_with("done\n"), "{}", ran.output);
