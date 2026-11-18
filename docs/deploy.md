@@ -834,14 +834,17 @@ flowchart TD
   Cargo holds one lock over a build directory for the whole of a build, so a directory of its own is
   what lets the checkouts' builds run side by side, each in its own seat. Each checkout compiles its
   dependencies once in its own directory, and builds after its first keep them.
-- **A development or test build keeps incremental state,** as Cargo's own default for those profiles
-  does. The Cargo verb sets `CARGO_PROFILE_DEV_INCREMENTAL` and `CARGO_PROFILE_TEST_INCREMENTAL` to `true`,
-  over the profiles' own `incremental = false`, unless its caller already names them. A checkout is built
+- **A build keeps incremental state in every profile,** as Cargo's own default for the development and
+  test profiles does and as its `incremental` setting allows a release. The Cargo verb sets
+  `CARGO_PROFILE_DEV_INCREMENTAL`, `CARGO_PROFILE_TEST_INCREMENTAL` and `CARGO_PROFILE_RELEASE_INCREMENTAL`
+  to `true`, over the profiles' own word, unless its caller already names them. A checkout is built
   again after each small change, a deployment's bench after each commit, and with the state kept the crate
   that changed is compiled in a fraction of the time. The state stands in the checkout's directory, one
   session a crate, and the prune takes it back from a working checkout once it has stood unchanged for its
-  span. The release profile stays as the manifest states it, and the one variable that sets incremental
-  state for every profile is never set, since the compile cache refuses to run under it.
+  span. A deployment's release build is the same crates after each commit, so with the state kept in its
+  bench it compiles the crate that changed in seconds where the whole of it is minutes. The one variable
+  that sets incremental state for every profile is never set, since the compile cache refuses to run under
+  it.
 - **A dependency compiled in one checkout is not compiled again in another** where the machine has the
   compile cache the Cargo Book names for sharing built dependencies between workspaces, `sccache`, on its
   search path: the verb names it as `RUSTC_WRAPPER`. The cache keeps what is compiled without incremental

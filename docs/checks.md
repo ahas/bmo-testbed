@@ -190,7 +190,7 @@
   `[profile.release]` with `debug = false` and `strip = "debuginfo"`. A setting left out or set otherwise
   is named with what it should be; a repository with no root `Cargo.toml` has nothing to hold. Setting
   them is each repository's own change. The profiles state what a build typed outside
-  the verb keeps; the Cargo verb turns incremental state on over them for the development and test profiles
+  the verb keeps; the Cargo verb turns incremental state on over them for every profile
   (`docs/deploy.md`, 「The Cargo build directory」).
 - **`personal-data`:** no file of the checkout holds personal data. Every file git tracks or would track
   is read a line at a time for the forms the policy names: a mail address, an account's home path, a telephone

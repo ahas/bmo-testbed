@@ -64,12 +64,11 @@ fn a_command_compiles_past_a_toolchain_and_the_options_before_it_and_a_reading_v
   assert!(!compiles(&[]));
 }
 
-// "the Cargo verb sets CARGO_PROFILE_DEV_INCREMENTAL and CARGO_PROFILE_TEST_INCREMENTAL to true ..., unless its
-// caller already names them", and "the verb names it as RUSTC_WRAPPER ... a caller that names RUSTC_WRAPPER
+// "the Cargo verb sets CARGO_PROFILE_DEV_INCREMENTAL, CARGO_PROFILE_TEST_INCREMENTAL and
+// CARGO_PROFILE_RELEASE_INCREMENTAL to true ..., unless its caller already names them", and "the verb names it as RUSTC_WRAPPER ... a caller that names RUSTC_WRAPPER
 // keeps its own, and a machine without the program builds as it always did".
 #[test]
-fn a_build_keeps_incremental_state_in_its_development_profiles_and_goes_through_the_machine_s_compile_cache()
- {
+fn a_build_keeps_incremental_state_in_every_profile_and_goes_through_the_machine_s_compile_cache() {
   use bmo_testbed_suite::cargo::{INCREMENTAL_VARIABLES, WRAPPER_VARIABLE, build_cache};
 
   let set = |name: &str, value: &str| (name.to_owned(), value.to_owned());
@@ -83,6 +82,7 @@ fn a_build_keeps_incremental_state_in_its_development_profiles_and_goes_through_
     [
       incremental[0].clone(),
       incremental[1].clone(),
+      incremental[2].clone(),
       set(WRAPPER_VARIABLE, "/opt/tools/sccache")
     ]
   );
@@ -92,5 +92,5 @@ fn a_build_keeps_incremental_state_in_its_development_profiles_and_goes_through_
       .into_iter()
       .collect();
 
-  assert_eq!(build_cache(&own, Some(cache)), [incremental[1].clone()]);
+  assert_eq!(build_cache(&own, Some(cache)), [incremental[1].clone(), incremental[2].clone()]);
 }
