@@ -33,6 +33,7 @@ use sse_stream::SseStream;
 use crate::words::BINARY;
 
 mod far_release;
+pub mod git_ignored;
 mod machine_hook;
 mod outage;
 
@@ -120,17 +121,14 @@ fn place_in_checkout(dir: &Path) -> String {
   git(dir, &["rev-parse", "--show-prefix"]).trim_end_matches('/').to_owned()
 }
 
-/// Whether a run stays here for the directory it was started in: one its checkout ignores, which a bench copy
-/// leaves out and so would not hold; said on a line naming it.
+/// Whether a run stays here for the directory it was started in: one the bench copy leaves out, a folder git
+/// ignores in its checkout or one inside it, which the bench would not hold; said on a line naming it. A
+/// directory in no checkout is not kept for this: its copy says what fails there.
 fn kept_outside_copy(ask: &PlaceAsk<'_>) -> bool {
-  let ignored = Command::new("git")
-    .args(["check-ignore", "-q", "."])
-    .current_dir(&ask.cwd)
-    .stdin(Stdio::null())
-    .stdout(Stdio::null())
-    .stderr(Stdio::null())
-    .status()
-    .is_ok_and(|status| status.success());
+  let top = git(&ask.cwd, &["rev-parse", "--show-toplevel"]);
+  let ignored = !top.is_empty()
+    && git_ignored::ignored_in(Path::new(&top))
+      .is_ok_and(|ignored| git_ignored::lies_in_ignored(&place_in_checkout(&ask.cwd), &ignored));
 
   if ignored {
     eprintln!("{}", fill_marks(&LANES.placed.ignored_dir, &[("dir", &ask.cwd.to_string_lossy())]));
@@ -270,22 +268,43 @@ fn laid_over(
   written.and(done)
 }
 
-// A tree copied over with `rsync`, the files git ignores, the `.git` directory and each path `kept` names left
-// out, so the copy neither writes nor deletes them.
-fn rsync_over(ssh_command: &str, from: &Path, to: &str, kept: &[String]) -> std::io::Result<Output> {
-  let mut command = Command::new("rsync");
+// A tree copied over with `rsync`, the `.git` directory, each path git ignores in it here and each pattern
+// `kept` names left out, so the copy neither writes nor deletes them, and each path of `protected`, those the
+// far side's own git ignores there, left standing there; what git said where it cannot name what it ignores
+// here, or `rsync` where it failed. The rules go to `rsync` on its input as one merged rule file, read before
+// it starts the far side.
+fn rsync_over(
+  ssh_command: &str,
+  from: &Path,
+  to: &str,
+  kept: &[String],
+  protected: &[Vec<u8>],
+) -> Result<(), String> {
+  let left_out = git_ignored::ignored_in(from)?;
+  let rule = |kind: &[u8], pattern: &[u8]| [kind, pattern, b"\0"].concat();
+  let rules: Vec<u8> = left_out
+    .iter()
+    .map(|path| rule(b"- ", &git_ignored::rsync_pattern(path)))
+    .chain(kept.iter().map(|pattern| rule(b"- ", pattern.as_bytes())))
+    .chain(protected.iter().map(|path| rule(b"P ", &git_ignored::rsync_pattern(path))))
+    .collect::<Vec<Vec<u8>>>()
+    .concat();
 
-  command.args(["-a", "--delete", "--filter=:- .gitignore", "--exclude", ".git", "-e", ssh_command]);
-
-  for path in kept {
-    command.arg("--exclude").arg(path);
-  }
-
-  command
+  let mut child = Command::new("rsync")
+    .args(["-a", "--delete", "--exclude", ".git", "--from0", "--filter=. -", "-e", ssh_command])
     .arg(format!("{}/", from.display()))
     .arg(format!("{to}/"))
-    .stdin(Stdio::null())
-    .output()
+    .stdin(Stdio::piped())
+    .stdout(Stdio::piped())
+    .stderr(Stdio::piped())
+    .spawn()
+    .map_err(|why| why.to_string())?;
+  // The input is closed before the wait, which ends `rsync`'s reading of the rules, and the command is waited
+  // on whether or not the writing went through.
+  let written = child.stdin.take().map_or(Ok(()), |mut input| input.write_all(&rules));
+  let done = written.and(child.wait_with_output());
+
+  if succeeded(&done) { Ok(()) } else { Err(said(&done)) }
 }
 
 /// A repository put at a commit there: where its place holds none, cloned from its remote, or made empty where
@@ -384,11 +403,25 @@ pub fn ready_bench(bench: &Bench, source: &BenchSource<'_>) -> Result<(), String
   )?;
 
   if source.open_files {
-    let copied = rsync_over(&ssh_command, checkout, &format!("{}:{}", bench.destination, bench.path), &[]);
+    // What the bench's own git ignores there stays, an installed package or a build's output among them,
+    // though this checkout holds none of it.
+    let listing = git_ignored::LISTING.map(quoted).join(" ");
+    let listed = ssh(format!("cd {} && {listing}", far_path(&bench.path)));
 
-    if !succeeded(&copied) {
-      return Err(failed(&said_of.uncopied, &copied));
+    if !succeeded(&listed) {
+      return Err(failed(&said_of.uncopied, &listed));
     }
+
+    let protected = listed.map(|done| git_ignored::listed(&done.stdout)).unwrap_or_default();
+
+    rsync_over(
+      &ssh_command,
+      checkout,
+      &format!("{}:{}", bench.destination, bench.path),
+      &[],
+      &protected,
+    )
+    .map_err(|said| fill_marks(&said_of.uncopied, &[("said", &said)]))?;
   }
 
   for laid_tree in &source.trees {
@@ -429,14 +462,10 @@ pub fn ready_bench(bench: &Bench, source: &BenchSource<'_>) -> Result<(), String
       .filter_map(|(file, _)| file.strip_prefix(&format!("{place}/")))
       .map(|relative| format!("/{relative}*"))
       .collect();
-    let copied = rsync_over(&ssh_command, tree, &format!("{}:{}", bench.destination, place), &kept);
-
-    if !succeeded(&copied) {
-      return Err(fill_marks(
-        &said_of.tree_uncopied,
-        &[("tree", &tree.to_string_lossy()), ("said", &said(&copied))],
-      ));
-    }
+    // The copy of a tree there holds no repository, so what it keeps is what git ignores in the tree here.
+    rsync_over(&ssh_command, tree, &format!("{}:{}", bench.destination, place), &kept, &[]).map_err(
+      |said| fill_marks(&said_of.tree_uncopied, &[("tree", &tree.to_string_lossy()), ("said", &said)]),
+    )?;
   }
 
   for (file, text) in &source.laid {

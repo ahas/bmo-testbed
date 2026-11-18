@@ -338,8 +338,9 @@ flowchart TD
   - a run whose environment sets a variable the checkout's declaration names as reaching what only this
     machine reaches, the address of a console standing on this machine's loopback among them, since a
     placed run carries none of the caller's environment;
-  - a run started in a folder its checkout ignores, said on a line naming it, since the bench copy
-    leaves ignored files out and would not hold the folder the command runs in;
+  - a run started in a folder the bench copy leaves out, said on a line naming it: a folder git
+    ignores in its checkout, or one inside such a folder, since the bench would not hold the folder the
+    command runs in;
   - a Cargo verb whose output this machine reads afterwards: a build, a run or any other subcommand that
     is not `test`, `check` or `clippy`, a `--no-run`, and words naming an absolute path, which would
     point elsewhere there;
@@ -379,16 +380,25 @@ flowchart TD
   machine」, 「`notice`」). `status` shows when a standing outage began.
 - **There it runs in a bench copy of the caller's checkout under that machine's own testbed:** the
   caller pushes its commit into a clone of the checkout's remote in the bench, the remote a support
-  checkout's main checkout names where the support checkout's own is a path on this machine, copies its open files
-  over, ignored ones left out, and copies every tree the checkout's workspace names outside the
-  repository to its own place under the bench root; the checkout's setup then runs there, and the
-  command in that machine's own turn, on its own seats and its own memory gate. Its output and its
-  one result line come back to the caller.
+  checkout's main checkout names where the support checkout's own is a path on this machine, copies its
+  open files over, and copies every tree the checkout's workspace names outside the repository to its
+  own place under the bench root; the checkout's setup then runs there, and the command in that
+  machine's own turn, on its own seats and its own memory gate. Its output and its one result line come
+  back to the caller.
+- **The copy carries what git itself sees in the tree:** git names the paths it ignores there, by its
+  own rules, every `.gitignore` with its `!` lines, the repository's exclude file and the account's,
+  and those alone are left out. So an untracked file a `!` line takes back reaches the bench, and a file
+  deleted here is deleted there. What the bench's own git ignores there stays, such as an installed
+  package or a build's output, whether or not the checkout here holds it. The copy of an outside tree
+  there holds no repository, so it keeps what git ignores in the tree here, and the rest of it is what
+  the tree holds here. A tree that no git repository holds has no ignore rules to read, and the run
+  ends as not run on a line naming it rather than copying it whole.
 - **The command runs where the caller stands in its checkout:** a run started in a folder below the
   checkout's top runs in the same folder of the bench, so a package script, a test path or a language
   read from that folder means there what it means here; the setup still runs at the bench's top. A
   suite, a change check and a Cargo verb start from the checkout's top here, and so they do there.
-  Where the bench holds no such folder, the run does not run there and says so on a line
+  The folder a run is sent from is one the copy carries, since a folder it leaves out keeps the run
+  here (above); a bench that holds no such folder all the same runs nothing and says so on a line
   naming the folder (`docs/boundary.md`, 「`placed`」).
 - **A deployment's gate and its Cargo release build go to the placed machine** the settings name,
   whatever the order says (`docs/deploy.md`, 「Where a deployment runs」), so the machine that serves is

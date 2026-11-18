@@ -15,8 +15,9 @@
 //! for the machine's return, sent to the hook the machine's testbed environment file names, the deployment's gate and build
 //! answering broken for it whether or not they began there, `status` reading the machine's release against the live
 //! one, a run whose environment sets a variable its declaration names as this machine's kept here, a run from a
-//! folder below the checkout's top running in that folder there and one from a folder the checkout ignores kept
-//! here, the `placed` verb refusing a folder the bench does not hold, the
+//! folder below the checkout's top running in that folder there and one from a folder the bench copy leaves out
+//! kept here, the copy carrying what git sees in the tree, a file a `!` line takes back among them, an outside
+//! tree no repository holds refused, the `placed` verb refusing a folder the bench does not hold, the
 //! run standing in its lane here while it lasts, running once the far side says its turn came, that line read
 //! and not passed on, and the `placed` verb there passing its command's output on, telling its own holder
 //! while it comes and ending it whole once it falls silent for the declared limit. The units a release marks
@@ -327,9 +328,11 @@ fn a_run_placed_from_a_folder_runs_in_that_folder_there_and_one_from_an_ignored_
   install(SSH, &ssh);
   settle(&dir, &ssh, "stand");
   checkout(&repo, "testbed = 0\n\n[test]\nsetup = [\"pwd > set-up.txt\"]\n");
-  std::fs::write(repo.join(".gitignore"), "build/\nset-up.txt\nwhere.txt\n").unwrap();
+  // `build/**` ignores what the folder holds and not the folder itself, which git still names as left out.
+  std::fs::write(repo.join(".gitignore"), "build/**\nset-up.txt\nwhere.txt\n").unwrap();
   std::fs::create_dir_all(repo.join("studio/client")).unwrap();
   std::fs::create_dir_all(repo.join("build/out")).unwrap();
+  std::fs::write(repo.join("build/out/made.o"), "built").unwrap();
 
   let folder = repo.join("studio/client");
   let done = on_machine(&folder, &dir, &["run", "--adapter", "plain", "--", "sh", "-c", "pwd > where.txt"]);
@@ -345,7 +348,7 @@ fn a_run_placed_from_a_folder_runs_in_that_folder_there_and_one_from_an_ignored_
     format!("{}\n", bench.display())
   );
 
-  let ignored = repo.join("build/out");
+  let ignored = repo.join("build");
   let here =
     on_machine(&ignored, &dir, &["run", "--adapter", "plain", "--", "sh", "-c", "pwd > where.txt"]);
   let kept = fill_marks(&LANES.placed.ignored_dir, &[("dir", &ignored.to_string_lossy())]);
@@ -354,6 +357,45 @@ fn a_run_placed_from_a_folder_runs_in_that_folder_there_and_one_from_an_ignored_
   assert!(here.err.contains(&kept), "{}", here.err);
   assert!(ignored.join("where.txt").exists());
   assert!(!bench.join("build").exists());
+}
+
+// "The copy carries what git itself sees in the tree": an untracked file a `!` line takes back reaches the
+// bench, a file deleted here is deleted there, an ignored file the bench already holds stays, and a file git
+// ignores by a name holding a wildcard is left out alone.
+#[test]
+fn a_placed_run_s_copy_carries_what_git_sees_a_file_a_negation_takes_back_among_them() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let repo = dir.join("repo");
+  let bench = dir.join("bench/repo");
+  let ssh = dir.join("ssh");
+
+  install(SSH, &ssh);
+  settle(&dir, &ssh, "stand");
+  checkout(&repo, "testbed = 0\n");
+  std::fs::write(repo.join(".gitignore"), "out/*\n!out/fresh/\nlogs/\nc\\*.log\n").unwrap();
+  git(&repo, &["add", "."]);
+  git(&repo, &["commit", "-q", "-m", "ignores"]);
+  std::fs::create_dir_all(repo.join("out/fresh")).unwrap();
+  std::fs::create_dir_all(repo.join("out/stale")).unwrap();
+  std::fs::write(repo.join("out/fresh/taken-back.txt"), "taken back").unwrap();
+  std::fs::write(repo.join("out/stale/left.txt"), "left out").unwrap();
+  std::fs::write(repo.join("c*.log"), "left out").unwrap();
+  std::fs::write(repo.join("cx.log"), "copied").unwrap();
+  // What an earlier run left in the bench: an ignored file of its own, and a file no longer here.
+  std::fs::create_dir_all(bench.join("logs")).unwrap();
+  std::fs::write(bench.join("logs/far.log"), "the bench's own").unwrap();
+  std::fs::write(bench.join("gone.txt"), "deleted here").unwrap();
+
+  let done = on_machine(&repo, &dir, &["run", "--adapter", "plain", "--", "true"]);
+
+  assert_eq!(done.code, 0, "{}\n{}", done.out, done.err);
+  assert_eq!(std::fs::read_to_string(bench.join("out/fresh/taken-back.txt")).unwrap(), "taken back");
+  assert_eq!(std::fs::read_to_string(bench.join("cx.log")).unwrap(), "copied");
+  assert_eq!(std::fs::read_to_string(bench.join("logs/far.log")).unwrap(), "the bench's own");
+  assert!(!bench.join("out/stale").exists());
+  assert!(!bench.join("c*.log").exists());
+  assert!(!bench.join("gone.txt").exists());
 }
 
 // "Where the bench holds no such folder, nothing runs and the verb exits 2 on a line naming it."
@@ -962,6 +1004,35 @@ fn a_deployments_bench_stands_apart_from_a_run_copying_the_same_tree() {
   machine.ready(&base, &deployed, BenchFor::Deployment("base")).unwrap();
 
   assert_eq!(std::fs::read_to_string(copied.join("src/lib.rs")).unwrap(), "pub fn moved() {}\n");
+}
+
+// "A tree that no git repository holds has no ignore rules to read, and the run ends as not run on a line
+// naming it rather than copying it whole."
+#[test]
+fn a_run_s_bench_refuses_an_outside_tree_no_repository_holds_naming_it() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let loose = dir.join("loose");
+  let consumer = dir.join("consumer");
+
+  std::fs::create_dir_all(loose.join("src")).unwrap();
+  std::fs::write(
+    loose.join("Cargo.toml"),
+    "[package]\nname = \"loose\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+  )
+  .unwrap();
+  std::fs::write(loose.join("src/lib.rs"), "").unwrap();
+  package_checkout(&consumer, "consumer", Some("../loose"));
+
+  let machine = released(&dir, None, None);
+  let run = git(&consumer, &["rev-parse", "HEAD"]);
+  let Err(said) = machine.ready(&consumer, &run, BenchFor::Run) else {
+    panic!("a tree no repository holds was copied");
+  };
+  let named = fill_marks(&LANES.placed.tree_uncopied, &[("tree", &loose.to_string_lossy()), ("said", "")]);
+
+  assert!(said.starts_with(named.trim_end()), "{said}");
+  assert!(!dir.join("bench/loose/src").exists());
 }
 
 // "For a deployment it lays no working tree: the repository holding each tree is ... pushed the head of the

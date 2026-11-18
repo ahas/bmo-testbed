@@ -856,9 +856,10 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   machine's loopback address among them, only this machine reaches. The variables a repository's runs
   read are that repository's to name, so the platform's own addresses every session carries keep
   nothing here.
-- **A run started in a folder its checkout ignores is never placed,** said on a line naming the folder: a
-  bench copy leaves ignored files out, so it would not hold the folder the command runs in. A run placed
-  from any other folder runs in the same folder of the bench (`docs/testbed.md`, 「A run on another
+- **A run started in a folder the bench copy leaves out is never placed,** said on a line naming the
+  folder: one git names as ignored in its checkout, or one inside such a folder, which the copy
+  (「The placed machine」) does not carry, so the bench would not hold the folder the command runs in. A
+  run placed from any other folder runs in the same folder of the bench (`docs/testbed.md`, 「A run on another
   machine」), the `placed` verb's `--dir` and the endpoint's `directory` naming it.
 - **The runs that can be placed** are a `run`, a `suite`, the change check and the Cargo verb's `test`,
   `check` and `clippy` (`docs/testbed.md`, 「A run on another machine」, which also names the runs that
@@ -954,16 +955,20 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   followed until one names a repository elsewhere, and none where the chain ends on this machine; and
   where the place stands as a folder already — a tree an earlier run copied there beside another
   checkout — it makes the repository in that folder; it pushes the commit there as the branch `bmo-bench` and checks it out detached;
-  for a run it copies its open files over with `rsync`, the files git ignores and the `.git` directory
-  left out, and for a deployment it copies none and takes every untracked file away, since the release is
-  the commit alone; and it lays
+  for a run it copies its open files over with `rsync`, leaving out the `.git` directory and each path
+  git names as ignored there by its own rules, a `.gitignore`'s `!` lines among them, so what git takes
+  back is copied and what is deleted here is deleted there, and keeping each path the bench's own git
+  names as ignored in the bench as it stands there; and for a deployment it copies none and takes every untracked file away, since the release
+  is the commit alone; and it lays
   every tree outside the repository the checkout's workspace reads by a path, for a deployment the
   workspace at the deployed commit, read as a deployment here reads it, the base libraries and
   the sibling crates among them, each tree those name in turn followed until none is new
   (`docs/deploy.md`, 「The releases」), and the checkout holding the shared versions the declaration
   names, found through this machine's registry, each at its own place under the bench root, so a path a manifest
   names resolves there as it does here and the quick checks find what they read. For a run it copies
-  each tree as it stands, the same way as the open files. For a deployment it lays no working tree: the
+  each tree as it stands, the same way as the open files but for what the copy there keeps, which is
+  what git ignores in the tree here, since the copy holds no repository; a tree no git repository holds
+  fails the step, since no ignore rules say what to leave out of it. For a deployment it lays no working tree: the
   repository holding each tree is made ready at its place as the bench is, from its own reachable
   remote, pushed the head of the main branch its declaration names (`docs/declaration.md`, 「The main branch's
   head」) as `bmo-bench`, checked out detached
