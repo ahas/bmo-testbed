@@ -196,6 +196,9 @@
   is read a line at a time for the forms the policy names: a mail address, an account's home path, a telephone
   number, a token and a private network address. A finding names the file, the line and the kind, never
   the value.
+  - **Text alone is read.** A file whose bytes are not valid UTF-8, such as a packed release, an image or a
+    font, holds no lines and is passed over, so a run of its bytes that happens to take one of the forms'
+    shapes is no finding. The count the clean line gives is of the files read.
   - **What stands:** a mail address in the space kept for documents (`example.com`, `.test` and their
     kin); a unit of the service manager written as a template and its instance, and a package named
     with its version, which both have a mailbox's shape; a version pinned after an equals sign, which has

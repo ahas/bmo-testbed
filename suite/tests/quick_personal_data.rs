@@ -2,7 +2,9 @@
 //! its kind, and what the policy and a declaration let stand. Every sample is put together from parts, so
 //! this file holds none of what the check looks for.
 
-use bmo_testbed_suite::quick::personal_data::personal_data_in;
+use bmo_testbed_suite::quick::personal_data::{checkout_personal_data, personal_data_in};
+
+use crate::quick::checkout;
 
 fn kinds_in(line: &str, allowed: &[&str]) -> Vec<String> {
   let allowed: Vec<String> = allowed.iter().map(|one| (*one).to_owned()).collect();
@@ -72,4 +74,23 @@ fn what_a_declaration_allows_stands_and_nothing_else_of_its_kind_does() {
 
   assert!(kinds_in(&format!("stands under {own}/work"), &[&own]).is_empty());
   assert_eq!(kinds_in(&format!("stands under {other}/work"), &[&own]), ["held.txt:2: a home path"]);
+}
+
+// "a file whose bytes are not valid UTF-8, such as a packed release ... holds no lines and is passed over,
+// so a run of its bytes that happens to take one of the forms' shapes is no finding ... the count the clean
+// line gives is of the files read"
+#[test]
+fn a_file_that_is_not_utf8_is_passed_over_and_the_same_run_in_text_is_found() {
+  let address = joined(&["qa", "@", "mail", ".", "dev"]);
+  let dir = checkout(&[("held.txt", &format!("{address}\n"))]);
+  let mut packed = vec![0x1f, 0x8b, 0x08, 0x00, 0xff, b'\n'];
+
+  packed.extend_from_slice(address.as_bytes());
+  packed.push(b'\n');
+  std::fs::write(dir.path().join("packed.tgz"), packed).unwrap();
+
+  let found = checkout_personal_data(dir.path(), &[]);
+
+  assert_eq!(found.findings, ["held.txt:1: a mail address"]);
+  assert_eq!(found.paths, 1);
 }

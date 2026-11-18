@@ -1,8 +1,8 @@
-//! The personal-data check over every file of the checkout (docs/checks.md, 「The quick checks」): a line
-//! holding one of the forms the policy names is refused where it stands, with the file, the line and the
-//! kind and never the value. What a form lets stand is the policy's and the declaration's: an address in the
-//! space kept for documents, a home folder named for a role, an address of no private network, and whatever
-//! the repository's declaration allows by name.
+//! The personal-data check over every text file of the checkout (docs/checks.md, 「The quick checks」): a
+//! line holding one of the forms the policy names is refused where it stands, with the file, the line and
+//! the kind and never the value. What a form lets stand is the policy's and the declaration's: an address
+//! in the space kept for documents, a home folder named for a role, an address of no private network, and
+//! whatever the repository's declaration allows by name.
 
 use std::path::Path;
 use std::sync::LazyLock;
@@ -12,7 +12,7 @@ use bmo_testbed_core::policy::quick_checks::{PersonalDataWords, QUICK_CHECKS};
 use regex::{Regex, RegexSet};
 
 use super::Findings;
-use super::files::read_text;
+use super::files::read_utf8;
 use crate::files::checkout_files;
 
 // One form: the kind a finding names and the pattern a line is read for.
@@ -214,17 +214,17 @@ pub fn personal_data_in(path: &str, text: &str, allowed: &[String]) -> Vec<Strin
   findings
 }
 
-/// The check over every file of the checkout at `root` that stands in the tree.
+/// The check over every text file of the checkout at `root` that stands in the tree: a file that is not
+/// valid UTF-8 holds no lines and is passed over, and the files counted are the ones read.
 pub fn checkout_personal_data(root: &Path, allowed: &[String]) -> Findings {
-  let files: Vec<String> =
-    checkout_files(root).into_iter().filter(|path| root.join(path).is_file()).collect();
-  let findings = files
-    .iter()
-    .flat_map(|path| personal_data_in(path, &read_text(root, path), allowed))
-    .collect();
+  let mut found = Findings::default();
 
-  Findings {
-    paths: files.len(),
-    findings,
+  for path in checkout_files(root).into_iter().filter(|path| root.join(path).is_file()) {
+    let Some(text) = read_utf8(root, &path) else { continue };
+
+    found.paths += 1;
+    found.findings.extend(personal_data_in(&path, &text, allowed));
   }
+
+  found
 }

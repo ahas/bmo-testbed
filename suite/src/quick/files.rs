@@ -14,6 +14,12 @@ pub fn read_text(root: &Path, path: &str) -> String {
     .unwrap_or_default()
 }
 
+/// A file of the checkout as text where its bytes are valid UTF-8; none where they are not, as a packed
+/// release's, an image's or a font's are, or where it cannot be read.
+pub fn read_utf8(root: &Path, path: &str) -> Option<String> {
+  std::fs::read(root.join(path)).ok().and_then(|bytes| String::from_utf8(bytes).ok())
+}
+
 /// The checkout's files that `wanted` takes and that stand in the tree, recorded input and installed
 /// packages left out.
 pub fn checkout_files_where(root: &Path, wanted: impl Fn(&str) -> bool) -> Vec<String> {
