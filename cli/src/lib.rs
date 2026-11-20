@@ -89,19 +89,22 @@ fn kept_here(env: &Env, repo: Option<&Repository>) -> Option<KeptHere> {
 
 /// The placement of a change check over several checkouts (docs/boundary.md, 「Placement」), chosen as one run's
 /// is: kept here where the environment sets a variable any of the checkouts' declarations names, or a checkout
-/// holds a file its declaration names, and then allowed to stay only where the placed machine's
-/// `combined_order` names this machine; else the endpoint the environment names, the placed machine the
-/// settings name, the endpoint the first checkout's declaration names, or the local one, each answering for
-/// the set itself.
+/// holds a file its declaration names, and then allowed to stay only where the settings name no placed machine
+/// or the placed machine's `combined_order` names this machine; else the endpoint the environment names, the
+/// placed machine the settings name, the endpoint the first checkout's declaration names, or the local one,
+/// each answering for the set itself.
 pub fn set_placement_of(env: &Env, checkouts: &[PathBuf]) -> Box<dyn Placement> {
   let repos: Vec<Option<Repository>> =
     checkouts.iter().map(|checkout| Repository::read(checkout).ok()).collect();
 
   if let Some(kept) = repos.iter().find_map(|repo| kept_here(env, repo.as_ref())) {
-    let set_here = MachineSettings::read(&data_root())
-      .and_then(Result::ok)
-      .and_then(|settings| settings.combined_order().ok())
-      .is_some_and(|order| order.contains(&Ordered::Here));
+    let set_here = match MachineSettings::read(&data_root()) {
+      None => true,
+      Some(settings) => settings
+        .ok()
+        .and_then(|settings| settings.combined_order().ok())
+        .is_some_and(|order| order.contains(&Ordered::Here)),
+    };
 
     return Box::new(KeptHere { set_here, ..kept });
   }
@@ -159,7 +162,7 @@ pub fn home_of(env: &Env) -> PathBuf {
 // whose command falls silent lets go」): the code it ended with, the hung code with its line said where it was
 // ended as hung; none where it did not start, said.
 fn watched(command: &mut Command, what: &str, silence: Silence) -> Option<i32> {
-  match run_passed_on(command, silence, what) {
+  match run_passed_on(command, silence, what, placement::standing_every()) {
     Ok(waited) => {
       if let Some(hung) = &waited.hung {
         eprintln!("{hung}");

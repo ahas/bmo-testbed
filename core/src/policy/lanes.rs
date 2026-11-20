@@ -25,6 +25,7 @@ pub struct Numbers {
   pub silence_seconds: u64,
   pub silence_grace_seconds: u64,
   pub silence_look_seconds: u64,
+  pub working_share_percent: u64,
   pub hung_named_processes: usize,
   pub hung_process_chars: usize,
   pub unreached_pause_seconds: u64,
@@ -122,7 +123,6 @@ pub struct PlacedWords {
   pub kept: String,
   pub ignored_dir: String,
   pub set_one_checkout: String,
-  pub set_no_machine: String,
   pub set_kept: String,
   pub turn_came: String,
 }
@@ -139,6 +139,7 @@ pub struct SilenceWords {
   pub hung: String,
   pub standing: String,
   pub piped: String,
+  pub working: String,
 }
 
 #[derive(Debug, Deserialize)]

@@ -132,6 +132,31 @@ fn a_touch_of_the_handed_file_counts_as_the_command_writing() {
   assert_eq!((waited.code(), waited.hung), (Some(0), None));
 }
 
+// "a command that computes without a word is working": a command writing nothing, whose process under it spins
+// past the limit until the test lets it end, is not ended, and ends on its own code.
+#[test]
+fn a_command_working_without_a_word_past_the_limit_runs_until_it_ends() {
+  let dir = tempfile::tempdir().unwrap();
+  let out = dir.path().join("out.log");
+  let done = dir.path().join("done");
+  let watch = Watch::new(Output::Files(vec![out.clone()]), short());
+  let mut child = started(
+    &format!("sh -c 'while [ ! -e {} ]; do :; done' & wait", done.display()),
+    &out,
+    &watch,
+    true,
+  );
+  let waited = std::thread::scope(|scope| {
+    scope.spawn(|| {
+      std::thread::sleep(short().limit * 3);
+      std::fs::write(&done, "").unwrap();
+    });
+    watch.wait(&mut child, "the computing command")
+  });
+
+  assert_eq!((waited.code(), waited.hung), (Some(0), None));
+}
+
 // "a command whose output is a terminal or a pipe is not watched": where any stream is not a regular file there
 // is nothing to watch, and a command with nothing to watch is waited for until it ends.
 #[test]

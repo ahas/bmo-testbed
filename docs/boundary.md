@@ -46,7 +46,7 @@ release. The version rules at the end are over this document.
 | 1 | Ran and failed: a test, a check, a step, a deployment |
 | 2 | Refused: words that do not read, a declaration that does not read or names another major, a change that cannot be read, a refusal a verb names |
 | 75 | Not run: the harness it waited for went away before the turn came, or a placed machine dropped the run. Run the same command again |
-| 124 | Ended as hung: the command holding a lane's turn wrote nothing for the silence limit (`docs/testbed.md`, 「A holder whose command falls silent lets go」) |
+| 124 | Ended as hung: the command holding a lane's turn neither wrote nor worked for the silence limit (`docs/testbed.md`, 「A holder whose command falls silent lets go」) |
 | any other | `run` only: the command's own exit code, passed through |
 
 ## The verbs
@@ -59,8 +59,8 @@ bmo-testbed run [--narrow] [--adapter <name>] [--json] -- <command…>
 
 - Runs the command in the wide lane's turn, or the narrow lane's with `--narrow`, read by the language
   that claims it or the one `--adapter` names (`bun`, `cargo`, `node`, `browser`, `plain`), waiting for
-  the turn however long the line takes and running the command until it ends, or until it writes nothing
-  to its log for the silence limit. `--guard <seconds>` and `--wait <seconds>` are read and given no
+  the turn however long the line takes and running the command until it ends, or until it neither writes
+  to its log nor works for the silence limit. `--guard <seconds>` and `--wait <seconds>` are read and given no
   effect.
 - Placed first where the machine's placement sends it elsewhere (「Placement」), unless inside a held turn.
 - Every run that is not placed elsewhere is a test run of kind `command` in the record (「The
@@ -89,8 +89,11 @@ bmo-testbed placed [--setup] [--checkout <path>…] [--dir <path>] -- <command�
   it.
 - **It watches what it runs for silence** (`docs/testbed.md`, 「A holder whose command falls silent lets
   go」): the setup steps and the command pass their output on through pipes it counts, and are handed
-  `BMO_TESTBED_HEARD`. A command that writes nothing for the bench's silence limit is ended whole and
-  the verb exits 124 with the hung line; a setup step ended so fails as any setup step does, exit 75.
+  `BMO_TESTBED_HEARD`. A command that neither writes nor works for the bench's silence limit is ended
+  whole and the verb exits 124 with the hung line; a setup step ended so fails as any setup step does,
+  exit 75. While the command works or touches that file with none of its own output passing for a
+  minute, the verb writes one line on standard error saying it still works, so the placing machine hears
+  it over the connection.
 - **The checkouts the run knows are the ones `--checkout` names:** the bench and the trees copied beside
   it, as 「The placed machine」 names them. They stand in a registry written for this run alone under the
   data root's `testbed/`, handed to the setup and the command as `BMO_TESTBED_CHECKOUTS`, and taken away
@@ -209,7 +212,7 @@ bmo-testbed suite [--since <commit>] [--again] [--json] [<word>…]
 - Runs the repository's units (`docs/suite.md`): all of them, or those the change since `--since`
   reaches. A word naming a path narrows the files; a word that is a unit's name exactly picks that
   unit; every other word goes to each file's runner. `--again` runs what failed once more. Every unit
-  runs until it ends, or fails with exit code 124 once it writes nothing for the silence limit;
+  runs until it ends, or fails with exit code 124 once it neither writes nor works for the silence limit;
   `--guard`, `--file-guard` and `--turn-wait`, each with seconds, are read and given no effect.
 - Writes its `suite:` lines and each unit's output to standard error, to be redirected to a file, and
   the same to a log of its own under the data root's `testbed/`.
@@ -371,7 +374,7 @@ bmo-testbed cargo <cargo arguments…>
   lane where the command compiles, run again where the kernel killed it for want of memory, then
   removes what the build superseded. Exits with Cargo's own code, 75 where its harness went away
   before the turn came, and 124 where, holding the turn with its standard output and error both files,
-  it wrote nothing to them for the silence limit.
+  it neither wrote to them nor worked for the silence limit.
 - Given `--locked` or `--frozen`, runs Cargo on a lock whose path packages are brought to the versions
   their manifests name, offline and fetching no package's source, only where no registry or git package
   moved, says on its standard error on one line which path packages moved, or why it left them as the lock
@@ -574,7 +577,7 @@ verb's own name, and each noun takes what that verb takes.
 | `BMO_TESTBED_TOKEN` | `serve`, `mcp` | The HTTP service's bearer token |
 | `BMO_TESTBED_SERVICE` | `mcp` | The HTTP service's address the reading tools call |
 | `BMO_TESTBED_PLACEMENT` | `run`, `suite`, `deploy` | The placement endpoint, over the settings and the declaration. Set empty for `deploy`, the testbed's deployment leaves the placed machine's testbed as it stands (`docs/deploy.md`, 「Where a deployment runs」) |
-| `BMO_TESTBED_PLACED_STANDING_MS` | every placed run | How often a placed run whose output has not come back says it still runs there, in milliseconds, over the lane policy's; anything that is not a positive whole number means the policy's |
+| `BMO_TESTBED_PLACED_STANDING_MS` | every placed run, `placed` | How often a placed run whose output has not come back says it still runs there, and how often the `placed` verb says its command still works while none of its output passes, in milliseconds, over the lane policy's; anything that is not a positive whole number means the policy's |
 | `BMO_TESTBED_PLACED` | the turn, `placed` | Set by `placed` for the run it starts: `1`. A run finding it is never placed again |
 | `BMO_TESTBED_CHECKOUTS` | `dependents`, `deploy`, `prune`, `check shared-versions`, the hosted deploy tool | The machine's registry of checkouts, over the data root's `testbed/checkouts.toml` |
 | `BMO_TESTBED_EVENT_HOOK` | every verb that sends events | The event hook, over the declaration's, and the hook for a verb run outside a repository |
@@ -906,18 +909,22 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   testbed release is brought to it, never passed over (「The placed machine」); where neither can be had,
   the run ends as not run, exit code 75, and sends an event (「Events」). The placement endpoint chooses
   for itself and is told nothing of the order.
-- **A change check over several checkouts is placed as one set** and never falls back to this machine. It
-  walks the placed machine's `combined_order` (「The placed machine」), whose default is the placed machine
-  alone, so it waits in that machine's line however long that takes, and goes to the machines in that order
-  as any run walks `order`. Where the machine cannot be reached within the wait, or its testbed cannot be
-  brought to the live release, it ends as not run, exit code 75, on the line naming the machine, as any
-  placed run does. It runs here only where `combined_order` names `local` and the walk comes to it. Every
-  other placement refuses the set, exit code 1, on a line saying why, and runs nothing: the placement
-  endpoint, whose request carries one checkout; a testbed whose settings name no placed machine; and a run
-  whose environment sets a variable one of the checkouts' declarations names in `[runner]
-  local_variables`, or a checkout holding a file its declaration names in `[runner] local_files`, the line
-  naming the variable or the file, unless the placed machine's `combined_order` names
-  `local`, where the set stays here as such a run does.
+- **A change check over several checkouts is placed as one set** wherever the settings name a placed
+  machine, and then never falls back to this machine. It walks the placed machine's `combined_order`
+  (「The placed machine」), whose default is the placed machine alone, so it waits in that machine's line
+  however long that takes, and goes to the machines in that order as any run walks `order`. Where the
+  machine cannot be reached within the wait, or its testbed cannot be brought to the live release, it ends
+  as not run, exit code 75, on the line naming the machine, as any placed run does. It runs here only where
+  `combined_order` names `local` and the walk comes to it.
+- **A testbed whose settings name no placed machine runs the set here,** in this machine's own turn, as the
+  change check over every checkout by its path, the same check a placed machine runs; so does a set kept
+  here by a variable or a file (below) where no placed machine is named.
+- **Every other placement refuses the set,** exit code 1, on a line saying why, and runs nothing: the
+  placement endpoint, whose request carries one checkout; and, where the settings name a placed machine
+  whose `combined_order` does not name `local`, a run whose environment sets a variable one of the
+  checkouts' declarations names in `[runner] local_variables`, or a checkout holding a file its
+  declaration names in `[runner] local_files`, the line naming the variable or the file. Where
+  `combined_order` names `local`, such a set stays here as such a run does.
 - **The set is laid in one bench and run there by one `ssh` command:** every checkout made ready at its own
   place under the bench root, its commit with its open files over it, and every tree any of them reads by a
   path laid beside them once; a tree whose place is one of the set's checkouts is that checkout and is not
@@ -930,9 +937,9 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   default, the placement kept here by a variable says so and answers here, and the placed machine, which
   walks its order, and the HTTP placement in `cli` are members of it. The second is asked with a change
   check's set of checkouts, and its default refuses the set on a line saying the placement carries one
-  checkout; the local placement refuses it as naming no placed machine, the placement kept here by a
-  variable refuses it naming the variable unless it was made knowing `combined_order` names `local`, and
-  the placed machine walks `combined_order`.
+  checkout; the local placement keeps it here, the placement kept here by a variable keeps it here where
+  it was made knowing no placed machine is named or that `combined_order` names `local` and refuses it
+  naming the variable otherwise, and the placed machine walks `combined_order`.
 
 ### The placed machine
 

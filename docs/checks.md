@@ -129,8 +129,8 @@
   The harness hook refuses a plain heavy `cargo` and names the verb line to run instead
   (`docs/testbed.md`).
 - **Every step runs to its end,** a failing one stopping none after it, and each says its exit code,
-  how long it waited for its turn and how long it ran. A step holding a lane's turn that writes nothing to
-  its output files for the silence limit is ended as hung and fails with exit code 124 (`docs/testbed.md`,
+  how long it waited for its turn and how long it ran. A step holding a lane's turn that neither writes to
+  its output files nor works for the silence limit is ended as hung and fails with exit code 124 (`docs/testbed.md`,
   「A holder whose command falls silent lets go」), and so does the workspace's own lint step, which holds
   no turn of its own but is watched the same way.
 - **A step a signal ended says the signal.** Its line, and the check's failing line where it is the
@@ -322,8 +322,8 @@
     runs the crate's tests whole; so does a changed file under `tests/` that is neither, such as a
     fixture or a helper of per-file targets.
 - **Every step runs to its end**, and the heavy ones wait for the testbed's turn. Every step, a declared
-  one that runs where it stands among them, is watched for silence and ended as hung once it writes nothing
-  for the silence limit.
+  one that runs where it stands among them, is watched for silence and ended as hung once it neither writes nor
+  works for the silence limit.
 - **While a step runs it says so** on standard error, once a minute by the policy: the step's name and how
   long it has run. A step's own output is taken into its log, and a step waiting for its turn or run on the
   placed machine writes next to nothing here, so without the line the check would stand silent for as long
@@ -372,11 +372,13 @@
   waited for, the line says where the call stands every notice; once it came, a line says how many
   checkouts the one seat holds and what the turn came to; while a step runs, its line every minute, as for
   one checkout, so the call is never silent while it lasts.
-- **Where it runs is the placed machine alone** (`docs/boundary.md`, 「Placement」, `combined_order`): the
-  whole set goes there as one run, every checkout laid in one bench at the place it has under this
-  machine's home, so the checkouts stand there as they stand to one another here and a path one names to
-  another resolves there as it does here. It waits in that machine's line however long that takes, and
-  runs on this machine only where the placed machine's settings name this machine in `combined_order`.
+- **Where the settings name a placed machine, it runs there alone** (`docs/boundary.md`, 「Placement」,
+  `combined_order`): the whole set goes there as one run, every checkout laid in one bench at the place it
+  has under this machine's home, so the checkouts stand there as they stand to one another here and a path
+  one names to another resolves there as it does here. It waits in that machine's line however long that
+  takes, and runs on this machine only where the placed machine's settings name this machine in
+  `combined_order`. Where the settings name no placed machine, the set runs on this machine, each checkout
+  where it stands.
 - **Every line of a checkout's check names its repository:** the heading of its change, each step's line
   as the step ends, printed as it ends, what failed under a failing step, the line a running step says every
   minute, and its own log's line, each opening with the name of the repository its declaration gives. The

@@ -1868,6 +1868,33 @@ fn the_placed_verb_ends_a_command_silent_for_the_declared_limit_whole() {
   assert!(!process_alive(pid));
 }
 
+// "a command that computes without a word is working", and "what the `placed` verb hears without a byte passing
+// it says over the connection": a command writing nothing, whose process under it spins past the declared limit of
+// a second until the test lets it end, ends on its own code, and the line saying it still works came meanwhile.
+#[test]
+fn the_placed_verb_keeps_a_working_command_and_says_it_works_over_the_connection() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let repo = dir.join("repo");
+  let done = dir.join("done");
+  let line = format!("sh -c 'while [ ! -e {} ]; do :; done' & wait", done.display());
+
+  checkout(&repo, "testbed = 0\n\n[test]\nsilence_seconds = 1\n");
+
+  let ended = std::thread::scope(|scope| {
+    scope.spawn(|| {
+      std::thread::sleep(Duration::from_millis(2500));
+      std::fs::write(&done, "").unwrap();
+    });
+    ran(testbed(&repo, &dir, &["placed", "--", "sh", "-c", &line]).env(STANDING_VARIABLE, "200"))
+  });
+  let working = LANES.silence.working.split("{seconds}").next().unwrap();
+  let working = fill_marks(working, &[("command", &format!("sh -c {line}"))]);
+
+  assert_eq!(ended.code, 0, "{}\n{}", ended.out, ended.err);
+  assert!(ended.err.lines().any(|said| said.starts_with(&working)), "{}", ended.err);
+}
+
 // "the setup steps and the command pass their output on through pipes it counts": while the command writes, the
 // file the verb's own holder handed it in `BMO_TESTBED_HEARD` is touched.
 #[test]
@@ -2436,11 +2463,18 @@ fn a_set_of_checkouts_is_placed_as_one_run_laid_as_here_and_never_falls_to_this_
   );
 }
 
-// "every placement but the placed machine refuses a change check over several checkouts rather than running it
-// here: the endpoint, a testbed naming no placed machine, and a run a declared variable keeps here, unless the
-// placed machine's combined_order names this machine"
+// Whether both checkouts of the set were checked here, by the lines naming each one's check.
+fn checked_here(done: &Ran) -> bool {
+  ["alpha: check:", "beta: check:"]
+    .iter()
+    .all(|head| done.out.lines().any(|line| line.starts_with(head)))
+}
+
+// "a testbed whose settings name no placed machine runs the set here, and so does a set kept here where no placed
+// machine is named; every other placement refuses it: the endpoint, and a run a declared variable keeps here while
+// a placed machine is named, unless that machine's combined_order names this machine"
 #[test]
-fn a_set_is_refused_by_every_placement_that_would_run_it_here() {
+fn a_set_runs_here_where_no_placed_machine_is_named_and_is_refused_where_one_would_take_it() {
   let dir = tempfile::tempdir().unwrap();
   let dir = std::fs::canonicalize(dir.path()).unwrap();
   let alpha = dir.join("alpha");
@@ -2453,8 +2487,13 @@ fn a_set_is_refused_by_every_placement_that_would_run_it_here() {
 
   let unplaced = on_machine(&alpha, &dir, &set);
 
-  assert_eq!(unplaced.code, 1, "{}\n{}", unplaced.out, unplaced.err);
-  assert!(unplaced.err.contains(&LANES.placed.set_no_machine), "{}", unplaced.err);
+  assert_eq!(unplaced.code, 0, "{}\n{}", unplaced.out, unplaced.err);
+  assert!(checked_here(&unplaced), "{}", unplaced.out);
+
+  let kept_unplaced = ran(testbed(&alpha, &dir, &set).env("HOME", &dir).env("STAND_LOCAL", "1"));
+
+  assert_eq!(kept_unplaced.code, 0, "{}\n{}", kept_unplaced.out, kept_unplaced.err);
+  assert!(checked_here(&kept_unplaced), "{}", kept_unplaced.out);
 
   settle(&dir, &ssh, "stand");
 
@@ -2490,6 +2529,5 @@ fn a_set_is_refused_by_every_placement_that_would_run_it_here() {
     "{}",
     here.err
   );
-  assert!(here.out.lines().any(|line| line.starts_with("alpha: check:")), "{}", here.out);
-  assert!(here.out.lines().any(|line| line.starts_with("beta: check:")), "{}", here.out);
+  assert!(checked_here(&here), "{}", here.out);
 }

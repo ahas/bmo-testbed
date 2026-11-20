@@ -37,7 +37,7 @@
 | `files` | list of globs | each declared language's own naming | The test files of the file languages, each run from the folder of its runner's configuration (`docs/suite.md`, 「Which files run」) |
 | `browser` | list of globs | `[]` | Test files run one at a time in the browser lane |
 | `guard_seconds` | integer | none | Read and given no effect: every unit of a run is started and runs to its end |
-| `file_guard_seconds` | integer | none | Read and given no effect: a unit runs until it ends, or until it writes nothing for the silence limit (`docs/testbed.md`) |
+| `file_guard_seconds` | integer | none | Read and given no effect: a unit runs until it ends, or until it neither writes nor works for the silence limit (`docs/testbed.md`) |
 | `test_timeout_seconds` | integer | 120, the declaration policy's | How long one test may run before it fails: handed to a runner that takes a per-test limit, and kept by the suite over a crate's tests (`docs/suite.md`, 「How long a unit and a test may run」). At least 1 |
 | `silence_seconds` | integer | 600, the lane policy's | How long a command run for the repository may write nothing before it is ended as hung: a run, a check's step, a suite's unit, the Cargo verb, a deployment's step, and a placed run on the machine it runs on (`docs/testbed.md`, 「A holder whose command falls silent lets go」). At least 1 |
 | `memory_gb` | integer | 12 | The fence's memory ceiling, which `BMO_SUITE_MEMORY_GB` overrides |

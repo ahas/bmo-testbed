@@ -768,8 +768,8 @@ flowchart TD
   `build`, `before`, `restart`, `stay-up`, `after`; `rollback` is never planned. Each stage is written
   with when it began.
 - **Each heavy step is written as it begins and as it ends,** with its exit code, how long it waited
-  for its turn and how long it ran, under the stage it ended in. A heavy step that writes nothing for the
-  silence limit while it holds its lane's turn is ended as hung and fails with exit code 124
+  for its turn and how long it ran, under the stage it ended in. A heavy step that neither writes nor works for
+  the silence limit while it holds its lane's turn is ended as hung and fails with exit code 124
   (`docs/testbed.md`, 「A holder whose command falls silent lets go」). A step whose command a signal
   ended is written with exit code 1, and the gate's lines for it name the signal in place of an exit
   code (`docs/checks.md`, 「The static check」). Steps are named by their declared

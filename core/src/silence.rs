@@ -1,10 +1,11 @@
-//! A command holding a lane's turn that writes nothing for the silence limit is ended as hung, and the turn
-//! passes on (docs/testbed.md, 「A holder whose command falls silent lets go」). The holder watches where the
-//! command's output goes and the file it hands the command for a watch under it to touch; once neither has
-//! moved for the limit, the command's process group and every process under it are sent a TERM, and whatever
-//! still stands after the grace a KILL. A command whose output this process passes on as its own, as a placed
-//! run's is, is counted byte by byte as it goes through.
+//! A command holding a lane's turn that neither writes nor works for the silence limit is ended as hung, and the
+//! turn passes on (docs/testbed.md, 「A holder whose command falls silent lets go」). The holder watches where the
+//! command's output goes, the file it hands the command for a watch under it to touch, and the processor time the
+//! command's processes use; once none of them has moved for the limit, the command's process group and every
+//! process under it are sent a TERM, and whatever still stands after the grace a KILL. A command whose output this
+//! process passes on as its own, as a placed run's is, is counted byte by byte as it goes through.
 
+use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
@@ -149,6 +150,7 @@ pub struct Watch {
   output: Output,
   silence: Silence,
   heard: Option<PathBuf>,
+  says_working: Option<Duration>,
 }
 
 // A file of this watch's own in the machine's temporary directory, or none where none could be made.
@@ -194,7 +196,17 @@ impl Watch {
       output,
       silence,
       heard,
+      says_working: None,
     }
+  }
+
+  /// The same watch, saying on this process's own standard error, at most once every `every`, that its command
+  /// still works while none of its output has come for `every`: the `placed` verb's, whose standard error is the
+  /// connection back to the machine that placed the run (docs/testbed.md, 「A holder whose command falls silent
+  /// lets go」).
+  pub fn saying_work(mut self, every: Duration) -> Self {
+    self.says_working = Some(every);
+    self
   }
 
   /// The variable the command is handed, where it is watched.
@@ -202,8 +214,8 @@ impl Watch {
     self.heard.clone().map(|path| (HEARD_VARIABLE, path))
   }
 
-  /// The command, `what` as the line names it, waited for until it ends, or ended as hung once nothing of it
-  /// has moved for the limit. A command with nothing to watch is waited for until it ends.
+  /// The command, `what` as the line names it, waited for until it ends, or ended as hung once it has neither
+  /// written nor worked for the limit. A command with nothing to watch is waited for until it ends.
   pub fn wait(&self, child: &mut Child, what: &str) -> Waited {
     if !self.output.watched() {
       return Waited {
@@ -216,7 +228,7 @@ impl Watch {
     let (ended, ending) = mpsc::channel::<()>();
 
     std::thread::scope(|scope| {
-      let watcher = scope.spawn(move || self.watch(leader, &ending));
+      let watcher = scope.spawn(move || self.watch(leader, &ending, what));
       let status = child.wait().ok();
 
       drop(ended);
@@ -235,12 +247,15 @@ impl Watch {
     (self.output.size(), touched(self.heard.as_ref()))
   }
 
-  // Looks at the command every so often until it ends, and ends it whole once nothing of it has moved for the
-  // limit; what still stood under it then where it was ended so. While it moves, the holder above is told so
-  // in turn.
-  fn watch(&self, leader: u32, ending: &Receiver<()>) -> Option<Vec<String>> {
+  // Looks at the command every so often until it ends, and ends it whole once it has neither written nor
+  // worked for the limit; what still stood under it then where it was ended so. While it writes or works, the
+  // holder above is told so in turn.
+  fn watch(&self, leader: u32, ending: &Receiver<()>, what: &str) -> Option<Vec<String>> {
     let mut last = self.heard();
+    let mut work = Work::of(leader);
     let mut moved = Instant::now();
+    let mut wrote = Instant::now();
+    let mut said = Instant::now();
 
     loop {
       let left = self.silence.limit.saturating_sub(moved.elapsed());
@@ -250,11 +265,17 @@ impl Watch {
       }
 
       let now = self.heard();
+      let worked = work.went_on(leader);
 
-      if now != last {
+      if now.0 != last.0 {
+        wrote = Instant::now();
+      }
+
+      if now != last || worked {
         last = now;
         moved = Instant::now();
         speak_for_holder();
+        self.say_working(what, wrote, &mut said);
       } else if moved.elapsed() >= self.silence.limit {
         let waiting = waiting_under(leader);
 
@@ -263,6 +284,25 @@ impl Watch {
         return Some(waiting);
       }
     }
+  }
+
+  // That the command still works, said where this watch says so and none of its output came for the while it
+  // names, nor was it said within that while.
+  fn say_working(&self, what: &str, wrote: Instant, said: &mut Instant) {
+    let Some(every) = self.says_working else { return };
+
+    if wrote.elapsed() < every || said.elapsed() < every {
+      return;
+    }
+
+    eprintln!(
+      "{}",
+      fill_marks(
+        &LANES.silence.working,
+        &[("command", what), ("seconds", &wrote.elapsed().as_secs().to_string())]
+      )
+    );
+    *said = Instant::now();
   }
 
   // The command's process group where it heads one, and every process under it, sent a TERM; whatever still
@@ -325,6 +365,73 @@ impl Watch {
       ],
     )
   }
+}
+
+/// The processor time a command's processes have used, each process's own as the kernel last counted it, and
+/// when it was read: what tells a command that computes without a word from one that waits.
+struct Work {
+  ticks: HashMap<i64, u64>,
+  at: Instant,
+}
+
+impl Work {
+  fn of(leader: u32) -> Self {
+    Self {
+      ticks: tree_ticks(leader),
+      at: Instant::now(),
+    }
+  }
+
+  // Whether the command's processes used at least the policy's share of one processor since the last reading,
+  // a process new since then counting all it used; the reading kept for the next.
+  fn went_on(&mut self, leader: u32) -> bool {
+    let now = tree_ticks(leader);
+    let used: u64 = now
+      .iter()
+      .map(|(pid, ticks)| ticks.saturating_sub(self.ticks.get(pid).copied().unwrap_or(0)))
+      .sum();
+    let share = LANES.numbers.working_share_percent as f64 / 100.0;
+    let owed = self.at.elapsed().as_secs_f64() * ticks_per_second() * share;
+
+    self.ticks = now;
+    self.at = Instant::now();
+
+    used as f64 >= owed && used > 0
+  }
+}
+
+// The kernel's clock ticks in a second, the unit it counts a process's processor time in.
+fn ticks_per_second() -> f64 {
+  // SAFETY: asks the kernel for a constant of the system.
+  let ticks = unsafe { libc::sysconf(libc::_SC_CLK_TCK) };
+
+  if ticks > 0 { ticks as f64 } else { 100.0 }
+}
+
+// The processor time each process of a command's tree has used, the command it started among them, by its pid.
+fn tree_ticks(leader: u32) -> HashMap<i64, u64> {
+  let leader = i64::from(leader);
+  let mut tree = descendants_of(leader);
+
+  tree.push(leader);
+  tree
+    .into_iter()
+    .filter_map(|pid| process_ticks(pid).map(|ticks| (pid, ticks)))
+    .collect()
+}
+
+// A process's processor time in user and system mode, in clock ticks: the fourteenth and fifteenth fields of the
+// kernel's record of it, laid out as proc(5) says; none where it has gone. The record is the kernel's own line, which
+// no crate the workspace holds reads. Its second field, the process's name in parentheses, is the one that may hold
+// spaces or parentheses itself, so the fields are counted from the last closing parenthesis, which ends it.
+fn process_ticks(pid: i64) -> Option<u64> {
+  let record = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+  let after_name = &record[record.rfind(')')? + 1..];
+  let fields: Vec<&str> = after_name.split_whitespace().collect();
+  let user: u64 = fields.get(11)?.parse().ok()?;
+  let system: u64 = fields.get(12)?.parse().ok()?;
+
+  Some(user + system)
 }
 
 // What still stood under a command found silent: each process of its tree that had started nothing further, by
@@ -449,10 +556,16 @@ pub fn said_while_quiet<T>(
 
 /// A command run with its standard output and error passed on to this process's own as they come, every byte
 /// counted as the command writing and the holder above this process told while bytes come, and ended as hung
-/// once nothing of it has moved for `silence`'s limit; `what` names it on the hung line.
-pub fn run_passed_on(command: &mut Command, silence: Silence, what: &str) -> std::io::Result<Waited> {
+/// once it has neither written nor worked for `silence`'s limit; `what` names it on the hung line and on the line
+/// said on standard error, at most once every `working_every`, while it works with none of its output coming.
+pub fn run_passed_on(
+  command: &mut Command,
+  silence: Silence,
+  what: &str,
+  working_every: Duration,
+) -> std::io::Result<Waited> {
   let count = Arc::new(AtomicU64::new(0));
-  let watch = Watch::new(Output::Read(Arc::clone(&count)), silence);
+  let watch = Watch::new(Output::Read(Arc::clone(&count)), silence).saying_work(working_every);
   let mut child = command.envs(watch.variable()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
   let (done, finished) = mpsc::channel::<()>();
   let mut streams = 0;

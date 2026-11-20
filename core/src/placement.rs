@@ -69,10 +69,9 @@ impl Placement for Local {
     None
   }
 
-  /// A change check over several checkouts runs on a placed machine alone, and this placement names none.
+  /// A change check over several checkouts runs here too: no placed machine is named to take it.
   fn place_set(&self, _: &SetAsk<'_>) -> Option<u8> {
-    eprintln!("{}", LANES.placed.set_no_machine);
-    Some(SET_REFUSED_EXIT_CODE)
+    None
   }
 }
 
@@ -82,8 +81,8 @@ impl Placement for Local {
 pub struct KeptHere {
   /// The variable or the file, as the declaration names it.
   pub named: String,
-  /// Whether a change check over several checkouts may stay here too: the placed machine's `combined_order`
-  /// names this machine.
+  /// Whether a change check over several checkouts may stay here too: the settings name no placed machine,
+  /// or the placed machine's `combined_order` names this machine.
   pub set_here: bool,
 }
 
@@ -116,8 +115,8 @@ impl Placement for KeptHere {
     None
   }
 
-  /// The set stays here only where the placed machine's `combined_order` names this machine; otherwise it is
-  /// refused, naming the variable or the file that would keep it here.
+  /// The set stays here where no placed machine is named or its `combined_order` names this machine; otherwise
+  /// it is refused, naming the variable or the file that would keep it here.
   fn place_set(&self, ask: &SetAsk<'_>) -> Option<u8> {
     if self.set_here {
       return self.place(&ask.run);

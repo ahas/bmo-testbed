@@ -157,10 +157,10 @@
     effect at that minute.
   - A project's check and a declared package check run their own runners, whose own limits stand.
 - **What fails at the limit runs once more** as any failing unit does (「What failed runs once more」).
-- **A unit that writes nothing for the silence limit is ended as hung** (`docs/testbed.md`, 「A holder
+- **A unit that neither writes nor works for the silence limit is ended as hung** (`docs/testbed.md`, 「A holder
   whose command falls silent lets go」): the run watches the pipes it reads the unit's output through, ends
-  the unit's process group once they stay silent, and the unit fails with exit code 124, the line naming it
-  in its output. While a unit writes, the run touches the file its own holder handed it in
+  the unit's process group once they stay silent and the unit's processes burn no processor time, and the unit fails with exit code 124, the line naming it
+  in its output. While a unit writes or works, the run touches the file its own holder handed it in
   `BMO_TESTBED_HEARD`, since the unit's output reaches the run's own only once the unit ends. A unit that
   writes but never ends holds the run open until someone stops it.
 - **A unit's output closes once it has ended:** whatever it left standing in its process group is killed

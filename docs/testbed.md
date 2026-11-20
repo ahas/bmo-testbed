@@ -200,23 +200,30 @@ flowchart TD
 
 ## A holder whose command falls silent lets go
 
-- **A command holding a lane's turn that writes nothing for the silence limit is ended as hung,** and its
-  seats pass on. Its length alone never cuts it: a command that keeps writing runs until it ends,
-  however long that takes, and a person who wants it gone stops it.
+- **A command holding a lane's turn that neither writes nor works for the silence limit is ended as hung,**
+  and its seats pass on. Its length alone never cuts it: a command that keeps writing or working runs until
+  it ends, however long that takes, and a person who wants it gone stops it.
 - **The silence limit is ten minutes,** or the seconds a repository's declaration names in `[test]
   silence_seconds` (`docs/declaration.md`): every watch over a command run for that repository, in its
   checkout or a bench copy of it, keeps to the declared number.
 - **A slow command is not a silent one, and the limit is never stretched for a slow one.** A static check
   or a deployment's gate gets no longer limit than any other command, and a check needs no warm build
-  directory to stay under it: Cargo reports every unit it compiles or checks as it starts it, so a cold
-  build keeps writing for as long as it runs, however long that is. A command that writes nothing for ten
-  minutes is waiting on something, a lock, the network or a process that will not end, and that wait is
-  the hang the limit is there to end. A repository whose own work is silent for longer by its nature, and
-  not because it waits, names its `silence_seconds`.
+  directory to stay under it. A command that computes without a word, such as a typechecker that speaks
+  only once it ends or a bundler transforming its modules, burns processor time the whole while, so it is
+  working, however slow the machine and however long it lasts. A command that neither writes nor works for
+  ten minutes is waiting on something, a lock, the network or a process that will not end, and that wait is
+  the hang the limit is there to end. A repository whose own work waits longer by its nature, and not
+  because something it waits on never comes, names its `silence_seconds`.
 - **The holder watches where its command's output goes,** every three seconds: the log of a `run`, the
   files a check step's output is taken into, the pipes a suite's unit, a deployment's heavy step or a placed
   run's command is read through, and the files the Cargo verb's own standard output and error stand in.
-  Once none of them has grown for the limit, the command is hung.
+- **At every look it also reads the processor time the command's processes have used,** the command it
+  started and every process under it, as the kernel counts each one's time. Where they used at least the
+  lane policy's share of one processor since the last look, the command is working. A process waiting on a
+  lock, a socket or a child burns next to none, so a waiting command stays silent however many processes
+  stand under it. A command spinning with nothing to show is working by this reading, and runs until a
+  person stops it.
+- **Once none of its output has grown and it has not worked for the limit, the command is hung.**
 - **A command under it that is watched in turn speaks for it.** The holder hands its command
   `BMO_TESTBED_HEARD`, a file of its own; a watch under it, such as a suite's over a unit whose output it
   holds back until the unit ends, touches that file while its own command writes, and the holder counts the
@@ -224,10 +231,16 @@ flowchart TD
   (「Memory」) touches the file each time it looks, so the wait is never taken for silence.
 - **A run placed on another machine is watched where it runs** (「A run on another machine」). The
   `placed` verb there passes its command's standard output and error on as they come, through pipes of its
-  own, counts every byte as the command writing, and hands the command `BMO_TESTBED_HEARD`; so a placed
-  command whose own output is that pipe, such as the Cargo verb's, is ended as hung on that machine at the
-  limit, its seats there pass on, and the line and code 124 come back over the connection. The declared
-  setup a placed run starts with is watched the same way.
+  own, counts every byte as the command writing, reads its command's processor time as every holder does,
+  and hands the command `BMO_TESTBED_HEARD`; so a placed command whose own output is that pipe, such as the
+  Cargo verb's, is ended as hung on that machine at the limit, its seats there pass on, and the line and
+  code 124 come back over the connection. The declared setup a placed run starts with is watched the same
+  way.
+- **What the `placed` verb hears without a byte passing it says over the connection:** while its command
+  works or the file it handed it is touched, and nothing of the command's own output has come through for
+  a minute by the lane policy, it writes one line on its standard error saying the command still works
+  there. So a watch on the calling machine over the connection, such as a deployment's over its heavy step
+  run there, hears a placed command that computes or holds its output back as working.
 - **The caller passes a placed run's output on the same way,** and while bytes come over the connection it
   touches the file its own holder handed it in `BMO_TESTBED_HEARD`. It ends nothing itself: a placed
   command that holds its output back, a `run` writing to its log there or a check whose step still runs, is
@@ -332,8 +345,8 @@ flowchart TD
   machine's home, the set run there as that machine's change check in one wide seat of its line. It goes
   by the settings' `combined_order`, whose default is the placed machine alone, so a busy placed machine
   is waited for in its line and the set never falls to this machine; it runs here only where that order
-  names this machine, and any other placement refuses it rather than running it here
-  (`docs/boundary.md`, 「Placement」).
+  names this machine or the settings name no placed machine at all, and the placement endpoint refuses it
+  rather than running it here (`docs/boundary.md`, 「Placement」).
 - **What stays here, whatever the order says:**
   - a run started inside a turn already held, since its holder's seat is here and it stands in it;
   - a run inside a deployment's or a whole run's unit, since those hold their own place in this
