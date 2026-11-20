@@ -23,6 +23,7 @@ mod quick_source;
 mod quick_wording;
 mod selection;
 mod static_check;
+mod step_fence;
 mod suite;
 mod superseded;
 mod template;

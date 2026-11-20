@@ -56,6 +56,7 @@ fn the_repositorys_deployment_keeps_the_prune_the_data_backup_and_their_timers()
       "units/bmo-backup.slice",
       "units/bmo-cargo-prune.service",
       "units/bmo-cargo-prune.timer",
+      "units/bmo-check.slice",
       "units/bmo-data-backup-drill.service",
       "units/bmo-data-backup-drill.timer",
       "units/bmo-data-backup-media.service",

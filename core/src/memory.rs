@@ -146,7 +146,8 @@ pub fn machine_available_bytes() -> Option<u64> {
   proc_number(Path::new("/proc/meminfo"), "MemAvailable").map(|kilobytes| kilobytes * 1024)
 }
 
-const CGROUP_ROOT: &str = "/sys/fs/cgroup";
+/// Where the kernel lays its control groups out as folders.
+pub const CGROUP_ROOT: &str = "/sys/fs/cgroup";
 
 // The unified hierarchy's line of /proc/self/cgroup is its id, an empty list of controllers and the group's
 // path, colon to colon; the path is everything after the second colon.
@@ -166,18 +167,22 @@ pub fn machine_fences() -> Vec<MemoryFence> {
   Path::new(&own)
     .ancestors()
     .filter(|group| !matches!(group.to_str(), Some("/" | "")))
-    .filter_map(|group| {
-      let dir = Path::new(CGROUP_ROOT).join(group.strip_prefix("/").unwrap_or(group));
-      let ceiling_bytes = std::fs::read_to_string(dir.join("memory.max")).ok()?.trim().parse().ok()?;
-      let ceiling_reached = proc_number(&dir.join("memory.events.local"), "oom")?;
-
-      Some(MemoryFence {
-        cgroup: group.to_string_lossy().into_owned(),
-        ceiling_bytes,
-        ceiling_reached,
-      })
-    })
+    .filter_map(|group| read_fence(Path::new(CGROUP_ROOT), &group.to_string_lossy()))
     .collect()
+}
+
+/// The group at `group`, its path under the hierarchy laid out at `root`, as a fence: its ceiling and its own
+/// count of reaching it. None where it has no ceiling or no longer stands.
+pub fn read_fence(root: &Path, group: &str) -> Option<MemoryFence> {
+  let dir = root.join(group.trim_start_matches('/'));
+  let ceiling_bytes = std::fs::read_to_string(dir.join("memory.max")).ok()?.trim().parse().ok()?;
+  let ceiling_reached = proc_number(&dir.join("memory.events.local"), "oom")?;
+
+  Some(MemoryFence {
+    cgroup: group.to_owned(),
+    ceiling_bytes,
+    ceiling_reached,
+  })
 }
 
 /// The fence whose own ceiling was reached between the two readings, or none.
@@ -201,7 +206,8 @@ pub fn killed_for_memory(run: RunEnd, before: Option<u64>, after: Option<u64>) -
     && matches!((before, after), (Some(before), Some(after)) if after > before)
 }
 
-fn gigabytes(bytes: u64) -> String {
+/// Bytes as a line names them, in gigabytes to one decimal.
+pub fn gigabytes(bytes: u64) -> String {
   format!("{:.1} GB", bytes as f64 / f64::from(1u32 << 30))
 }
 
@@ -375,6 +381,8 @@ pub struct MachineHands<'a> {
   pub checkout: String,
   pub env: Env,
   pub start: &'a mut dyn FnMut(&TestbedTurn) -> RunEnd,
+  /// A fence the command stands in that this process does not, by its group's path: a check step's own.
+  pub command_fence: Option<String>,
   started: Instant,
 }
 
@@ -392,6 +400,7 @@ impl<'a> MachineHands<'a> {
       checkout,
       env,
       start,
+      command_fence: None,
       started: Instant::now(),
     }
   }
@@ -430,7 +439,12 @@ impl HeavyHands for MachineHands<'_> {
   }
 
   fn fences(&self) -> Vec<MemoryFence> {
-    machine_fences()
+    let command = self
+      .command_fence
+      .as_deref()
+      .and_then(|group| read_fence(Path::new(CGROUP_ROOT), group));
+
+    machine_fences().into_iter().chain(command).collect()
   }
 
   // A wait for memory is no silence: each pause ends by telling the holder above that the command still stands.

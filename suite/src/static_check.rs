@@ -7,9 +7,10 @@ use std::process::{Command, Stdio};
 use std::time::Instant;
 
 use bmo_testbed_core::declaration::{self, Repository};
-use bmo_testbed_core::memory::{MachineHands, MemoryLimits, RunEnd, run_in_turn};
+use bmo_testbed_core::memory::{MachineHands, MemoryLimits, RunEnd, gigabytes, run_in_turn};
 use bmo_testbed_core::policy::deploy_steps::DeployStep;
 use bmo_testbed_core::policy::fill_marks;
+use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::policy::static_check::STATIC_CHECK;
 use bmo_testbed_core::silence::{Output, Silence, Watch};
 use bmo_testbed_core::turn::{
@@ -20,6 +21,7 @@ use crate::cargo::cargo_verb_line;
 use crate::crates::{CrateDeclaration, workspace_crates};
 use crate::own_binary::testbed_line;
 use crate::selection::{Layout, changed_paths, glob_matches, select_crates};
+use crate::step_fence::{StepFence, say_none};
 
 /// One command of the check, run in a directory of the tree being checked, with `env` over the caller's: in
 /// the lane it names, run again after an out-of-memory kill where it asks to be, or at once where it names
@@ -318,7 +320,8 @@ fn timed(run: impl FnOnce(&Path) -> (RunEnd, String)) -> TimedRun {
 }
 
 // A command started with its output taken, `times` the file its heavy commands write their waits into, and
-// ended as hung where it is watched for `silence` and writes nothing for it.
+// ended as hung where it is watched for `silence` and writes nothing for it; born inside `fence` where one is
+// handed, and said on standard error where it could not move into it.
 fn output_of(
   command: &[String],
   cwd: &Path,
@@ -326,6 +329,7 @@ fn output_of(
   times: &Path,
   held: Option<(&'static str, String)>,
   silence: Option<Silence>,
+  fence: Option<(&str, &StepFence)>,
 ) -> (RunEnd, String) {
   // The output goes to files of the run's own and never a pipe: a process the command leaves running keeps
   // a pipe open, and a reader of it would wait for that process long after the command ended.
@@ -336,7 +340,9 @@ fn output_of(
   let done = std::fs::File::create(&said)
     .and_then(|out| Ok((out, std::fs::File::create(&failed)?)))
     .and_then(|(out, errors)| {
-      Command::new(&command[0])
+      let mut started = Command::new(&command[0]);
+
+      started
         .args(&command[1..])
         .current_dir(cwd)
         .envs(env.iter().map(|(name, value)| (name, value)))
@@ -345,8 +351,18 @@ fn output_of(
         .env(TURN_TIMES_VARIABLE, times)
         .stdin(Stdio::null())
         .stdout(out)
-        .stderr(errors)
-        .spawn()
+        .stderr(errors);
+
+      let joining = fence.map(|(name, fence)| (name, fence.join(&mut started)));
+      let child = started.spawn();
+
+      if let Some((name, joining)) = joining
+        && let Some(why) = joining.missed()
+      {
+        say_none(name, &why);
+      }
+
+      child
     })
     .map(|mut child| watch.wait(&mut child, &command.join(" ")));
   let taken = |path: &Path| String::from_utf8_lossy(&std::fs::read(path).unwrap_or_default()).into_owned();
@@ -381,7 +397,44 @@ pub fn run_timed(
   env: &[(String, String)],
   silence: Option<Silence>,
 ) -> TimedRun {
-  timed(|times| output_of(command, cwd, env, times, None, silence))
+  timed(|times| output_of(command, cwd, env, times, None, silence, None))
+}
+
+/// A step's command run as `run_timed` runs it, in a fence of its own (docs/checks.md, 「The static check」),
+/// `name` naming the step in what is said of its fence: where its own ceiling was reached, a line under its
+/// output says so; where no fence could be had, a line on standard error says why and it runs where it stands.
+pub fn run_fenced(
+  name: &str,
+  command: &[String],
+  cwd: &Path,
+  env: &[(String, String)],
+  silence: Option<Silence>,
+) -> TimedRun {
+  let fence = StepFence::open_for(name);
+  let mut done = timed(|times| {
+    output_of(command, cwd, env, times, None, silence, fence.as_ref().map(|fence| (name, fence)))
+  });
+
+  if done.code != 0
+    && let Some(reached) = fence.as_ref().and_then(StepFence::reached)
+  {
+    if !(done.output.is_empty() || done.output.ends_with('\n')) {
+      done.output.push('\n');
+    }
+
+    done.output.push_str(&fill_marks(
+      &LANES.memory.fenced,
+      &[
+        ("what", name),
+        ("end", &done.end_words()),
+        ("ceiling", &gigabytes(reached.ceiling_bytes)),
+        ("fence", &reached.cgroup),
+      ],
+    ));
+    done.output.push('\n');
+  }
+
+  done
 }
 
 // A name no two runs of this process share.
@@ -486,21 +539,26 @@ pub fn run_static_check(
   failed.or(not_run)
 }
 
-/// A step run in the tree, its heavy commands' waits read back as the step's wait: where it stands, or in
-/// its lane's turn, watched for silence and run again after an out-of-memory kill where it asks to be.
+/// A step run in the tree in a fence of its own, its heavy commands' waits read back as the step's wait:
+/// where it stands, or in its lane's turn, watched for silence and run again after an out-of-memory kill
+/// where it asks to be and its own fence's ceiling was not what it met.
 pub fn spawn_step(root: &Path, step: &CheckStep) -> TimedRun {
   let cwd = root.join(&step.dir);
   let Some(lane) = step.lane else {
-    return run_timed(&step.command, &cwd, &step.env, step.watched.then(|| Silence::at(root)));
+    let silence = step.watched.then(|| Silence::at(root));
+
+    return run_fenced(&step.id, &step.command, &cwd, &step.env, silence);
   };
   let silence = Silence::at(root);
+  let fence = StepFence::open_for(&step.id);
+  let joined = fence.as_ref().map(|fence| (step.id.as_str(), fence));
 
   timed(|times| {
     let mut output = String::new();
     let mut signal = None;
     let mut start = |turn: &TestbedTurn| {
       let held = turn.held_variable();
-      let (end, said) = output_of(&step.command, &cwd, &step.env, times, held, Some(silence));
+      let (end, said) = output_of(&step.command, &cwd, &step.env, times, held, Some(silence), joined);
 
       output.push_str(&said);
       signal = end.signal;
@@ -516,6 +574,9 @@ pub fn spawn_step(root: &Path, step: &CheckStep) -> TimedRun {
     };
     let mut hands =
       MachineHands::new(step.id.clone(), lane, root.to_string_lossy().into_owned(), env, &mut start);
+
+    hands.command_fence = fence.as_ref().map(|fence| fence.group.clone());
+
     let code = run_in_turn(&mut hands, &limits, &mut || {});
 
     drop(hands);

@@ -23,7 +23,7 @@ use crate::cargo::cargo_verb_line;
 use crate::own_binary::testbed_line;
 use crate::run::{file_groups, script_runner};
 use crate::selection::changed_paths;
-use crate::static_check::{CheckStep, TimedRun, run_timed, spawn_step, static_steps};
+use crate::static_check::{CheckStep, TimedRun, run_fenced, spawn_step, static_steps};
 use crate::test_server::test_postgres;
 use crate::test_targets::TargetTests;
 use crate::tool_checks::CheckedTool;
@@ -628,8 +628,13 @@ pub fn run_step(root: &Path, step: &Step) -> TimedRun {
 
   handed.extend(turn.held_variable().map(|(name, value)| (name.to_owned(), value)));
 
-  let mut done =
-    run_timed(&step.step.command, &root.join(&step.step.dir), &handed, Some(Silence::at(root)));
+  let mut done = run_fenced(
+    &step.name,
+    &step.step.command,
+    &root.join(&step.step.dir),
+    &handed,
+    Some(Silence::at(root)),
+  );
 
   done.waited_seconds += turn.waited_seconds();
   done

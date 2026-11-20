@@ -663,11 +663,11 @@ mod fence {
       (self.takes, self.says.clone())
     }
 
-    fn cgroup(&mut self) -> String {
+    fn cgroup(&mut self, _: u32) -> String {
       self.looks += 1;
 
       if self.looks > self.moves_after {
-        format!("0::/user.slice/app.slice/{}\n", fence_unit(4242))
+        format!("0::/user.slice/app.slice/{}\n", self.calls.last().unwrap()[8])
       } else {
         "0::/user.slice/app.slice/terminal.service\n".to_owned()
       }
@@ -738,7 +738,7 @@ mod fence {
   // "asks the manager for a scope around the running process, with its ceilings, in the suite's slice"
   #[test]
   fn asks_the_manager_for_a_scope_around_the_running_process() {
-    let call = fence_call("bmo-suite-7.scope", 7, LIMITS);
+    let call = fence_call("bmo-suite-7.scope", SUITE_SLICE, 7, LIMITS);
 
     assert_eq!(call[..3], words(&["busctl", "--user", "call"]));
     assert!(call.contains(&"bmo-suite-7.scope".to_owned()));

@@ -233,6 +233,7 @@
 | Slice | What runs in it |
 |---|---|
 | `bmo-backup.slice` | The data backup's services, `bmo-data-backup`, `bmo-data-backup-media` and `bmo-data-backup-drill` (`docs/backup.md`), and a deployment's backup upload, `bmo-backup-upload-<stamp>` |
+| `bmo-check.slice` | Every check step's fence, `bmo-check-<pid>-<n>.scope` (`docs/checks.md`, 「The static check」) |
 | `bmo-deploy.slice` | Every deployment's unit, `bmo-deploy-<stamp>` (「Where a deployment runs」) |
 | `bmo-suite.slice` | A suite run's fence, `bmo-suite-<pid>.scope`, the daily whole run's unit, `bmo-full-suite-<stamp>`, and the test server, `bmo-test-postgres` (`docs/suite.md`) |
 | `bmo-upkeep.slice` | The prune of the Cargo build directory, `bmo-cargo-prune` (「The Cargo build directory」) |

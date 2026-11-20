@@ -21,6 +21,7 @@ pub mod quick;
 pub mod run;
 pub mod selection;
 pub mod static_check;
+pub mod step_fence;
 pub mod superseded;
 pub mod sweep;
 pub mod template;

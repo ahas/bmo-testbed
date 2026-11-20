@@ -1,5 +1,5 @@
 # What the static check says of its steps (docs/checks.md, 「The static check」): a line for each step as
-# it ends, and the line a check that failed or did not run ends on. A harness reads them, so they are
+# it ends, and the line a check that failed or did not run ends on; and the ceilings of each step's fence. A harness reads them, so they are
 # English. Each `{name}` is filled in with what it names; {step} is a step as `step` names it, {end} how its
 # command ended, an exit code or the signal that ended it, as the memory turn words them, and {by} the Cargo
 # workspace check's own step that covers a declared step left out.
@@ -10,3 +10,14 @@ left_out = "static check: {step} left out, the Cargo workspace check's {by} cove
 not_run = "static check: not run"
 not_had = "{mark} {step} did not get its turn within its wait; run this again at once"
 failed = "static check: FAILED, {step}, {end}"
+# A step that runs where its caller stands, with no fence of its own, and why; {name} is the step's name.
+fence_none = "static check: {name} runs where its caller stands, with no fence of its own: {why}"
+# Why, where the command could not move itself into the scope its step holds.
+fence_unjoined = "the command could not move into {unit}: {why}"
+
+# Each step's fence (docs/checks.md, 「The static check」): its memory ceiling and the swap beyond it, in
+# gigabytes, and the tasks it may hold.
+[fence]
+memory_gb = 16
+swap_gb = 2
+tasks = 8192

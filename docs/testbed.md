@@ -277,6 +277,9 @@ flowchart TD
   it, is at least `seat_free_gigabytes` in the lane policy, four, or where no seat of the lane is held
   at all, so a lone command always runs. `BMO_TESTBED_SEAT_FREE_GB` names another amount for a machine
   or a test. A deployment's seat is a seat beside the held ones like any other.
+- **The machine's memory is the reading, not the ceiling of the unit the caller stands in,** since a
+  close's heavy work stands in fences of its own outside the caller's unit: a suite run (`docs/suite.md`,
+  「A fence of its own」) and every check step (`docs/checks.md`, 「The static check」).
 - **A command the kernel killed for want of memory runs again,** at most four runs in all: before each
   further run the testbed waits at least thirty seconds, then until six gigabytes are free, however long
   that takes, saying every minute that it still waits. The Cargo

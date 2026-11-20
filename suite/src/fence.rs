@@ -72,14 +72,14 @@ pub fn other_fence_listed(listed: &str, pid: u32) -> bool {
     .any(|unit| unit != own)
 }
 
-/// The manager's own call that starts a scope around a process already running.
-pub fn fence_call(unit: &str, pid: u32, limits: FenceLimits) -> Vec<String> {
+/// The manager's own call that starts a scope around a process already running, in `slice`.
+pub fn fence_call(unit: &str, slice: &str, pid: u32, limits: FenceLimits) -> Vec<String> {
   let properties = [
     ("MemoryMax", "t", (limits.memory_gb * GIB).to_string()),
     ("MemorySwapMax", "t", (limits.swap_gb * GIB).to_string()),
     ("TasksMax", "t", limits.tasks.to_string()),
     ("OOMPolicy", "s", "continue".to_owned()),
-    ("Slice", "s", SUITE_SLICE.to_owned()),
+    ("Slice", "s", slice.to_owned()),
     ("CollectMode", "s", "inactive-or-failed".to_owned()),
   ];
   let mut call: Vec<String> = [
@@ -142,8 +142,8 @@ pub fn user_bus_refusal(env: &[(String, String)]) -> Option<String> {
   Some(fill_marks(&SUITE.lines.no_socket, &[("runtime", runtime)]))
 }
 
-fn own_cgroup() -> String {
-  std::fs::read_to_string("/proc/self/cgroup").unwrap_or_default()
+fn cgroup_of(pid: &str) -> String {
+  std::fs::read_to_string(format!("/proc/{pid}/cgroup")).unwrap_or_default()
 }
 
 fn none(why: &str) -> String {
@@ -157,8 +157,8 @@ pub trait FenceSeams {
   fn env(&self) -> Vec<(String, String)>;
   /// The manager asked: whether it took the call, and what it said.
   fn call(&mut self, command: &[String], env: &[(String, String)]) -> (bool, String);
-  /// The process's own control group, as `/proc/self/cgroup` names it.
-  fn cgroup(&mut self) -> String;
+  /// A process's control group, as `/proc/<pid>/cgroup` names it.
+  fn cgroup(&mut self, pid: u32) -> String;
   fn pause(&mut self);
   /// Raises the process's own OOM score to the most; its children inherit it.
   fn offer_first(&mut self);
@@ -195,8 +195,8 @@ impl FenceSeams for LiveFence {
     }
   }
 
-  fn cgroup(&mut self) -> String {
-    own_cgroup()
+  fn cgroup(&mut self, pid: u32) -> String {
+    cgroup_of(&pid.to_string())
   }
 
   fn pause(&mut self) {
@@ -223,26 +223,9 @@ pub fn fence_suite(limits: FenceLimits, seams: &mut dyn FenceSeams) -> String {
 
   let pid = seams.pid();
   let unit = fence_unit(pid);
-  let (taken, said) = seams.call(&fence_call(&unit, pid, limits), &env);
 
-  if !taken {
-    return none(&fill_marks(&SUITE.lines.fence_refused, &[("said", &said)]));
-  }
-
-  let scope = format!("/{unit}");
-  let mut inside = seams.cgroup().contains(&scope);
-
-  for _ in 0..SUITE.numbers.fence_move_tries {
-    if inside {
-      break;
-    }
-
-    seams.pause();
-    inside = seams.cgroup().contains(&scope);
-  }
-
-  if !inside {
-    return none(&fill_marks(&SUITE.lines.fence_not_moved, &[("unit", &unit)]));
+  if let Err(why) = start_scope(&unit, SUITE_SLICE, pid, limits, &env, seams) {
+    return none(&why);
   }
 
   fill_marks(
@@ -255,6 +238,43 @@ pub fn fence_suite(limits: FenceLimits, seams: &mut dyn FenceSeams) -> String {
       ("tasks", &limits.tasks.to_string()),
     ],
   )
+}
+
+/// Asks the manager for the scope `unit` in `slice` around the process `pid`, and waits, briefly and bounded,
+/// until that process's control group names it, since the manager answers before the move is carried out.
+/// Answers the scope's group, its path under the cgroup root, or why the process does not stand in it.
+pub fn start_scope(
+  unit: &str,
+  slice: &str,
+  pid: u32,
+  limits: FenceLimits,
+  env: &[(String, String)],
+  seams: &mut dyn FenceSeams,
+) -> Result<String, String> {
+  let (taken, said) = seams.call(&fence_call(unit, slice, pid, limits), env);
+
+  if !taken {
+    return Err(fill_marks(&SUITE.lines.fence_refused, &[("said", &said)]));
+  }
+
+  let scope = format!("/{unit}");
+  let group = |seams: &mut dyn FenceSeams| {
+    seams
+      .cgroup(pid)
+      .lines()
+      .map(|line| line.trim_start_matches("0::").to_owned())
+      .find(|path| path.ends_with(&scope))
+  };
+
+  for _ in 0..SUITE.numbers.fence_move_tries {
+    if let Some(found) = group(seams) {
+      return Ok(found);
+    }
+
+    seams.pause();
+  }
+
+  group(seams).ok_or_else(|| fill_marks(&SUITE.lines.fence_not_moved, &[("unit", unit)]))
 }
 
 /// What emptying the fence reads and kills, handed in so a test can stand in for the kernel.
@@ -278,7 +298,7 @@ impl ClearSeams for LiveClear {
   }
 
   fn cgroup(&mut self) -> String {
-    own_cgroup()
+    cgroup_of("self")
   }
 
   fn members(&mut self, group: &str) -> Vec<u32> {

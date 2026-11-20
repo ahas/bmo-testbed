@@ -7,7 +7,7 @@ use std::collections::VecDeque;
 use std::time::Duration;
 
 use bmo_testbed_core::memory::{
-  HeavyHands, MemoryFence, MemoryLimits, RunEnd, killed_for_memory, proc_number, run_in_turn,
+  HeavyHands, MemoryFence, MemoryLimits, RunEnd, killed_for_memory, proc_number, read_fence, run_in_turn,
 };
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
@@ -282,4 +282,31 @@ fn reads_a_kernel_listing_by_its_name() {
 
   assert_eq!(proc_number(&file, "MemAvailable"), Some(2048));
   assert_eq!(proc_number(&file, "SwapTotal"), None);
+}
+
+// "a group with a ceiling, and its own count of reaching it"
+#[test]
+fn reads_a_group_as_a_fence_only_where_it_has_a_ceiling() {
+  let root = tempfile::tempdir().unwrap();
+  let lay = |group: &str, ceiling: &str| {
+    let dir = root.path().join(group);
+
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("memory.max"), ceiling).unwrap();
+    std::fs::write(dir.join("memory.events.local"), "low 0\nhigh 0\nmax 9\noom 2\noom_kill 5\n").unwrap();
+  };
+
+  lay("work.slice/step.scope", "1073741824\n");
+  lay("open.slice", "max\n");
+
+  assert_eq!(
+    read_fence(root.path(), "/work.slice/step.scope"),
+    Some(MemoryFence {
+      cgroup: "/work.slice/step.scope".to_owned(),
+      ceiling_bytes: 1 << 30,
+      ceiling_reached: 2,
+    })
+  );
+  assert_eq!(read_fence(root.path(), "/open.slice"), None);
+  assert_eq!(read_fence(root.path(), "/gone.scope"), None);
 }

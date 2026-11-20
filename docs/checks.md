@@ -133,6 +133,27 @@
   its output files nor works for the silence limit is ended as hung and fails with exit code 124 (`docs/testbed.md`,
   「A holder whose command falls silent lets go」), and so does the workspace's own lint step, which holds
   no turn of its own but is watched the same way.
+- **Every step runs in a fence of its own:** a transient scope, `bmo-check-<pid>-<n>.scope` in
+  `bmo-check.slice` (`docs/deploy.md`, 「The slices」), the check's process number and the step's own
+  count, which the user's service manager starts around a keeper the step holds before its command
+  starts. The command moves itself into the scope before it executes, so it and everything it starts are
+  born inside and count against the scope alone. A command run again after an out-of-memory kill runs in
+  the same scope.
+  - **The ceilings** are the static-check policy's: sixteen gigabytes of memory, two of swap beyond it,
+    and 8,192 tasks.
+  - **Why:** without a scope a step's processes count against whatever unit its caller stands in. A job's
+    close stands in its job pane's service, whose one ceiling every job pane shares, so a front-end build
+    that alone fits is killed there for the memory of other jobs' dev servers and type checks. Inside its
+    scope the step meets only its own ceiling and the machine's memory, which is what the memory gate
+    reads (`docs/testbed.md`, 「Memory」).
+  - **A step whose own ceiling was reached says so,** naming the scope and the ceiling, and is not run
+    again for memory, as for any fence it stands in (`docs/testbed.md`, 「Memory」); a testbed verb inside
+    the step reads the same fence and says the same.
+  - **The scope goes with the step:** once the command has ended the keeper is let go, and a process the
+    step left running stays in the scope until it ends.
+  - **Where the scope cannot be had,** no user service manager reached, the manager refusing it, or the
+    command unable to move into it, a line on standard error says why and the step runs where its caller
+    stands.
 - **A step a signal ended says the signal.** Its line, and the check's failing line where it is the
   first to fail, name the signal in place of an exit code, so a command killed from outside is never
   read as a lint or a test that failed; it counts as exit code 1 for a caller.
@@ -321,6 +342,8 @@
     file under the crate's `tests/` names by a path through it or by a `#[path]` attribute, is shared, and
     runs the crate's tests whole; so does a changed file under `tests/` that is neither, such as a
     fixture or a helper of per-file targets.
+- **Every step runs in a fence of its own,** the test files' among them, as a static step does (「The
+  static check」).
 - **Every step runs to its end**, and the heavy ones wait for the testbed's turn. Every step, a declared
   one that runs where it stands among them, is watched for silence and ended as hung once it neither writes nor
   works for the silence limit.
