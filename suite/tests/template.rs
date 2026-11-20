@@ -3,12 +3,12 @@
 //! migrate command, with its functions and its note, and dropped with its pool.
 
 use bmo_testbed_core::policy::fill_marks;
-use bmo_testbed_core::policy::suite::SUITE;
+use bmo_testbed_core::policy::suite::{SUITE, ServerSetting};
 use bmo_testbed_suite::template::{
   connect, drop_set, execute, is_database_name, is_made_note, make_once, orphaned, pool_held, standing,
   superseded,
 };
-use bmo_testbed_suite::test_server::{StandWait, pool_prefix, test_server_up};
+use bmo_testbed_suite::test_server::{StandWait, pool_prefix, settings_query, test_server_up};
 use sqlx::Connection as _;
 
 fn words(given: &[&str]) -> Vec<String> {
@@ -155,4 +155,50 @@ fn a_wait_for_another_run_standing_the_server_up_is_said_once_a_minute() {
   assert_eq!(wait.line_at(began + 60_000), said("60"));
   assert_eq!(wait.line_at(began + 61_000), None);
   assert_eq!(wait.line_at(began + 121_000), said("121"));
+}
+
+// "On PostgreSQL 18 or later it does its reads and writes in the backend that asks for them (`io_method` set
+// to `sync`) ... A server older than 18 has neither the setting nor the workers, so it is started without
+// it."
+#[test]
+fn the_server_is_handed_io_method_sync_from_postgresql_18_on() {
+  let io_method = |major: u32| {
+    SUITE
+      .server
+      .settings_for(major)
+      .iter()
+      .find(|setting| setting.name == "io_method")
+      .map(|setting| setting.value.clone())
+  };
+
+  assert_eq!(io_method(17), None);
+  assert_eq!(io_method(18), Some("sync".to_owned()));
+  assert_eq!(SUITE.server.settings_for(17).len() + 1, SUITE.server.settings_for(18).len());
+}
+
+// "A run ... that finds the server answering with settings other than these restarts it": the server answers
+// the settings query true only where every setting stands as given, a value holding a quote among them.
+#[tokio::test]
+async fn the_settings_query_answers_whether_every_setting_stands() {
+  test_server_up().unwrap();
+
+  let setting = |name: &str, value: &str| ServerSetting {
+    name: name.to_owned(),
+    value: value.to_owned(),
+    since: None,
+  };
+  let standing = setting("server_encoding", "UTF8");
+  let other = setting("max_connections", "1");
+  let quoted = setting("server_encoding", "UTF'8");
+  let mut server = connect("postgres").await.unwrap();
+  let mut answer = async |settings: &[&ServerSetting]| -> bool {
+    let query = settings_query(settings).unwrap();
+
+    sqlx::query_scalar(&query).fetch_one(&mut server).await.unwrap()
+  };
+
+  assert!(answer(&[&standing]).await);
+  assert!(!answer(&[&standing, &other]).await);
+  assert!(!answer(&[&quoted]).await);
+  assert_eq!(settings_query(&[]), None);
 }

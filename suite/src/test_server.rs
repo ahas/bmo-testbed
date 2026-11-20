@@ -1,15 +1,16 @@
 //! Where the suite's databases stand (docs/suite.md, 「The test database」): the suite's own PostgreSQL
 //! server, a cluster of the user's own apart from any server the repository's services run on, stood up
-//! before the first unit starts; and the template a checkout's declared migrations make, named by what those
-//! migrations are.
+//! before the first unit starts and kept on the settings `policy/suite.toml` lists; and the template a
+//! checkout's declared migrations make, named by what those migrations are.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use bmo_testbed_core::declaration::Repository;
 use bmo_testbed_core::policy::fill_marks;
-use bmo_testbed_core::policy::suite::SUITE;
-use bmo_testbed_core::queue::{LockWait, now_ms, take_lock};
+use bmo_testbed_core::policy::suite::{SUITE, ServerSetting};
+use bmo_testbed_core::queue::{HeldLock, LockWait, now_ms, take_lock};
 
+use crate::fence::{fence_units, other_fence_listed};
 use crate::files::checkout_files;
 use crate::selection::glob_matches;
 use std::process::{Command, Stdio};
@@ -23,16 +24,6 @@ use crate::crates::account_home;
 pub const TEMPLATE_MARK: &str = "bmo_test_tmpl_";
 
 const OWN_UNIT: &str = "bmo-test-postgres";
-
-// What it holds is thrown away with every test, so it waits for no disk; and every file of every run at
-// the same time, with the scripts each starts, holds connections out of it.
-const OWN_SETTINGS: [(&str, &str); 5] = [
-  ("listen_addresses", ""),
-  ("max_connections", "300"),
-  ("fsync", "off"),
-  ("synchronous_commit", "off"),
-  ("full_page_writes", "off"),
-];
 
 fn own_server_dir() -> PathBuf {
   account_home().join(".local").join("state").join("bmo-test-postgres")
@@ -100,9 +91,31 @@ pub fn template_name(repo: &Repository) -> Option<String> {
   Some(format!("{TEMPLATE_MARK}{}", &format!("{:x}", hash.finalize())[..16]))
 }
 
-fn program(bin: &Path, name: &str) -> String {
-  bin.join(name).to_string_lossy().into_owned()
+fn quoted(text: &str) -> String {
+  format!("'{}'", text.replace('\'', "''"))
 }
+
+/// The query a running server answers `t` to where every one of these settings stands as given, and `f`
+/// where one does not; none where there is nothing to compare.
+pub fn settings_query(settings: &[&ServerSetting]) -> Option<String> {
+  if settings.is_empty() {
+    return None;
+  }
+
+  let rows: Vec<String> = settings
+    .iter()
+    .map(|setting| format!("({}, {})", quoted(&setting.name), quoted(&setting.value)))
+    .collect();
+
+  Some(format!(
+    "SELECT bool_and(current_setting(name) = value) FROM (VALUES {}) AS own(name, value)",
+    rows.join(", ")
+  ))
+}
+
+// The sessions on the server other than the one asking: whatever a test, a template or a sweep holds.
+const OTHER_SESSIONS: &str =
+  "SELECT count(*) FROM pg_stat_activity WHERE backend_type = 'client backend' AND pid <> pg_backend_pid()";
 
 // Whether the server's unit still stands active or on its way there.
 fn coming_up() -> bool {
@@ -117,16 +130,19 @@ fn coming_up() -> bool {
     })
 }
 
-fn answers(bin: &Path, socket: &Path) -> bool {
-  Command::new(program(bin, "pg_isready"))
-    .args(["-q", "-t", "1", "-h"])
-    .arg(socket)
-    .args(["-d", "postgres"])
+// Whether the scope of a run other than this process's stands; a listing that cannot be read is taken for
+// one that names another.
+fn other_fence_stands() -> bool {
+  Command::new("systemctl")
+    .args(["--user", "list-units", "--plain", "--no-legend"])
+    .arg(fence_units())
+    .envs(crate::fence::user_bus())
     .stdin(Stdio::null())
-    .stdout(Stdio::null())
     .stderr(Stdio::null())
-    .status()
-    .is_ok_and(|status| status.success())
+    .output()
+    .ok()
+    .filter(|done| done.status.success())
+    .is_none_or(|done| other_fence_listed(&String::from_utf8_lossy(&done.stdout), std::process::id()))
 }
 
 fn ran(command: &mut Command) -> Result<String, String> {
@@ -145,9 +161,6 @@ fn ran(command: &mut Command) -> Result<String, String> {
   }
 }
 
-/// The server the suite tests on, answering: where it is the suite's own and does not answer, made where it
-/// was never made and started as a transient user unit that outlives the run. Another server the
-/// environment names is taken as it stands.
 /// A wait for another run standing the test server up (docs/suite.md, 「The test database」), which says so once
 /// every `every` milliseconds of it; the moments are handed in, so a test sets them.
 pub struct StandWait {
@@ -180,113 +193,229 @@ impl StandWait {
   }
 }
 
+/// The suite's own server: the programs of the machine's PostgreSQL and the cluster under the account's home.
+struct OwnServer {
+  bin: PathBuf,
+  dir: PathBuf,
+  data: PathBuf,
+  socket: PathBuf,
+}
+
+impl OwnServer {
+  fn here() -> Result<Self, String> {
+    let bin = PathBuf::from(ran(Command::new("pg_config").arg("--bindir"))?.trim());
+    let dir = own_server_dir();
+
+    Ok(Self {
+      bin,
+      data: dir.join("data"),
+      socket: dir.join("socket"),
+      dir,
+    })
+  }
+
+  fn program(&self, name: &str) -> String {
+    self.bin.join(name).to_string_lossy().into_owned()
+  }
+
+  fn answers(&self) -> bool {
+    Command::new(self.program("pg_isready"))
+      .args(["-q", "-t", "1", "-h"])
+      .arg(&self.socket)
+      .args(["-d", "postgres"])
+      .stdin(Stdio::null())
+      .stdout(Stdio::null())
+      .stderr(Stdio::null())
+      .status()
+      .is_ok_and(|status| status.success())
+  }
+
+  fn asked(&self, query: &str) -> Result<String, String> {
+    let server = format!("postgres:///postgres?host={}", self.socket.display());
+
+    ran(Command::new("psql").args(["-X", "-At", "-d", &server, "-c", query]))
+      .map(|said| said.trim().to_owned())
+  }
+
+  // The major version of the cluster, which the server running on it is.
+  fn major(&self) -> Result<u32, String> {
+    let marked = self.data.join("PG_VERSION");
+    let read = std::fs::read_to_string(&marked).map_err(|why| format!("{}: {why}", marked.display()))?;
+
+    read.trim().parse().map_err(|_| format!("{}: no major version", marked.display()))
+  }
+
+  fn settings_stand(&self) -> Result<bool, String> {
+    let major = self.major()?;
+
+    match settings_query(&SUITE.server.settings_for(major)) {
+      Some(query) => self.asked(&query).map(|said| said == "t"),
+      None => Ok(true),
+    }
+  }
+
+  fn in_use(&self) -> Result<bool, String> {
+    self.asked(OTHER_SESSIONS).map(|said| said != "0")
+  }
+
+  // Another run standing the server up is waited out, however long it takes, said once a minute.
+  fn stand_lock(&self) -> Result<HeldLock, String> {
+    std::fs::create_dir_all(&self.dir).map_err(|why| why.to_string())?;
+
+    let every = i64::try_from(SUITE.numbers.stand_waiting_seconds * 1000).unwrap_or(i64::MAX);
+    let mut standing = StandWait::new(now_ms(), every);
+    let mut wait_on = |_: Option<&str>| -> Option<i64> {
+      let now = now_ms();
+
+      if let Some(line) = standing.line_at(now) {
+        eprintln!("{line}");
+      }
+
+      Some(now + 1000)
+    };
+    let wait = LockWait {
+      wait_on: Some(&mut wait_on),
+      ..LockWait::default()
+    };
+
+    take_lock(&self.dir.join("stand.lock"), 1.0, wait)
+      .ok_or_else(|| format!("{}: its stand lock could not be taken", self.dir.display()))
+  }
+
+  // Made where it was never made, started as the transient unit and asked until it answers, with the stand
+  // lock held.
+  fn start(&self) -> Result<(), String> {
+    // Made under another name and put in place only whole, so a making cut short is never taken for the
+    // cluster.
+    if !self.data.join("PG_VERSION").exists() {
+      let making = self.dir.join("data.making");
+      let _ = std::fs::remove_dir_all(&making);
+
+      ran(Command::new(self.program("initdb")).arg("-D").arg(&making).args([
+        "--locale=C",
+        "--encoding=UTF8",
+        "--auth-local=trust",
+        "--auth-host=reject",
+        "--no-instructions",
+      ]))?;
+      std::fs::rename(&making, &self.data).map_err(|why| why.to_string())?;
+    }
+
+    std::fs::create_dir_all(&self.socket).map_err(|why| why.to_string())?;
+
+    let mut start = Command::new("systemd-run");
+
+    start
+      .args([
+        "--user",
+        &format!("--unit={OWN_UNIT}"),
+        &format!("--slice={}", crate::fence::SUITE_SLICE),
+        "--collect",
+        "--quiet",
+        "--",
+      ])
+      .arg(self.program("postgres"))
+      .arg("-D")
+      .arg(&self.data)
+      .arg("-k")
+      .arg(&self.socket)
+      .env_clear()
+      .envs(crate::fence::user_bus());
+
+    for setting in SUITE.server.settings_for(self.major()?) {
+      start.args(["-c", &format!("{}={}", setting.name, setting.value)]);
+    }
+
+    // A unit that already stands is one still coming up, which the wait below waits for as well.
+    let started = start.stdin(Stdio::null()).output();
+
+    // Asked until it answers, however long it takes, or until its unit is no longer coming up.
+    while !self.answers() && coming_up() {
+      std::thread::sleep(Duration::from_millis(SUITE.numbers.server_start_poll_ms));
+    }
+
+    if !self.answers() {
+      let said = started
+        .map(|done| String::from_utf8_lossy(&done.stderr).trim().to_owned())
+        .unwrap_or_default();
+
+      return Err(format!("{OWN_UNIT}: {said}"));
+    }
+
+    if self.asked("SELECT 1 FROM pg_database WHERE datname = 'bmo_test'")? != "1" {
+      self.asked("CREATE DATABASE bmo_test")?;
+    }
+
+    Ok(())
+  }
+}
+
+/// The server the suite tests on, answering: where it is the suite's own and does not answer, made where it
+/// was never made and started as a transient user unit that outlives the run. Another server the
+/// environment names is taken as it stands.
 pub fn test_server_up() -> Result<(), String> {
   if test_postgres() != own_test_postgres() {
     return Ok(());
   }
 
-  let bin = PathBuf::from(ran(Command::new("pg_config").arg("--bindir"))?.trim());
-  let dir = own_server_dir();
-  let (data, socket) = (dir.join("data"), dir.join("socket"));
+  let own = OwnServer::here()?;
 
-  if answers(&bin, &socket) {
+  if own.answers() {
     return Ok(());
   }
 
-  std::fs::create_dir_all(&dir).map_err(|why| why.to_string())?;
+  let lock = own.stand_lock()?;
 
-  // Another run standing the server up is waited out, however long it takes, said once a minute.
-  let every = i64::try_from(SUITE.numbers.stand_waiting_seconds * 1000).unwrap_or(i64::MAX);
-  let mut standing = StandWait::new(now_ms(), every);
-  let mut wait_on = |_: Option<&str>| -> Option<i64> {
-    let now = now_ms();
-
-    if let Some(line) = standing.line_at(now) {
-      eprintln!("{line}");
-    }
-
-    Some(now + 1000)
-  };
-  let wait = LockWait {
-    wait_on: Some(&mut wait_on),
-    ..LockWait::default()
-  };
-  let lock = take_lock(&dir.join("stand.lock"), 1.0, wait)
-    .ok_or_else(|| format!("{}: its stand lock could not be taken", dir.display()))?;
-
-  if answers(&bin, &socket) {
+  if own.answers() {
     drop(lock);
     return Ok(());
   }
 
-  // Made under another name and put in place only whole, so a making cut short is never taken for the
-  // cluster.
-  if !data.join("PG_VERSION").exists() {
-    let making = dir.join("data.making");
-    let _ = std::fs::remove_dir_all(&making);
-
-    ran(Command::new(program(&bin, "initdb")).arg("-D").arg(&making).args([
-      "--locale=C",
-      "--encoding=UTF8",
-      "--auth-local=trust",
-      "--auth-host=reject",
-      "--no-instructions",
-    ]))?;
-    std::fs::rename(&making, &data).map_err(|why| why.to_string())?;
-  }
-
-  std::fs::create_dir_all(&socket).map_err(|why| why.to_string())?;
-
-  let mut start = Command::new("systemd-run");
-
-  start
-    .args([
-      "--user",
-      &format!("--unit={OWN_UNIT}"),
-      &format!("--slice={}", crate::fence::SUITE_SLICE),
-      "--collect",
-      "--quiet",
-      "--",
-    ])
-    .arg(program(&bin, "postgres"))
-    .arg("-D")
-    .arg(&data)
-    .arg("-k")
-    .arg(&socket)
-    .env_clear()
-    .envs(crate::fence::user_bus());
-
-  for (name, value) in OWN_SETTINGS {
-    start.args(["-c", &format!("{name}={value}")]);
-  }
-
-  // A unit that already stands is one still coming up, which the wait below waits for as well.
-  let started = start.stdin(Stdio::null()).output();
-
-  // Asked until it answers, however long it takes, or until its unit is no longer coming up.
-  while !answers(&bin, &socket) && coming_up() {
-    std::thread::sleep(Duration::from_millis(SUITE.numbers.server_start_poll_ms));
-  }
-
-  if !answers(&bin, &socket) {
-    let said = started
-      .map(|done| String::from_utf8_lossy(&done.stderr).trim().to_owned())
-      .unwrap_or_default();
-
-    return Err(format!("{OWN_UNIT}: {said}"));
-  }
-
-  let server = format!("postgres:///postgres?host={}", socket.display());
-  let exists = ran(
-    Command::new("psql")
-      .args(["-X", "-At", "-d", &server, "-c"])
-      .arg("SELECT 1 FROM pg_database WHERE datname = 'bmo_test'"),
-  )?;
-
-  if exists.trim() != "1" {
-    ran(Command::new("psql").args(["-X", "-q", "-d", &server, "-c", "CREATE DATABASE bmo_test"]))?;
-  }
+  let started = own.start();
 
   drop(lock);
-  Ok(())
+  started
+}
+
+/// The server answering as `test_server_up` stands it, and then, where it is the suite's own unit answering
+/// with settings other than its own, restarted onto them; but only while no other session is connected to it
+/// and no other run's fence stands, and otherwise used as it stands, said once.
+pub fn test_server_settled() -> Result<(), String> {
+  test_server_up()?;
+
+  if test_postgres() != own_test_postgres() {
+    return Ok(());
+  }
+
+  let own = OwnServer::here()?;
+
+  if !coming_up() || own.settings_stand()? {
+    return Ok(());
+  }
+
+  let lock = own.stand_lock()?;
+  let settled = settle(&own);
+
+  drop(lock);
+  settled
+}
+
+// With the stand lock held: another run may have restarted it meanwhile.
+fn settle(own: &OwnServer) -> Result<(), String> {
+  if !coming_up() || own.settings_stand()? {
+    return Ok(());
+  }
+
+  if own.in_use()? || other_fence_stands() {
+    eprintln!("{}", SUITE.lines.server_settings_held);
+    return Ok(());
+  }
+
+  eprintln!("{}", SUITE.lines.server_restarting);
+  ran(
+    Command::new("systemctl")
+      .args(["--user", "stop", OWN_UNIT])
+      .envs(crate::fence::user_bus()),
+  )?;
+  own.start()
 }

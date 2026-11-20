@@ -49,9 +49,27 @@ pub fn fenced_build_jobs(limits: FenceLimits, width: usize, given: Option<&str>)
 /// repository's `units/` (docs/deploy.md, 「The slices」).
 pub const SUITE_SLICE: &str = "bmo-suite.slice";
 
+const FENCE_MARK: &str = "bmo-suite-";
+
 /// The scope a run with this process id stands in.
 pub fn fence_unit(pid: u32) -> String {
-  format!("bmo-suite-{pid}.scope")
+  format!("{FENCE_MARK}{pid}.scope")
+}
+
+/// The pattern the user's service manager matches every run's scope by.
+pub fn fence_units() -> String {
+  format!("{FENCE_MARK}*.scope")
+}
+
+/// Whether the manager's listing of the scopes `fence_units` matches names one other than the scope of the
+/// run with this process id.
+pub fn other_fence_listed(listed: &str, pid: u32) -> bool {
+  let own = fence_unit(pid);
+
+  listed
+    .lines()
+    .filter_map(|line| line.split_whitespace().find(|word| word.starts_with(FENCE_MARK)))
+    .any(|unit| unit != own)
 }
 
 /// The manager's own call that starts a scope around a process already running.

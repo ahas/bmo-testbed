@@ -45,6 +45,22 @@ stripped = [
   "BMO_UNIT",
 ]
 
+# The suite's own test server's settings (docs/suite.md, 「The test database」), each handed to it as it starts
+# and compared with what a running one answers. What it holds is thrown away with every test, so it waits for
+# no disk; every file of every run at the same time, with the scripts each starts, holds connections out of
+# it. A setting with `since` is handed only to a server of that major version or later, which has it.
+[server]
+settings = [
+  { name = "listen_addresses", value = "" },
+  { name = "max_connections", value = "300" },
+  { name = "fsync", value = "off" },
+  { name = "synchronous_commit", value = "off" },
+  { name = "full_page_writes", value = "off" },
+  # The I/O workers otherwise sit idle while the server is quiet and can hold a dropped database's
+  # signal for minutes.
+  { name = "io_method", value = "sync", since = 18 },
+]
+
 # What a run is named in the machine's line.
 [run]
 whole = "the whole suite"
@@ -124,6 +140,10 @@ no_socket = "the runtime directory {runtime} holds no socket of the user's servi
 server_down = "database: the test server is not up: {why}"
 # Said every `stand_waiting_seconds` while another run stands the test server up, {seconds} the wait so far.
 stand_waiting = "database: waiting for another run to stand the test server up ({seconds}s so far)"
+# A test server answering with settings other than its own: restarted where it is idle, used as it stands
+# where another session or run holds it.
+server_restarting = "database: restarting the test server onto its own settings"
+server_settings_held = "database: the test server runs with settings other than its own and is in use, so it is used as it stands until a run finds it idle"
 on_postgres = "database: the database tests run on PostgreSQL, each file on a clone of {template}"
 template_stands = "database: the template stands"
 template_failed = "database: the template could not be made: {why}"

@@ -232,6 +232,17 @@
     it takes, saying once a minute that it waits.
   - What it holds is thrown away with every test, so it waits for no disk, and it takes three hundred
     connections. It is made with the `C` collation, and so is every database in it.
+  - On PostgreSQL 18 or later it does its reads and writes in the backend that asks for them (`io_method`
+    set to `sync`) rather than in separate I/O workers. Those workers sit idle while the server is
+    otherwise quiet and can be slow to accept the signal every dropped database sends to every
+    process, and a drop waits for them all, sometimes for minutes. A server older than 18 has neither the
+    setting nor the workers, so it is started without it. The settings and the version each one needs are
+    listed under `[server]` in `policy/suite.toml`.
+  - A run, or a change check about to run crate tests, that finds the server answering with settings
+    other than these restarts it, but only where it runs as the `bmo-test-postgres` unit, no other session
+    is connected to it and no other run's fence stands. Otherwise the run uses it as it stands and says
+    so, and the first later run that finds it idle restarts it. A file asking for its template never
+    restarts it.
   - The suite names it in `BMO_TEST_POSTGRES` for every process it starts. Naming another address
     there before the run puts the run on that server instead, which the suite then neither makes nor
     starts.

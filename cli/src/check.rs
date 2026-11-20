@@ -22,7 +22,7 @@ use bmo_testbed_suite::quick::language::{language_report, settle};
 use bmo_testbed_suite::quick::shared_versions::shared_versions_report;
 use bmo_testbed_suite::quick::{Checked, enabled_checks, quick_check};
 use bmo_testbed_suite::static_check::{check_steps, run_static_check, spawn_step};
-use bmo_testbed_suite::test_server::test_server_up;
+use bmo_testbed_suite::test_server::test_server_settled;
 use bmo_testbed_suite::workspace::git_lines;
 
 use crate::own::{called_from, run_own};
@@ -238,7 +238,7 @@ fn set_here(read: Vec<(Repository, String)>, log: Option<PathBuf>, json: bool, e
   }
 
   if members.iter().any(|member| !member.plan.touched.tested_crates.is_empty())
-    && let Err(why) = test_server_up()
+    && let Err(why) = test_server_settled()
   {
     eprintln!("{}", fill_marks(&said.server_down, &[("why", &why)]));
   }
@@ -372,7 +372,7 @@ fn change(
 
   // The crates' tests stand on the suite's own database server, which a run that finds it down starts.
   if !plan.touched.tested_crates.is_empty()
-    && let Err(why) = test_server_up()
+    && let Err(why) = test_server_settled()
   {
     eprintln!("{}", fill_marks(&said.server_down, &[("why", &why)]));
   }

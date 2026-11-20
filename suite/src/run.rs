@@ -35,7 +35,7 @@ use crate::selection::{
   Layout, Selection, changed_paths, glob_matches, select_packages, selected_tests, selection_lines,
 };
 use crate::sweep::{SweepPlan, largest_first, sweep};
-use crate::test_server::{template_name, test_postgres, test_server_up};
+use crate::test_server::{template_name, test_postgres, test_server_settled};
 use crate::tool_checks::{CheckedTool, package_check};
 use crate::unit::{PerTest, UnitCommand, UnitRun, run_unit};
 use crate::workspace::{OwnProject, git_lines, own_projects, project_browser_files, repository_paths};
@@ -520,7 +520,7 @@ fn run_held(
   let template = template_name(repo);
 
   if database.is_some() {
-    if let Err(why) = test_server_up() {
+    if let Err(why) = test_server_settled() {
       say(&fill_marks(&SUITE.lines.server_down, &[("why", &why)]));
     }
 

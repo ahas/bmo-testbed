@@ -98,6 +98,8 @@ pub struct LineWords {
   pub no_socket: String,
   pub server_down: String,
   pub stand_waiting: String,
+  pub server_restarting: String,
+  pub server_settings_held: String,
   pub on_postgres: String,
   pub template_stands: String,
   pub template_failed: String,
@@ -215,11 +217,42 @@ pub struct Environment {
   pub stripped: Vec<String>,
 }
 
+/// One setting the suite's own test server is started with (docs/suite.md, 「The test database」): handed
+/// only to a server of the major version `since` names or later, where it names one.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ServerSetting {
+  pub name: String,
+  pub value: String,
+  pub since: Option<u32>,
+}
+
+impl ServerSetting {
+  /// Whether a server of this major version has the setting.
+  pub fn held_by(&self, major: u32) -> bool {
+    self.since.is_none_or(|since| major >= since)
+  }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Server {
+  pub settings: Vec<ServerSetting>,
+}
+
+impl Server {
+  /// The settings a server of this major version is started with.
+  pub fn settings_for(&self, major: u32) -> Vec<&ServerSetting> {
+    self.settings.iter().filter(|setting| setting.held_by(major)).collect()
+  }
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Suite {
   pub numbers: Numbers,
   pub environment: Environment,
+  pub server: Server,
   pub run: RunWords,
   pub reasons: ReasonWords,
   pub selection: SelectionWords,

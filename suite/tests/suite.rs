@@ -14,7 +14,7 @@ use bmo_testbed_core::policy::suite::SUITE;
 use bmo_testbed_core::turn::machine_width;
 use bmo_testbed_suite::fence::{
   ClearSeams, FenceLimits, FenceSeams, SUITE_SLICE, clear_fence, fence_call, fence_limits, fence_suite,
-  fence_unit, fenced_build_jobs,
+  fence_unit, fence_units, fenced_build_jobs, other_fence_listed,
 };
 use bmo_testbed_suite::run::{
   SuiteWords, SweepCount, ask_of, file_groups, runner_of, script_runner, sweep_ending, unit_account,
@@ -853,6 +853,20 @@ mod fence {
     fn kill(&mut self, pid: u32) {
       self.killed.push(pid);
     }
+  }
+
+  // "restarts it, but only where ... no other run's fence stands": the manager's listing of the fences names
+  // another only where a scope other than the run's own stands in it, with or without the mark of a failed unit.
+  #[test]
+  fn another_run_s_fence_is_found_in_the_manager_s_listing() {
+    let own = fence_unit(4242);
+    let other = fence_unit(77);
+    let line = |unit: &str| format!("{unit} loaded active running Scope\n");
+
+    assert!(fence_units().starts_with(own.split("4242").next().unwrap()));
+    assert!(!other_fence_listed("", 4242));
+    assert!(!other_fence_listed(&line(&own), 4242));
+    assert!(other_fence_listed(&format!("{}\u{25cf} {}", line(&own), line(&other)), 4242));
   }
 
   // "kills what the files left in the run's own scope, and names it"
