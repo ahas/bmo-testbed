@@ -171,8 +171,8 @@ bmo-testbed close-line --checkout <path>…
 
 - **Holds the close line of each named checkout's repository** (`docs/testbed.md`, 「The close line」) for a
   close run outside the testbed, from the moment every line is its own until its standard input ends. A path is
-  read from the directory the verb runs in, given once for each checkout; checkouts of one repository stand in
-  its one line once.
+  read from the directory the verb runs in, given once for each checkout; checkouts of one repository, clones and
+  worktrees alike, stand in its one line once.
 - **The lines are taken one after another in the order of their lock files' names,** whatever order the
   checkouts are named in, each waited for however long the line takes, the waiting said every thirty seconds
   on standard error as a close waiting for its line says it.
@@ -1151,8 +1151,8 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   memory limits, the placement, the declaration reader and the policy loader. Its public types are the
   ones the status fields above serialise: the lane, the queue, the entry, the close line and its entry;
   the turn's ask and the turn held; the run's result; the language type every language is a member of.
-  The close line of a repository stands where `core` names it from a data root and any directory of a
-  checkout, so a consumer holding the line and `status` reading it meet in one file.
+  The close line of a repository stands where `core` names it from a data root and any directory of any
+  clone or worktree of it, so a consumer holding the line and `status` reading it meet in one file.
 - **`cli`:** the `bmo-testbed` binary: each verb's words read and handed to the crates, the
   classification of a shell line, and the HTTP placement.
 - **`client`:** `bmo-testbed-client`, the published client: every member, page, query and error code

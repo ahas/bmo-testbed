@@ -13,6 +13,7 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+use crate::declaration::Repository;
 use crate::policy::close_line::CLOSE_LINE;
 use crate::policy::fill_marks;
 use crate::queue::{HeldLock, LockWait, Rank, now_ms, process_alive, queue_tickets, take_lock};
@@ -70,9 +71,22 @@ fn read_holder(path: &Path) -> Option<CloseEntry> {
 }
 
 /// Where the close line of the repository a directory stands in is kept under a data root: one lock to a
-/// repository under the data root's `locks/`, named by its common git directory so every worktree of it
-/// shares the one line; none outside a repository.
+/// repository under the data root's `locks/`. It is named by the name the repository's declaration gives it,
+/// so every clone and worktree of it shares the one line; by its common git directory, which its worktrees
+/// alone share, where the declaration names none or does not read; none outside a repository.
 pub fn close_line_path(data_root: &Path, from: &Path) -> Option<PathBuf> {
+  let common = common_git_dir(from)?;
+  let line = match Repository::read(from).ok().and_then(|repository| repository.declaration.name) {
+    Some(name) => format!("close:repository:{name}"),
+    None => format!("close:{common}"),
+  };
+
+  Some(data_root.join("locks").join(lock_file_name(&line)))
+}
+
+/// The common git directory of the checkout a directory stands in, which every worktree of it shares; none
+/// outside a repository.
+fn common_git_dir(from: &Path) -> Option<String> {
   let done = Command::new("git")
     .args(["rev-parse", "--path-format=absolute", "--git-common-dir"])
     .current_dir(from)
@@ -82,8 +96,7 @@ pub fn close_line_path(data_root: &Path, from: &Path) -> Option<PathBuf> {
     .ok()?;
   let common = String::from_utf8_lossy(&done.stdout).trim().to_owned();
 
-  (done.status.success() && !common.is_empty())
-    .then(|| data_root.join("locks").join(lock_file_name(&format!("close:{common}"))))
+  (done.status.success() && !common.is_empty()).then_some(common)
 }
 
 /// The file a lock of this name stands in: the name made safe for a file, cut from the front where it is

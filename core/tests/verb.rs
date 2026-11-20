@@ -133,6 +133,45 @@ fn every_worktree_of_a_repository_shares_one_close_line() {
   assert_eq!(close_line_path(&data, &data), None);
 }
 
+// "every clone and worktree of a repository its declaration names shares one close line, apart from another's"
+#[test]
+fn every_clone_and_worktree_of_a_named_repository_shares_one_close_line() {
+  let dir = tempfile::tempdir().unwrap();
+  let git = |at: &std::path::Path, args: &[&str]| {
+    assert!(
+      Command::new("git").args(args).current_dir(at).output().unwrap().status.success(),
+      "{args:?}"
+    );
+  };
+  let repository = |name: &str, declared: &str| {
+    let repo = dir.path().join(name);
+
+    std::fs::create_dir_all(&repo).unwrap();
+    std::fs::write(repo.join("testbed.toml"), format!("testbed = 0\nname = \"{declared}\"\n")).unwrap();
+    git(&repo, &["init", "-q"]);
+    git(&repo, &["add", "."]);
+    git(
+      &repo,
+      &["-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "-m", "start"],
+    );
+    repo
+  };
+
+  let repo = repository("repo", "shop");
+  let other = repository("other", "ledger");
+
+  git(dir.path(), &["clone", "-q", "repo", "clone"]);
+  git(&repo, &["worktree", "add", "-q", "../worktree"]);
+
+  let data = dir.path().join("data");
+  let line = close_line_path(&data, &repo).unwrap();
+
+  for checkout in ["clone", "worktree"] {
+    assert_eq!(close_line_path(&data, &dir.path().join(checkout)), Some(line.clone()), "{checkout}");
+  }
+  assert_ne!(close_line_path(&data, &other), Some(line));
+}
+
 // "a lock's file name keeps the tail of a long name, and the digest of the whole tells two apart"
 #[test]
 fn a_lock_file_name_is_safe_short_and_apart() {

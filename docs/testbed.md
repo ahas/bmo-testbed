@@ -157,8 +157,11 @@ flowchart TD
 ## The close line
 
 - **One line per repository on a machine,** every close of that repository standing in it, the first
-  to ask going first. Its lock stands under the data root's locks, keyed by the repository's common
-  git directory, so every worktree of one repository shares it.
+  to ask going first, from whichever clone or worktree of it the close runs. Its lock stands under the
+  data root's locks, keyed by the name the repository's declaration gives it (`docs/declaration.md`), so
+  every clone and every worktree of one repository shares it. A checkout whose declaration names none,
+  or does not read, is keyed by its common git directory, which its worktrees share and a separate clone
+  does not.
 - **One close checks at a time because a check is of what lands.** In the line each close rebases onto
   the main the close before it landed, so its check runs once, on the commit that lands.
 - **The deployment of that commit takes the close's suite as its own.** The close's whole suite is a
