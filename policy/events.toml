@@ -14,25 +14,29 @@ failed = "event: the hook for {event} failed: {why}"
 # The hook ran past its time and was ended, {seconds} the time it was given.
 overran = "event: the hook for {event} ran past {seconds} seconds and was ended"
 
-# What `notice` sends and says (docs/boundary.md, 「`notice`」): an event queued for the owner's supervisor through
-# the receiver's owner notices, the receiver found as its own tools find it.
+# What `notice` sends and says (docs/boundary.md, 「`notice`」): an event queued for the owner's supervisor as a quiet
+# instruction in the owner's private room, the receiver found as its own tools find it.
 [notice]
-# The notice's code, {event} the event's name; the receiver reads the word before the colon as its publisher.
+# The fact's code, and the instruction's kind and summary, {event} the event's name.
 code = "testbed:{event}"
-# The receiver's route for a notice to the owner.
-route = "/owner/notices"
+# The instruction's sort and the publisher it names.
+sort = "notice"
+publisher = "testbed"
+# The receiver's route naming the owner's private room, and its route for an instruction.
+owner_route = "/owner"
+route = "/instructions"
 # The receiver's own env file under the data root, and the two variables read from the environment or out of it.
 env_file = "env/receiver.env"
 address_variable = "RECEIVER_ADDRESS"
 token_variable = "RECEIVER_TOKEN"
-# How long the receiver is given to answer, in seconds.
+# How long the receiver is given to answer each request, in seconds.
 seconds = 20
 # How many characters of a refusal's body are quoted.
 quoted_chars = 300
 
 [notice.lines]
-# The receiver queued the notice, {id} the row it was queued as.
-queued = "notice: {event} queued for the owner's supervisor as notice {id}"
+# The receiver queued the instruction, {id} the row it was queued as.
+queued = "notice: {event} queued for the owner's supervisor as instruction {id}"
 # Neither the environment nor {file} names {variable}.
 unfound = "notice: {event} not sent: neither the environment nor {file} names {variable}"
 # The payload on standard input is not one JSON object.
@@ -41,3 +45,5 @@ unread = "notice: {event} not sent: the payload on standard input is not one JSO
 unreached = "notice: {event} not sent: the receiver at {address} did not answer: {why}"
 # The receiver answered with a refusal, {status} its status and {said} the start of its body.
 refused = "notice: {event} not sent: the receiver answered {status}: {said}"
+# The receiver's answer for the owner names no private room, {said} the start of its body.
+roomless = "notice: {event} not sent: the receiver names no private room for the owner: {said}"

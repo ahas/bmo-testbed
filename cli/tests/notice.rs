@@ -1,5 +1,5 @@
-//! `notice` (docs/boundary.md, 「`notice`」): an event, taken as a hook takes it, queued for the owner's supervisor
-//! at the receiver's owner notices, the receiver found as its own tools find it.
+//! `notice` (docs/boundary.md, 「`notice`」): an event, taken as a hook takes it, queued for the owner's supervisor as
+//! a quiet instruction in the owner's private room, the receiver found as its own tools find it.
 
 use std::io::Write as _;
 use std::path::Path;
@@ -38,11 +38,12 @@ fn payload() -> Value {
   })
 }
 
-// "Its `code` is `testbed:` and the event's name, the payload's fields standing beside it"; the receiver found out of
-// `<data root>/env/receiver.env`, and the environment's `RECEIVER_ADDRESS` and `RECEIVER_TOKEN` over it; the token
-// in the request's authorization alone
+// "The room is the one the receiver's `GET /owner` names ... said as a fact: `code`, `testbed:` and the event's name,
+// with the payload's fields standing beside it. Its `sort` is `notice`, its `kind` and `summary` the code, and its
+// `publisher` `testbed`"; the receiver found out of `<data root>/env/receiver.env`, and the environment's
+// `RECEIVER_ADDRESS` and `RECEIVER_TOKEN` over it; the token in the requests' authorization alone
 #[test]
-fn an_event_is_queued_as_an_owner_notice_at_the_receiver_its_own_env_file_or_the_environment_names() {
+fn an_event_is_queued_in_the_owner_s_room_at_the_receiver_its_env_file_or_the_environment_names() {
   let dir = tempfile::tempdir().unwrap();
   let dir = std::fs::canonicalize(dir.path()).unwrap();
   let filed = ReceiverStand::answering(201);
@@ -60,11 +61,21 @@ fn an_event_is_queued_as_an_owner_notice_at_the_receiver_its_own_env_file_or_the
   assert!(!run.out.contains(TOKEN) && !run.err.contains(TOKEN), "{}\n{}", run.out, run.err);
 
   let [one] = filed.noticed().try_into().unwrap();
-  let mut expected = payload();
+  let mut fact = payload();
 
-  expected["code"] = json!("testbed:placed-unreachable");
+  fact["code"] = json!("testbed:placed-unreachable");
   assert_eq!(one.authorization, format!("Bearer {TOKEN}"));
-  assert_eq!(one.body, expected);
+  assert_eq!(
+    one.body,
+    json!({
+      "room": ReceiverStand::OWNER_ROOM,
+      "said": { "fact": fact },
+      "sort": "notice",
+      "kind": "testbed:placed-unreachable",
+      "summary": "testbed:placed-unreachable",
+      "publisher": "testbed",
+    })
+  );
 
   let run = noticed(
     &dir,
@@ -79,11 +90,12 @@ fn an_event_is_queued_as_an_owner_notice_at_the_receiver_its_own_env_file_or_the
   let [one] = named.noticed().try_into().unwrap();
 
   assert_eq!(one.authorization, "Bearer other-token");
-  assert_eq!(one.body["code"], "testbed:placed-recovered");
+  assert_eq!(one.body["kind"], "testbed:placed-recovered");
 }
 
-// "Exits 1 where the receiver is not found, does not answer or refuses: the reason goes on a line, then the event's
-// line as an event with no hook writes it ... Exits 2 where the payload is not one JSON object"
+// "Exits 1 where the receiver is not found, does not answer, refuses, or names no private room for the owner: the
+// reason goes on a line, then the event's line as an event with no hook writes it ... Exits 2 where the payload is
+// not one JSON object"
 #[test]
 fn a_notice_not_queued_says_why_and_leaves_the_event_on_standard_error() {
   let dir = tempfile::tempdir().unwrap();
@@ -111,6 +123,17 @@ fn a_notice_not_queued_says_why_and_leaves_the_event_on_standard_error() {
       event_line.clone(),
     ]
   );
+
+  let roomless = ReceiverStand::roomless();
+
+  roomless.written_under(&data, TOKEN);
+
+  let unroomed = noticed(&dir, "placed-unreachable", &payload().to_string(), &[]);
+
+  assert_eq!(unroomed.code, 1, "{}", unroomed.err);
+  assert!(unroomed.err.contains("names no private room for the owner"), "{}", unroomed.err);
+  assert!(unroomed.err.contains(&event_line), "{}", unroomed.err);
+  assert!(roomless.noticed().is_empty(), "no instruction is queued without the owner's room");
 
   let refusing = ReceiverStand::answering(403);
 

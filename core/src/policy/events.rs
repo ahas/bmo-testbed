@@ -19,13 +19,17 @@ pub struct NoticeLines {
   pub unread: String,
   pub unreached: String,
   pub refused: String,
+  pub roomless: String,
 }
 
-/// How `notice` reaches the receiver's owner notices.
+/// How `notice` queues an instruction in the owner's private room at the receiver.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Notice {
   pub code: String,
+  pub sort: String,
+  pub publisher: String,
+  pub owner_route: String,
   pub route: String,
   pub env_file: String,
   pub address_variable: String,

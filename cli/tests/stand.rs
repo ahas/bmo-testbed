@@ -116,15 +116,15 @@ pub fn until(what: &str, condition: impl Fn() -> bool, within: Duration) {
   }
 }
 
-/// One owner notice a stand-in receiver was handed: the authorization it carried and its body.
+/// One instruction a stand-in receiver was handed: the authorization it carried and its body.
 #[derive(Clone, Debug)]
 pub struct Noticed {
   pub authorization: String,
   pub body: serde_json::Value,
 }
 
-/// A stand-in receiver answering `POST /owner/notices` with `status` and the row it would have queued: what it was
-/// handed, and the address it serves on, which ends with the runtime.
+/// A stand-in receiver: `GET /owner` answers `owner`, and `POST /instructions` answers `status` with the row it would
+/// have queued. What it was handed, and the address it serves on, which ends with the runtime.
 pub struct ReceiverStand {
   _runtime: tokio::runtime::Runtime,
   pub address: String,
@@ -132,7 +132,19 @@ pub struct ReceiverStand {
 }
 
 impl ReceiverStand {
+  /// The owner's private room the stand names.
+  pub const OWNER_ROOM: i64 = 7;
+
   pub fn answering(status: u16) -> Self {
+    Self::serving(status, serde_json::json!({ "senderId": 1, "room": Self::OWNER_ROOM }))
+  }
+
+  /// A stand whose answer for the owner names no private room.
+  pub fn roomless() -> Self {
+    Self::serving(201, serde_json::json!({ "senderId": 1, "room": null }))
+  }
+
+  fn serving(status: u16, owner: serde_json::Value) -> Self {
     use axum::http::{HeaderMap, StatusCode};
 
     let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -145,26 +157,35 @@ impl ReceiverStand {
     let noticed = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
     let keeping = std::sync::Arc::clone(&noticed);
     let status = StatusCode::from_u16(status).unwrap();
-    let app = axum::Router::new().route(
-      "/owner/notices",
-      axum::routing::post(move |headers: HeaderMap, axum::Json(body): axum::Json<serde_json::Value>| {
-        let authorization = headers
-          .get("authorization")
-          .and_then(|value| value.to_str().ok())
-          .unwrap_or_default()
-          .to_owned();
-        let mut kept = keeping.lock().unwrap();
+    let app = axum::Router::new()
+      .route(
+        "/owner",
+        axum::routing::get(move || {
+          let owner = owner.clone();
 
-        kept.push(Noticed {
-          authorization,
-          body,
-        });
+          async move { axum::Json(owner) }
+        }),
+      )
+      .route(
+        "/instructions",
+        axum::routing::post(move |headers: HeaderMap, axum::Json(body): axum::Json<serde_json::Value>| {
+          let authorization = headers
+            .get("authorization")
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or_default()
+            .to_owned();
+          let mut kept = keeping.lock().unwrap();
 
-        let id = kept.len();
+          kept.push(Noticed {
+            authorization,
+            body,
+          });
 
-        async move { (status, axum::Json(serde_json::json!({ "id": id }))) }
-      }),
-    );
+          let id = kept.len();
+
+          async move { (status, axum::Json(serde_json::json!({ "id": id }))) }
+        }),
+      );
 
     runtime.spawn(async move { axum::serve(listener, app).await });
     Self {
@@ -174,7 +195,7 @@ impl ReceiverStand {
     }
   }
 
-  /// The notices handed so far, in order.
+  /// The instructions handed so far, in order.
   pub fn noticed(&self) -> Vec<Noticed> {
     self.noticed.lock().unwrap().clone()
   }

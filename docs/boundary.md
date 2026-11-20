@@ -517,20 +517,23 @@ bmo-testbed notice <event>
 - Tells the owner's supervisor of an event, taken as a hook takes it (「Events」): the event's name the
   word, its payload on standard input. It is the placed machine's hook where none is named, and any hook
   setting may name it.
-- **The event goes to the receiver's owner notices,** `POST /owner/notices` (the receiver's `docs/api.md`,
-  「Notices」), which queues it for the agent that answers the owner's private room. Its `code` is
-  `testbed:` and the event's name, the payload's fields standing beside it. The receiver keeps one notice
-  of a code waiting, so a newer notice of the same event replaces one not yet said, and it reads
-  `testbed` off the code as the notice's publisher.
+- **The event goes to the owner's private room as a quiet instruction,** `POST /instructions` (the
+  receiver's `docs/api.md`, 「Instructions」), which queues it for the agent that answers that room. The
+  room is the one the receiver's `GET /owner` names as the owner's private room, asked first. The
+  instruction is said as a fact: `code`, `testbed:` and the event's name, with the payload's fields
+  standing beside it. Its `sort` is `notice`, its `kind` and `summary` the code, and its `publisher`
+  `testbed`. It names no `cause`, so it is a room reply that opens the supervisor's turn as soon as it
+  is queued. The receiver keeps one pending instruction of a kind in a room, so a newer notice of the
+  same event replaces one not yet said.
 - **The receiver is found as its own tools find it:** `RECEIVER_ADDRESS` and `RECEIVER_TOKEN` from the
   environment, else from `<data root>/env/receiver.env`, which the receiver writes as it is deployed.
   Each is read out of that file as the machine's hook is read out of its own (「Events」), and nothing
-  else of the file. The token goes into the request's authorization and nowhere else.
-- The receiver is given the policy's twenty seconds to answer.
-- Exits 0 once the receiver answers that the notice is queued. Exits 1 where the receiver is not found,
-  does not answer or refuses: the reason goes on a line, then the event's line as an event with no hook
-  writes it, so the event still stands wherever the verb's standard error goes. Exits 2 where the payload
-  is not one JSON object.
+  else of the file. The token goes into the requests' authorization and nowhere else.
+- The receiver is given the policy's twenty seconds to answer each request.
+- Exits 0 once the receiver answers that the instruction is queued. Exits 1 where the receiver is not
+  found, does not answer, refuses, or names no private room for the owner: the reason goes on a line,
+  then the event's line as an event with no hook writes it, so the event still stands wherever the
+  verb's standard error goes. Exits 2 where the payload is not one JSON object.
 
 ### The nouns `bmo` serves
 
@@ -641,12 +644,12 @@ keep (`docs/deploy.md`, 「The unit links」).
   then the running testbed binary's own `notice` (「`notice`」); a program that calls the placement in its
   own process, such as a test harness, has none, and the event is its line. An outage of the placed machine, or its testbed
   left behind the live release, stops every run placed there, and only the owner can act on it. The
-  route that tells him is the receiver's owner notices, the one route the platform keeps for a system
-  notice to the owner: it queues the notice until his supervisor's session can take it, rather than
-  handing it to a session that may be at rest, and the supervisor says it in his room (the receiver's
-  `docs/voiced-notices.md`, 「Delivery」). It needs only the receiver's own token, which the receiver
-  writes for every process of the machine, so no secret stands in the testbed's code, policy or
-  settings. The receiver is named here only as the platform's queue of notices to the owner, by its fixed
+  route that tells him is the receiver's instruction queue, the platform's one road for a system notice
+  to the owner: it holds the instruction until his supervisor's session can take it, rather than
+  handing it to a session that may be at rest, and the supervisor says it in his private room (the
+  receiver's `docs/voiced-notices.md`, 「Delivery」). It needs only the receiver's own token, which the
+  receiver writes for every process of the machine, so no secret stands in the testbed's code, policy
+  or settings. The receiver is named here only as the platform's queue of instructions, by its fixed
   API, and nothing of any repository stands with it.
 - **The hook never changes a verb's outcome.** It is waited for up to the policy's time, sixty seconds;
   one still running then has its process group ended, and one that fails or overruns is said on a line

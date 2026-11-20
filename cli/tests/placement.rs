@@ -1445,7 +1445,7 @@ fn a_release_failure_is_told_once_for_each_live_release_and_again_once_a_run_fou
 }
 
 // "Where neither names a hook, the placed machine's events go to the owner's supervisor": through `notice`, an
-// outage reaches the receiver's owner notices as one notice however many runs give up on it, and its end as one more
+// outage reaches the receiver's instructions as one notice however many runs give up on it, and its end as one more
 #[test]
 fn an_outage_and_its_end_reach_the_owner_s_supervisor_as_one_notice_each_through_notice() {
   let dir = tempfile::tempdir().unwrap();
@@ -1474,12 +1474,12 @@ fn an_outage_and_its_end_reach_the_owner_s_supervisor_as_one_notice_each_through
     cwd: dir.clone(),
     env: &env,
   };
-  let codes = || receiver.noticed().iter().map(|one| one.body["code"].clone()).collect::<Vec<_>>();
+  let codes = || receiver.noticed().iter().map(|one| one.body["kind"].clone()).collect::<Vec<_>>();
 
   assert_eq!(machine.waited_ready(&ask), Err(NOT_RUN_EXIT_CODE));
   assert_eq!(machine.waited_ready(&ask), Err(NOT_RUN_EXIT_CODE));
   assert_eq!(codes(), [json!("testbed:placed-unreachable")], "one outage is one notice");
-  assert_eq!(receiver.noticed()[0].body["detail"]["machine"], "machine-2");
+  assert_eq!(receiver.noticed()[0].body["said"]["fact"]["detail"]["machine"], "machine-2");
 
   machine.settings.ssh = answering;
   assert_eq!(machine.waited_ready(&ask), Ok(()));

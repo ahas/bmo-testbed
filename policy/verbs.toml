@@ -320,11 +320,13 @@ usage: {verb} notice <event>
 
 Tells the owner's supervisor of an event, taken as a hook takes it (docs/boundary.md): the event's
 name the word, its payload as one JSON object on standard input. The event is queued at the
-receiver's owner notices, the receiver found through RECEIVER_ADDRESS and RECEIVER_TOKEN, else the
-data root's env/receiver.env. It is the placed machine's event hook where none is named.
+receiver as an instruction in the owner's private room, the receiver found through RECEIVER_ADDRESS
+and RECEIVER_TOKEN, else the data root's env/receiver.env. It is the placed machine's event hook
+where none is named.
 
-Exits 0 once the notice is queued, 1 where the receiver is not found, does not answer or refuses,
-the event then written on standard error, and 2 where the payload does not read."""
+Exits 0 once the instruction is queued, 1 where the receiver is not found, does not answer, refuses
+or names no private room for the owner, the event then written on standard error, and 2 where the
+payload does not read."""
 
 # What `classify` answers: `light`, or `heavy` with {language} the language that claims the command
 # and, on the line after it, `instead` with {testbed} the running binary and {words} the command's words.
