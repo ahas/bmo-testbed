@@ -1001,7 +1001,12 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   for a run it copies its open files over with `rsync`, leaving out the `.git` directory and each path
   git names as ignored there by its own rules, a `.gitignore`'s `!` lines among them, so what git takes
   back is copied and what is deleted here is deleted there, and keeping each path the bench's own git
-  names as ignored in the bench as it stands there; and for a deployment it copies none and takes every untracked file away, since the release
+  names as ignored in the bench as it stands there. The copy goes by content, not by time: a file goes over
+  only where its content differs from the bench's, and it stands there with the moment of the copy rather
+  than its modification time here, while a file whose content the bench already holds keeps the time it has
+  there. A build there reads a source by its modification time against what it built before, so a file
+  whose time here is older than that build is still one it builds, a file the bench's checkout has just
+  written is never set back to an older time, and an unchanged file builds nothing again; and for a deployment it copies none and takes every untracked file away, since the release
   is the commit alone; and it lays
   every tree outside the repository the checkout's workspace reads by a path, for a deployment the
   workspace at the deployed commit, read as a deployment here reads it, the base libraries and

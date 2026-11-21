@@ -273,7 +273,10 @@ fn laid_over(
 // `kept` names left out, so the copy neither writes nor deletes them, and each path of `protected`, those the
 // far side's own git ignores there, left standing there; what git said where it cannot name what it ignores
 // here, or `rsync` where it failed. The rules go to `rsync` on its input as one merged rule file, read before
-// it starts the far side.
+// it starts the far side. A file goes over by its content and stands there with the moment of the copy, since
+// a build there reads a source by its modification time against what it last built: the time a file has here
+// may be older than that build, and carried over it would make the build count the file as built already, or
+// set back a file the bench's checkout has just written.
 fn rsync_over(
   ssh_command: &str,
   from: &Path,
@@ -292,7 +295,8 @@ fn rsync_over(
     .concat();
 
   let mut child = Command::new("rsync")
-    .args(["-a", "--delete", "--exclude", ".git", "--from0", "--filter=. -", "-e", ssh_command])
+    .args(["-a", "--no-times", "--checksum", "--delete"])
+    .args(["--exclude", ".git", "--from0", "--filter=. -", "-e", ssh_command])
     .arg(format!("{}/", from.display()))
     .arg(format!("{to}/"))
     .stdin(Stdio::piped())

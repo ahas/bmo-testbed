@@ -16,7 +16,8 @@
 //! answering broken for it whether or not they began there, `status` reading the machine's release against the live
 //! one, a run whose environment sets a variable its declaration names as this machine's kept here, a run from a
 //! folder below the checkout's top running in that folder there and one from a folder the bench copy leaves out
-//! kept here, the copy carrying what git sees in the tree, a file a `!` line takes back among them, an outside
+//! kept here, the copy carrying what git sees in the tree, a file a `!` line takes back among them, the copy
+//! going by content so a file whose time is older than the bench's last build is built there again, an outside
 //! tree no repository holds refused, the `placed` verb refusing a folder the bench does not hold, the
 //! run standing in its lane here while it lasts, running once the far side says its turn came, that line read
 //! and not passed on, and the `placed` verb there passing its command's output on, telling its own holder
@@ -473,6 +474,65 @@ fn a_placed_run_s_copy_carries_what_git_sees_a_file_a_negation_takes_back_among_
   assert!(!bench.join("out/stale").exists());
   assert!(!bench.join("c*.log").exists());
   assert!(!bench.join("gone.txt").exists());
+}
+
+// A build in the bench that reads its source by modification time, as Cargo does: it compiles `lib.rs` into
+// `built` where nothing is built yet or the source is newer than what it built.
+const BUILD_BY_TIME: &str =
+  r#"if [ ! -e built ] || [ -n "$(find lib.rs -newer built)" ]; then cp lib.rs built; fi"#;
+
+// "The copy goes by content, not by time": a source edited here under a time older than the bench's last
+// build is compiled by the next build there, open or committed, and a file whose content the bench already
+// holds keeps its time there.
+#[test]
+fn a_file_copied_over_a_built_bench_under_an_older_time_is_compiled_by_the_next_build() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let repo = dir.join("repo");
+  let bench = dir.join("bench/repo");
+  let ssh = dir.join("ssh");
+  let build = ["run", "--adapter", "plain", "--", "sh", "-c", BUILD_BY_TIME];
+  let modified = |file: &Path| std::fs::metadata(file).unwrap().modified().unwrap();
+  let edit_before_the_build = |text: &str| {
+    std::fs::write(repo.join("lib.rs"), text).unwrap();
+    std::fs::File::options()
+      .write(true)
+      .open(repo.join("lib.rs"))
+      .unwrap()
+      .set_modified(std::time::SystemTime::now() - Duration::from_secs(3600))
+      .unwrap();
+  };
+
+  install(SSH, &ssh);
+  settle(&dir, &ssh, "stand");
+  checkout(&repo, "testbed = 0\n");
+  std::fs::write(repo.join(".gitignore"), "built\n").unwrap();
+  std::fs::write(repo.join("lib.rs"), "one").unwrap();
+  std::fs::write(repo.join("other.rs"), "unchanged").unwrap();
+  git(&repo, &["add", "."]);
+  git(&repo, &["commit", "-q", "-m", "sources"]);
+
+  let first = on_machine(&repo, &dir, &build);
+
+  assert_eq!(first.code, 0, "{}\n{}", first.out, first.err);
+  assert_eq!(std::fs::read_to_string(bench.join("built")).unwrap(), "one");
+  let unchanged = modified(&bench.join("other.rs"));
+
+  // An open edit whose time here is older than the build there.
+  edit_before_the_build("two");
+  let open = on_machine(&repo, &dir, &build);
+
+  assert_eq!(open.code, 0, "{}\n{}", open.out, open.err);
+  assert_eq!(std::fs::read_to_string(bench.join("built")).unwrap(), "two");
+
+  // The same, committed: the bench's checkout writes it, and the copy of the open files after it leaves it.
+  edit_before_the_build("three");
+  git(&repo, &["commit", "-q", "-a", "-m", "three"]);
+  let committed = on_machine(&repo, &dir, &build);
+
+  assert_eq!(committed.code, 0, "{}\n{}", committed.out, committed.err);
+  assert_eq!(std::fs::read_to_string(bench.join("built")).unwrap(), "three");
+  assert_eq!(modified(&bench.join("other.rs")), unchanged);
 }
 
 // "Where the bench holds no such folder, nothing runs and the verb exits 2 on a line naming it."
