@@ -13,8 +13,8 @@ use crate::policy::fill_marks;
 use crate::policy::lanes::LANES;
 use crate::queue::{now_ms, process_alive};
 use crate::turn::{
-  Env, HELD_VARIABLE, Lane, TurnEntry, lane_seats_held, lock_path, read_queue, scope_of, stands_at_front,
-  stands_next,
+  Env, HELD_VARIABLE, Lane, TurnEntry, lane_seats_held, leading_number, lock_path, machine_threads,
+  read_queue, scope_of, stands_at_front, stands_next,
 };
 
 /// The variable a deployment's or a whole run's unit is named by inside it.
@@ -135,13 +135,60 @@ pub fn runs_here(env: &Env) -> bool {
     .any(|name| env.get(*name).is_some_and(|value| !value.is_empty()))
 }
 
-/// Whether a lane of this machine has no seat for a run now: every one of its own seats held, or someone
-/// already waiting for one. A run walking a placement order passes this machine over then; the deployment's
-/// seat is never one such a run could take.
-pub fn lane_full(env: &Env, lane: Lane) -> bool {
+/// The variable naming another share of the machine's threads, in percent, at or above which its load makes it
+/// loaded, over the lane policy's `loaded_percent`.
+pub const LOADED_VARIABLE: &str = "BMO_TESTBED_LOADED_PERCENT";
+
+/// Why a lane of this machine takes no run now, as the line `status --free` gives: every one of its own seats
+/// held or someone already waiting for one, or the machine loaded (docs/testbed.md, 「A run on another
+/// machine」); none where it takes one. A run walking a placement order passes this machine over then; the
+/// deployment's seat is never one such a run could take.
+pub fn lane_closed(env: &Env, lane: Lane) -> Option<String> {
   let lock = lock_path(env, lane);
 
-  lane_seats_held(&lock) >= lane.seats(env) || !read_queue(&lock).waiting.is_empty()
+  if lane_seats_held(&lock) >= lane.seats(env) || !read_queue(&lock).waiting.is_empty() {
+    return Some(LANES.placed.seats_taken.clone());
+  }
+
+  loaded(machine_load()?, machine_threads(), loaded_percent(env))
+}
+
+/// Whether a lane of this machine takes no run now, as `lane_closed` says why.
+pub fn lane_full(env: &Env, lane: Lane) -> bool {
+  lane_closed(env, lane).is_some()
+}
+
+/// The line saying the machine is loaded where `load`, its load average over the last minute, stands at or
+/// above `percent` of its `threads`; none where it stands below.
+pub fn loaded(load: f64, threads: usize, percent: u64) -> Option<String> {
+  let float = |count: u64| f64::from(u32::try_from(count).unwrap_or(u32::MAX));
+  let bound = float(u64::try_from(threads).unwrap_or(u64::MAX)) * float(percent);
+
+  (load * 100.0 >= bound).then(|| {
+    fill_marks(
+      &LANES.placed.loaded,
+      &[
+        ("load", &format!("{load:.2}")),
+        ("threads", &threads.to_string()),
+        ("percent", &percent.to_string()),
+      ],
+    )
+  })
+}
+
+/// The share of the machine's threads, in percent, at or above which its load makes it loaded: the lane
+/// policy's, or the whole number of 0 or more `BMO_TESTBED_LOADED_PERCENT` names.
+pub fn loaded_percent(env: &Env) -> u64 {
+  match env.get(LOADED_VARIABLE).and_then(|given| leading_number(given)) {
+    Some(given) if given >= 0 => given.unsigned_abs(),
+    _ => LANES.numbers.loaded_percent,
+  }
+}
+
+// The machine's load average over the last minute, the first figure the kernel writes in /proc/loadavg; none
+// where it does not read, which counts as no load.
+fn machine_load() -> Option<f64> {
+  std::fs::read_to_string("/proc/loadavg").ok()?.split_whitespace().next()?.parse().ok()
 }
 
 static PLACED_RUNS: AtomicU64 = AtomicU64::new(0);

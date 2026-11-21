@@ -365,7 +365,9 @@
 - **A failing check's log is kept apart** beside the log, named as the log is with `failed` before its
   extension, so the next run of the checkout, which writes the log afresh, leaves it; only the next failing
   run replaces it. The check says where it is kept on a line before the log's own last line. A placed change
-  check keeps it on the machine it ran on, and its lines, which come back, carry what failed and that path.
+  check keeps it on the machine it ran on, and its lines, which come back, carry what failed and that path;
+  the machine that placed it then brings the file here and names the copy on a line of its own
+  (`docs/testbed.md`, 「A run on another machine」).
 - **It ends 1 where any step failed, 2 where the change could not be read.**
 
 ## The change check over several checkouts

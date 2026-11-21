@@ -33,6 +33,7 @@ pub struct Numbers {
   pub placed_lock_seconds: u64,
   pub status_connect_seconds: u64,
   pub placed_standing_seconds: u64,
+  pub loaded_percent: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -89,6 +90,11 @@ pub struct PlacedWords {
   pub order_unknown: String,
   pub unreached: String,
   pub full: String,
+  pub no_answer: String,
+  pub seats_taken: String,
+  pub loaded: String,
+  pub log_brought: String,
+  pub log_unbrought: String,
   pub tree_uncopied: String,
   pub sibling_absent: String,
   pub file_unlaid: String,

@@ -3,6 +3,7 @@
 
 use std::path::Path;
 
+use bmo_testbed_core::placement::LOADED_VARIABLE;
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::queue::{LockWait, take_lock};
@@ -151,16 +152,28 @@ fn the_status_names_the_holder_of_each_seat_held() {
   assert_eq!(lane["holder"], lane["holders"][0]);
 }
 
-// "says with its code alone whether a seat of the wide lane is free now with nobody waiting for one"
+// "prints nothing and exits 0 where this machine takes a run of its wide lane now: a seat free, nobody waiting for
+// one, and the machine not loaded; else it prints one line saying why and exits 1"
 #[test]
-fn the_status_says_by_its_code_whether_a_wide_seat_is_free() {
+fn the_status_says_by_its_code_whether_the_machine_takes_a_wide_run_and_why_not() {
   let dir = tempfile::tempdir().unwrap();
-  let free = |seats: &str| {
+  let asked = |seats: &str, share: &str| {
     let mut command = testbed(dir.path(), dir.path(), &["status", "--free"]);
 
-    ran(command.env(SEATS_VARIABLE, seats).env(SEAT_FREE_VARIABLE, "0"))
+    ran(
+      command
+        .env(SEATS_VARIABLE, seats)
+        .env(SEAT_FREE_VARIABLE, "0")
+        .env(LOADED_VARIABLE, share),
+    )
   };
+  let free = |seats: &str| asked(seats, "1000000");
   let idle = free("2");
+  let loaded = asked("2", "0");
+  let loaded_head = LANES.placed.loaded.split("{load}").next().unwrap();
+
+  assert_eq!(loaded.code, 1, "{}", loaded.err);
+  assert!(loaded.out.starts_with(loaded_head) && loaded.out.lines().count() == 1, "{}", loaded.out);
 
   assert_eq!((idle.code, idle.out.as_str()), (0, ""), "{}", idle.err);
 
@@ -180,7 +193,14 @@ fn the_status_says_by_its_code_whether_a_wide_seat_is_free() {
 
   assert!(held.had());
   assert_eq!(free("2").code, 0, "one of two seats is still free");
-  assert_eq!(free("1").code, 1, "the one seat is held");
+
+  let full = free("1");
+
+  assert_eq!(
+    (full.code, full.out.trim_end()),
+    (1, LANES.placed.seats_taken.as_str()),
+    "the one seat is held"
+  );
 }
 
 // "prints the close line of the repository it is run in, and none outside one"

@@ -31,7 +31,7 @@ use std::process::{Command, Stdio};
 use bmo_testbed_core::close_line::close_line_path;
 use bmo_testbed_core::declaration::Repository;
 use bmo_testbed_core::languages::LANGUAGES;
-use bmo_testbed_core::placement::{KeptHere, Local, PLACED_VARIABLE, Placement, lane_full};
+use bmo_testbed_core::placement::{KeptHere, Local, PLACED_VARIABLE, Placement, lane_closed};
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::policy::verbs::VERBS;
@@ -417,7 +417,13 @@ pub fn main(args: impl IntoIterator<Item = OsString>) -> u8 {
     Verb::Status(args) if args.free => {
       let lane = if args.narrow { Lane::Narrow } else { Lane::Wide };
 
-      u8::from(lane_full(&process_env(), lane))
+      match lane_closed(&process_env(), lane) {
+        Some(why) => {
+          println!("{why}");
+          1
+        }
+        None => 0,
+      }
     }
     Verb::Status(args) => status(args.json),
     Verb::CloseLine(args) => close_line::close_line(&args),

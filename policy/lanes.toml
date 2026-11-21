@@ -48,6 +48,10 @@ unreached_wait_minutes = 20
 placed_lock_seconds = 300
 status_connect_seconds = 10
 placed_standing_seconds = 60
+# The share of the machine's threads, in percent, at or above which its load average over the last minute makes
+# it loaded, so it takes no run while another machine follows it in the order (docs/testbed.md, 「A run on
+# another machine」).
+loaded_percent = 75
 
 # How a command killed for want of memory is run again (docs/testbed.md, 「Memory」): how long it waits
 # before it looks at the memory at all, how many gigabytes have to be available, how often it looks, and
@@ -116,9 +120,19 @@ order_empty = "order names no machine"
 order_twice = "order names {name} more than once"
 order_unknown = "order names {name}, which is neither the placed machine {machine} nor {here}"
 unreached = "testbed: the placed machine {machine} cannot be reached ({said})"
-# A run the order sends to the placed machine before another finds every seat of its lane there held or waited
-# for, or no answer saying otherwise; it goes on to this machine, the next in the order.
-full = "testbed: every seat on {machine} is held or waited for; running here"
+# A run the order sends to the placed machine before another finds it takes no run now, {why} the line its
+# `status --free` gave, or `no_answer` where it gave none; the run goes on to the next machine in the order.
+full = "testbed: {machine} takes no run now ({why}); going on to the next machine in the order"
+no_answer = "no answer saying it takes one"
+# What `status --free` says where the machine takes no run of the lane now: every seat held or waited for; or the
+# machine loaded, {load} its load average over the last minute, {threads} its threads and {percent} the share
+# at or above which it is loaded.
+seats_taken = "every seat of the lane is held or waited for"
+loaded = "loaded: {load} over the last minute on {threads} threads, at or above {percent}%"
+# A failing log a placed run kept there, brought here (docs/boundary.md, 「The placed machine」): {machine} the
+# machine, {path} the copy here; or not, {far} the file there and {said} what was answered.
+log_brought = "testbed: the failing log kept on {machine} is brought here: {path}"
+log_unbrought = "testbed: the failing log kept on {machine} at {far} could not be brought here: {said}"
 tree_uncopied = "the tree {tree} could not be copied: {said}"
 # A tree the declaration's [test] sibling_trees names that does not stand here: {tree} the path as written and
 # {why} what reading it said.

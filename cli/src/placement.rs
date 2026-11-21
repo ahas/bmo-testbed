@@ -9,8 +9,8 @@
 use std::io::{BufRead as _, BufReader, Read, Write as _};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use bmo_testbed_core::declaration::Repository;
@@ -20,7 +20,8 @@ use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::policy::prune::PRUNE;
 use bmo_testbed_core::policy::quick_checks::QUICK_CHECKS;
-use bmo_testbed_core::silence::{Heard, Silence, pass_on, said_while_quiet};
+use bmo_testbed_core::policy::suite::SUITE;
+use bmo_testbed_core::silence::{Heard, Silence, said_while_quiet};
 use bmo_testbed_core::turn::{
   FRONT_VARIABLE, Lane, NEXT_VARIABLE, NOT_RUN_EXIT_CODE, process_env, stands_at_front, stands_next,
 };
@@ -492,8 +493,9 @@ fn says_turn_came(line: &[u8]) -> bool {
 }
 
 // The far run's standard error passed on to this process's as it comes, line by line, but for the line saying
-// its turn there came, which marks the placed run running here, where one stands, and goes no further.
-fn passed_on(from: impl Read, placed: Option<&PlacedRun>) {
+// its turn there came, which marks the placed run running here, where one stands, and goes no further; each
+// failing log a line names as kept there noted in `kept`, where one is handed.
+fn passed_on(from: impl Read, placed: Option<&PlacedRun>, kept: Option<&KeptThere>) {
   let mut from = BufReader::new(from);
   let mut line = Vec::new();
   let mut to = std::io::stderr();
@@ -504,11 +506,67 @@ fn passed_on(from: impl Read, placed: Option<&PlacedRun>) {
         placed.turn_came();
       }
     } else {
+      if let Some(kept) = kept {
+        kept.hear(&line);
+      }
+
       let _ = to.write_all(&line).and_then(|()| to.flush());
     }
 
     line.clear();
   }
+}
+
+// The far run's standard output passed on to this process's as it comes, line by line, each failing log a line
+// names as kept there noted in `kept`. Writing on stops once standard output refuses, and the stream is still
+// read to its end, so the far side never stalls on a full pipe.
+fn passed_out(from: impl Read, kept: &KeptThere) {
+  let mut from = BufReader::new(from);
+  let mut line = Vec::new();
+  let mut to = std::io::stdout();
+  let mut writing = true;
+
+  while from.read_until(b'\n', &mut line).is_ok_and(|read| read > 0) {
+    kept.hear(&line);
+
+    if writing {
+      writing = to.write_all(&line).and_then(|()| to.flush()).is_ok();
+    }
+
+    line.clear();
+  }
+}
+
+// The failing logs a far run's output named as kept there, gathered as its lines pass, each once.
+#[derive(Debug, Default)]
+struct KeptThere(Mutex<Vec<String>>);
+
+impl KeptThere {
+  // Notes the file a line names where it is a change check's `failing log kept:` line.
+  fn hear(&self, line: &[u8]) {
+    let Some(path) = kept_named(&String::from_utf8_lossy(line)) else { return };
+    let mut paths = self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+
+    if !paths.contains(&path) {
+      paths.push(path);
+    }
+  }
+
+  // The files noted, in the order their lines came.
+  fn paths(&self) -> Vec<String> {
+    self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone()
+  }
+}
+
+// The file a line of a change check's output names where it is its `failing log kept:` line, whatever
+// repository name opens it; none for any other line.
+fn kept_named(line: &str) -> Option<String> {
+  let (before, after) = SUITE.check.kept.split_once("{path}")?;
+  let line = line.trim_end();
+  let at = line.find(before)?;
+  let path = line[at + before.len()..].strip_suffix(after)?;
+
+  (!path.is_empty()).then(|| path.to_owned())
 }
 
 // A run the placed machine dropped: the line saying so, and the code of a run not run.
@@ -1099,8 +1157,9 @@ impl MachinePlacement {
     )
   }
 
-  /// Whether a seat of the lane there is free now with nobody waiting for one, as that machine's `status
-  /// --free` answers; the `full` line where it is not, or where the answer does not come.
+  /// Whether the machine takes a run of the lane now, a seat free with nobody waiting for one and the machine not
+  /// loaded, as its `status --free` answers; the `full` line where it does not, carrying the line it gave or
+  /// `no_answer` where the answer does not come.
   pub fn seat_free(&self, lane: Lane) -> bool {
     let narrow = if lane == Lane::Narrow { " --narrow" } else { "" };
     let asked = self.ssh().arg(format!("{} status --free{narrow}", self.settings.testbed)).output();
@@ -1109,7 +1168,13 @@ impl MachinePlacement {
       return true;
     }
 
-    eprintln!("{}", fill_marks(&LANES.placed.full, &[("machine", self.settings.label())]));
+    let answered = asked.ok().map(|done| String::from_utf8_lossy(&done.stdout).trim().to_owned());
+    let why = answered.filter(|why| !why.is_empty()).unwrap_or_else(|| LANES.placed.no_answer.clone());
+
+    eprintln!(
+      "{}",
+      fill_marks(&LANES.placed.full, &[("machine", self.settings.label()), ("why", &why)])
+    );
 
     false
   }
@@ -1434,6 +1499,7 @@ impl MachinePlacement {
     // The far side's `placed` verb ends a command there that falls silent; this side passes the output on, and
     // tells its own holder while it comes.
     let look = Silence::default().look;
+    let kept = KeptThere::default();
     let started = self.ssh().arg(line).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn();
     let status = started.and_then(|mut child| {
       let far_output = child.stdout.take().map(|out| Heard::new(out, Arc::clone(heard), look));
@@ -1441,22 +1507,68 @@ impl MachinePlacement {
 
       std::thread::scope(|scope| {
         if let Some(far_output) = far_output {
-          scope.spawn(|| pass_on(far_output, std::io::stdout()));
+          scope.spawn(|| passed_out(far_output, &kept));
         }
 
         if let Some(far_errors) = far_errors {
-          scope.spawn(|| passed_on(far_errors, placed));
+          scope.spawn(|| passed_on(far_errors, placed, Some(&kept)));
         }
 
         child.wait()
       })
     });
-
-    match status.ok().and_then(|status| status.code()) {
+    let end = match status.ok().and_then(|status| status.code()) {
       // 255 is `ssh`'s own: the connection broke or was never made.
       Some(255) | None => FarEnd::Broken,
       Some(code) => FarEnd::Ended(u8::try_from(code).unwrap_or(1)),
+    };
+
+    if matches!(end, FarEnd::Ended(_)) {
+      self.bring_kept(&kept.paths());
     }
+
+    end
+  }
+
+  // Each failing log a run kept there, read over `ssh` once it ended and written under this machine's data root
+  // at `testbed/placed/<machine>/` by its own name, each said on standard error (docs/boundary.md, 「The placed
+  // machine」).
+  fn bring_kept(&self, paths: &[String]) {
+    let machine = self.settings.label();
+    let dir = self.data_root.join("testbed").join("placed").join(machine);
+
+    for far in paths {
+      let line = match self.brought(far, &dir) {
+        Ok(path) => {
+          fill_marks(&LANES.placed.log_brought, &[("machine", machine), ("path", &path.to_string_lossy())])
+        }
+        Err(said) => {
+          fill_marks(&LANES.placed.log_unbrought, &[("machine", machine), ("far", far), ("said", &said)])
+        }
+      };
+
+      eprintln!("{line}");
+    }
+  }
+
+  // One failing log read from the machine and written into `dir` by its own name: the copy's path, or what was
+  // answered where it could not be read there or written here.
+  fn brought(&self, far: &str, dir: &Path) -> Result<PathBuf, String> {
+    let name = Path::new(far).file_name().ok_or_else(|| far.to_owned())?;
+    let read = self.ssh().arg(format!("cat -- {}", quoted(far))).output();
+
+    if !succeeded(&read) {
+      return Err(said(&read));
+    }
+
+    let path = dir.join(name);
+    let text = read.map(|done| done.stdout).unwrap_or_default();
+
+    std::fs::create_dir_all(dir)
+      .and_then(|()| std::fs::write(&path, text))
+      .map_err(|why| why.to_string())?;
+
+    Ok(path)
   }
 
   /// The line saying the connection to the machine broke, as a deployment's work there names it.
@@ -1477,7 +1589,7 @@ impl MachinePlacement {
     let far_errors = child.stderr.take();
     let done = std::thread::scope(|scope| {
       if let Some(far_errors) = far_errors {
-        scope.spawn(|| passed_on(far_errors, None));
+        scope.spawn(|| passed_on(far_errors, None, None));
       }
 
       child.wait_with_output()

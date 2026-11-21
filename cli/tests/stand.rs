@@ -21,6 +21,9 @@ pub fn testbed(dir: &Path, data: &Path, args: &[&str]) -> Command {
     .args(args)
     .current_dir(dir)
     .env("BMO_TESTBED_LOCK", data.join("testbed.lock"))
+    // A share of the threads no machine's load reaches, so the load of the machine running the tests never
+    // makes it loaded; a test of the load names its own.
+    .env("BMO_TESTBED_LOADED_PERCENT", "1000000")
     .env("BMO_DATA_DIR", data)
     // A runtime directory holding no socket of the service manager's, as a test home's is.
     .env("XDG_RUNTIME_DIR", data)

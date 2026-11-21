@@ -329,11 +329,21 @@ flowchart TD
   name, reached over `ssh`, or the placement endpoint's answer; with neither, or an endpoint that does
   not answer, the run stays on the machine it was started on.
 - **The settings put the machines in order,** this machine among them (`docs/boundary.md`, 「The placed
-  machine」, `order`). A run that can be placed goes to the first machine in the order with a seat of its
-  lane free now and nobody waiting for one, and falls to the next only where every seat there is held or
-  waited for. The last machine in the order takes it whatever it holds, and the run waits in that
-  machine's line. So the order alone says which machine's seats are used first, and which machine a run
-  waits on once every machine is full.
+  machine」, `order`). A run that can be placed goes to the first machine in the order that takes a run
+  now: a seat of its lane free, nobody waiting for one, and the machine not loaded (below). It falls to the
+  next only where the machine takes none. The last machine in the order takes it whatever it holds, and the
+  run waits in that machine's line. So the order alone says which machine's seats are used first, and which
+  machine a run waits on once every machine is full.
+- **A loaded machine takes no run while another machine follows it in the order.** A machine is loaded
+  where its load average over the last minute, as the kernel counts it, stands at or above a share of its
+  threads: `loaded_percent` in the lane policy, seventy-five, and `BMO_TESTBED_LOADED_PERCENT` names
+  another whole number for a machine or a test. The seats count the testbed's own commands alone, and a
+  machine that carries other work besides, a fleet of agents or a person's desktop, can stand with a seat
+  free while every thread is busy; a run sent there takes many times what it takes on an idle machine, and
+  a test bounded in time fails there where it passes elsewhere. A machine reads its own load; the placed
+  machine answers for its own through `status --free`, whose line saying why it takes no run the caller
+  passes on. A loaded machine still takes a run that comes to it last in the order, and a run already
+  there keeps its seat.
 - **A placed machine is never passed over for being out of reach or behind:** a run that comes to it
   waits for it to answer and brings its testbed to the live release (below), and where neither can be
   had it ends as not run rather than running here. What runs on this machine is what the order sends
@@ -343,8 +353,8 @@ flowchart TD
   through `bmo-testbed cargo`, which run there as the same verb of that machine's testbed; and the change
   check, `bmo-testbed check` with no part named, which is placed whole and runs there as that machine's
   own change check over the same commit and open files, its steps in that machine's turn, its log staying
-  on that machine and named in the lines that come back. The commit its `--since` names is resolved here
-  and handed over as the commit itself, since a name such as `origin/main` names a commit only in this
+  on that machine and named in the lines that come back, and a failing log it keeps there brought here
+  (below). The commit its `--since` names is resolved here and handed over as the commit itself, since a name such as `origin/main` names a commit only in this
   checkout and the bench there holds none of its references.
 - **A change check over several checkouts is placed whole as one set** (`docs/checks.md`, 「The change
   check over several checkouts」): every checkout laid in one bench there at the place it has under this
@@ -409,6 +419,13 @@ flowchart TD
   without the line a watcher of its output could not tell it from a hung one. A run whose output keeps
   coming back says nothing more. The line says nothing of the run's health: a hung command is ended by the
   watches there (「A holder whose command falls silent lets go」).
+- **A failing log a placed run keeps there is brought here.** Where a line of the output that comes back
+  names a failing log kept apart (`docs/checks.md`, 「The change check」), this machine reads that file
+  from the placed machine over the same `ssh` once the run has ended, writes it under the data root's
+  `testbed/placed/<machine>/` by the file's own name, and says on standard error, on a line naming the
+  copy here, that it was brought. A caller, or a close that runs the check, reads what failed in full
+  without reaching that machine. A copy that cannot be made is said on a line naming what `ssh` answered,
+  and changes nothing of the run's result.
 - **An outage is told once, and its end once.** The first run that gives up on a machine sends
   `placed-unreachable`, and the runs that give up after it in the same outage send nothing more; the first
   process that finds the machine answering again sends `placed-recovered`. Both go to the machine's own

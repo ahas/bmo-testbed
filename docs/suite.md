@@ -27,6 +27,14 @@
   runs start while the rest can still fill the places around them.
 - **A file's process takes its descendants with it.** Each file runs as the head of a process group of
   its own, and when the file ends the whole group is taken down.
+- **Nothing of the testbed ends a process while the unit that started it runs.** A file's group goes once
+  the file's process has ended, a heavy unit's once the unit has ended (「Heavy units run in a lane of
+  one」), and whatever the run's fence still holds once the whole run has ended (「A fence of its own」).
+  A test runner ends processes of its own inside a unit: Bun's, where a test or a hook runs past its
+  bound, ends every process its file started, a browser and a server the file's tests share among them,
+  and says `killed N dangling processes`. Every later test of that file then finds them gone, so a
+  file's tests that share a browser or a server bound each wait well under the test's own bound, and the
+  line is read as the end of a test that ran out of time, never as the testbed's.
 - **Streaming:** each file's result is written out whole as that file ends, its verdict ahead of it,
   so what the run found is already in the redirected file even if the run is killed from outside.
   Output is held per file because files running beside one another would otherwise interleave.

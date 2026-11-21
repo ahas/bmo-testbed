@@ -43,10 +43,11 @@ use bmo_testbed_cli::placement::{
   ReadyBench, STANDING_VARIABLE, machine_hook, reachable_remote,
 };
 use bmo_testbed_core::events::Hook;
-use bmo_testbed_core::placement::{PlaceAsk, PlacedRun, Placement, read_placed};
+use bmo_testbed_core::placement::{LOADED_VARIABLE, PlaceAsk, PlacedRun, Placement, read_placed};
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::policy::prune::PRUNE;
+use bmo_testbed_core::policy::suite::SUITE;
 use bmo_testbed_core::policy::verbs::VERBS;
 use bmo_testbed_core::queue::process_alive;
 use bmo_testbed_core::turn::{Env, Lane, NOT_RUN_EXIT_CODE, TestbedTurn, TurnAsk, lock_path, take_turn};
@@ -121,8 +122,10 @@ fn endpoint_quiet(answer: Value, events: Vec<(&'static str, String)>, quiet: Dur
 }
 
 // A stand-in `ssh` that runs the line it is handed on this machine, past its options and its destination,
-// the way git and rsync hand it theirs.
+// the way git and rsync hand it theirs; the far side is a machine no load makes loaded, so the load of the
+// machine running the tests decides nothing of where a run goes.
 const SSH: &str = r#"#!/bin/sh
+export BMO_TESTBED_LOADED_PERCENT=1000000
 while [ $# -gt 0 ]; do
   case "$1" in
     -o|-p|-i|-l|-F) shift 2 ;;
@@ -2146,7 +2149,8 @@ fn a_run_goes_to_the_first_machine_in_the_order_with_a_seat_free_and_falls_to_th
   let bench = dir.join("bench/repo");
   let running =
     fill_marks(&LANES.placed.running, &[("machine", "machine-2"), ("bench", &bench.to_string_lossy())]);
-  let full = fill_marks(&LANES.placed.full, &[("machine", "machine-2")]);
+  let full =
+    fill_marks(&LANES.placed.full, &[("machine", "machine-2"), ("why", &LANES.placed.seats_taken)]);
 
   // The far side's turns stand at a lock of their own, as another machine's do.
   install(
@@ -2179,6 +2183,111 @@ fn a_run_goes_to_the_first_machine_in_the_order_with_a_seat_free_and_falls_to_th
   assert!(!here.err.contains(&running), "{}", here.err);
   assert_eq!(placed.code, 7, "{}\n{}", placed.out, placed.err);
   assert!(placed.err.contains(&running), "{}", placed.err);
+}
+
+// "a loaded machine takes no run while another machine follows it in the order ... the placed machine answers
+// for its own through `status --free`, whose line saying why it takes no run the caller passes on. A loaded
+// machine still takes a run that comes to it last in the order": a loaded placed machine passes the run on, a
+// loaded machine here sends it to the placed one, and the last takes it however loaded
+#[test]
+fn a_loaded_machine_takes_no_run_while_another_follows_it_and_the_last_takes_it_whatever_its_load() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let repo = dir.join("repo");
+  let calm = dir.join("ssh");
+  let busy = dir.join("busy-ssh");
+  let here = &LANES.placed.here;
+  let place = |ssh: &Path, order: &str, share: &str| {
+    settle(&dir, ssh, "stand");
+    let file = dir.join("env/placement.toml");
+    let text = std::fs::read_to_string(&file).unwrap();
+
+    std::fs::write(&file, format!("{text}order = {order}\n")).unwrap();
+    ran(
+      testbed(&repo, &dir, &["run", "--adapter", "plain", "--", "sh", "-c", "exit 7"])
+        .env("HOME", &dir)
+        .env(LOADED_VARIABLE, share),
+    )
+  };
+  let running = fill_marks(
+    &LANES.placed.running,
+    &[("machine", "machine-2"), ("bench", &dir.join("bench/repo").to_string_lossy())],
+  );
+  let passed_on = format!(
+    "{}{}",
+    LANES.placed.full.split("{why}").next().unwrap().replace("{machine}", "machine-2"),
+    LANES.placed.loaded.split("{load}").next().unwrap()
+  );
+
+  install(SSH, &calm);
+  // The far side's own share of 0 makes it loaded whatever its load.
+  install(&SSH.replace("exec sh -c", "export BMO_TESTBED_LOADED_PERCENT=0; exec sh -c"), &busy);
+  checkout(&repo, "testbed = 0\n");
+
+  let fell = place(&busy, &format!("[\"machine-2\", \"{here}\"]"), "1000000");
+
+  assert_eq!(fell.code, 7, "{}\n{}", fell.out, fell.err);
+  assert!(fell.err.contains(&passed_on), "{}", fell.err);
+  assert!(!fell.err.contains(&running), "{}", fell.err);
+
+  let sent = place(&calm, &format!("[\"{here}\", \"machine-2\"]"), "0");
+
+  assert_eq!(sent.code, 7, "{}\n{}", sent.out, sent.err);
+  assert!(sent.err.contains(&running), "{}", sent.err);
+
+  let last = place(&busy, &format!("[\"{here}\", \"machine-2\"]"), "0");
+
+  assert_eq!(last.code, 7, "{}\n{}", last.out, last.err);
+  assert!(last.err.contains(&running) && !last.err.contains(&passed_on), "{}", last.err);
+}
+
+// "a failing log a placed run keeps there is brought here": a far run that fails naming, under a repository's
+// name on its standard output, a failing log kept there has it copied under this machine's data root and said on
+// a line; one naming, on its standard error, a log that does not stand there is said not brought; the run's code
+// stays the one it ended with there
+#[test]
+fn a_failing_log_kept_on_the_placed_machine_is_brought_here_and_named() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let repo = dir.join("repo");
+  let ssh = dir.join("ssh");
+  let far = dir.join("far/check-alpha-1234.failed.log");
+  let missing = dir.join("far/check-set-5678.failed.log");
+  let kept = |path: &Path| fill_marks(&SUITE.check.kept, &[("path", &path.to_string_lossy())]);
+
+  std::fs::create_dir_all(far.parent().unwrap()).unwrap();
+  std::fs::write(&far, "==> tests: exit 1\nthe whole of what failed\n").unwrap();
+  install(
+    &SSH.replacen(
+      "shift\nexec",
+      &format!(
+        "shift\ncase \"$*\" in *\" placed \"*) echo 'alpha: {}'; echo '{}' >&2; exit 1 ;; esac\nexec",
+        kept(&far),
+        kept(&missing)
+      ),
+      1,
+    ),
+    &ssh,
+  );
+  settle(&dir, &ssh, "stand");
+  checkout(&repo, "testbed = 0\n");
+
+  let done = on_machine(&repo, &dir, &["run", "--adapter", "plain", "--", "sh", "-c", "exit 1"]);
+  let copy = dir.join("testbed/placed/machine-2/check-alpha-1234.failed.log");
+  let brought = fill_marks(
+    &LANES.placed.log_brought,
+    &[("machine", "machine-2"), ("path", &copy.to_string_lossy())],
+  );
+  let unbrought_head = fill_marks(
+    LANES.placed.log_unbrought.split("{said}").next().unwrap(),
+    &[("machine", "machine-2"), ("far", &missing.to_string_lossy())],
+  );
+
+  assert_eq!(done.code, 1, "{}\n{}", done.out, done.err);
+  assert!(done.out.contains(&kept(&far)), "the kept line is passed on: {}", done.out);
+  assert!(done.err.contains(&brought), "{}", done.err);
+  assert_eq!(std::fs::read_to_string(&copy).unwrap(), std::fs::read_to_string(&far).unwrap());
+  assert!(done.err.contains(&unbrought_head), "{}", done.err);
 }
 
 // A hook that writes down the name and the payload of each event it is handed.
@@ -2331,7 +2440,8 @@ case "$*" in
     if [ $n -le {drops} ]; then echo 'client_loop: send disconnect: Broken pipe' >&2; exit 255; fi ;;
 esac
 mkdir -p {far}/data
-export HOME={far} BMO_DATA_DIR={far}/data BMO_TESTBED_LOCK={far}/data/testbed.lock XDG_RUNTIME_DIR={far}/data
+export HOME={far} BMO_DATA_DIR={far}/data BMO_TESTBED_LOCK={far}/data/testbed.lock XDG_RUNTIME_DIR={far}/data \
+  BMO_TESTBED_LOADED_PERCENT=1000000
 unset CLAUDE_PID BMO_TESTBED_SCOPE BMO_TESTBED_SERVICE BMO_TESTBED_TOKEN BMO_TESTBED_HELD BMO_TESTBED_FRONT \
   BMO_TESTBED_NEXT BMO_TESTBED_PLACEMENT BMO_TESTBED_PLACED BMO_TESTBED_CHECKOUTS BMO_DEPLOY_UNIT \
   DBUS_SESSION_BUS_ADDRESS

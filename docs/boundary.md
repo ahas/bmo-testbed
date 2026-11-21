@@ -158,8 +158,10 @@ bmo-testbed status [--json | --free [--narrow]]
   of the mark that put it first. A ticket a testbed of an earlier revision stood carries its `words` and
   `pid` alone, every other field null.
 - **A close entry** carries `scope`, `checkout`, `askedAt`, `heldAt` and `pid` as a queue entry does.
-- **`--free`** prints nothing and exits 0 where a seat of this machine's wide lane is free now with nobody
-  waiting for one, else 1; with `--narrow`, the same of the narrow lane. A machine that places a run on a
+- **`--free`** prints nothing and exits 0 where this machine takes a run of its wide lane now: a seat free,
+  nobody waiting for one, and the machine not loaded (`docs/testbed.md`, 「A run on another machine」); else
+  it prints one line saying why, every seat held or waited for or the load against the machine's threads,
+  and exits 1. With `--narrow`, the same of the narrow lane. A machine that places a run on a
   machine its order does not name last asks that machine this, of the run's lane, before the run goes
   (「Placement」).
 
@@ -569,6 +571,7 @@ verb's own name, and each noun takes what that verb takes.
 | `BMO_TESTBED_LOCK` | the turn | Another first wide seat's lock, the further seats and the narrow lane's beside it |
 | `BMO_TESTBED_SEATS` | the turn | The wide lane's seats, over the lane policy's; anything that is not a positive whole number means the policy's |
 | `BMO_TESTBED_SEAT_FREE_GB` | the turn | The gigabytes of available memory a seat beside a held one needs, over the lane policy's; anything that is not a whole number means the policy's |
+| `BMO_TESTBED_LOADED_PERCENT` | the placement, `status --free` | The share of the machine's threads, in percent, at or above which its load average over the last minute makes it loaded, over the lane policy's; anything that is not a whole number of 0 or more means the policy's |
 | `BMO_TESTBED_HELD` | the turn | Set by a holder for its children: its process number. A command finding it holding any seat of its lane runs at once, in the holder's seats |
 | `BMO_TESTBED_FRONT` | the turn | `1` stands the caller at the front, unless it is inside a harness's call |
 | `BMO_TESTBED_NEXT` | the turn | `1` stands the caller next after the front |
@@ -903,13 +906,14 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   `check` and `clippy` (`docs/testbed.md`, 「A run on another machine」, which also names the runs that
   stay here and why).
 - **The placed machine's settings put the machines in order** (「The placed machine」, `order`): the
-  placed machine and this machine, `local`. A run goes to the first in the order with a seat of its lane
-  free now and nobody waiting for one, and falls to the next only where every seat there is held or
-  waited for. This machine's seats are read from its lanes; the placed machine is asked its `status
-  --free`, of the run's lane, before its bench is made ready, and no answer saying a seat is free counts as
-  full. The last machine in the order takes the run whatever it holds, and the run waits in its line. A
-  placed machine that cannot be reached is waited for, and one whose testbed is not this machine's live
-  testbed release is brought to it, never passed over (「The placed machine」); where neither can be had,
+  placed machine and this machine, `local`. A run goes to the first in the order that takes a run now, a
+  seat of its lane free, nobody waiting for one and the machine not loaded (`docs/testbed.md`, 「A run on
+  another machine」), and falls to the next only where the machine takes none. This machine's seats are
+  read from its lanes and its load from its kernel; the placed machine is asked its `status --free`, of the
+  run's lane, before its bench is made ready, and no answer saying it takes one counts as full, the line it
+  gave saying why passed on. The last machine in the order takes the run whatever it holds, and the run
+  waits in its line. A placed machine that cannot be reached is waited for, and one whose testbed is not
+  this machine's live testbed release is brought to it, never passed over (「The placed machine」); where neither can be had,
   the run ends as not run, exit code 75, and sends an event (「Events」). The placement endpoint chooses
   for itself and is told nothing of the order.
 - **A change check over several checkouts is placed as one set** wherever the settings name a placed
@@ -1070,6 +1074,13 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   the line saying the run's turn there came (「A run placed elsewhere stands here too」), touching the file
   its own holder handed it in `BMO_TESTBED_HEARD` while they do; ending a silent command is the `placed`
   verb's there.
+- **A failing log kept there comes back.** Each line of either stream that is a change check's `failing log
+  kept:` line, whatever repository name opens it, names a file there; once the run has ended
+  the caller reads each such file with `cat` over the same `ssh`, writes it under this machine's data root
+  at `testbed/placed/<machine>/<file name>`, `machine` the settings' label, and says on standard error
+  `testbed: the failing log kept on <machine> is brought here: <path>`. A file that cannot be read there or
+  written here is said on standard error with what was answered, and the run's exit code stays the one it
+  ended with there.
 - **A connection that cannot be made is waited for:** the caller asks the machine again every
   `unreached_pause_seconds` of the lanes policy (30), saying on a line each time how long it has waited
   and what `ssh` said, and goes there once it answers; it takes no seat here meanwhile. Once
@@ -1144,7 +1155,7 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   standard error or the stream's `output` events, and does not pass it on. A run whose far side writes
   no such line stands waiting until it ends.
 - **It takes no seat here:** whether a seat here is free, for `status --free` and for a run walking the
-  order (「Placement」), is read from the lane's seats and line alone.
+  order (「Placement」), is read from the lane's seats and line and the machine's load alone.
 - **A deployment's gate and release build on the placed machine stand as the deployment's stages**
   (「The record」), never in a lane's `placed` list.
 - **The entries stand beside the lane's lock,** one file for each run in a directory named for the lock
