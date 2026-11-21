@@ -181,9 +181,10 @@ fn asked(attach: Option<bool>) -> Arguments {
   }
 }
 
-// Waits, bounded, for `ready` to hold.
+// Waits, bounded, for `ready` to hold. The bound is a failure's and never a wait: a condition that holds ends
+// the wait at once, and the deployment gate's loaded machine takes seconds to start each stand-in a turn asks.
 fn until(mut ready: impl FnMut() -> bool) {
-  let deadline = Instant::now() + Duration::from_secs(10);
+  let deadline = Instant::now() + Duration::from_secs(60);
 
   while !ready() {
     assert!(Instant::now() < deadline, "the condition never held");
