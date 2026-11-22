@@ -48,10 +48,11 @@ unreached_wait_minutes = 20
 placed_lock_seconds = 300
 status_connect_seconds = 10
 placed_standing_seconds = 60
-# The share of the machine's threads, in percent, at or above which its load average over the last minute makes
-# it loaded, so it takes no run while another machine follows it in the order (docs/testbed.md, 「A run on
-# another machine」).
-loaded_percent = 75
+# The share of the machine's threads, in percent, at or above which its load figure makes it loaded, so it takes
+# no run wherever it stands in a placement order (docs/testbed.md, 「A run on another machine」). A run in the
+# wide lane expects a seat's share of the threads, one third of them with the three seats here, so a machine
+# standing loaded has less than that left free: two thirds of its threads already at work.
+loaded_percent = 67
 
 # How a command killed for want of memory is run again (docs/testbed.md, 「Memory」): how long it waits
 # before it looks at the memory at all, how many gigabytes have to be available, how often it looks, and
@@ -125,10 +126,10 @@ unreached = "testbed: the placed machine {machine} cannot be reached ({said})"
 full = "testbed: {machine} takes no run now ({why}); going on to the next machine in the order"
 no_answer = "no answer saying it takes one"
 # What `status --free` says where the machine takes no run of the lane now: every seat held or waited for; or the
-# machine loaded, {load} its load average over the last minute, {threads} its threads and {percent} the share
-# at or above which it is loaded.
+# machine loaded, {load} its load figure, the larger of its last-minute and last-five-minute averages, {threads}
+# its threads and {percent} the share of them at or above which it is loaded.
 seats_taken = "every seat of the lane is held or waited for"
-loaded = "loaded: {load} over the last minute on {threads} threads, at or above {percent}%"
+loaded = "loaded: {load} on {threads} threads, at or above {percent}%"
 # A failing log a placed run kept there, brought here (docs/boundary.md, 「The placed machine」): {machine} the
 # machine, {path} the copy here; or not, {far} the file there and {said} what was answered.
 log_brought = "testbed: the failing log kept on {machine} is brought here: {path}"

@@ -15,7 +15,9 @@ use std::time::Duration;
 
 use bmo_testbed_core::declaration::Repository;
 use bmo_testbed_core::events::Hook;
-use bmo_testbed_core::placement::{PlaceAsk, PlacedRun, Placement, SetAsk, lane_full};
+use bmo_testbed_core::placement::{
+  Closed, LOADED_EXIT_CODE, PlaceAsk, PlacedRun, Placement, SetAsk, lane_closed, lane_takes,
+};
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::policy::prune::PRUNE;
@@ -1022,6 +1024,12 @@ pub struct ReadyBench {
   pub within: String,
 }
 
+/// A machine's own answer about a lane: why it takes no run, with the line it said, where it takes none.
+struct FarLane {
+  closed: Option<Closed>,
+  said: String,
+}
+
 /// The placed machine, a member of the placement type: every run goes there over `ssh`, as the testbed's
 /// `placed` verb in a bench copy of the checkout.
 pub struct MachinePlacement {
@@ -1157,26 +1165,46 @@ impl MachinePlacement {
     )
   }
 
-  /// Whether the machine takes a run of the lane now, a seat free with nobody waiting for one and the machine not
-  /// loaded, as its `status --free` answers; the `full` line where it does not, carrying the line it gave or
-  /// `no_answer` where the answer does not come.
-  pub fn seat_free(&self, lane: Lane) -> bool {
-    let narrow = if lane == Lane::Narrow { " --narrow" } else { "" };
-    let asked = self.ssh().arg(format!("{} status --free{narrow}", self.settings.testbed)).output();
+  /// Whether the machine takes a run of the lane now, as its `status --free` answers: seats free and the machine
+  /// calm take it, every seat held or waited for takes one only where the machine stands `last` in the order,
+  /// and a loaded machine takes none wherever it stands. Said on the `full` line where it takes none, carrying
+  /// the line it gave or `no_answer` where the answer does not come.
+  pub fn takes_run(&self, lane: Lane, last: bool) -> bool {
+    let FarLane { closed, said } = self.asked_lane(lane);
 
-    if succeeded(&asked) {
+    if lane_takes(closed, last) {
       return true;
     }
 
-    let answered = asked.ok().map(|done| String::from_utf8_lossy(&done.stdout).trim().to_owned());
-    let why = answered.filter(|why| !why.is_empty()).unwrap_or_else(|| LANES.placed.no_answer.clone());
-
     eprintln!(
       "{}",
-      fill_marks(&LANES.placed.full, &[("machine", self.settings.label()), ("why", &why)])
+      fill_marks(&LANES.placed.full, &[("machine", self.settings.label()), ("why", &said)])
     );
 
     false
+  }
+
+  /// What the machine's `status --free` said of the lane. An answer that does not come, or comes with a code
+  /// naming no reason, is taken for every seat held or waited for, as an answer that does not say it takes one
+  /// has always been.
+  fn asked_lane(&self, lane: Lane) -> FarLane {
+    let narrow = if lane == Lane::Narrow { " --narrow" } else { "" };
+    let asked = self.ssh().arg(format!("{} status --free{narrow}", self.settings.testbed)).output();
+    let (code, line) = match asked.as_ref() {
+      Ok(done) => (done.status.code(), String::from_utf8_lossy(&done.stdout).trim().to_owned()),
+      Err(_) => (None, String::new()),
+    };
+    let said = if line.is_empty() { LANES.placed.no_answer.clone() } else { line };
+
+    FarLane {
+      // An answer with no code at all, one ended on a signal, says nothing of the machine: full of seats.
+      closed: match code {
+        Some(0) => None,
+        Some(code) if code == i32::from(LOADED_EXIT_CODE) => Some(Closed::Loaded(said.clone())),
+        Some(_) | None => Some(Closed::Seats),
+      },
+      said,
+    }
   }
 
   /// Whether the machine answers; what `ssh` said where it does not, on the `unreached` line.
@@ -1649,23 +1677,23 @@ impl MachinePlacement {
   /// A run placed on the machine: the machine waited for and its testbed brought to the live release, the bench
   /// made ready at the checkout's `HEAD` with its open files, and the words run there as the testbed's own `run`;
   /// the code it ended with there, or the code of a run not run where the machine did not answer within the wait
-  /// or its testbed could not be brought to the live release. None where it did not go: for a run that goes there
-  /// only to a seat free now since another machine follows it in the order, every seat of its lane there held or
-  /// waited for, said on a line. From the moment it goes there it says it still runs every minute none of its
-  /// output came back.
-  fn placed(&self, ask: &PlaceAsk<'_>, to_free_seat: bool) -> Option<u8> {
+  /// or its testbed could not be brought to the live release. None where it did not go, said on a line: every
+  /// seat of the lane there is held or waited for while another machine follows this one in the order, or the
+  /// machine is loaded. From the moment it goes there it says it still runs every minute none of its output came
+  /// back.
+  fn placed(&self, ask: &PlaceAsk<'_>, last: bool) -> Option<u8> {
     let heard = Arc::new(AtomicU64::new(0));
 
-    standing(self.settings.label(), &heard, || self.placed_heard(ask, to_free_seat, &heard))
+    standing(self.settings.label(), &heard, || self.placed_heard(ask, last, &heard))
   }
 
   // The run placed as `placed` places it, every byte of its output that comes back counted into `heard`.
-  fn placed_heard(&self, ask: &PlaceAsk<'_>, to_free_seat: bool, heard: &Arc<AtomicU64>) -> Option<u8> {
+  fn placed_heard(&self, ask: &PlaceAsk<'_>, last: bool, heard: &Arc<AtomicU64>) -> Option<u8> {
     if let Err(code) = self.waited_ready(ask) {
       return Some(code);
     }
 
-    if to_free_seat && !self.seat_free(ask.lane) {
+    if !self.takes_run(ask.lane, last) {
       return None;
     }
 
@@ -1710,19 +1738,19 @@ impl MachinePlacement {
   /// each checkout's declared setup run in its own bench, and the set run in the first checkout's bench as the
   /// testbed's change check there. None where it did not go, as for one run. It says it still runs as one run
   /// does.
-  fn placed_set(&self, ask: &SetAsk<'_>, to_free_seat: bool) -> Option<u8> {
+  fn placed_set(&self, ask: &SetAsk<'_>, last: bool) -> Option<u8> {
     let heard = Arc::new(AtomicU64::new(0));
 
-    standing(self.settings.label(), &heard, || self.placed_set_heard(ask, to_free_seat, &heard))
+    standing(self.settings.label(), &heard, || self.placed_set_heard(ask, last, &heard))
   }
 
   // The set placed as `placed_set` places it, every byte of its output that comes back counted into `heard`.
-  fn placed_set_heard(&self, ask: &SetAsk<'_>, to_free_seat: bool, heard: &Arc<AtomicU64>) -> Option<u8> {
+  fn placed_set_heard(&self, ask: &SetAsk<'_>, last: bool, heard: &Arc<AtomicU64>) -> Option<u8> {
     if let Err(code) = self.waited_ready(&ask.run) {
       return Some(code);
     }
 
-    if to_free_seat && !self.seat_free(ask.run.lane) {
+    if !self.takes_run(ask.run.lane, last) {
       return None;
     }
 
@@ -1830,9 +1858,10 @@ pub fn path_from(from: &str, to: &str) -> String {
 }
 
 impl Placement for MachinePlacement {
-  /// The run walks the order: it goes to the first machine with a seat of its lane free now, and the last
-  /// takes it whatever it holds. A placed machine that does not take it passes it on to the next, and a run
-  /// no machine took stays here.
+  /// The run walks the order: it goes to the first machine that takes a run of its lane now, where a machine
+  /// whose every seat is held or waited for takes one only from the last of the order, and a loaded machine
+  /// takes none wherever it stands. A machine that does not take it passes the run on, and a run no machine
+  /// took runs where it was started, in this machine's line.
   fn place(&self, ask: &PlaceAsk<'_>) -> Option<u8> {
     if kept_outside_copy(ask) {
       return None;
@@ -1842,16 +1871,16 @@ impl Placement for MachinePlacement {
     let last = order.len().saturating_sub(1);
 
     for (at, ordered) in order.into_iter().enumerate() {
-      let to_free_seat = at < last;
+      let stands_last = at == last;
 
       match ordered {
         Ordered::Here => {
-          if !to_free_seat || !lane_full(ask.env, ask.lane) {
+          if lane_takes(lane_closed(ask.env, ask.lane), stands_last) {
             return None;
           }
         }
         Ordered::Placed => {
-          if let Some(code) = self.placed(ask, to_free_seat) {
+          if let Some(code) = self.placed(ask, stands_last) {
             return Some(code);
           }
         }
@@ -1861,23 +1890,23 @@ impl Placement for MachinePlacement {
     None
   }
 
-  /// The set walks `combined_order` as a run walks `order`: by default the placed machine alone, which takes it
-  /// whatever it holds, so the set waits in that machine's line and never falls to this one.
+  /// The set walks `combined_order` as a run walks `order`: by default the placed machine alone, so the set
+  /// waits in that machine's line, which only a machine loaded past its share turns away.
   fn place_set(&self, ask: &SetAsk<'_>) -> Option<u8> {
     let order = self.settings.combined_order().unwrap_or_else(|_| vec![Ordered::Placed]);
     let last = order.len().saturating_sub(1);
 
     for (at, ordered) in order.into_iter().enumerate() {
-      let to_free_seat = at < last;
+      let stands_last = at == last;
 
       match ordered {
         Ordered::Here => {
-          if !to_free_seat || !lane_full(ask.run.env, ask.run.lane) {
+          if lane_takes(lane_closed(ask.run.env, ask.run.lane), stands_last) {
             return None;
           }
         }
         Ordered::Placed => {
-          if let Some(code) = self.placed_set(ask, to_free_seat) {
+          if let Some(code) = self.placed_set(ask, stands_last) {
             return Some(code);
           }
         }

@@ -418,9 +418,9 @@ pub fn main(args: impl IntoIterator<Item = OsString>) -> u8 {
       let lane = if args.narrow { Lane::Narrow } else { Lane::Wide };
 
       match lane_closed(&process_env(), lane) {
-        Some(why) => {
-          println!("{why}");
-          1
+        Some(closed) => {
+          println!("{}", closed.said());
+          closed.code()
         }
         None => 0,
       }

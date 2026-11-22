@@ -3,7 +3,7 @@
 
 use std::path::Path;
 
-use bmo_testbed_core::placement::LOADED_VARIABLE;
+use bmo_testbed_core::placement::{LOADED_EXIT_CODE, LOADED_VARIABLE};
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::queue::{LockWait, take_lock};
@@ -152,8 +152,9 @@ fn the_status_names_the_holder_of_each_seat_held() {
   assert_eq!(lane["holder"], lane["holders"][0]);
 }
 
-// "prints nothing and exits 0 where this machine takes a run of its wide lane now: a seat free, nobody waiting for
-// one, and the machine not loaded; else it prints one line saying why and exits 1"
+// "prints nothing and exits 0 where this machine takes a run of its wide lane now: a seat free, nobody waiting
+// for one, and the machine not loaded; else it prints one line saying why, ending with 1 where every seat is
+// held or waited for and 3 where the machine is loaded"
 #[test]
 fn the_status_says_by_its_code_whether_the_machine_takes_a_wide_run_and_why_not() {
   let dir = tempfile::tempdir().unwrap();
@@ -172,7 +173,7 @@ fn the_status_says_by_its_code_whether_the_machine_takes_a_wide_run_and_why_not(
   let loaded = asked("2", "0");
   let loaded_head = LANES.placed.loaded.split("{load}").next().unwrap();
 
-  assert_eq!(loaded.code, 1, "{}", loaded.err);
+  assert_eq!(loaded.code, i32::from(LOADED_EXIT_CODE), "{}", loaded.err);
   assert!(loaded.out.starts_with(loaded_head) && loaded.out.lines().count() == 1, "{}", loaded.out);
 
   assert_eq!((idle.code, idle.out.as_str()), (0, ""), "{}", idle.err);

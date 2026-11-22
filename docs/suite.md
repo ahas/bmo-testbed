@@ -168,7 +168,11 @@
     hung unit is ended. The unit fails with exit code 124 and its output closes on a line naming the test
     and the limit, so a deployment's gate says which test hung. A limit below the harness's minute takes
     effect at that minute.
-  - A project's check and a declared package check run their own runners, whose own limits stand.
+  - A project's check and a declared package check run their own runners, whose own limits stand. The testbed
+    hands them no limit of its own, since it neither passes words into a script nor edits a project's
+    configuration, so a bound inside one is the project's to set wide enough for a busy machine: a browser test
+    of such a script whose test or hook runs past its bound loses the browser and the server its own file
+    started, the runner's dangling sweep taking them (above).
 - **What fails at the limit runs once more** as any failing unit does (「What failed runs once more」).
 - **A unit that neither writes nor works for the silence limit is ended as hung** (`docs/testbed.md`, 「A holder
   whose command falls silent lets go」): the run watches the pipes it reads the unit's output through, ends

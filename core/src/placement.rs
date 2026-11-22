@@ -139,41 +139,87 @@ pub fn runs_here(env: &Env) -> bool {
 /// loaded, over the lane policy's `loaded_percent`.
 pub const LOADED_VARIABLE: &str = "BMO_TESTBED_LOADED_PERCENT";
 
-/// Why a lane of this machine takes no run now, as the line `status --free` gives: every one of its own seats
-/// held or someone already waiting for one, or the machine loaded (docs/testbed.md, 「A run on another
-/// machine」); none where it takes one. A run walking a placement order passes this machine over then; the
+/// The code `status --free` ends with where the machine takes no run because every seat of the lane is held or
+/// waited for.
+pub const SEATS_EXIT_CODE: u8 = 1;
+
+/// The code `status --free` ends with where the machine takes no run because it is loaded. Taking a run ends
+/// with 0. The placement road reads these codes off the far machine's answer (docs/boundary.md, 「`status`」).
+pub const LOADED_EXIT_CODE: u8 = 3;
+
+/// Why a lane takes no run now, and what a machine standing last in a placement order does about it.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Closed {
+  /// Every seat of the lane is held or someone already waits for one. A run that comes to a machine with
+  /// this answer last in the order waits in its line all the same: the line is what the order is for.
+  Seats,
+  /// The machine's load stands at or above the share of its threads, with the line naming its figures. This
+  /// takes no run wherever the machine stands, since a run sent to a loaded machine takes many times what it
+  /// takes on a calm one.
+  Loaded(String),
+}
+
+impl Closed {
+  /// The line `status --free` says the reason in.
+  pub fn said(&self) -> &str {
+    match self {
+      Self::Seats => &LANES.placed.seats_taken,
+      Self::Loaded(line) => line,
+    }
+  }
+
+  /// The code `status --free` ends with for this reason.
+  pub fn code(&self) -> u8 {
+    match self {
+      Self::Seats => SEATS_EXIT_CODE,
+      Self::Loaded(..) => LOADED_EXIT_CODE,
+    }
+  }
+}
+
+/// Why a lane of this machine takes no run now: every one of its own seats held or someone already waiting for
+/// one, or the machine loaded (docs/testbed.md, 「A run on another machine」); none where it takes one. The
 /// deployment's seat is never one such a run could take.
-pub fn lane_closed(env: &Env, lane: Lane) -> Option<String> {
+pub fn lane_closed(env: &Env, lane: Lane) -> Option<Closed> {
   let lock = lock_path(env, lane);
 
   if lane_seats_held(&lock) >= lane.seats(env) || !read_queue(&lock).waiting.is_empty() {
-    return Some(LANES.placed.seats_taken.clone());
+    return Some(Closed::Seats);
   }
 
   loaded(machine_load()?, machine_threads(), loaded_percent(env))
 }
 
-/// Whether a lane of this machine takes no run now, as `lane_closed` says why.
-pub fn lane_full(env: &Env, lane: Lane) -> bool {
-  lane_closed(env, lane).is_some()
+/// Whether a lane takes a run from a machine standing `last` in a placement order: seats and waiters turn a
+/// run away only where another machine follows, while load turns it away wherever the machine stands. Where
+/// none of the order's machines takes a run, the run runs where it was started.
+pub fn lane_takes(closed: Option<Closed>, last: bool) -> bool {
+  match closed {
+    None => true,
+    Some(Closed::Seats) => last,
+    Some(Closed::Loaded(..)) => false,
+  }
 }
 
-/// The line saying the machine is loaded where `load`, its load average over the last minute, stands at or
-/// above `percent` of its `threads`; none where it stands below.
-pub fn loaded(load: f64, threads: usize, percent: u64) -> Option<String> {
+/// Where the machine is loaded: `load`, its load figure, stands at or above `percent` of its `threads`. The
+/// share of 0 takes any machine for loaded, and the line it carries names its own figures.
+pub fn loaded(load: f64, threads: usize, percent: u64) -> Option<Closed> {
   let float = |count: u64| f64::from(u32::try_from(count).unwrap_or(u32::MAX));
   let bound = float(u64::try_from(threads).unwrap_or(u64::MAX)) * float(percent);
 
-  (load * 100.0 >= bound).then(|| {
-    fill_marks(
-      &LANES.placed.loaded,
-      &[
-        ("load", &format!("{load:.2}")),
-        ("threads", &threads.to_string()),
-        ("percent", &percent.to_string()),
-      ],
-    )
-  })
+  (load * 100.0 >= bound).then(|| Closed::Loaded(loaded_line(load, threads, percent)))
+}
+
+/// The line naming a machine's load figures in the words the policy holds.
+fn loaded_line(load: f64, threads: usize, percent: u64) -> String {
+  fill_marks(
+    &LANES.placed.loaded,
+    &[
+      ("load", &format!("{load:.2}")),
+      ("threads", &threads.to_string()),
+      ("percent", &percent.to_string()),
+    ],
+  )
 }
 
 /// The share of the machine's threads, in percent, at or above which its load makes it loaded: the lane
@@ -185,10 +231,20 @@ pub fn loaded_percent(env: &Env) -> u64 {
   }
 }
 
-// The machine's load average over the last minute, the first figure the kernel writes in /proc/loadavg; none
-// where it does not read, which counts as no load.
+// The machine's load figure; none where it does not read, which counts as no load.
 fn machine_load() -> Option<f64> {
-  std::fs::read_to_string("/proc/loadavg").ok()?.split_whitespace().next()?.parse().ok()
+  load_figure(&std::fs::read_to_string("/proc/loadavg").ok()?)
+}
+
+/// The larger of the first two figures `written` names, the last-minute and last-five-minute averages the
+/// kernel writes in /proc/loadavg: a minute that has only just eased off does not stand for a calm machine.
+/// None where neither reads.
+pub fn load_figure(written: &str) -> Option<f64> {
+  written
+    .split_whitespace()
+    .take(2)
+    .map_while(|figure| figure.parse::<f64>().ok())
+    .reduce(f64::max)
 }
 
 static PLACED_RUNS: AtomicU64 = AtomicU64::new(0);

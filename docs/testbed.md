@@ -329,21 +329,24 @@ flowchart TD
   name, reached over `ssh`, or the placement endpoint's answer; with neither, or an endpoint that does
   not answer, the run stays on the machine it was started on.
 - **The settings put the machines in order,** this machine among them (`docs/boundary.md`, 「The placed
-  machine」, `order`). A run that can be placed goes to the first machine in the order that takes a run
-  now: a seat of its lane free, nobody waiting for one, and the machine not loaded (below). It falls to the
-  next only where the machine takes none. The last machine in the order takes it whatever it holds, and the
-  run waits in that machine's line. So the order alone says which machine's seats are used first, and which
-  machine a run waits on once every machine is full.
-- **A loaded machine takes no run while another machine follows it in the order.** A machine is loaded
-  where its load average over the last minute, as the kernel counts it, stands at or above a share of its
-  threads: `loaded_percent` in the lane policy, seventy-five, and `BMO_TESTBED_LOADED_PERCENT` names
-  another whole number for a machine or a test. The seats count the testbed's own commands alone, and a
-  machine that carries other work besides, a fleet of agents or a person's desktop, can stand with a seat
-  free while every thread is busy; a run sent there takes many times what it takes on an idle machine, and
-  a test bounded in time fails there where it passes elsewhere. A machine reads its own load; the placed
-  machine answers for its own through `status --free`, whose line saying why it takes no run the caller
-  passes on. A loaded machine still takes a run that comes to it last in the order, and a run already
-  there keeps its seat.
+  machine」, `order`). A run that can be placed goes to the first machine in the order that takes a run now:
+  a seat of its lane free with nobody waiting for one, or every seat held or waited for while the machine
+  stands last in the order, and the machine not loaded either way (below). It falls to the next only where the
+  machine takes none, and a run no machine of the order takes runs where it was started, in this machine's
+  line. So the order says whose seats are used first, where a run waits behind a machine that is merely full,
+  and where a loaded machine sends it back instead.
+- **A loaded machine takes no run wherever it stands in the order.** A machine is loaded where its load
+  figure, the larger of the last-minute and last-five-minute averages as the kernel counts them, stands at or
+  above a share of its threads: `loaded_percent` in the lane policy, sixty-seven, and
+  `BMO_TESTBED_LOADED_PERCENT` names another whole number for a machine or a test. The share answers to what a
+  seat asks of the machine: a run in the wide lane expects a seat's share of the threads, one third of them
+  with three seats, so a machine already two thirds loaded has less than one run's share to give. The seats
+  count the testbed's own commands alone, and a machine that carries other work besides, a fleet of agents or a
+  person's desktop, can stand with a seat free while every thread is busy; a run sent there takes many times
+  what it takes on a calm machine, and a test bounded in time fails there where it passes elsewhere. A machine
+  reads its own load; the placed machine answers for its own through `status --free`, whose code names the
+  reason and whose line the caller passes on. A run already placed on a machine keeps its seat there whatever
+  its load becomes.
 - **A placed machine is never passed over for being out of reach or behind:** a run that comes to it
   waits for it to answer and brings its testbed to the live release (below), and where neither can be
   had it ends as not run rather than running here. What runs on this machine is what the order sends
@@ -359,10 +362,11 @@ flowchart TD
 - **A change check over several checkouts is placed whole as one set** (`docs/checks.md`, 「The change
   check over several checkouts」): every checkout laid in one bench there at the place it has under this
   machine's home, the set run there as that machine's change check in one wide seat of its line. It goes
-  by the settings' `combined_order`, whose default is the placed machine alone, so a busy placed machine
-  is waited for in its line and the set never falls to this machine; it runs here only where that order
-  names this machine or the settings name no placed machine at all, and the placement endpoint refuses it
-  rather than running it here (`docs/boundary.md`, 「Placement」).
+  by the settings' `combined_order`, whose default is the placed machine alone, so a placed machine with
+  every seat of the lane held or waited for is waited for in its line all the same; a loaded placed machine
+  turns the set away and it is checked here, where it was started. It runs here too where that order names
+  this machine or the settings name no placed machine at all, and the placement endpoint refuses it rather
+  than running it here (`docs/boundary.md`, 「Placement」).
 - **What stays here, whatever the order says:**
   - a run started inside a turn already held, since its holder's seat is here and it stands in it;
   - a run inside a deployment's or a whole run's unit, since those hold their own place in this

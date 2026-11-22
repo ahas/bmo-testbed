@@ -402,10 +402,10 @@
 - **Where the settings name a placed machine, it runs there alone** (`docs/boundary.md`, 「Placement」,
   `combined_order`): the whole set goes there as one run, every checkout laid in one bench at the place it
   has under this machine's home, so the checkouts stand there as they stand to one another here and a path
-  one names to another resolves there as it does here. It waits in that machine's line however long that
-  takes, and runs on this machine only where the placed machine's settings name this machine in
-  `combined_order`. Where the settings name no placed machine, the set runs on this machine, each checkout
-  where it stands.
+  one names to another resolves there as it does here. While that machine is calm it waits in its line however
+  long that takes, and it runs on this machine where the placed machine's settings name this machine in
+  `combined_order` or where the placed machine is loaded past its share. Where the settings name no placed
+  machine, the set runs on this machine, each checkout where it stands.
 - **Every line of a checkout's check names its repository:** the heading of its change, each step's line
   as the step ends, printed as it ends, what failed under a failing step, the line a running step says every
   minute, and its own log's line, each opening with the name of the repository its declaration gives. The

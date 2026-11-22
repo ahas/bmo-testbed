@@ -45,6 +45,7 @@ release. The version rules at the end are over this document.
 | 0 | Done, or passed |
 | 1 | Ran and failed: a test, a check, a step, a deployment |
 | 2 | Refused: words that do not read, a declaration that does not read or names another major, a change that cannot be read, a refusal a verb names |
+| 3 | `status --free` only: the machine is loaded past its share, so it takes no run (「`status`」) |
 | 75 | Not run: the harness it waited for went away before the turn came, or a placed machine dropped the run. Run the same command again |
 | 124 | Ended as hung: the command holding a lane's turn neither wrote nor worked for the silence limit (`docs/testbed.md`, 「A holder whose command falls silent lets go」) |
 | any other | `run` only: the command's own exit code, passed through |
@@ -159,11 +160,10 @@ bmo-testbed status [--json | --free [--narrow]]
   `pid` alone, every other field null.
 - **A close entry** carries `scope`, `checkout`, `askedAt`, `heldAt` and `pid` as a queue entry does.
 - **`--free`** prints nothing and exits 0 where this machine takes a run of its wide lane now: a seat free,
-  nobody waiting for one, and the machine not loaded (`docs/testbed.md`, 「A run on another machine」); else
-  it prints one line saying why, every seat held or waited for or the load against the machine's threads,
-  and exits 1. With `--narrow`, the same of the narrow lane. A machine that places a run on a
-  machine its order does not name last asks that machine this, of the run's lane, before the run goes
-  (「Placement」).
+  nobody waiting for one, and the machine not loaded (`docs/testbed.md`, 「A run on another machine」). Where it
+  takes none it prints one line saying why and ends on the code of that reason: 1 where every seat is held or
+  waited for, 3 where the machine is loaded past its share. With `--narrow`, the same of the narrow lane. Every
+  machine a placement order names is asked this, of the run's lane, before the run goes (「Placement」).
 
 ### `close-line`
 
@@ -571,7 +571,7 @@ verb's own name, and each noun takes what that verb takes.
 | `BMO_TESTBED_LOCK` | the turn | Another first wide seat's lock, the further seats and the narrow lane's beside it |
 | `BMO_TESTBED_SEATS` | the turn | The wide lane's seats, over the lane policy's; anything that is not a positive whole number means the policy's |
 | `BMO_TESTBED_SEAT_FREE_GB` | the turn | The gigabytes of available memory a seat beside a held one needs, over the lane policy's; anything that is not a whole number means the policy's |
-| `BMO_TESTBED_LOADED_PERCENT` | the placement, `status --free` | The share of the machine's threads, in percent, at or above which its load average over the last minute makes it loaded, over the lane policy's; anything that is not a whole number of 0 or more means the policy's |
+| `BMO_TESTBED_LOADED_PERCENT` | the placement, `status --free` | The share of the machine's threads, in percent, at or above which its load figure, the larger of the last-minute and last-five-minute averages, makes it loaded, over the lane policy's; anything that is not a whole number of 0 or more means the policy's |
 | `BMO_TESTBED_HELD` | the turn | Set by a holder for its children: its process number. A command finding it holding any seat of its lane runs at once, in the holder's seats |
 | `BMO_TESTBED_FRONT` | the turn | `1` stands the caller at the front, unless it is inside a harness's call |
 | `BMO_TESTBED_NEXT` | the turn | `1` stands the caller next after the front |
@@ -910,16 +910,19 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   seat of its lane free, nobody waiting for one and the machine not loaded (`docs/testbed.md`, 「A run on
   another machine」), and falls to the next only where the machine takes none. This machine's seats are
   read from its lanes and its load from its kernel; the placed machine is asked its `status --free`, of the
-  run's lane, before its bench is made ready, and no answer saying it takes one counts as full, the line it
-  gave saying why passed on. The last machine in the order takes the run whatever it holds, and the run
-  waits in its line. A placed machine that cannot be reached is waited for, and one whose testbed is not
+  run's lane, before its bench is made ready; an answer that does not say the machine takes one counts as one
+  saying every seat is held or waited for, the line it gave saying why passed on. A machine full of seats takes
+  the run only where it stands last in the order, and then waits for it in its line; a machine loaded past its
+  share takes none wherever it stands. Where no machine of the order takes the run, it runs where it was
+  started. A placed machine that cannot be reached is waited for, and one whose testbed is not
   this machine's live testbed release is brought to it, never passed over (「The placed machine」); where neither can be had,
   the run ends as not run, exit code 75, and sends an event (「Events」). The placement endpoint chooses
   for itself and is told nothing of the order.
 - **A change check over several checkouts is placed as one set** wherever the settings name a placed
-  machine, and then never falls back to this machine. It walks the placed machine's `combined_order`
-  (「The placed machine」), whose default is the placed machine alone, so it waits in that machine's line
-  however long that takes, and goes to the machines in that order as any run walks `order`. Where the
+  machine that takes it. It walks the placed machine's `combined_order` (「The placed machine」), whose default
+  is the placed machine alone, so while that machine is calm it waits in its line however long that takes, and
+  the set goes on to the machines that order names after it as any run walks `order`, a loaded machine turning
+  it away as any run. Where the
   machine cannot be reached within the wait, or its testbed cannot be brought to the live release, it ends
   as not run, exit code 75, on the line naming the machine, as any placed run does. It runs here only where
   `combined_order` names `local` and the walk comes to it.

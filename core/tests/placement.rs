@@ -6,7 +6,8 @@
 use std::path::Path;
 
 use bmo_testbed_core::placement::{
-  LOADED_VARIABLE, PlaceAsk, PlacedEntry, PlacedRun, loaded, loaded_percent, read_placed,
+  Closed, LOADED_VARIABLE, PlaceAsk, PlacedEntry, PlacedRun, lane_takes, load_figure, loaded,
+  loaded_percent, read_placed,
 };
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
@@ -98,15 +99,47 @@ fn an_entry_whose_process_is_gone_is_left_out_and_taken_away() {
   assert_eq!(read_placed(&narrow).len(), 1);
 }
 
-// "a machine is loaded where its load average over the last minute stands at or above a share of its threads":
-// the line names the load, the threads and the share, and a load just under the bound is no load
+// "a machine is loaded where its load figure stands at or above a share of its threads": the line the reason
+// carries names the load, the threads and the share, and a load just under the bound is no load
 #[test]
 fn a_machine_is_loaded_from_its_share_of_threads_on() {
-  let said = fill_marks(&LANES.placed.loaded, &[("load", "12.00"), ("threads", "16"), ("percent", "75")]);
+  // Sixty-seven percent of sixteen threads is 10.72, a hair under the two thirds one seat of a three-seat
+  // wide lane asks for.
+  let said = fill_marks(&LANES.placed.loaded, &[("load", "10.72"), ("threads", "16"), ("percent", "67")]);
 
-  assert_eq!(loaded(12.0, 16, 75), Some(said));
-  assert_eq!(loaded(11.99, 16, 75), None);
+  assert_eq!(loaded(10.72, 16, 67), Some(Closed::Loaded(said)));
+  assert_eq!(loaded(10.71, 16, 67), None);
   assert!(loaded(0.0, 16, 0).is_some(), "a share of 0 makes any machine loaded");
+}
+
+// "its load figure, the larger of its last-minute and last-five-minute averages": the kernel's line is read for
+// those two figures alone, and a line that gives neither reads as no load
+#[test]
+fn the_load_figure_is_the_larger_of_the_first_two_averages() {
+  assert_eq!(load_figure("11.30 8.90 13.30 1/234 5678"), Some(11.3));
+  assert_eq!(load_figure("8.90 11.30 13.30 1/234 5678"), Some(11.3));
+  assert_eq!(load_figure("2.00 1.00"), Some(2.0));
+  assert_eq!(load_figure("0.50"), Some(0.5));
+  assert_eq!(load_figure("many 1.00"), None);
+  assert_eq!(load_figure(""), None);
+}
+
+// "a machine whose every seat is held or waited for takes a run only from the last of the order, and a loaded
+// machine takes none wherever it stands"; a lane that closes for no reason takes a run wherever it stands
+#[test]
+fn seats_turn_a_run_away_only_before_the_last_machine_and_load_turns_it_away_everywhere() {
+  assert!(lane_takes(None, false) && lane_takes(None, true));
+  assert!(
+    !lane_takes(Some(Closed::Seats), false),
+    "a machine with others behind it passes the run on"
+  );
+  assert!(lane_takes(Some(Closed::Seats), true), "the last machine waits the run in its line");
+  let loaded = || Some(Closed::Loaded("loaded".to_owned()));
+
+  assert!(
+    !lane_takes(loaded(), false) && !lane_takes(loaded(), true),
+    "a loaded machine takes no run wherever it stands"
+  );
 }
 
 // "`loaded_percent` in the lane policy, and `BMO_TESTBED_LOADED_PERCENT` names another whole number"; anything

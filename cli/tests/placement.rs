@@ -43,7 +43,9 @@ use bmo_testbed_cli::placement::{
   ReadyBench, STANDING_VARIABLE, machine_hook, reachable_remote,
 };
 use bmo_testbed_core::events::Hook;
-use bmo_testbed_core::placement::{LOADED_VARIABLE, PlaceAsk, PlacedRun, Placement, read_placed};
+use bmo_testbed_core::placement::{
+  LOADED_EXIT_CODE, LOADED_VARIABLE, PlaceAsk, PlacedRun, Placement, read_placed,
+};
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::policy::prune::PRUNE;
@@ -2185,12 +2187,11 @@ fn a_run_goes_to_the_first_machine_in_the_order_with_a_seat_free_and_falls_to_th
   assert!(placed.err.contains(&running), "{}", placed.err);
 }
 
-// "a loaded machine takes no run while another machine follows it in the order ... the placed machine answers
-// for its own through `status --free`, whose line saying why it takes no run the caller passes on. A loaded
-// machine still takes a run that comes to it last in the order": a loaded placed machine passes the run on, a
-// loaded machine here sends it to the placed one, and the last takes it however loaded
+// "the placed machine answers for its own through `status --free`, whose line saying why it takes no run the
+// caller passes on ... a loaded machine takes no run wherever it stands in the order, and a run no machine of
+// the order takes runs where it was started"
 #[test]
-fn a_loaded_machine_takes_no_run_while_another_follows_it_and_the_last_takes_it_whatever_its_load() {
+fn a_loaded_machine_takes_no_run_wherever_it_stands_and_a_run_none_takes_runs_where_it_stands() {
   let dir = tempfile::tempdir().unwrap();
   let dir = std::fs::canonicalize(dir.path()).unwrap();
   let repo = dir.join("repo");
@@ -2235,10 +2236,12 @@ fn a_loaded_machine_takes_no_run_while_another_follows_it_and_the_last_takes_it_
   assert_eq!(sent.code, 7, "{}\n{}", sent.out, sent.err);
   assert!(sent.err.contains(&running), "{}", sent.err);
 
+  // The same machine stands last in the order and turns the run away there too, so it is this machine's.
   let last = place(&busy, &format!("[\"{here}\", \"machine-2\"]"), "0");
 
   assert_eq!(last.code, 7, "{}\n{}", last.out, last.err);
-  assert!(last.err.contains(&running) && !last.err.contains(&passed_on), "{}", last.err);
+  assert!(last.err.contains(&passed_on), "{}", last.err);
+  assert!(!last.err.contains(&running), "{}", last.err);
 }
 
 // "a failing log a placed run keeps there is brought here": a far run that fails naming, under a repository's
@@ -2558,8 +2561,8 @@ fn a_machine_out_of_reach_answers_broken_whether_or_not_begun_there_and_nothing_
 }
 
 // The stand-in `ssh` with every `placed` line written down, one a line, and ended there; `status --free`
-// answers the machine full, so a run that may fall to this machine would.
-fn set_ssh(dir: &Path) -> (PathBuf, PathBuf) {
+// answers with `free`, the code for a reason the machine gives, so a run that may fall to this machine would.
+fn set_ssh(dir: &Path, free: &str) -> (PathBuf, PathBuf) {
   let ssh = dir.join("ssh");
   let lines = dir.join("placed-lines");
 
@@ -2567,7 +2570,7 @@ fn set_ssh(dir: &Path) -> (PathBuf, PathBuf) {
     &SSH.replacen(
       "shift\nexec",
       &format!(
-        "shift\ncase \"$*\" in *\" placed \"*) echo \"$*\" >> {}; exit 0 ;; *\"status --free\"*) exit 1 ;; esac\nexec",
+        "shift\ncase \"$*\" in *\" placed \"*) echo \"$*\" >> {}; exit 0 ;; *\"status --free\"*) {free} ;; esac\nexec",
         lines.display()
       ),
       1,
@@ -2579,15 +2582,15 @@ fn set_ssh(dir: &Path) -> (PathBuf, PathBuf) {
 
 // "a change check over several checkouts is placed as one set: every checkout laid in one bench at the place it
 // has under this machine's home, the set run there by one `ssh` command naming each checkout by its path from
-// the first's bench and its since by the commit, and by default never falling to this machine however full the
-// placed machine is"
+// the first's bench and its since by the commit, and by default waiting in the placed machine's line however
+// many of its seats are held"
 #[test]
-fn a_set_of_checkouts_is_placed_as_one_run_laid_as_here_and_never_falls_to_this_machine() {
+fn a_set_of_checkouts_is_placed_as_one_run_laid_as_here_and_waits_in_a_full_placed_machine() {
   let dir = tempfile::tempdir().unwrap();
   let dir = std::fs::canonicalize(dir.path()).unwrap();
   let alpha = dir.join("work/alpha");
   let beta = dir.join("base/beta");
-  let (ssh, lines) = set_ssh(&dir);
+  let (ssh, lines) = set_ssh(&dir, "exit 1");
 
   settle(&dir, &ssh, "stand");
   checkout(&alpha, "testbed = 0\n");
@@ -2633,6 +2636,29 @@ fn a_set_of_checkouts_is_placed_as_one_run_laid_as_here_and_never_falls_to_this_
   );
 }
 
+// "a loaded machine takes no run wherever it stands in the order, and a run no machine of the order takes runs
+// where it was started": the set whose placed machine answers loaded is checked here, though the settings name
+// no other machine for it
+#[test]
+fn a_set_turns_away_a_loaded_placed_machine_and_is_checked_where_it_was_started() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let alpha = dir.join("alpha");
+  let beta = dir.join("beta");
+  let loaded = i32::from(LOADED_EXIT_CODE).to_string();
+  let (ssh, lines) = set_ssh(&dir, &format!("exit {loaded}"));
+
+  settle(&dir, &ssh, "stand");
+  checkout(&alpha, "testbed = 0\n");
+  checkout(&beta, "testbed = 0\n");
+
+  let done = on_machine(&alpha, &dir, &["check", "--checkout", ".", "--checkout", "../beta"]);
+
+  assert_eq!(done.code, 0, "{}\n{}", done.out, done.err);
+  assert!(checked_here(&done), "{}", done.out);
+  assert!(!lines.exists(), "a loaded machine was handed the set");
+}
+
 // Whether both checkouts of the set were checked here, by the lines naming each one's check.
 fn checked_here(done: &Ran) -> bool {
   ["alpha: check:", "beta: check:"]
@@ -2649,7 +2675,7 @@ fn a_set_runs_here_where_no_placed_machine_is_named_and_is_refused_where_one_wou
   let dir = std::fs::canonicalize(dir.path()).unwrap();
   let alpha = dir.join("alpha");
   let beta = dir.join("beta");
-  let (ssh, lines) = set_ssh(&dir);
+  let (ssh, lines) = set_ssh(&dir, "exit 1");
   let set = ["check", "--checkout", ".", "--checkout", "../beta"];
 
   checkout(&alpha, "testbed = 0\n\n[runner]\nlocal_variables = [\"STAND_LOCAL\"]\n");
