@@ -738,6 +738,13 @@ keep (`docs/deploy.md`, 「The unit links」).
   starts again.
 - **Writing the record never changes a verb's outcome.** A record that cannot be opened or written is
   said on one line of standard error and the verb goes on.
+- **Every opener and every writer waits its turn rather than being refused.** The record is kept in SQLite's
+  write-ahead-log mode, set as the file is first made, and turning a fresh file into that mode takes it whole:
+  SQLite answers busy at once, without waiting, to a connection whose wait could deadlock with another
+  doing the same. So whoever opens the record sets it up holding an exclusive lock on the file
+  `record.sqlite.lock` beside it, one opener after another, and every write takes the record's write lock as its
+  transaction begins, waiting as long as another writer holds it, rather than reading first and being refused
+  when it comes to write.
 - **What it keeps:** test runs, deployments, their log lines, restarts and gates' passes for the policy's days, and
   events for the policy's window; older ones go as the next one is written.
 
@@ -833,7 +840,9 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
 
 - **A lane's change is seen by the service itself,** which reads the lanes every second of the
   policy's and writes a `queue.changed` event where a holder, a line or a placed run differs from the
-  last reading.
+  last reading. A reading whose events could not be written is said on standard error and does not become
+  the last reading, so the next reading writes the change again, as the lanes then stand; no change is
+  lost to a record that could not be written for a moment.
 - **A reader resumes** with `Last-Event-ID` or `after`, and narrows with `kinds`, a comma-separated
   list. The window is the policy's; a resume from before it answers 410 `gone`.
 - **To `Accept: application/json`** the same events are a page by `after` and `limit`.

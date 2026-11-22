@@ -17,7 +17,7 @@ use bmo_testbed_client::{
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::record::RECORD;
 use bmo_testbed_core::queue::{now_ms, process_alive};
-use rusqlite::{Connection, OptionalExtension, Transaction, params};
+use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
@@ -81,6 +81,15 @@ const SCHEMA: &str = "
 /// The record's file under a data root.
 pub fn record_path(data_root: &Path) -> PathBuf {
   data_root.join("testbed").join(&RECORD.dir).join(&RECORD.file)
+}
+
+// The file whose exclusive lock an opener holds while it sets the record up: the record's own path with
+// `.lock` after it.
+fn setup_lock_path(record: &Path) -> PathBuf {
+  let mut name = record.as_os_str().to_owned();
+
+  name.push(".lock");
+  PathBuf::from(name)
 }
 
 /// Says on standard error that the record was not written, and nothing more: a verb never stops over it.
@@ -157,13 +166,31 @@ impl Record {
     let connection = Connection::open(path).map_err(failed)?;
 
     connection.busy_timeout(LOCK_WAIT).map_err(failed)?;
+
+    // Turning a fresh file into write-ahead-log mode takes it whole, and SQLite answers busy at once, past the
+    // busy timeout, to a connection whose wait could deadlock with another doing the same; so the record is set
+    // up by one opener at a time, under an exclusive lock on the file beside it, held until the schema stands.
+    let setup = std::fs::OpenOptions::new()
+      .create(true)
+      .truncate(false)
+      .write(true)
+      .open(setup_lock_path(path))
+      .map_err(failed)?;
+
+    setup.lock().map_err(failed)?;
     connection.execute_batch(SCHEMA).map_err(failed)?;
+    drop(setup);
 
     Ok(Self { connection })
   }
 
+  // A write's transaction takes the write lock as it begins, waiting the busy timeout for another writer, so it is
+  // never refused at once for having read before it wrote.
   fn writing<T>(&mut self, write: impl FnOnce(&Transaction<'_>) -> Result<T, String>) -> Result<T, String> {
-    let transaction = self.connection.transaction().map_err(failed)?;
+    let transaction = self
+      .connection
+      .transaction_with_behavior(TransactionBehavior::Immediate)
+      .map_err(failed)?;
     let written = write(&transaction)?;
 
     prune(&transaction, now_ms())?;

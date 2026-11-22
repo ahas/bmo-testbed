@@ -24,7 +24,7 @@ use bmo_testbed_core::turn::Env;
 use bmo_testbed_record::Record;
 use serde::Serialize;
 
-pub use queues::{queue_page, watch_queues};
+pub use queues::{QueueWatch, queue_page, watch_queues};
 
 /// What the service stands on: the data root whose record it reads, its token, the environment the lanes'
 /// locks are found in, and how often an open stream asks the record for what was written since.

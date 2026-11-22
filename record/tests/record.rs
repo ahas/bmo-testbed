@@ -407,3 +407,34 @@ fn the_newest_ended_deployment_of_a_commit_passes_over_one_still_running() {
   );
   assert_eq!(record.newest_ended_deployment("another", "abc123").unwrap(), None);
 }
+
+// "whoever opens the record sets it up holding an exclusive lock on the file `record.sqlite.lock` beside it, one
+// opener after another, and every write takes the record's write lock as its transaction begins": a fresh record
+// opened by several at once, each writing or reading at once, refuses none of them.
+#[test]
+fn a_fresh_record_opened_by_several_at_once_refuses_none() {
+  for _ in 0..25 {
+    let dir = tempfile::tempdir().unwrap();
+    let answered: Vec<Result<(), String>> = std::thread::scope(|scope| {
+      let openers: Vec<_> = (0..8_i64)
+        .map(|at| {
+          let path = dir.path();
+
+          scope.spawn(move || {
+            let mut record = Record::open(path)?;
+
+            match at % 2 {
+              0 => record.post_event(EventKind::QueueChanged, &at).map(|_| ()),
+              _ => record.last_event_id().map(|_| ()),
+            }
+          })
+        })
+        .collect();
+
+      openers.into_iter().map(|opener| opener.join().unwrap()).collect()
+    });
+
+    assert!(answered.iter().all(Result::is_ok), "{answered:?}");
+    assert_eq!(kinds(&Record::open(dir.path()).unwrap(), 0).len(), 4);
+  }
+}

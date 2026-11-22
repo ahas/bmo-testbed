@@ -14,7 +14,7 @@ use bmo_testbed_core::placement::{PlaceAsk, PlacedRun};
 use bmo_testbed_core::queue::now_ms;
 use bmo_testbed_core::turn::{Env, Lane, TurnAsk, take_turn};
 use bmo_testbed_record::Record;
-use bmo_testbed_service::{Ground, router, watch_queues};
+use bmo_testbed_service::{Ground, QueueWatch, router, watch_queues};
 use tokio::task::JoinHandle;
 
 const TOKEN: &str = "the-service-token";
@@ -332,4 +332,47 @@ async fn the_stream_carries_each_event_written_after_the_resume() {
     .unwrap();
 
   assert_eq!(unknown.status().as_u16(), 400);
+}
+
+// "A reading whose events could not be written is said on standard error and does not become the last reading,
+// so the next reading writes the change again": a lane's change met by a record that cannot be opened is written
+// by the next look once it can.
+#[tokio::test]
+async fn a_lane_change_the_record_could_not_take_is_written_by_the_next_look() {
+  let dir = tempfile::tempdir().unwrap();
+  let lock = dir.path().join("wide.lock");
+  let ground = Arc::new(Ground {
+    data_root: dir.path().to_path_buf(),
+    token: TOKEN.to_owned(),
+    env: Env::from([("BMO_TESTBED_LOCK".to_owned(), lock.to_string_lossy().into())]),
+    event_poll: Duration::from_millis(10),
+  });
+  let mut watch = QueueWatch::new(ground);
+  // A file where the record's folder belongs, so the record cannot be opened.
+  let blocked = dir.path().join("testbed");
+
+  std::fs::write(&blocked, "").unwrap();
+
+  let turn = take_turn(&TurnAsk {
+    command: "a check".to_owned(),
+    lane: Lane::Wide,
+    say: &|_| {},
+    path: Some(lock),
+    env: Env::new(),
+    checkout: "/checkout".to_owned(),
+    poll: Some(Duration::from_millis(5)),
+    notice_seconds: None,
+  });
+
+  assert!(turn.had());
+  assert!(watch.look().await.is_err(), "the record cannot be opened");
+
+  std::fs::remove_file(&blocked).unwrap();
+  watch.look().await.unwrap();
+
+  let written = Record::open(dir.path()).unwrap().last_event_id().unwrap();
+
+  assert_eq!(written, 1, "the change is written once the record takes it");
+  watch.look().await.unwrap();
+  assert_eq!(Record::open(dir.path()).unwrap().last_event_id().unwrap(), 1, "and only once");
 }

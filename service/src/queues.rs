@@ -78,42 +78,71 @@ pub(crate) async fn queues(
   Ok(Json(queue_page(&ground.env, &asked)))
 }
 
+/// The lanes as the watch last read them, and the look that writes a `queue.changed` event for each lane that
+/// differs from that reading.
+pub struct QueueWatch {
+  ground: Arc<Ground>,
+  last: Vec<Queue>,
+}
+
+impl QueueWatch {
+  /// A watch whose baseline is the lanes as they stand now, which writes nothing.
+  pub fn new(ground: Arc<Ground>) -> Self {
+    let last = reading(&ground.env);
+
+    Self { ground, last }
+  }
+
+  /// One look: a `queue.changed` event written for each lane whose holders, line or placed runs differ from the
+  /// last reading, and this reading taken as the last only once they are written. Where they could not be, why;
+  /// the next look writes the change again, as the lanes then stand.
+  pub async fn look(&mut self) -> Result<(), String> {
+    let now = reading(&self.ground.env);
+    let changed: Vec<Queue> = now
+      .iter()
+      .zip(&self.last)
+      .filter(|(now, last)| now != last)
+      .map(|(now, _)| now.clone())
+      .collect();
+
+    if !changed.is_empty() {
+      let data_root = self.ground.data_root.clone();
+
+      tokio::task::spawn_blocking(move || {
+        let mut record = Record::open(&data_root)?;
+
+        changed
+          .iter()
+          .try_for_each(|queue| record.post_event(EventKind::QueueChanged, queue).map(|_| ()))
+      })
+      .await
+      .map_err(|why| why.to_string())??;
+    }
+
+    self.last = now;
+    Ok(())
+  }
+}
+
+// Both lanes as they stand.
+fn reading(env: &Env) -> Vec<Queue> {
+  Lane::ALL.iter().map(|lane| queue_of(*lane, env)).collect()
+}
+
 /// Reads the lanes every interval for as long as the service runs, and writes a `queue.changed` event for
-/// each lane whose holders, line or placed runs differ from its last reading. The lanes as they stand when it
-/// is called are the baseline, which writes nothing.
+/// each lane whose holders, line or placed runs differ from its last reading (docs/boundary.md, 「The event
+/// stream」). The lanes as they stand when it is called are the baseline, which writes nothing; a look whose
+/// events could not be written is said, and the next look writes the change again.
 pub fn watch_queues(ground: Arc<Ground>, every: Duration) -> impl Future<Output = ()> {
-  let reading = |env: &Env| -> Vec<Queue> { Lane::ALL.iter().map(|lane| queue_of(*lane, env)).collect() };
-  let mut last = reading(&ground.env);
+  let mut watch = QueueWatch::new(ground);
 
   async move {
     loop {
       tokio::time::sleep(every).await;
 
-      let now = reading(&ground.env);
-      let changed: Vec<Queue> = now
-        .iter()
-        .zip(&last)
-        .filter(|(now, last)| now != last)
-        .map(|(now, _)| now.clone())
-        .collect();
-
-      if !changed.is_empty() {
-        let data_root = ground.data_root.clone();
-        let posted = tokio::task::spawn_blocking(move || {
-          let mut record = Record::open(&data_root)?;
-
-          changed
-            .iter()
-            .try_for_each(|queue| record.post_event(EventKind::QueueChanged, queue).map(|_| ()))
-        })
-        .await;
-
-        if let Ok(Err(why)) = posted {
-          say_unwritten(&why);
-        }
+      if let Err(why) = watch.look().await {
+        say_unwritten(&why);
       }
-
-      last = now;
     }
   }
 }
