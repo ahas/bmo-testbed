@@ -17,8 +17,8 @@ use bmo_testbed_suite::fence::{
   fence_unit, fence_units, fenced_build_jobs, other_fence_listed,
 };
 use bmo_testbed_suite::run::{
-  SuiteWords, SweepCount, ask_of, file_groups, runner_of, script_runner, sweep_ending, unit_account,
-  verdict_line,
+  SuiteWords, SweepCount, ask_of, file_groups, holds_browser, runner_of, script_runner, sweep_ending,
+  unit_account, verdict_line,
 };
 use bmo_testbed_suite::sweep::{SweepPlan, largest_first, sweep};
 use bmo_testbed_suite::unit::UnitRun;
@@ -180,6 +180,23 @@ mod folders {
     assert_eq!(group.dir, Path::new("tests/ts"));
     assert!(passes(&root.join(&group.dir), &command));
     assert!(!passes(root, &group.language.test_command(&file, &[]).unwrap()));
+  }
+
+  // "a browser file's runner is handed no per-test limit, the testbed's or the runner's own" (docs/suite.md,
+  // 「How long a unit and a test may run」): a command running from a folder below the repository's root holds
+  // its files as paths from that folder, and the browser file among them is known by its path from the root.
+  #[test]
+  fn the_browser_file_of_a_group_running_below_the_root_is_found_from_the_root() {
+    let named = "client/tests/browser/screen.test.ts";
+    let drives = |file: &str| file == named;
+
+    assert!(holds_browser(
+      Path::new("client"),
+      &words(&["tests/unit/a.test.ts", "tests/browser/screen.test.ts"]),
+      &drives
+    ));
+    assert!(!holds_browser(Path::new("client"), &words(&["tests/unit/a.test.ts"]), &drives));
+    assert!(holds_browser(Path::new(""), &words(&[named]), &drives));
   }
 }
 

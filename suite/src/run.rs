@@ -134,6 +134,20 @@ pub struct FileGroup {
   pub files: Vec<String>,
 }
 
+/// The words that stand a runner's own per-test limit over these files, laid after the caller's `words`
+/// (docs/suite.md, 「How long a unit and a test may run」): none where the run drives a browser among them,
+/// since a runner that ends one test of such a file takes down the browser every later test of it shares;
+/// the language's limit words otherwise. A command handed no limit word keeps none of its own.
+pub fn limit_words(language: &dyn Language, words: &[String], seconds: u64, browser: bool) -> Vec<String> {
+  if browser { Vec::new() } else { language.per_test_limit(words, seconds) }
+}
+
+/// Whether one of these test files, each a path from `within` a folder of the repository, is one the run
+/// drives a browser in, as `drives` answers for a path from the repository's root.
+pub fn holds_browser(within: &Path, files: &[String], drives: &dyn Fn(&str) -> bool) -> bool {
+  files.iter().any(|file| drives(&within.join(file).to_string_lossy()))
+}
+
 /// Test files, each a path from the repository's root, gathered into one group for each language that runs
 /// them and folder it runs them from (docs/suite.md, 「Which files run」): the languages in the order they are
 /// declared, the folders in their own order. A file no declared language runs is in none.
@@ -325,8 +339,8 @@ pub fn test_files(repo: &Repository) -> Vec<String> {
   repository_paths(repo, found)
 }
 
-// Whether a test file is one the declaration names as a browser file.
-fn browser_file(test: &Test, file: &str) -> bool {
+/// Whether a test file, as a path from the repository's root, is one the declaration names as a browser file.
+pub(crate) fn browser_file(test: &Test, file: &str) -> bool {
   test.browser.iter().any(|glob| glob_matches(glob, file))
 }
 
@@ -703,6 +717,11 @@ fn run_held(
         .map(|file| (file, unit_of(&project.dir)))
     })
     .collect();
+  // Whether this run drives a browser for a file, as a path from the repository's root: one the declaration
+  // names as a browser file, or one of the projects it checks declares for itself. Such a file runs in the
+  // browser lane, and its runner is handed no per-test limit of its own.
+  let drives_browser =
+    |file: &str| browser_file(test, file) || project_browser.iter().any(|(one, _)| one == file);
 
   // The TypeScript test files the run starts. A file git names that is already gone stays in.
   let tests = test_files(repo);
@@ -822,7 +841,8 @@ fn run_held(
     }
   };
   // Test files run from the folder of their runner's configuration under `under`, a folder of the repository,
-  // with the run's words and its per-test limit; none where one command cannot run them all.
+  // with the run's words and its per-test limit, save where a browser runs among the files; none where one
+  // command cannot run them all.
   let files_command = |under: &Path, files: &[String]| -> Option<UnitCommand> {
     let mut groups = file_groups(under, test, files).into_iter();
     let group = groups.next()?;
@@ -831,9 +851,11 @@ fn run_held(
       return None;
     }
 
+    let within = under.strip_prefix(root).unwrap_or(Path::new(""));
+    let browser = holds_browser(within, files, &drives_browser);
     let mut words = ask.extra.clone();
 
-    words.extend(group.language.per_test_limit(&ask.extra, per_test_seconds));
+    words.extend(limit_words(group.language, &ask.extra, per_test_seconds, browser));
 
     let line = group.language.test_command(&group.files, &words)?;
 
@@ -1002,7 +1024,7 @@ fn run_held(
     second.code
   };
   let lane = |file: &String| -> Option<String> {
-    if browser_file(test, file) || project_browser.iter().any(|(one, _)| one == file) {
+    if drives_browser(file) {
       Some("browser".to_owned())
     } else if project_units.contains_key(file)
       || tool_units.contains_key(file)

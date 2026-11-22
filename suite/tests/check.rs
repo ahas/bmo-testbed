@@ -46,13 +46,15 @@ fn git(at: &Path, args: &[&str]) -> String {
   String::from_utf8_lossy(&done.stdout).trim().to_owned()
 }
 
-// The declaration of the scratch checkout: the quick checks on, a type check every change owes, the web
-// front end's own type check only a change under it reaches, and a tools directory.
+// The declaration of the scratch checkout: the quick checks on, one file named as a browser file, a type
+// check every change owes, the web front end's own type check only a change under it reaches, and a tools
+// directory.
 const DECLARED: &str = r#"
 testbed = 0
 
 [test]
 languages = ["bun"]
+browser = ["packages/util/screen*.test.ts"]
 
 [check]
 quick = ["layout"]
@@ -71,9 +73,10 @@ when = ["web/**"]
 dir = "tools"
 "#;
 
-// Two packages, each a module and a test that loads it, and a web front end, committed on main; then a
-// branch whose own commit changes the first package's module. The commit main stood on is answered beside
-// the checkout.
+// Two packages, each a module and a test that loads it, two loose test files of the first package (one of
+// them the declaration's browser file, which no module hands it), and a web front end, committed on main;
+// then a branch whose own commit changes the first package's module. The commit main stood on is answered
+// beside the checkout.
 fn checkout() -> (tempfile::TempDir, String) {
   let dir = tempfile::tempdir().unwrap();
   let root = dir.path();
@@ -89,6 +92,8 @@ fn checkout() -> (tempfile::TempDir, String) {
       "packages/util/numbers.test.ts",
       "import { one } from \"./numbers\";\n\nconsole.log(one);\n",
     ),
+    ("packages/util/screen.test.ts", "console.log(0);\n"),
+    ("packages/util/labels.test.ts", "console.log(0);\n"),
     ("packages/other/package.json", r#"{ "name": "@sample/other" }"#),
     ("packages/other/other.ts", "export const two = 2;\n"),
     (
@@ -194,6 +199,46 @@ fn touched_test_files_run_one_step_per_folder_of_their_configuration() {
       ran("bun test", ".", "./top.test.ts"),
       ran("bun test in packages/other", "packages/other", "./other.test.ts"),
       ran("bun test in packages/util", "packages/util", "./numbers.test.ts"),
+    ]
+  );
+}
+
+// "a step whose files hold one the declaration names as a browser file is handed no per-test limit of the
+// runner's own" (docs/checks.md, 「The change check」)
+#[test]
+fn the_step_holding_a_browser_file_keeps_no_per_test_limit_of_its_runner() {
+  let (dir, _) = checkout();
+  let root = dir.path();
+  let command = |given: &[&str]| {
+    plan(&repo(root), &files(given))
+      .unwrap()
+      .steps
+      .into_iter()
+      .find(|step| step.tests)
+      .unwrap()
+      .step
+      .command
+  };
+  let screen = "packages/util/screen.test.ts";
+  let labels = "packages/util/labels.test.ts";
+
+  // The declaration's browser glob reaches the first of them alone, so a step over the other keeps the limit.
+  assert_eq!(
+    command(&[labels]),
+    ["bun", "test", "--timeout=120000", "./packages/util/labels.test.ts"]
+  );
+  // A step the browser file is in is handed no limit word, and bun lifts its own built-in one.
+  assert_eq!(command(&[screen]), ["bun", "test", "--timeout", "0", "./packages/util/screen.test.ts"]);
+  assert_eq!(
+    command(&[labels, screen]),
+    [
+      "bun",
+      "test",
+      "--parallel",
+      "--timeout",
+      "0",
+      "./packages/util/labels.test.ts",
+      "./packages/util/screen.test.ts"
     ]
   );
 }

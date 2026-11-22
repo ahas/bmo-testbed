@@ -21,7 +21,7 @@ use sha2::{Digest, Sha256};
 
 use crate::cargo::cargo_verb_line;
 use crate::own_binary::testbed_line;
-use crate::run::{file_groups, script_runner};
+use crate::run::{browser_file, file_groups, holds_browser, limit_words, script_runner};
 use crate::selection::changed_paths;
 use crate::static_check::{CheckStep, TimedRun, run_fenced, spawn_step, static_steps};
 use crate::test_server::test_postgres;
@@ -197,7 +197,11 @@ pub fn plan(repo: &Repository, ask: &CheckAsk) -> Result<CheckPlan, String> {
   let test = &repo.declaration.test;
 
   for group in file_groups(&repo.root, test, &touched.tests) {
-    let limit = group.language.per_test_limit(&[], test.per_test_seconds());
+    // A step holding a file the declaration names as a browser file is handed no limit of the runner's own:
+    // a runner that ends one test of such a file takes down the browser the whole command shares
+    // (docs/suite.md, 「How long a unit and a test may run」).
+    let browser = holds_browser(&group.dir, &group.files, &|file| browser_file(test, file));
+    let limit = limit_words(group.language, &[], test.per_test_seconds(), browser);
 
     if let Some(command) = group.language.test_command(&group.files, &limit) {
       let dir = if group.dir.as_os_str().is_empty() { Path::new(".") } else { group.dir.as_path() };

@@ -152,11 +152,16 @@
   declaration policy's, 120 seconds. A test that waits on something that never comes, a stand-in nobody
   answers or a lock nobody lets go, fails at that limit rather than holding its unit until the silence limit
   below, which is five times as long and counts only from the unit's last word.
+- **A browser file's runner is handed no per-test limit, the testbed's or the runner's own.** The files the
+  declaration names as browser files and the ones each project of its own declares (「Browser files run in a
+  lane of one」) share one browser across the whole file, and a runner that ends a test past its bound ends
+  every process that file started with it, the browser among them (「One sweep, a process per file」), so
+  every later test of that file loses the browser it drives. What bounds such a file is the waits its own
+  tests name, and a test that waits on something that never comes is ended as a hung unit (below), which
+  costs that file alone. Where a caller names a limit in its words, the file keeps the caller's.
 - **Each language hands its runner the limit its own way** (`docs/testbed.md`, 「Languages」):
   - `bun test` is handed the limit as its own `--timeout`, so the test fails there and the file runs on. A
     caller that names a limit in its words keeps its own, and a limit a test sets for itself is the test's.
-    A browser file keeps no limit of bun's, since a browser's start alone can outlast a test's ordinary
-    length.
   - A crate's tests have no limit in Rust's test harness. The harness says of each test still running after
     a minute that it has been running that long, naming it; the run reads the unit's output as it comes, and
     once a test so named has run for the limit without its result, it ends the unit's process group as a

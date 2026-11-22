@@ -495,8 +495,8 @@ flowchart TD
     test files, handed the caller's words, with no per-test limit of its runner's own standing, and each
     file by its path from the folder the command runs in;
   - for a language whose runner takes a per-test limit, the words that hand it one, which the suite and the
-    change check add to the caller's words unless those name a limit already (`docs/suite.md`, 「How long a
-    unit and a test may run」);
+    change check add to the caller's words unless those name a limit already or the files they run hold a
+    browser file (`docs/suite.md`, 「How long a unit and a test may run」);
   - for a language whose runner says, while a test runs, that the test has been running long, that line
     read as the test and how long it had run, and its result line read as the test ended;
   - for a language whose runner names, in its output, the test files that held a failed test, those
