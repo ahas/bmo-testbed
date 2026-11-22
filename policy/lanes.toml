@@ -120,6 +120,11 @@ here = "local"
 order_empty = "order names no machine"
 order_twice = "order names {name} more than once"
 order_unknown = "order names {name}, which is neither the placed machine {machine} nor {here}"
+# An order naming a machine where the settings name no destination, so no machine is placed: {name} the name,
+# {here} this machine's name.
+order_paused = "order names {name}, but the settings name no destination, so placement is paused and only {here} may stand there"
+# The status line where the settings at {file} name no destination (docs/boundary.md, 「The placed machine」).
+paused = "placement: paused, {file} names no destination; every run runs on this machine"
 unreached = "testbed: the placed machine {machine} cannot be reached ({said})"
 # A run the order sends to the placed machine before another finds it takes no run now, {why} the line its
 # `status --free` gave, or `no_answer` where it gave none; the run goes on to the next machine in the order.

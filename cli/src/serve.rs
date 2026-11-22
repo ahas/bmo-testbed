@@ -54,16 +54,24 @@ struct CloseLineAnswer {
 struct StatusAnswer {
   queues: bmo_testbed_client::Page<bmo_testbed_client::Queue>,
   machines: Vec<MachineState>,
+  placement: &'static str,
   close_line: Option<CloseLineAnswer>,
   deploy_line: Served,
 }
 
-/// Both lanes as `GET /queues` answers them, the placed machines as given, the close line where the caller
+/// Both lanes as `GET /queues` answers them, the placed machines as given, how the placement settings stand, the
+/// close line where the caller
 /// names one, then the deployment line under the environment's data root as it will serve its deployments.
-pub fn status_json(env: &Env, close_line: Option<&Path>, machines: Vec<MachineState>) -> String {
+pub fn status_json(
+  env: &Env,
+  close_line: Option<&Path>,
+  machines: Vec<MachineState>,
+  placement: &'static str,
+) -> String {
   let answer = StatusAnswer {
     queues: queue_page(env, &PageQuery::default()),
     machines,
+    placement,
     close_line: close_line.map(read_close_line).map(|line| CloseLineAnswer {
       holder: line.holder.as_ref().map(CloseLineEntry::from),
       waiting: line.waiting.iter().map(CloseLineEntry::from).collect(),

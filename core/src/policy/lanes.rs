@@ -88,6 +88,8 @@ pub struct PlacedWords {
   pub order_empty: String,
   pub order_twice: String,
   pub order_unknown: String,
+  pub order_paused: String,
+  pub paused: String,
   pub unreached: String,
   pub full: String,
   pub no_answer: String,

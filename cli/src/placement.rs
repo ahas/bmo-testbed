@@ -702,7 +702,10 @@ impl Placement for HttpPlacement {
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct MachineSettings {
-  pub destination: String,
+  /// The machine as this machine's `ssh` reaches it; none where placement is paused (docs/boundary.md, 「The
+  /// placed machine」).
+  #[serde(default)]
+  pub destination: Option<String>,
   #[serde(default)]
   pub machine: Option<String>,
   #[serde(default = "MachineSettings::bench")]
@@ -789,6 +792,48 @@ pub const FAR_UNIT_DIR: &str = "~/.config/systemd/user";
 /// The settings file's name under the data root's `env/`.
 pub const PLACEMENT_SETTINGS: &str = "placement.toml";
 
+/// How the placement settings under a data root stand, as `status` names them (docs/boundary.md, 「`status`」).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PlacementState {
+  /// They name a placed machine.
+  Placed,
+  /// They name no destination, so every run runs here.
+  Paused,
+  /// No settings file stands.
+  None,
+  /// The file does not read.
+  Unread,
+}
+
+impl PlacementState {
+  /// How the settings under a data root stand now.
+  pub fn of(data_root: &Path) -> Self {
+    match MachineSettings::read(data_root) {
+      None => Self::None,
+      Some(Err(_)) => Self::Unread,
+      Some(Ok(settings)) if settings.paused() => Self::Paused,
+      Some(Ok(_)) => Self::Placed,
+    }
+  }
+
+  /// The word `status --json` answers it by.
+  pub fn word(self) -> &'static str {
+    match self {
+      Self::Placed => "placed",
+      Self::Paused => "paused",
+      Self::None => "none",
+      Self::Unread => "unread",
+    }
+  }
+
+  /// The line `status` says of it, where it says one: placement paused, naming the settings file.
+  pub fn line(self, data_root: &Path) -> Option<String> {
+    let file = data_root.join("env").join(PLACEMENT_SETTINGS);
+
+    (self == Self::Paused).then(|| fill_marks(&LANES.placed.paused, &[("file", &file.to_string_lossy())]))
+  }
+}
+
 impl MachineSettings {
   fn bench() -> String {
     "~/.local/share/bmo/bench".to_owned()
@@ -834,6 +879,7 @@ impl MachineSettings {
   pub fn order(&self) -> Result<Vec<Ordered>, String> {
     match &self.order {
       Some(names) => self.ordered(names),
+      None if self.paused() => Ok(vec![Ordered::Here]),
       None => Ok(vec![Ordered::Placed, Ordered::Here]),
     }
   }
@@ -844,8 +890,21 @@ impl MachineSettings {
   pub fn combined_order(&self) -> Result<Vec<Ordered>, String> {
     match &self.combined_order {
       Some(names) => self.ordered(names),
+      None if self.paused() => Ok(vec![Ordered::Here]),
       None => Ok(vec![Ordered::Placed]),
     }
+  }
+
+  /// Whether placement is paused: the settings name no `destination`, so no machine is placed and every run
+  /// runs here, the rest of the file read all the same (docs/boundary.md, 「The placed machine」).
+  pub fn paused(&self) -> bool {
+    self.destination.is_none()
+  }
+
+  /// The machine as this machine's `ssh` reaches it, empty where placement is paused; a placement is made only
+  /// of settings that name one.
+  pub fn destination(&self) -> &str {
+    self.destination.as_deref().unwrap_or_default()
   }
 
   // The machines named, each by the placed machine's label or this machine's name; why the names do not read
@@ -862,6 +921,8 @@ impl MachineSettings {
     for name in names {
       let ordered = if *name == words.here {
         Ordered::Here
+      } else if self.paused() {
+        return Err(fill_marks(&words.order_paused, &[("name", name), ("here", &words.here)]));
       } else if name == self.label() {
         Ordered::Placed
       } else {
@@ -904,7 +965,7 @@ impl MachineSettings {
 
   /// The label the lines name the machine by.
   pub fn label(&self) -> &str {
-    self.machine.as_deref().unwrap_or(&self.destination)
+    self.machine.as_deref().unwrap_or_else(|| self.destination())
   }
 
   /// Where a tree of this machine stands under the root of a bench made ready for `purpose`: at its path
@@ -917,7 +978,7 @@ impl MachineSettings {
 
   fn as_bench(&self, path: String) -> Bench {
     Bench {
-      destination: self.destination.clone(),
+      destination: self.destination().to_owned(),
       path,
       ssh: self.ssh.clone(),
     }
@@ -1061,6 +1122,7 @@ impl MachinePlacement {
   /// the settings name no machine or do not read, the reason said on a line.
   pub fn named(data_root: &Path, home: &Path) -> Option<Self> {
     match MachineSettings::read(data_root)? {
+      Ok(settings) if settings.paused() => None,
       Ok(settings) => Some(Self {
         settings,
         home: home.to_path_buf(),
@@ -1089,7 +1151,7 @@ impl MachinePlacement {
     let (program, options) = self.ssh_program();
     let mut command = Command::new(program);
 
-    command.args(options).arg(&self.settings.destination).stdin(Stdio::null());
+    command.args(options).arg(self.settings.destination()).stdin(Stdio::null());
     command
   }
 
@@ -1106,7 +1168,7 @@ impl MachinePlacement {
 
     for (name, text) in units {
       let file = format!("{FAR_UNIT_DIR}/{name}");
-      let laid = laid_over(program, options, &self.settings.destination, &file, text.as_bytes(), None);
+      let laid = laid_over(program, options, self.settings.destination(), &file, text.as_bytes(), None);
 
       if !succeeded(&laid) {
         return Err(said(&laid));
@@ -1661,7 +1723,7 @@ impl MachinePlacement {
     for binary in binaries {
       let fetched = Command::new("rsync")
         .args(["-a", "-e", &ssh_command])
-        .arg(format!("{}:{built}/{binary}", self.settings.destination))
+        .arg(format!("{}:{built}/{binary}", self.settings.destination()))
         .arg(format!("{}/", into.display()))
         .stdin(Stdio::null())
         .output();

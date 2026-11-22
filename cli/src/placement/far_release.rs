@@ -243,7 +243,7 @@ impl MachinePlacement {
     let (program, options) = self.ssh_program();
     let lay = |from: &Path, to: &str, mode: Option<&str>| {
       let bytes = std::fs::read(from).map_err(|why| unwritten(to, &why.to_string()))?;
-      let laid = laid_over(program, options, &self.settings.destination, to, &bytes, mode);
+      let laid = laid_over(program, options, self.settings.destination(), to, &bytes, mode);
 
       if succeeded(&laid) { Ok(()) } else { Err(unwritten(to, &said(&laid))) }
     };
@@ -449,7 +449,7 @@ impl MachinePlacement {
     let read = std::process::Command::new(program)
       .args(options)
       .args(["-o", &format!("ConnectTimeout={}", LANES.numbers.status_connect_seconds)])
-      .arg(&self.settings.destination)
+      .arg(self.settings.destination())
       .arg(format!("cat {}", far_path(&self.far_built_from_file())))
       .stdin(std::process::Stdio::null())
       .output();

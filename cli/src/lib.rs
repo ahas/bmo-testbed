@@ -292,9 +292,10 @@ fn status(json: bool) -> u8 {
     .map(|machine| machine.state())
     .into_iter()
     .collect();
+  let placement = placement::PlacementState::of(&data_root());
 
   if json {
-    println!("{}", serve::status_json(&env, close_line.as_deref(), machines));
+    println!("{}", serve::status_json(&env, close_line.as_deref(), machines, placement.word()));
   } else {
     for line in verb::status_lines(close_line.as_deref()) {
       println!("{line}");
@@ -308,6 +309,10 @@ fn status(json: bool) -> u8 {
 
     for machine in &machines {
       println!("{}", machine.line());
+    }
+
+    if let Some(line) = placement.line(&data_root()) {
+      println!("{line}");
     }
   }
 

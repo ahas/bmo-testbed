@@ -142,7 +142,8 @@ bmo-testbed status [--json | --free [--narrow]]
   for its deploy root's turn; then a line for the placed machine the settings name, where they
   name one: whether it answers, with when its outage began where one stands, and where it does, the
   commit its testbed is built from and whether that is this machine's live testbed release, `current` or
-  `behind` naming the live one. Exits 0.
+  `behind` naming the live one, or a line saying placement is paused where the settings name no
+  `destination`, or that they do not read, naming the file (「The placed machine」). Exits 0.
 - **`--json`** prints one object:
   - `queues`: the page of both lanes exactly as `GET /queues` answers it (「Members」);
   - `machines`: one object for the placed machine the settings name, none where they name none, with
@@ -150,6 +151,8 @@ bmo-testbed status [--json | --free [--narrow]]
     null), `outageSince` (when the outage the runs remember began, null where none stands), `release` (the commit its testbed names, null where it was not reached or names none), `live`
     (this machine's live testbed release's commit, null where this testbed runs from no release) and
     `current` (whether `release` is `live`);
+  - `placement`: how the settings stand: `placed` where they name a placed machine, `paused` where they name
+    no `destination`, `none` where no settings file stands, and `unread` where it does not read;
   - `closeLine`: the repository's close line, with `holder` (a close entry or null) and `waiting` (a
     list of close entries, in the order they will be served), or null outside a repository.
   - `deployLine`: the deployment line, with `holder` (a deployment ticket or null) and `waiting` (a
@@ -979,7 +982,7 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   | Key | Type | Default | Meaning |
   |---|---|---|---|
   | `machine` | string | the destination | The label the lines name the machine by |
-  | `destination` | string | required | The machine as this machine's `ssh` reaches it |
+  | `destination` | string | none: placement paused | The machine as this machine's `ssh` reaches it. Where none is named, placement is paused (below) |
   | `bench` | string | `~/.local/share/bmo/bench` | The runs' bench root there: every tree a run copies over stands under it at the path it has under this machine's home |
   | `deploy_bench` | string | `~/.local/share/bmo/deploy-bench` | The deployments' bench root there: every tree a deployment copies over stands under the folder of its repository's name in it, at the path it has under this machine's home, the bench itself at its repository's one place (「A deployment's bench stands apart」) |
   | `ssh` | list of strings | `["ssh"]` | The `ssh` program and its options |
@@ -987,11 +990,18 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   | `cargo_target` | string | `~/.local/share/bmo/cargo-target` | That machine's shared Cargo build directory; a deployment's build is read back from the bench's own directory under it, the one that machine's Cargo verb builds in (`docs/deploy.md`, 「The Cargo build directory」) |
   | `disk_free_gigabytes` | number | 50, the prune policy's | The free space, in gigabytes of a thousand million bytes, below which a disk of that machine sends `placed-disk-low` from this machine's prune (`docs/deploy.md`, 「The Cargo build directory」). Not negative |
   | `disk_paths` | list of strings | none | Paths on that machine whose disks' free space the prune reads beside `cargo_target`'s. A machine on a virtual disk names the mount of the host drive the disk file stands on, `/mnt/c` for a WSL machine whose disk file is on `C:`, since the virtual disk's own free space says nothing of that drive |
-  | `order` | list of strings | the placed machine, then `local` | The machines a run that can be placed goes to, first choice first (「Placement」): the placed machine by its label, `machine` or else `destination`, and this machine as `local`. Each at most once and none other; an empty list does not read. A deployment's gate and release build go to the placed machine whatever it says |
-  | `combined_order` | list of strings | the placed machine alone | The machines a change check over several checkouts goes to, first choice first, read as `order` is (「Placement」). Left at its default the set never runs on this machine and waits in the placed machine's line; naming `local` lets the set fall to this machine as `order` lets a run |
+  | `order` | list of strings | the placed machine, then `local`; `local` alone where placement is paused | The machines a run that can be placed goes to, first choice first (「Placement」): the placed machine by its label, `machine` or else `destination`, and this machine as `local`. Each at most once and none other; an empty list does not read. A deployment's gate and release build go to the placed machine whatever it says |
+  | `combined_order` | list of strings | the placed machine alone; `local` alone where placement is paused | The machines a change check over several checkouts goes to, first choice first, read as `order` is (「Placement」). Left at its default the set never runs on this machine and waits in the placed machine's line; naming `local` lets the set fall to this machine as `order` lets a run |
 
   A `~` opening a path there is that machine's home. A file that does not read is no placement, said
   on a line.
+- **A file that names no `destination` pauses placement.** It reads as no placed machine: every run, a
+  deployment's gate and its release build run on this machine, as where no file stands, and nothing is said
+  on any run's line. The rest of the file is read all the same, so a machine taken out for a while keeps its
+  settings beside the commented-out lines that named it: a key that does not read still makes the file not
+  read, and `order` and `combined_order` may name `local` alone, since no placed machine stands to be named.
+  `status` says on a line that placement is paused, naming the file, and its `--json` answers `placement`
+  `paused` (「`status`」).
 - **The testbed there is this machine's live testbed release.** A testbed running from a release reads,
   before it makes a bench ready, the commit the `built-from` file beside that machine's `testbed` binary
   names, and compares it with the commit of the live release: the release the deploy tree its own

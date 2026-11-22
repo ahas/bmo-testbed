@@ -40,7 +40,7 @@ use bmo_testbed_cli::cargo::placed_disk;
 use bmo_testbed_cli::deploy::{PlacedGate, brings_testbed};
 use bmo_testbed_cli::placement::{
   BenchFor, FarWait, MACHINE_ENV_FILE, MachinePlacement, MachineSettings, MachineState, Ordered,
-  ReadyBench, STANDING_VARIABLE, machine_hook, reachable_remote,
+  PlacementState, ReadyBench, STANDING_VARIABLE, machine_hook, reachable_remote,
 };
 use bmo_testbed_core::events::Hook;
 use bmo_testbed_core::placement::{
@@ -892,7 +892,7 @@ fn released(dir: &Path, far: Option<&str>, live: Option<&str>) -> MachinePlaceme
 
   MachinePlacement {
     settings: MachineSettings {
-      destination: "stand".to_owned(),
+      destination: Some("stand".to_owned()),
       machine: Some("machine-2".to_owned()),
       bench: dir.join("bench").to_string_lossy().into_owned(),
       deploy_bench: dir.join("deploy-bench").to_string_lossy().into_owned(),
@@ -2102,6 +2102,49 @@ fn the_order_reads_by_name_and_refuses_an_empty_a_repeated_or_an_unknown_machine
     &LANES.placed.order_unknown,
     &[("name", "stand"), ("machine", "machine-2"), ("here", here)]
   )));
+}
+
+// "A file that names no `destination` pauses placement. It reads as no placed machine ... The rest of the file is
+// read all the same ... `order` and `combined_order` may name `local` alone"; "`placement` ... `paused`": a machine
+// taken out with its lines commented out, as the settings file keeps it.
+#[test]
+fn a_file_naming_no_destination_pauses_placement_and_reads_the_rest() {
+  let dir = tempfile::tempdir().unwrap();
+  let here = &LANES.placed.here;
+  let write = |text: &str| {
+    std::fs::create_dir_all(dir.path().join("env")).unwrap();
+    std::fs::write(dir.path().join("env/placement.toml"), text).unwrap();
+  };
+
+  write(&format!(
+    "# machine = \"machine-2\"\n# destination = \"stand\"\ndisk_paths = [\"/mnt/c\"]\norder = [\"{here}\"]\n"
+  ));
+
+  let paused = MachineSettings::read(dir.path()).unwrap().unwrap();
+
+  assert!(paused.paused());
+  assert_eq!(paused.disk_paths(), ["~/.local/share/bmo/cargo-target", "/mnt/c"]);
+  assert_eq!(paused.order().unwrap(), [Ordered::Here]);
+  assert_eq!(paused.combined_order().unwrap(), [Ordered::Here], "none named is this machine alone");
+  assert!(MachinePlacement::named(dir.path(), dir.path()).is_none(), "no machine is placed");
+  assert_eq!(PlacementState::of(dir.path()), PlacementState::Paused);
+  assert!(
+    PlacementState::of(dir.path())
+      .line(dir.path())
+      .is_some_and(|line| line.contains("placement.toml"))
+  );
+
+  // Naming the machine that is out is refused, and the rest of the file still has to read.
+  write("machine = \"machine-2\"\norder = [\"machine-2\"]\n");
+  assert!(
+    MachineSettings::read(dir.path())
+      .unwrap()
+      .unwrap_err()
+      .contains(&fill_marks(&LANES.placed.order_paused, &[("name", "machine-2"), ("here", here)]))
+  );
+  assert_eq!(PlacementState::of(dir.path()), PlacementState::Unread);
+  write("disk_free_gigabytes = -1\n");
+  assert!(MachineSettings::read(dir.path()).unwrap().is_err());
 }
 
 // A turn held in one lane of the seats a lock names, in a machine of one wide seat.
