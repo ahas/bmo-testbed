@@ -365,8 +365,39 @@ flowchart TD
   order」, step 2), so a refusal and a dry run never wait. A deployment waiting for either has written
   nothing into its progress record or the testbed's record yet, so two deployments of one repository
   never write one progress record at once: it is read through its unit's journal, which the hosted tool
-  follows it by. A call of the same repository and commit asked while one waits therefore attaches to
-  nothing and waits behind it.
+  follows it by.
+- **A repository and commit stand once.** Every deployment of a deploy root holds a ticket under its deploy
+  root's turn from the moment it stands for that turn until it ends, waiting or holding it, and the ticket
+  names the whole commit it asks for. Before the verb starts a unit, in the caller's own process, it
+  fetches the remote, reads the commit asked for as a commit, a whole or shortened name, `HEAD` where none
+  is given, and reads the commit each of those tickets names the same way, so `d935412` and
+  `d9354126cf6753f0…` are one commit. Where one of them is the commit asked for:
+  - **the call attaches to it and starts nothing.** It prints a line naming that deployment's unit, its
+    repository and commit, how long ago it asked and how to read its journal, and exits 0, so a caller that
+    follows the unit it is told follows that deployment as it would its own. Asked with `--first`, the call
+    raises that deployment to first as `deploy first` does before it attaches; one that holds the line or
+    is marked first already is attached to as it stands.
+  - **An ask that brings what the standing one lacks stands on its own:** one asked with `--before-start`,
+    `--no-check` or `--force-live`, since each is a promise of its own run.
+  - **The judgement is made of the tickets standing when the call is asked.** A unit started but still
+    reading its commit holds no ticket for a few seconds, so two calls in that moment each start one; the
+    later of the two then ends at its turn on the commit already live, or on the failure below.
+  - Where the commit or the remote cannot be read in the caller's process, the verb starts the unit as
+    asked, and the unit refuses what is to be refused.
+- **A commit whose gate failed and that main still stands on is refused.** Before the verb starts a unit, it
+  reads the testbed's record for the newest ended deployment of the repository and the commit. Where that one
+  failed in its gate (the `check` stage) and the repository's main branch, its remote's as the declaration
+  names it (`docs/declaration.md`, 「The main branch's head」), still stands on that very commit, the call
+  refuses with 2, naming that deployment's unit, when it ended and its reason: running the same gate on the
+  same tree fails the same way, and the mend is a new commit on main. A main that has moved since, so that its
+  head is another commit, reopens it, and so does an ask with `--first`, which says on purpose that the gate
+  is to run again; an ask with `--no-check` runs no gate and is not refused for one. A record that cannot be
+  read refuses nothing.
+- **A commit whose gate failed while the deployment waited ends it at its turn.** Once its turns come, and
+  before its gate, a deployment reads the record again; where a deployment of the same commit failed in its
+  gate after this one was asked, it refuses with 2, naming that deployment, and lets both turns go, with
+  nothing written into its progress record or the testbed's record, since that failure was told already. One
+  asked with `--no-check` runs no gate and goes on.
 - **Its turn reads the live release again.** Once its turn comes, the deployment reads the deployment
   record again, so the range its gate checks and the major change it judges are against what the
   deployment before it put live.
@@ -378,7 +409,9 @@ flowchart TD
   its declaration, its places and every refusal are judged of that commit, and a refusal ends the deployment
   as any refusal does. Two things keep a deployment to its own commit: its gate left out with `--no-check`,
   since the pass it stands on is its own commit's, and a waiting deployment asked with `--before-start`, whose
-  command runs only in its own restart.
+  command runs only in its own restart. A waiting commit whose newest ended deployment in the testbed's record
+  failed in its gate is not taken, since its gate would fail again; its own deployment answers for it at its
+  own turn.
 - **A commit already live when its turn comes ends the deployment there.** Where the record read again
   names the commit asked for, the deployment says so on a line, begins its progress record and ends it
   live at once, lets the line go and exits 0: no gate, no backup, no release, no restart and no event,
@@ -416,11 +449,22 @@ flowchart TD
   runs as; the hosted tool names the session's holder. Why is the English reason given. The deployment
   says both on a line once it is marked, its waiting lines name them, and `status` shows them beside
   its ticket.
-- **`status` lists the line,** after the lanes and the close line (`docs/boundary.md`, 「`status`」): the
-  deployment holding it, and every deployment waiting, in the order the line will serve them, each with
-  its repository, its commit, its unit, how long ago it asked and its first mark where it has one.
-  The holder's ticket says it holds the line, so the one holding it is named even where a deployment
-  marked first stands ahead of its ticket.
+- **`status` lists the line as it will serve it,** after the lanes and the close line (`docs/boundary.md`,
+  「`status`」): the deployment holding it, then every deployment waiting, each with its repository, its
+  commit, its unit, how long ago it asked, its first mark where it has one, and whether it waits in the line
+  or for its deploy root's turn. The holder's ticket says it holds the line, so the one holding it is named
+  even where a deployment marked first stands ahead of its ticket.
+  - **Those in the line come first,** in the order the line serves them.
+  - **Those waiting for their deploy root's turn come after,** since each reaches the line only once the
+    deployment ahead of it of its own deploy root has ended. They stand in rounds: the first waiting of each
+    deploy root, then the second of each, and so on. Within a round, those marked first, by `--first` or by
+    a raise not yet read, stand ahead in the order they were marked, and the rest stand in the order the
+    deployment ahead of each of its deploy root is served: one whose deploy root's deployment is past the
+    line first, then by that deployment's place in the line.
+  - **The deploy roots are found through the line.** A deployment about to stand for its deploy root's turn
+    enrols that turn's lock beside the line's, a file for each deploy root under `deploy-line.roots/` in the
+    same `locks/`, so `status` reads every deploy root that has had a deployment without knowing any
+    repository. A deploy root with no ticket standing adds nothing.
 
 ## A connection that breaks under the placed machine
 
@@ -492,7 +536,9 @@ flowchart TD
 - **It raises a deployment already waiting** where `first` is given and a deployment of the same
   repository and commit stands waiting, for its deploy root's turn or in the line: the call raises it
   as `deploy first` does, by the unit its ticket names, and follows it as it would its own, starting
-  nothing; one marked first already is followed as it stands.
+  nothing; one marked first already is followed as it stands. Without `first`, the verb itself attaches to a
+  deployment of the same commit standing for the deploy root (「The deployment line」) and names its unit, which
+  the call then follows as it would one it started.
 - **It attaches to a deployment already under way.** Where the record's newest deployment of the
   repository is still running and is of the commit asked for, the call runs no verb and follows that
   deployment as it would its own. With `attach`, the call starts nothing whatever that deployment's

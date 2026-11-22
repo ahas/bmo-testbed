@@ -374,3 +374,36 @@ fn a_gates_pass_is_found_on_exactly_its_ground_and_no_earlier_than_asked() {
     None
   );
 }
+
+// The newest ended deployment of a commit: one still running is passed over, and another repository's or another
+// commit's is none of it.
+#[test]
+fn the_newest_ended_deployment_of_a_commit_passes_over_one_still_running() {
+  let dir = tempfile::tempdir().unwrap();
+  let mut record = Record::open(dir.path()).unwrap();
+  let alive = i64::from(std::process::id());
+  // Recent moments, since the record keeps only recent deployments.
+  let at = bmo_testbed_core::queue::now_ms();
+  let ended = |started_at: i64, state: DeploymentState| Deployment {
+    ended_at: Some(started_at + 1),
+    ..deployment(alive, started_at, state)
+  };
+
+  record.write_deployment(&ended(at + 1, DeploymentState::Live)).unwrap();
+  record.write_deployment(&ended(at + 2, DeploymentState::Failed)).unwrap();
+  record.write_deployment(&deployment(alive, at + 3, DeploymentState::Running)).unwrap();
+  record
+    .write_deployment(&Deployment {
+      commit: Some("def456".to_owned()),
+      ..ended(at + 4, DeploymentState::Live)
+    })
+    .unwrap();
+
+  let newest = record.newest_ended_deployment("repository", "abc123").unwrap();
+
+  assert_eq!(
+    newest.map(|deployment| (deployment.started_at, deployment.state)),
+    Some((at + 2, DeploymentState::Failed))
+  );
+  assert_eq!(record.newest_ended_deployment("another", "abc123").unwrap(), None);
+}

@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use bmo_testbed_client::{
-  Deployment, DeploymentState, PageQuery, RestartsQuery, TestRun, TestRunKind, TestRunState,
+  Deployment, DeploymentState, PageQuery, RestartsQuery, StopCode, TestRun, TestRunKind, TestRunState,
 };
 use bmo_testbed_core::declaration::Repository;
 use bmo_testbed_core::events::Hook;
@@ -2131,6 +2131,161 @@ fn a_deployment_whose_turn_comes_lays_down_the_commit_a_waiting_one_asks_for_tha
   // One release: the later commit alone was laid down after the first deploy.
   assert_eq!(laid.last().copied(), Some(later.as_str()), "{log}");
   assert!(!laid.contains(&earlier.as_str()), "{log}");
+}
+
+impl Scene {
+  // A deployment of the commit given that failed in its gate, written into the scene's record as ending now.
+  fn failed_in_gate(&self, commit: &str) {
+    let repo = Repository::read(&self.source).unwrap();
+    let now = bmo_testbed_core::queue::now_ms();
+    let failed = Deployment {
+      id: 0,
+      repository_name: Some(repo.name()),
+      unit_name: Some("bmo-deploy-1".to_owned()),
+      pid: 1,
+      commit: Some(commit.to_owned()),
+      state: DeploymentState::Failed,
+      plan: vec![],
+      stages: vec![],
+      steps: vec![],
+      rolled_back: false,
+      stopped_for: Some(StopCode::Check),
+      reason: Some("the suite failed: a.test.ts".to_owned()),
+      started_at: now,
+      ended_at: Some(now),
+    };
+
+    Record::open(&self.at("testbed-data")).unwrap().write_deployment(&failed).unwrap();
+  }
+
+  // The deploy root's turn of the scene's repository, looked at every few milliseconds.
+  fn root_turn(&self) -> RootTurn {
+    let repo = Repository::read(&self.source).unwrap();
+
+    RootTurn {
+      poll: Some(Duration::from_millis(5)),
+      ..RootTurn::under(&DeployPlaces::of(&repo, &self.env()).unwrap().deploy_root)
+    }
+  }
+
+  // The commits laid down, in the order they went live.
+  fn laid(&self) -> Vec<String> {
+    let log = std::fs::read_to_string(self.at("live/deployed.log")).unwrap();
+
+    log
+      .lines()
+      .filter_map(|line| line.split_whitespace().nth(1))
+      .map(str::to_owned)
+      .collect()
+  }
+}
+
+// An ask of the commit given against the scene's record, its deploy root's turn looked at every few milliseconds.
+fn asked_of(scene: &Scene, commit: &str) -> DeployAsk {
+  DeployAsk {
+    commit: Some(commit.to_owned()),
+    record: Some(scene.at("testbed-data")),
+    root_poll: Some(Duration::from_millis(5)),
+    ..DeployAsk::default()
+  }
+}
+
+// "A waiting commit whose newest ended deployment in the testbed's record failed in its gate is not taken ... its
+// own deployment answers for it at its own turn"
+#[test]
+fn a_deployment_whose_turn_comes_does_not_take_a_waiting_commit_whose_gate_failed() {
+  let scene = Scene::new();
+
+  assert_eq!(scene.run(&Hands::default()), 0);
+
+  scene.declare("v2", "true");
+
+  let earlier = scene.push("second");
+
+  scene.declare("v3", "true");
+
+  let later = scene.push("third");
+
+  scene.failed_in_gate(&later);
+
+  let held = scene.root_turn().take(&earlier_ticket(), &|_| {});
+  let (ask_earlier, ask_later) = (asked_of(&scene, &earlier), asked_of(&scene, &later));
+  let (told_earlier, heard_earlier) = std::sync::mpsc::channel();
+  let (told_later, heard_later) = std::sync::mpsc::channel();
+  let given_up = Instant::now() + Duration::from_secs(60);
+  let scene = &scene;
+
+  let ((earlier_code, earlier_said), (later_code, later_said)) = std::thread::scope(|scope| {
+    let deploying_earlier = scope.spawn(move || {
+      let hands = Hands {
+        told: Some(told_earlier),
+        ..Hands::default()
+      };
+
+      (scene.run_with(&ask_earlier, &Told(true), &hands, &scene.env()), said(&hands))
+    });
+
+    heard_until(&heard_earlier, &[words_of(&DEPLOY.run.root_waiting)], given_up);
+
+    let deploying_later = scope.spawn(move || {
+      let hands = Hands {
+        told: Some(told_later),
+        ..Hands::default()
+      };
+
+      (scene.run_with(&ask_later, &Told(true), &hands, &scene.env()), said(&hands))
+    });
+
+    heard_until(&heard_later, &[words_of(&DEPLOY.run.root_waiting)], given_up);
+    drop(held);
+
+    (deploying_earlier.join().unwrap(), deploying_later.join().unwrap())
+  });
+  let laid = scene.laid();
+
+  assert_eq!(earlier_code, 0, "{earlier_said}");
+  assert_eq!(later_code, 0, "{later_said}");
+  assert!(!earlier_said.contains(words_of(&DEPLOY.run.joined)), "{earlier_said}");
+  assert_eq!(laid[laid.len() - 2..], [earlier.as_str(), later.as_str()]);
+}
+
+// "A commit whose gate failed while the deployment waited ends it at its turn ... it refuses with 2, naming that
+// deployment"
+#[test]
+fn a_deployment_whose_commit_failed_in_its_gate_while_it_waited_ends_refused_before_its_gate() {
+  let scene = Scene::new();
+
+  assert_eq!(scene.run(&Hands::default()), 0);
+
+  scene.declare("v2", "true");
+
+  let commit = scene.push("second");
+  let held = scene.root_turn().take(&earlier_ticket(), &|_| {});
+  let ask = asked_of(&scene, &commit);
+  let (told, heard) = std::sync::mpsc::channel();
+  let given_up = Instant::now() + Duration::from_secs(60);
+  let scene = &scene;
+
+  let (code, lines) = std::thread::scope(|scope| {
+    let deploying = scope.spawn(move || {
+      let hands = Hands {
+        told: Some(told),
+        ..Hands::default()
+      };
+
+      (scene.run_with(&ask, &Told(true), &hands, &scene.env()), said(&hands))
+    });
+
+    heard_until(&heard, &[words_of(&DEPLOY.run.root_waiting)], given_up);
+    scene.failed_in_gate(&commit);
+    drop(held);
+    deploying.join().unwrap()
+  });
+
+  assert_eq!(code, 2, "{lines}");
+  assert!(lines.contains(words_of(&DEPLOY.run.failed_waiting)), "{lines}");
+  assert!(lines.contains("bmo-deploy-1"), "{lines}");
+  assert!(!scene.laid().contains(&commit), "{lines}");
 }
 
 // "Once it has picked its commit, a deployment reads its repository through the repository's primary checkout":

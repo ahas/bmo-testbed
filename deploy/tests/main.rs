@@ -2,6 +2,7 @@
 //! temporary directories of its own.
 
 mod adopt;
+mod again;
 mod backup;
 mod boot;
 mod console;

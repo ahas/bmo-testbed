@@ -136,8 +136,10 @@ bmo-testbed status [--json | --free [--narrow]]
   stands here too」), naming the machine, whether it waits or runs there and since when; then the close
   line of the repository it is run in; then the deployment line: a `holding it:` line naming the
   deployment holding it, or one saying nobody, and its waiting deployments in the order the line will
-  serve them, each naming its repository, commit and unit, how long ago it asked, and `first, by <who>:
-  <why>` where it is marked first; then a line for the placed machine the settings name, where they
+  serve them, those waiting for their deploy root's turn included after those in the line
+  (`docs/deploy.md`, 「The deployment line」), each naming its repository, commit and unit, how long ago it
+  asked, `first, by <who>: <why>` where it is marked first, and `for its repository's turn` where it waits
+  for its deploy root's turn; then a line for the placed machine the settings name, where they
   name one: whether it answers, with when its outage began where one stands, and where it does, the
   commit its testbed is built from and whether that is this machine's live testbed release, `current` or
   `behind` naming the live one. Exits 0.
@@ -151,9 +153,13 @@ bmo-testbed status [--json | --free [--narrow]]
   - `closeLine`: the repository's close line, with `holder` (a close entry or null) and `waiting` (a
     list of close entries, in the order they will be served), or null outside a repository.
   - `deployLine`: the deployment line, with `holder` (a deployment ticket or null) and `waiting` (a
-    list of deployment tickets, in the order they will be served).
+    list of deployment tickets, in the order they will be served, those waiting for their deploy root's
+    turn included), each waiting ticket with `waitsFor` beside its fields: `line` where it stands in the
+    line, `root` where it waits for its deploy root's turn.
 - **A deployment ticket** carries `words` (what the line names it by, its repository, short commit and
-  unit), `repository`, `commit` (the short commit), `unit` (null where the deployment runs in none),
+  unit), `repository`, `commit` (the whole commit; the short one where a testbed of an earlier revision
+  stood the ticket), `root` (the deploy root, null where an earlier revision stood the ticket), `unit` (null
+  where the deployment runs in none),
   `askedAt` (epoch milliseconds), `pid`, `beforeStart` (whether it was asked with a command to run before its
   start), and `first`: null, or `by`, `why` and `at` (epoch milliseconds)
   of the mark that put it first. A ticket a testbed of an earlier revision stood carries its `words` and
@@ -433,9 +439,15 @@ bmo-testbed deploy first <unit> --why <why> [--by <who>]
 - Puts the commit live (`docs/deploy.md`). `--message` is the reason the deploy is made, written into
   the record and the `deployed` event; the commit's subject stands where none is given. Outside a
   deployment's unit it starts one, prints its name
-  and the command that reads its journal, and exits 0; inside it, it runs and exits 0 where the commit
-  went live, or was live already when its turn came, 1 where it failed or was rolled back. Its refusals
-  exit 2 in the caller's own process.
+  and the command that reads its journal, and exits 0; where a deployment of the same repository and commit,
+  read as commits, already stands for the deploy root, waiting or under way, it starts none, prints that
+  deployment's unit, how long ago it asked and the command that reads its journal, and exits 0, unless it
+  is asked with `--before-start`, `--no-check` or `--force-live`; inside it, it runs and exits 0 where the commit
+  went live, or was live already when its turn came, 1 where it failed or was rolled back, 2 where a
+  deployment of its commit failed in its gate while it waited. Its refusals exit 2 in the caller's own
+  process, among them a commit whose newest ended deployment failed in its gate while the main branch still
+  stands on it, unless it is asked with `--first` or `--no-check` (`docs/deploy.md`, 「The deployment
+  line」).
   Deployments started together each run in their own unit and pass their gate and their build one after
   the other, in the order they asked, through the deployment line under the data root's `locks/`
   (`docs/deploy.md`, 「The deployment line」). A deployment of a repository whose earlier deployment is

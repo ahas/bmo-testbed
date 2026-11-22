@@ -280,6 +280,8 @@ machine_outage = "; out since {since}"
 close_line = "the close line:"
 # The deployment line's heading (docs/deploy.md, 「The deployment line」).
 deploy_line = "the deployment line:"
+# Said after a waiting deployment that waits for its deploy root's turn rather than in the line.
+for_root = ", for its repository's turn"
 
 # The `run` verb's refusal of a language it does not know, {name} the name given and {names} the ones
 # there are.

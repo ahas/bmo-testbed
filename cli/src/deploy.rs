@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 use bmo_testbed_client::{PageQuery, TestRun, TestRunState};
 use bmo_testbed_core::declaration::Repository;
 use bmo_testbed_core::events::{Event, Hook};
+use bmo_testbed_core::main_branch::MainBranch;
 use bmo_testbed_core::policy::deploy::DEPLOY;
 use bmo_testbed_core::policy::deploy_steps::DeployStep as OwnStep;
 use bmo_testbed_core::policy::fill_marks;
@@ -17,15 +18,19 @@ use bmo_testbed_core::policy::verbs::VERBS;
 use bmo_testbed_core::queue::{LockWait, now_ms, take_lock};
 use bmo_testbed_core::turn::{Env, FRONT_VARIABLE, NOT_RUN_EXIT_CODE, harness_pid, process_env};
 use bmo_testbed_core::verb::{REFUSED_EXIT_CODE, data_root};
+use bmo_testbed_deploy::again::{AskAgain, Asked, judged};
 use bmo_testbed_deploy::console::{LayerPin, LayerRelease, PinnedLayer};
 use bmo_testbed_deploy::deployment::{
   BuildAsk, DeployAsk, DeployPlaces, Gate, GateAsk, GateFault, GateFooting, GateOutcome, GateStep,
-  LaidUnits, Machine, Passed, SuitePassed, deploy as deploy_run, passed_before,
+  LaidUnits, Machine, Passed, SuitePassed, deploy as deploy_run, iso, passed_before,
 };
-use bmo_testbed_deploy::line::{DeployLine, FirstMark, RaiseAsk, raise_first as raise_first_in_line};
+use bmo_testbed_deploy::line::{
+  DeployLine, DeployTicket, FirstMark, RaiseAsk, RootTurn, raise_first as raise_first_in_line,
+};
 use bmo_testbed_deploy::progress::DEPLOY_PROGRESS_VARIABLE;
 use bmo_testbed_deploy::release::primary_checkout;
 use bmo_testbed_deploy::run::run_quiet;
+use bmo_testbed_deploy::tree::short;
 use bmo_testbed_deploy::unit::{
   DEPLOY_SLICE, DEPLOY_UNIT_PREFIX, DeployUnitStart, deploy_unit_name, deploy_unit_of_process, hand_off,
   this_again,
@@ -550,6 +555,10 @@ pub fn deploy(args: &DeployFlags) -> u8 {
   let unit = deploy_unit_of_process();
 
   if unit.is_none() && !args.dry_run {
+    if let Some(code) = asked_again(args, &repo, &places, &env) {
+      return code;
+    }
+
     let start = DeployUnitStart {
       unit: deploy_unit_name(bmo_testbed_core::queue::now_ms()),
       slice: DEPLOY_SLICE.to_owned(),
@@ -619,6 +628,84 @@ pub fn deploy(args: &DeployFlags) -> u8 {
   runtime.block_on(deploy_run(&repo, &places, &ask, &env, gate, &Machine, &hook))
 }
 
+// What a call that would start a deployment finds already standing for its commit (docs/deploy.md, 「The
+// deployment line」), judged in the caller's own process before any unit starts: a deployment of the same
+// commit, read as a commit, standing for the deploy root, which the call attaches to, raising it first where
+// asked; or a commit whose newest ended deployment failed in its gate while main still stands on it, refused.
+// None where the call starts its own, among them every call whose commit or remote cannot be read here.
+fn asked_again(args: &DeployFlags, repo: &Repository, places: &DeployPlaces, env: &Env) -> Option<u8> {
+  let said = &DEPLOY.run;
+  let git = |words: &[&str]| {
+    let line: Vec<String> =
+      std::iter::once("git").chain(words.iter().copied()).map(str::to_owned).collect();
+
+    run_quiet(&line, Some(&repo.root))
+  };
+  let resolve = |named: &str| {
+    let resolved = git(&["rev-parse", "--verify", "--quiet", &format!("{named}^{{commit}}")]);
+
+    resolved.ok.then(|| resolved.out.trim().to_owned())
+  };
+
+  if !git(&["fetch", "--quiet", "origin"]).ok {
+    return None;
+  }
+
+  let commit = resolve(args.commit.as_deref().unwrap_or("HEAD"))?;
+  let main_head = || MainBranch::new(&repo.root, &repo.declaration.check.main).head().ok();
+  let judged = judged(&AskAgain {
+    repository: &repo.name(),
+    commit: &commit,
+    turn: &RootTurn::under(&places.deploy_root).lock,
+    data_root: &data_root(),
+    own_run: args.before_start.is_some() || args.no_check || args.force_live,
+    no_check: args.no_check,
+    first: args.first.is_some(),
+    resolve: &resolve,
+    main_head: &main_head,
+  });
+
+  match judged {
+    Asked::Standing(standing) => Some(attach(args, &standing, env)),
+    Asked::FailedUnmoved(failed) => Some(refused(&fill_marks(
+      &said.failed_unmoved,
+      &[
+        ("commit", &short(&commit)),
+        ("unit", failed.unit_name.as_deref().unwrap_or_default()),
+        ("when", &iso(failed.ended_at.unwrap_or(failed.started_at))),
+        ("reason", failed.reason.as_deref().unwrap_or_default()),
+      ],
+    ))),
+    Asked::Start => None,
+  }
+}
+
+// The call attached to the deployment standing for its commit: raised to first where it asks so, the raise's
+// own line said whether it took or not, since one holding the line or marked first already is followed as it
+// stands; then the line naming the unit it follows. Exits 0.
+fn attach(args: &DeployFlags, standing: &DeployTicket, env: &Env) -> u8 {
+  let unit = standing.unit.as_deref().unwrap_or_default();
+
+  if let Some(why) = &args.first {
+    let mark = FirstMark::now(&who(args.by.as_deref(), env), why);
+
+    match raise_unit(unit, mark) {
+      Ok(line) | Err(line) => println!("{line}"),
+    }
+  }
+
+  let seconds = standing.asked_at.map_or(0, |at| (now_ms() - at).max(0) / 1000);
+
+  println!(
+    "{}",
+    fill_marks(
+      &DEPLOY.run.attached,
+      &[("unit", unit), ("words", &standing.words), ("seconds", &seconds.to_string())]
+    )
+  );
+  0
+}
+
 // Who marks a deployment first: the one named, else the account the verb runs as.
 fn who(named: Option<&str>, env: &Env) -> String {
   named
@@ -647,25 +734,30 @@ fn recorded_in(record: &Record, unit: &str) -> Result<bool, String> {
   }
 }
 
-/// `deploy first`: a waiting deployment raised to first in the deployment line by its unit (docs/deploy.md,
-/// 「The deployment line」); a refusal exits 2.
-pub fn raise_first(args: &FirstArgs) -> u8 {
-  let env = process_env();
+// A waiting deployment raised to first in the machine's line by its unit: the line saying so, or the refusal.
+fn raise_unit(unit: &str, mark: FirstMark) -> Result<String, String> {
   let line = DeployLine::under(&data_root());
   let running = |unit: &str| {
     unit.starts_with(DEPLOY_UNIT_PREFIX)
       && run_quiet(&["systemctl", "--user", "is-active", "--quiet", unit].map(str::to_owned), None).ok
   };
   let recorded = |unit: &str| Record::open(&data_root()).and_then(|record| recorded_in(&record, unit));
-  let raised = raise_first_in_line(&RaiseAsk {
+
+  raise_first_in_line(&RaiseAsk {
     line: &line.lock,
-    unit: &args.unit,
-    mark: FirstMark::now(&who(args.by.as_deref(), &env), &args.why),
+    unit,
+    mark,
     running: &running,
     recorded: &recorded,
-  });
+  })
+}
 
-  match raised {
+/// `deploy first`: a waiting deployment raised to first in the deployment line by its unit (docs/deploy.md,
+/// 「The deployment line」); a refusal exits 2.
+pub fn raise_first(args: &FirstArgs) -> u8 {
+  let env = process_env();
+
+  match raise_unit(&args.unit, FirstMark::now(&who(args.by.as_deref(), &env), &args.why)) {
     Ok(line) => {
       println!("{line}");
       0

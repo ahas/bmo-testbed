@@ -8,9 +8,11 @@ use std::sync::mpsc::{Receiver, Sender, channel};
 use std::time::{Duration, Instant};
 
 use bmo_testbed_core::policy::deploy::DEPLOY;
+use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::queue::{LockWait, now_ms, take_lock};
 use bmo_testbed_deploy::line::{
-  DeployLine, DeployTicket, FIRST_MARKS, FirstMark, RaiseAsk, Standing, raise_first, standing, status_lines,
+  DeployLine, DeployTicket, FIRST_MARKS, FirstMark, RaiseAsk, RootTurn, Standing, WaitsFor, raise_first,
+  served, standing, status_lines,
 };
 
 // A line under the folder given, looking and saying where it stands every few milliseconds.
@@ -286,5 +288,101 @@ fn a_line_held_under_an_earlier_revisions_words_names_that_holder_and_a_first_on
     drop(earlier);
 
     assert_eq!(turns(&taken, 1), ["first"]);
+  });
+}
+
+// A deploy root's turn under the folder given, named `name`, enrolled beside the line and looked at every few
+// milliseconds.
+fn root_in(dir: &Path, line: &DeployLine, name: &str) -> RootTurn {
+  let turn = RootTurn {
+    lock: dir.join(name).join("deploy-run.lock"),
+    say_every: Duration::from_millis(5),
+    poll: Some(Duration::from_millis(5)),
+  };
+
+  line.enrol(&turn.lock);
+  turn
+}
+
+// A deployment waiting for a deploy root's turn on a thread of the scope, until `ahead` of them wait there.
+fn root_waiter<'scope>(
+  scope: &'scope std::thread::Scope<'scope, '_>,
+  turn: &'scope RootTurn,
+  name: &str,
+  ahead: usize,
+) {
+  let stood = ticket(name, None);
+
+  scope.spawn(move || drop(turn.take(&stood, &|_| {})));
+
+  let given_up = Instant::now() + Duration::from_secs(60);
+
+  while standing(&turn.lock).waiting.len() <= ahead && Instant::now() < given_up {
+    std::thread::sleep(Duration::from_millis(5));
+  }
+}
+
+// The names of the deployments the line will serve, those waiting for their deploy root's turn marked `root:`.
+fn served_names(lock: &Path) -> Vec<String> {
+  served(lock)
+    .waiting
+    .iter()
+    .map(|waiting| {
+      let name = waiting.ticket.commit.clone().unwrap_or_default();
+
+      match waiting.waits_for {
+        WaitsFor::Line => name,
+        WaitsFor::Root => format!("root:{name}"),
+      }
+    })
+    .collect()
+}
+
+// "Those in the line come first"; "Those waiting for their deploy root's turn come after ... in rounds ... those
+// marked first, by `--first` or by a raise not yet read, stand ahead ... the rest ... by that deployment's place in
+// the line"; "The deploy roots are found through the line"
+#[test]
+fn the_line_is_served_after_its_own_by_those_waiting_for_their_deploy_roots_turn_in_rounds_marked_first_ahead()
+ {
+  let dir = tempfile::tempdir().unwrap();
+  let line = line_in(dir.path());
+  let (a, b) = (root_in(dir.path(), &line, "a"), root_in(dir.path(), &line, "b"));
+  let a_turn = a.take(&ticket("a1", None), &|_| {}).unwrap();
+  let b_turn = b.take(&ticket("b1", None), &|_| {}).unwrap();
+  let a_line = line.take(&ticket("a1", None), &|_| {}).unwrap();
+  let (taken_by, _taken) = channel();
+
+  std::thread::scope(|scope| {
+    let b1 = waiter(scope, &line, ticket("b1", None), taken_by);
+
+    until_said(&b1, &DEPLOY.run.line_waiting);
+    root_waiter(scope, &a, "a2", 0);
+    root_waiter(scope, &a, "a3", 1);
+    root_waiter(scope, &b, "b2", 0);
+
+    let before = served_names(&line.lock);
+    let raised = raise_first(&RaiseAsk {
+      line: &line.lock,
+      unit: "bmo-deploy-b2",
+      mark: FirstMark::now("ops", "the paint fix"),
+      running: &|_| true,
+      recorded: &|_| Ok(false),
+    });
+    let after = served_names(&line.lock);
+    let listed = status_lines(&line.lock, now_ms()).join("\n");
+    let holder = served(&line.lock).holder.and_then(|holder| holder.commit);
+
+    drop((a_line, a_turn, b_turn));
+
+    assert!(raised.is_ok(), "{raised:?}");
+    assert_eq!(holder.as_deref(), Some("a1"));
+    assert_eq!(before, ["b1", "root:a2", "root:b2", "root:a3"]);
+    assert_eq!(after, ["b1", "root:b2", "root:a2", "root:a3"]);
+    assert!(
+      listed
+        .lines()
+        .any(|line| line.contains("app a3 (bmo-deploy-a3)") && line.ends_with(&LANES.status.for_root)),
+      "{listed}"
+    );
   });
 }

@@ -144,6 +144,12 @@ gate_work = "gate"
 again = "{commit} is already what is deployed; once its turn comes the deployment ends there if it still is"
 # The commit is still what is deployed once the turn comes, so the deployment ends live at once.
 already_live = "{commit} is already live, so nothing is laid down again and the deployment ends here"
+# A deployment asked again (docs/deploy.md, 「The deployment line」): {unit} the deployment standing or failed,
+# {words} its ticket's words, {seconds} how long ago it asked, {commit} a short commit, {when} when it ended and
+# {reason} its reason.
+attached = "{unit} already stands for {words}, asked {seconds}s ago; nothing new is started and this call attaches to it: journalctl --user -u {unit} --no-pager"
+failed_unmoved = "{commit} failed in its gate in {unit}, ended {when}, and the main branch still stands on it: {reason}; a new commit on main reopens it, or --first runs the gate again"
+failed_waiting = "{commit} failed in its gate in {unit} while this deployment waited: {reason}; its gate is not run again"
 major = "the change is major: version {version} against the live {previous}; the repositories that build on this one are run"
 unit_faults = "{faults}; the reload after the flip would make that unit vanish, so put its file back or relink it in {dir} by hand first"
 dry = "--dry-run: {commit} would go live over {live}; nothing was changed"

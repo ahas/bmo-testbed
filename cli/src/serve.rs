@@ -16,7 +16,7 @@ use bmo_testbed_service::{Ground, queue_page, router, watch_queues};
 use serde::Serialize;
 
 use bmo_testbed_core::verb::data_root_of;
-use bmo_testbed_deploy::line::{DeployLine, Standing, standing};
+use bmo_testbed_deploy::line::{DeployLine, Served, served};
 
 use crate::placement::MachineState;
 use crate::words::{McpArgs, ServeArgs};
@@ -55,11 +55,11 @@ struct StatusAnswer {
   queues: bmo_testbed_client::Page<bmo_testbed_client::Queue>,
   machines: Vec<MachineState>,
   close_line: Option<CloseLineAnswer>,
-  deploy_line: Standing,
+  deploy_line: Served,
 }
 
 /// Both lanes as `GET /queues` answers them, the placed machines as given, the close line where the caller
-/// names one, then the deployment line under the environment's data root.
+/// names one, then the deployment line under the environment's data root as it will serve its deployments.
 pub fn status_json(env: &Env, close_line: Option<&Path>, machines: Vec<MachineState>) -> String {
   let answer = StatusAnswer {
     queues: queue_page(env, &PageQuery::default()),
@@ -68,7 +68,7 @@ pub fn status_json(env: &Env, close_line: Option<&Path>, machines: Vec<MachineSt
       holder: line.holder.as_ref().map(CloseLineEntry::from),
       waiting: line.waiting.iter().map(CloseLineEntry::from).collect(),
     }),
-    deploy_line: standing(&DeployLine::under(&data_root_of(env)).lock),
+    deploy_line: served(&DeployLine::under(&data_root_of(env)).lock),
   };
 
   serde_json::to_string_pretty(&answer).unwrap_or_default()

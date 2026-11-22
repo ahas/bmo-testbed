@@ -479,7 +479,9 @@ flowchart TD
 - **The `status` verb** prints each lane: its width, who holds each seat held and since when, a line
   for each seat, or nobody, and who waits behind them in order, with the front and the next marked, and
   each run this machine placed on another in that lane, waiting or running there; then the close line of
-  the repository it is run in, its holder and who waits behind it; then the placed machine the settings
+  the repository it is run in, its holder and who waits behind it; then the deployment line in the order it
+  will serve its deployments, those waiting for their deploy root's turn included (`docs/deploy.md`, 「The
+  deployment line」); then the placed machine the settings
   name, whether it answers, the release its testbed is built from and whether that is this machine's live
   testbed release. `--json` gives the same as structure (`docs/boundary.md`).
 

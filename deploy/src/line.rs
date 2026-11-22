@@ -16,9 +16,15 @@ use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::queue::{HeldLock, LockWait, QueueTicket, Rank, now_ms, queue_tickets, take_lock};
 use bmo_testbed_core::verb::age;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+
+use crate::tree::short;
 
 /// The line's lock under the testbed data root's `locks/`.
 pub const DEPLOY_LINE_LOCK: &str = "deploy-line.lock";
+/// The folder beside the line's lock naming the lock of each deploy root's turn a deployment has stood for, a
+/// file for each, so the line's whole service order is read without knowing any repository.
+pub const ROOT_TURNS: &str = "deploy-line.roots";
 /// The folder beside the line's lock holding the first mark of each waiting deployment raised to first, a file
 /// for each, named by its unit.
 pub const FIRST_MARKS: &str = "deploy-line.first";
@@ -50,7 +56,11 @@ impl FirstMark {
 pub struct DeployTicket {
   pub words: String,
   pub repository: Option<String>,
+  /// The whole commit it asks for; the short one where an earlier revision stood the ticket.
   pub commit: Option<String>,
+  /// The deploy root it deploys.
+  #[serde(default)]
+  pub root: Option<String>,
   pub unit: Option<String>,
   pub asked_at: Option<i64>,
   /// The process standing the ticket, as the queue names it.
@@ -63,12 +73,18 @@ pub struct DeployTicket {
 }
 
 impl DeployTicket {
-  /// The ticket of a deployment of a repository's short commit asked now, in its unit where it runs in one.
+  /// The ticket of a deployment of a repository's whole commit asked now, in its unit where it runs in one,
+  /// its words naming the commit short.
   pub fn asked(repository: &str, commit: &str, unit: Option<&str>) -> Self {
     Self {
-      words: format!("{repository} {commit}{}", unit.map(|unit| format!(" ({unit})")).unwrap_or_default()),
+      words: format!(
+        "{repository} {}{}",
+        short(commit),
+        unit.map(|unit| format!(" ({unit})")).unwrap_or_default()
+      ),
       repository: Some(repository.to_owned()),
       commit: Some(commit.to_owned()),
+      root: None,
       unit: unit.map(str::to_owned),
       asked_at: Some(now_ms()),
       pid: 0,
@@ -85,8 +101,8 @@ impl DeployTicket {
     })
   }
 
-  // The ticket as a queue's words hold it.
-  fn written(&self) -> String {
+  /// The ticket as a queue's words hold it.
+  pub fn written(&self) -> String {
     serde_json::to_string(self).unwrap_or_else(|_| self.words.clone())
   }
 
@@ -169,18 +185,140 @@ pub fn waiting_ticket(locks: &[&Path], repository: &str, commit: &str) -> Option
     .find(|ticket| ticket.is_of(repository, commit) && ticket.unit.is_some())
 }
 
+/// Where a waiting deployment waits: in the line, or before it for its deploy root's turn.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum WaitsFor {
+  Line,
+  Root,
+}
+
+/// A waiting deployment as the line will serve it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Waiting {
+  #[serde(flatten)]
+  pub ticket: DeployTicket,
+  pub waits_for: WaitsFor,
+}
+
+/// The deployments asked of a line in the order it will serve them (docs/deploy.md, 「The deployment line」): the
+/// one holding it, then those waiting in it, then those waiting for their deploy root's turn.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct Served {
+  pub holder: Option<DeployTicket>,
+  pub waiting: Vec<Waiting>,
+}
+
+// Whether two tickets stand for one deployment: by their units where both name one, else by their processes.
+fn same_deployment(one: &DeployTicket, other: &DeployTicket) -> bool {
+  match (&one.unit, &other.unit) {
+    (Some(one), Some(other)) => one == other,
+    _ => one.pid == other.pid,
+  }
+}
+
+/// The locks of the deploy roots' turns enrolled beside a line's lock, each once.
+pub fn enrolled_turns(lock: &Path) -> Vec<PathBuf> {
+  let mut turns: Vec<PathBuf> = std::fs::read_dir(lock.with_file_name(ROOT_TURNS))
+    .into_iter()
+    .flatten()
+    .flatten()
+    .filter_map(|entry| std::fs::read_to_string(entry.path()).ok())
+    .map(|text| PathBuf::from(text.trim()))
+    .filter(|turn| !turn.as_os_str().is_empty())
+    .collect();
+
+  turns.sort();
+  turns.dedup();
+  turns
+}
+
+// The first mark a raise left for the ticket's unit and the deployment has not read yet, left where it stands.
+fn mark_left(lock: &Path, ticket: &DeployTicket) -> Option<FirstMark> {
+  let mark = marks_of(lock).join(format!("{}.json", ticket.unit.as_deref()?));
+
+  serde_json::from_str(&std::fs::read_to_string(mark).ok()?).ok()
+}
+
+/// The deployments asked of the line under a lock, read now in the order it will serve them (docs/deploy.md,
+/// 「The deployment line」). Those waiting for a deploy root's turn reach the line only as the deployment ahead of
+/// them of their deploy root ends, so they follow those in it in rounds, each deploy root's next one a round;
+/// within a round those marked first go ahead in the order marked, and the rest by where the deployment ahead
+/// of each stands: past the line first, then by its place in the line.
+pub fn served(lock: &Path) -> Served {
+  let line = standing(lock);
+  let in_line: Vec<&DeployTicket> = line.holder.iter().chain(&line.waiting).collect();
+  let place_of = |ticket: &DeployTicket| {
+    in_line.iter().position(|one| same_deployment(one, ticket)).map_or(0, |at| at + 1)
+  };
+  let mut roots: Vec<(usize, Vec<DeployTicket>)> = enrolled_turns(lock)
+    .iter()
+    .filter_map(|turn| {
+      let root = standing(turn);
+      let ahead = root.holder.as_ref().map_or(0, place_of);
+      let waiting: Vec<DeployTicket> = root
+        .waiting
+        .into_iter()
+        .filter(|ticket| !in_line.iter().any(|one| same_deployment(one, ticket)))
+        .map(|ticket| DeployTicket {
+          first: ticket.first.clone().or_else(|| mark_left(lock, &ticket)),
+          ..ticket
+        })
+        .collect();
+
+      (!waiting.is_empty()).then_some((ahead, waiting))
+    })
+    .collect();
+
+  roots.sort_by_key(|(ahead, _)| *ahead);
+
+  let rounds = roots.iter().map(|(_, waiting)| waiting.len()).max().unwrap_or(0);
+  let mut waiting: Vec<Waiting> = line
+    .waiting
+    .iter()
+    .cloned()
+    .map(|ticket| Waiting {
+      ticket,
+      waits_for: WaitsFor::Line,
+    })
+    .collect();
+
+  for round in 0..rounds {
+    let mut this: Vec<DeployTicket> =
+      roots.iter().filter_map(|(_, waiting)| waiting.get(round).cloned()).collect();
+
+    this.sort_by_key(|ticket| ticket.first.as_ref().map_or((1, 0), |first| (0, first.at)));
+    waiting.extend(this.into_iter().map(|ticket| Waiting {
+      ticket,
+      waits_for: WaitsFor::Root,
+    }));
+  }
+
+  Served {
+    holder: line.holder,
+    waiting,
+  }
+}
+
 /// The line as `status` says it (docs/boundary.md, 「`status`」): its heading, the deployment holding it, and
-/// each one waiting in the order the line serves them, with how long ago it asked and its first mark.
+/// each one waiting in the order the line will serve them, with how long ago it asked, its first mark, and
+/// whether it waits for its deploy root's turn.
 pub fn status_lines(lock: &Path, now: i64) -> Vec<String> {
   let said = &LANES.status;
-  let line = standing(lock);
+  let line = served(lock);
   let ticket_line =
     |ticket: &DeployTicket| format!("{}{}", ticket.named(), age(ticket.asked_at.unwrap_or(0), now));
   let holding = line.holder.as_ref().map_or_else(|| said.nobody.clone(), ticket_line);
   let mut lines = vec![said.deploy_line.clone(), fill_marks(&said.holding, &[("who", &holding)])];
 
-  lines.extend(line.waiting.iter().enumerate().map(|(at, ticket)| {
-    fill_marks(&said.waiting, &[("at", &(at + 1).to_string()), ("who", &ticket_line(ticket))])
+  lines.extend(line.waiting.iter().enumerate().map(|(at, waiting)| {
+    let who = match waiting.waits_for {
+      WaitsFor::Line => ticket_line(&waiting.ticket),
+      WaitsFor::Root => format!("{}{}", ticket_line(&waiting.ticket), said.for_root),
+    };
+
+    fill_marks(&said.waiting, &[("at", &(at + 1).to_string()), ("who", &who)])
   }));
   lines
 }
@@ -298,6 +436,29 @@ fn standing_ahead(lock: &Path) -> usize {
 }
 
 impl DeployLine {
+  /// A deploy root's turn enrolled beside the line, by a file named for its lock's path and naming it, so the
+  /// line's service order reads the deployments waiting for it (docs/deploy.md, 「The deployment line」). One
+  /// that cannot be written leaves that deploy root's waiting deployments out of the order and nothing else.
+  pub fn enrol(&self, turn: &Path) {
+    let dir = self.lock.with_file_name(ROOT_TURNS);
+    let path = turn.to_string_lossy();
+    let name: String = Sha256::digest(path.as_bytes()).iter().map(|byte| format!("{byte:02x}")).collect();
+    let enrolled = dir.join(&name);
+
+    if enrolled.exists() {
+      return;
+    }
+
+    let staged = dir.join(format!(".{name}-{}", std::process::id()));
+    let written = std::fs::create_dir_all(&dir)
+      .and_then(|()| std::fs::write(&staged, path.as_bytes()))
+      .and_then(|()| std::fs::rename(&staged, &enrolled));
+
+    if written.is_err() {
+      let _ = std::fs::remove_file(&staged);
+    }
+  }
+
   /// The machine's line under a testbed data root, at the policy's bound and pace.
   pub fn under(data_root: &Path) -> Self {
     let numbers = &DEPLOY.numbers;

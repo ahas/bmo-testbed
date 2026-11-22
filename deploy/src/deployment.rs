@@ -33,6 +33,7 @@ use bmo_testbed_record::{GateGround, GatePass, Record, say_unwritten};
 use serde_json::{Value, json};
 
 use crate::adopt::{Adopting, adopt, prune_retired};
+use crate::again::failed_gate;
 use crate::backup::{BackupPlan, BackupTaken, take_backup};
 use crate::boot::{
   HealthEnd, HealthWatch, StayUp, boot_report, boot_scene, stands_up, stay_report, unit_gave_up,
@@ -1501,6 +1502,14 @@ fn later_asked(run: &Laying<'_>, lock: &Path, commit: &str) -> Option<String> {
   let _ = run.git(&["fetch", "--quiet", "origin"], source);
   let carries =
     |later: &str, earlier: &str| run.git(&["merge-base", "--is-ancestor", earlier, later], source).ok;
+  // A commit whose newest ended deployment failed in its gate would fail there again.
+  let failed = |later: &str| {
+    run
+      .ask
+      .record
+      .as_deref()
+      .is_some_and(|data_root| failed_gate(data_root, &run.repo.name(), later, 0).is_some())
+  };
 
   asked
     .iter()
@@ -1509,7 +1518,7 @@ fn later_asked(run: &Laying<'_>, lock: &Path, commit: &str) -> Option<String> {
 
       resolved.ok.then(|| resolved.out.trim().to_owned())
     })
-    .filter(|later| later != commit && carries(later, commit))
+    .filter(|later| later != commit && carries(later, commit) && !failed(later))
     .fold(None, |furthest: Option<String>, later| match furthest {
       Some(furthest) if !carries(&later, &furthest) => Some(furthest),
       _ => Some(later),
@@ -1671,7 +1680,8 @@ async fn laid(
   let ticket = DeployTicket {
     first: ask.first.clone(),
     before_start: ask.before_start.is_some(),
-    ..DeployTicket::asked(&repo.name(), &shown, ask.unit.as_deref())
+    root: Some(places.deploy_root.to_string_lossy().into_owned()),
+    ..DeployTicket::asked(&repo.name(), &commit, ask.unit.as_deref())
   };
   let carried =
     deploy_progress_at(&places.progress).is_some_and(|standing| standing.carried_in(ask.unit.as_deref()));
@@ -1680,6 +1690,12 @@ async fn laid(
     ..RootTurn::under(&places.deploy_root)
   };
   let taken_now = turn.is_none() && !carried;
+
+  // The deploy root's turn enrolled beside the line, so the line's service order reads who waits for it.
+  if taken_now && let Some(line) = &ask.line {
+    line.enrol(&root.lock);
+  }
+
   let root_turn = match turn {
     Some(held) => Some(held),
     None => (!carried).then(|| root.take(&ticket, &|line| run.say(line))).flatten(),
@@ -1703,6 +1719,25 @@ async fn laid(
 
   let _root_turn = root_turn;
   let line = ask.line.as_ref().and_then(|line| line.take(&ticket, &|line| run.say(line)));
+
+  // A gate of this very commit that failed while this deployment waited would fail again: it ends here, before
+  // its gate, with nothing written, since that failure was told already.
+  if !ask.no_check
+    && let Some(failed) = ask.record.as_deref().and_then(|data_root| {
+      failed_gate(data_root, &repo.name(), &commit, ticket.asked_at.unwrap_or_default())
+    })
+  {
+    drop(line);
+
+    return run.refused(fill_marks(
+      &said.failed_waiting,
+      &[
+        ("commit", &shown),
+        ("unit", failed.unit_name.as_deref().unwrap_or_default()),
+        ("reason", failed.reason.as_deref().unwrap_or_default()),
+      ],
+    ));
+  }
 
   run.previous = read_deploy_record(&places.record);
 

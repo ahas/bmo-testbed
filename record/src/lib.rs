@@ -435,6 +435,37 @@ impl Record {
     Ok(under_way)
   }
 
+  /// The newest deployment of the repository and the whole commit given that has ended, as it stands now; none
+  /// where every one of them still runs or there is none.
+  pub fn newest_ended_deployment(
+    &self,
+    repository: &str,
+    commit: &str,
+  ) -> Result<Option<Deployment>, String> {
+    let mut statement = self
+      .connection
+      .prepare(
+        "SELECT member FROM deployments
+          WHERE json_extract(member, '$.repositoryName') = ?1
+            AND json_extract(member, '$.commit') = ?2
+          ORDER BY id DESC",
+      )
+      .map_err(failed)?;
+    let rows = statement
+      .query_map(params![repository, commit], |row| row.get::<_, String>(0))
+      .map_err(failed)?;
+
+    for row in rows {
+      let deployment = deployment_now(member_of(&row.map_err(failed)?)?);
+
+      if deployment.state != DeploymentState::Running {
+        return Ok(Some(deployment));
+      }
+    }
+
+    Ok(None)
+  }
+
   /// One line a deployment said.
   pub fn add_log_line(&mut self, deployment_id: i64, text: &str) -> Result<LogLine, String> {
     let at = now_ms();
