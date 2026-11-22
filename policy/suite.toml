@@ -178,6 +178,8 @@ no_check = "its manifest names no {script} script, so nothing of it could be che
 no_runner = "no declared language runs its {script} script, so nothing of it could be checked"
 # The change check's step running the touched test files of one {language}.
 tests_step = "{language} test"
+# The change check's step running one touched browser file, {file} its path from the folder it runs from.
+browser_step = "{language} browser test {file}"
 no_tool_check = "its {manifest} names no {key} command, so nothing of it could be checked"
 unread_manifest = "its {manifest} does not read, so nothing of it could be checked: {why}"
 # A crate whose tests the build ahead did not build, by the {code} that build ended with.

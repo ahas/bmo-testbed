@@ -21,7 +21,7 @@ use sha2::{Digest, Sha256};
 
 use crate::cargo::cargo_verb_line;
 use crate::own_binary::testbed_line;
-use crate::run::{browser_file, file_groups, holds_browser, limit_words, script_runner};
+use crate::run::{browser_file, file_groups, limit_words, script_runner};
 use crate::selection::changed_paths;
 use crate::static_check::{CheckStep, TimedRun, run_fenced, spawn_step, static_steps};
 use crate::test_server::test_postgres;
@@ -192,30 +192,42 @@ pub fn plan(repo: &Repository, ask: &CheckAsk) -> Result<CheckPlan, String> {
     vec![]
   };
 
-  // The touched test files, one step to each declared language that runs some of them and folder it runs
-  // them from.
+  // The touched test files, one step to each declared language that runs some of them and folder it runs them
+  // from, and one to each browser file among them after it (docs/checks.md, 「The change check」).
   let test = &repo.declaration.test;
 
   for group in file_groups(&repo.root, test, &touched.tests) {
-    // A step holding a file the declaration names as a browser file is handed no limit of the runner's own:
-    // a runner that ends one test of such a file takes down the browser the whole command shares
-    // (docs/suite.md, 「How long a unit and a test may run」).
-    let browser = holds_browser(&group.dir, &group.files, &|file| browser_file(test, file));
-    let limit = limit_words(group.language, &[], test.per_test_seconds(), browser);
+    let dir = if group.dir.as_os_str().is_empty() { Path::new(".") } else { group.dir.as_path() };
+    let (browser, other): (Vec<String>, Vec<String>) = group
+      .files
+      .iter()
+      .cloned()
+      .partition(|file| browser_file(test, &group.dir.join(file).to_string_lossy()));
+    let language = group.language;
+    let mut push = |files: &[String], name: String, browser: bool| {
+      // A browser file's runner is handed no limit of its own: a runner that ends one test of such a file takes
+      // down the browser every later test of it shares (docs/suite.md, 「How long a unit and a test may run」).
+      let limit = limit_words(language, &[], test.per_test_seconds(), browser);
 
-    if let Some(command) = group.language.test_command(&group.files, &limit) {
-      let dir = if group.dir.as_os_str().is_empty() { Path::new(".") } else { group.dir.as_path() };
-      let step = plain(&dir.to_string_lossy(), command, database.clone());
+      if let Some(command) = language.test_command(files, &limit) {
+        let step = plain(&dir.to_string_lossy(), command, database.clone());
 
-      steps.push(Step {
-        name: format!(
-          "{}{}",
-          fill_marks(&SUITE.file.tests_step, &[("language", group.language.name())]),
-          where_it_runs(&step.dir)
-        ),
-        step,
-        tests: true,
-      });
+        steps.push(Step {
+          name: format!("{name}{}", where_it_runs(&step.dir)),
+          step,
+          tests: true,
+        });
+      }
+    };
+
+    if !other.is_empty() {
+      push(&other, fill_marks(&SUITE.file.tests_step, &[("language", language.name())]), false);
+    }
+
+    for file in &browser {
+      let name = fill_marks(&SUITE.file.browser_step, &[("language", language.name()), ("file", file)]);
+
+      push(std::slice::from_ref(file), name, true);
     }
   }
 

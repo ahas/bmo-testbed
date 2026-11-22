@@ -57,6 +57,8 @@
   waits holds its place until a check ends.
 - **Why one at a time:** each drives a browser, and several browsers side by side slow one another far
   more than they slow the rest.
+- **The change check runs them so too:** each browser file a change touches is a step of its own, apart from
+  the other files of its folder (`docs/checks.md`, 「The change check」).
 - **Why a process each:** a browser driver freshly loaded several times inside one process can hang
   where the browser starts or closes; a process per file loads it once.
 

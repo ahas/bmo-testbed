@@ -310,10 +310,14 @@
   the static check's own steps for the change, then the test files the change touches, `cargo test` on
   the crates it touches itself, and the check of every tool, project and package the change reaches, a
   step each. The test files are one step for each declared language and folder they run from
-  (`docs/suite.md`, 「Which files run」), each file handed by its path from that folder. A step whose files
-  hold one the declaration names as a browser file is handed no per-test limit of the runner's own, since
-  ending one test of such a file takes down the browser the whole step shares (`docs/suite.md`, 「How long a
-  unit and a test may run」). The whole suite stays with the close.
+  (`docs/suite.md`, 「Which files run」), each file handed by its path from that folder, apart from the files
+  the declaration names as browser files: each of those is a step of its own, after the step of the other
+  files of its language and folder, so a change's browser files run one at a time as the suite runs them
+  (`docs/suite.md`, 「Browser files run in a lane of one」). A browser file's step is handed no per-test limit
+  of the runner's own, since ending one test of such a file takes down the browser the whole file shares, and
+  the step of the other files keeps the limit (`docs/suite.md`, 「How long a unit and a test may run」). A
+  browser file alone costs the change check the few seconds it would have run beside another. The whole suite
+  stays with the close.
 - **Its static steps are the static check's,** asked of the same place with the change it reads, so the
   two never check differently (「The static check」): the enabled quick checks, the declared steps the
   change reaches, and, where the change marks a crate, the Cargo workspace's `cargo fmt --check`, on the

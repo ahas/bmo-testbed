@@ -125,6 +125,7 @@ pub struct FileWords {
   pub no_check: String,
   pub no_runner: String,
   pub tests_step: String,
+  pub browser_step: String,
   pub no_tool_check: String,
   pub unread_manifest: String,
   pub unbuilt_crate: String,

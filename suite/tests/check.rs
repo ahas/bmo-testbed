@@ -93,6 +93,7 @@ fn checkout() -> (tempfile::TempDir, String) {
       "import { one } from \"./numbers\";\n\nconsole.log(one);\n",
     ),
     ("packages/util/screen.test.ts", "console.log(0);\n"),
+    ("packages/util/screen-wide.test.ts", "console.log(0);\n"),
     ("packages/util/labels.test.ts", "console.log(0);\n"),
     ("packages/other/package.json", r#"{ "name": "@sample/other" }"#),
     ("packages/other/other.ts", "export const two = 2;\n"),
@@ -203,42 +204,45 @@ fn touched_test_files_run_one_step_per_folder_of_their_configuration() {
   );
 }
 
-// "a step whose files hold one the declaration names as a browser file is handed no per-test limit of the
-// runner's own" (docs/checks.md, 「The change check」)
+// "apart from the files the declaration names as browser files: each of those is a step of its own, after the step
+// of the other files of its language and folder"; "A browser file's step is handed no per-test limit of the
+// runner's own ... and the step of the other files keeps the limit" (docs/checks.md, 「The change check」)
 #[test]
-fn the_step_holding_a_browser_file_keeps_no_per_test_limit_of_its_runner() {
+fn each_browser_file_is_a_step_of_its_own_without_a_limit_and_the_other_files_keep_theirs() {
   let (dir, _) = checkout();
-  let root = dir.path();
-  let command = |given: &[&str]| {
-    plan(&repo(root), &files(given))
-      .unwrap()
-      .steps
-      .into_iter()
-      .find(|step| step.tests)
-      .unwrap()
-      .step
-      .command
-  };
-  let screen = "packages/util/screen.test.ts";
-  let labels = "packages/util/labels.test.ts";
+  let planned = plan(
+    &repo(dir.path()),
+    &files(&[
+      "packages/util/labels.test.ts",
+      "packages/util/screen.test.ts",
+      "packages/util/screen-wide.test.ts",
+    ]),
+  )
+  .unwrap();
+  let tests: Vec<(String, Vec<String>)> = planned
+    .steps
+    .into_iter()
+    .filter(|step| step.tests)
+    .map(|step| (step.name, step.step.command))
+    .collect();
+  let words = |all: &[&str]| all.iter().map(|word| (*word).to_owned()).collect::<Vec<_>>();
+  let browser = |file: &str| fill_marks(&SUITE.file.browser_step, &[("language", "bun"), ("file", file)]);
 
-  // The declaration's browser glob reaches the first of them alone, so a step over the other keeps the limit.
   assert_eq!(
-    command(&[labels]),
-    ["bun", "test", "--timeout=120000", "./packages/util/labels.test.ts"]
-  );
-  // A step the browser file is in is handed no limit word, and bun lifts its own built-in one.
-  assert_eq!(command(&[screen]), ["bun", "test", "--timeout", "0", "./packages/util/screen.test.ts"]);
-  assert_eq!(
-    command(&[labels, screen]),
+    tests,
     [
-      "bun",
-      "test",
-      "--parallel",
-      "--timeout",
-      "0",
-      "./packages/util/labels.test.ts",
-      "./packages/util/screen.test.ts"
+      (
+        fill_marks(&SUITE.file.tests_step, &[("language", "bun")]),
+        words(&["bun", "test", "--timeout=120000", "./packages/util/labels.test.ts"])
+      ),
+      (
+        browser("packages/util/screen-wide.test.ts"),
+        words(&["bun", "test", "--timeout", "0", "./packages/util/screen-wide.test.ts"])
+      ),
+      (
+        browser("packages/util/screen.test.ts"),
+        words(&["bun", "test", "--timeout", "0", "./packages/util/screen.test.ts"])
+      ),
     ]
   );
 }
