@@ -455,12 +455,14 @@ flowchart TD
   or for its deploy root's turn. The holder's ticket says it holds the line, so the one holding it is named
   even where a deployment marked first stands ahead of its ticket.
   - **Those in the line come first,** in the order the line serves them.
-  - **Those waiting for their deploy root's turn come after,** since each reaches the line only once the
-    deployment ahead of it of its own deploy root has ended. They stand in rounds: the first waiting of each
-    deploy root, then the second of each, and so on. Within a round, those marked first, by `--first` or by
-    a raise not yet read, stand ahead in the order they were marked, and the rest stand in the order the
-    deployment ahead of each of its deploy root is served: one whose deploy root's deployment is past the
-    line first, then by that deployment's place in the line.
+  - **Those waiting for their deploy root's turn stand where they will reach it.** A deployment lets the line go
+    at the end of its build and its deploy root's turn only at its own end, so the line passes to the next one
+    waiting there before that deploy root's next waiting deployment reaches it. `status` therefore follows the
+    line one turn at a time, reading each deployment as ending once the line has passed on from it: as it ends,
+    its deploy root's next waiting deployment reaches the line behind every one waiting there, or, marked first,
+    by `--first` or by a raise not yet read, ahead of every unmarked one, after those marked before it. A deploy
+    root whose deployment stands nowhere in the line, past its build or not yet in it, is read as having ended,
+    so its next waiting deployment reaches the line at once.
   - **The deploy roots are found through the line.** A deployment about to stand for its deploy root's turn
     enrols that turn's lock beside the line's, a file for each deploy root under `deploy-line.roots/` in the
     same `locks/`, so `status` reads every deploy root that has had a deployment without knowing any

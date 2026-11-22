@@ -7,6 +7,7 @@
 //! turn, which keeps one deployment of a deploy root under way at a time.
 
 use std::cell::RefCell;
+use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -241,40 +242,68 @@ fn mark_left(lock: &Path, ticket: &DeployTicket) -> Option<FirstMark> {
   serde_json::from_str(&std::fs::read_to_string(mark).ok()?).ok()
 }
 
+// A deploy root's turn as the line's service order reads it: the deployment holding it, and those waiting for it.
+struct RootQueue {
+  holder: Option<DeployTicket>,
+  waiting: VecDeque<DeployTicket>,
+}
+
+impl RootQueue {
+  // The deploy root's next waiting deployment reaching the line as the one holding its turn ends: behind every one
+  // waiting there, or, marked first, ahead of every unmarked one, after those marked before it. It then holds the
+  // deploy root's turn.
+  fn reach(&mut self, line: &mut VecDeque<Waiting>) {
+    self.holder = self.waiting.pop_front();
+
+    if let Some(ticket) = self.holder.clone() {
+      let at = if ticket.first.is_some() {
+        line.iter().take_while(|waiting| waiting.ticket.first.is_some()).count()
+      } else {
+        line.len()
+      };
+
+      line.insert(
+        at,
+        Waiting {
+          ticket,
+          waits_for: WaitsFor::Root,
+        },
+      );
+    }
+  }
+}
+
 /// The deployments asked of the line under a lock, read now in the order it will serve them (docs/deploy.md,
-/// 「The deployment line」). Those waiting for a deploy root's turn reach the line only as the deployment ahead of
-/// them of their deploy root ends, so they follow those in it in rounds, each deploy root's next one a round;
-/// within a round those marked first go ahead in the order marked, and the rest by where the deployment ahead
-/// of each stands: past the line first, then by its place in the line.
+/// 「The deployment line」), the line followed one turn at a time. A holder lets the line go after its build and its
+/// deploy root's turn only at its end, so the line passes to the next one waiting there before that deploy root's
+/// next waiting deployment reaches it; a deploy root whose deployment stands nowhere in the line is past it, so its
+/// next one reaches the line at once.
 pub fn served(lock: &Path) -> Served {
   let line = standing(lock);
-  let in_line: Vec<&DeployTicket> = line.holder.iter().chain(&line.waiting).collect();
-  let place_of = |ticket: &DeployTicket| {
-    in_line.iter().position(|one| same_deployment(one, ticket)).map_or(0, |at| at + 1)
-  };
-  let mut roots: Vec<(usize, Vec<DeployTicket>)> = enrolled_turns(lock)
+  let in_line =
+    |ticket: &DeployTicket| line.holder.iter().chain(&line.waiting).any(|one| same_deployment(one, ticket));
+  let mut roots: Vec<RootQueue> = enrolled_turns(lock)
     .iter()
-    .filter_map(|turn| {
+    .map(|turn| {
       let root = standing(turn);
-      let ahead = root.holder.as_ref().map_or(0, place_of);
-      let waiting: Vec<DeployTicket> = root
+      let waiting = root
         .waiting
         .into_iter()
-        .filter(|ticket| !in_line.iter().any(|one| same_deployment(one, ticket)))
+        .filter(|ticket| !in_line(ticket))
         .map(|ticket| DeployTicket {
           first: ticket.first.clone().or_else(|| mark_left(lock, &ticket)),
           ..ticket
         })
         .collect();
 
-      (!waiting.is_empty()).then_some((ahead, waiting))
+      RootQueue {
+        holder: root.holder,
+        waiting,
+      }
     })
+    .filter(|root| !root.waiting.is_empty())
     .collect();
-
-  roots.sort_by_key(|(ahead, _)| *ahead);
-
-  let rounds = roots.iter().map(|(_, waiting)| waiting.len()).max().unwrap_or(0);
-  let mut waiting: Vec<Waiting> = line
+  let mut queue: VecDeque<Waiting> = line
     .waiting
     .iter()
     .cloned()
@@ -284,15 +313,32 @@ pub fn served(lock: &Path) -> Served {
     })
     .collect();
 
-  for round in 0..rounds {
-    let mut this: Vec<DeployTicket> =
-      roots.iter().filter_map(|(_, waiting)| waiting.get(round).cloned()).collect();
+  for root in &mut roots {
+    if !root.holder.as_ref().is_some_and(in_line) {
+      root.reach(&mut queue);
+    }
+  }
 
-    this.sort_by_key(|ticket| ticket.first.as_ref().map_or((1, 0), |first| (0, first.at)));
-    waiting.extend(this.into_iter().map(|ticket| Waiting {
-      ticket,
-      waits_for: WaitsFor::Root,
-    }));
+  let mut serving = line.holder.clone();
+  let mut waiting = Vec::new();
+
+  loop {
+    let next = queue.pop_front();
+
+    if let Some(ended) = serving.take() {
+      for root in &mut roots {
+        if root.holder.as_ref().is_some_and(|holder| same_deployment(holder, &ended)) {
+          root.reach(&mut queue);
+        }
+      }
+    }
+
+    let Some(next) = next.or_else(|| queue.pop_front()) else {
+      break;
+    };
+
+    serving = Some(next.ticket.clone());
+    waiting.push(next);
   }
 
   Served {

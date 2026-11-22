@@ -304,22 +304,41 @@ fn root_in(dir: &Path, line: &DeployLine, name: &str) -> RootTurn {
   turn
 }
 
-// A deployment waiting for a deploy root's turn on a thread of the scope, until `ahead` of them wait there.
-fn root_waiter<'scope>(
+// A deployment on a thread of the scope, as a deploy run stands: it takes its deploy root's turn, then its turn of
+// the line, says its name on `taken` once it holds the line, lets the line go when told, and lets its deploy root's
+// turn go when told again, as a run lets the line go after its build and its deploy root's turn at its end.
+fn deployment<'scope>(
   scope: &'scope std::thread::Scope<'scope, '_>,
   turn: &'scope RootTurn,
+  line: &'scope DeployLine,
   name: &str,
-  ahead: usize,
-) {
+  taken: Sender<String>,
+) -> Sender<()> {
+  let (tell, told) = channel::<()>();
   let stood = ticket(name, None);
 
-  scope.spawn(move || drop(turn.take(&stood, &|_| {})));
+  scope.spawn(move || {
+    let root = turn.take(&stood, &|_| {});
+    let held = line.take(&stood, &|_| {});
 
-  let given_up = Instant::now() + Duration::from_secs(60);
+    let _ = taken.send(stood.commit.clone().unwrap_or_default());
+    let _ = told.recv();
+    drop(held);
+    let _ = told.recv();
+    drop(root);
+  });
+  tell
+}
 
-  while standing(&turn.lock).waiting.len() <= ahead && Instant::now() < given_up {
-    std::thread::sleep(Duration::from_millis(5));
-  }
+// Whether the deployment named stands under a lock, holding it or waiting for it.
+fn stands(lock: &Path, name: &str) -> bool {
+  let now = standing(lock);
+
+  now
+    .holder
+    .iter()
+    .chain(&now.waiting)
+    .any(|ticket| ticket.commit.as_deref() == Some(name))
 }
 
 // The names of the deployments the line will serve, those waiting for their deploy root's turn marked `root:`.
@@ -338,50 +357,87 @@ fn served_names(lock: &Path) -> Vec<String> {
     .collect()
 }
 
-// "Those in the line come first"; "Those waiting for their deploy root's turn come after ... in rounds ... those
-// marked first, by `--first` or by a raise not yet read, stand ahead ... the rest ... by that deployment's place in
-// the line"; "The deploy roots are found through the line"
+// "A deployment lets the line go at the end of its build and its deploy root's turn only at its own end, so the
+// line passes to the next one waiting there before that deploy root's next waiting deployment reaches it"; "marked
+// first, by `--first` or by a raise not yet read, ahead of every unmarked one"; "The deploy roots are found through
+// the line": the order `status` reads is the order the line is then taken in.
 #[test]
-fn the_line_is_served_after_its_own_by_those_waiting_for_their_deploy_roots_turn_in_rounds_marked_first_ahead()
- {
+fn the_line_is_taken_in_the_order_status_reads_those_waiting_for_their_deploy_roots_turn_included() {
   let dir = tempfile::tempdir().unwrap();
   let line = line_in(dir.path());
-  let (a, b) = (root_in(dir.path(), &line, "a"), root_in(dir.path(), &line, "b"));
-  let a_turn = a.take(&ticket("a1", None), &|_| {}).unwrap();
-  let b_turn = b.take(&ticket("b1", None), &|_| {}).unwrap();
-  let a_line = line.take(&ticket("a1", None), &|_| {}).unwrap();
-  let (taken_by, _taken) = channel();
+  let (x, y, z) = (
+    root_in(dir.path(), &line, "x"),
+    root_in(dir.path(), &line, "y"),
+    root_in(dir.path(), &line, "z"),
+  );
+  let (taken_by, taken) = channel();
+  let given_up = Instant::now() + Duration::from_secs(60);
 
   std::thread::scope(|scope| {
-    let b1 = waiter(scope, &line, ticket("b1", None), taken_by);
+    let mut told = std::collections::HashMap::new();
 
-    until_said(&b1, &DEPLOY.run.line_waiting);
-    root_waiter(scope, &a, "a2", 0);
-    root_waiter(scope, &a, "a3", 1);
-    root_waiter(scope, &b, "b2", 0);
+    // x1 holds the line and x's turn; y1 and z1 hold their deploy roots' turns and wait in the line; x2, x3 and y2
+    // wait for their deploy roots' turns.
+    told.insert("x1", deployment(scope, &x, &line, "x1", taken_by.clone()));
+    assert_eq!(turns(&taken, 1), ["x1"]);
+    told.insert("y1", deployment(scope, &y, &line, "y1", taken_by.clone()));
+    standing_until(&line.lock, |now| now.waiting.len() == 1);
+    told.insert("z1", deployment(scope, &z, &line, "z1", taken_by.clone()));
+    standing_until(&line.lock, |now| now.waiting.len() == 2);
 
-    let before = served_names(&line.lock);
+    for (turn, name, ahead) in [(&x, "x2", 0), (&x, "x3", 1), (&y, "y2", 0)] {
+      told.insert(name, deployment(scope, turn, &line, name, taken_by.clone()));
+      standing_until(&turn.lock, |now| now.waiting.len() > ahead);
+    }
+
+    let unmarked = served_names(&line.lock);
     let raised = raise_first(&RaiseAsk {
       line: &line.lock,
-      unit: "bmo-deploy-b2",
+      unit: "bmo-deploy-x2",
       mark: FirstMark::now("ops", "the paint fix"),
       running: &|_| true,
       recorded: &|_| Ok(false),
     });
-    let after = served_names(&line.lock);
+    let marked = served_names(&line.lock);
     let listed = status_lines(&line.lock, now_ms()).join("\n");
-    let holder = served(&line.lock).holder.and_then(|holder| holder.commit);
 
-    drop((a_line, a_turn, b_turn));
+    // The line followed: its holder lets it go, the next one takes it, then the holder ends and its deploy root's
+    // next one stands in the line before the line moves again.
+    let roots = [["x1", "x2", "x3"].as_slice(), ["y1", "y2"].as_slice(), ["z1"].as_slice()];
+    let mut holding = "x1".to_owned();
+    let mut taken_in = Vec::new();
+
+    for _ in 0..5 {
+      let _ = told[holding.as_str()].send(());
+      let Some(next) = turns(&taken, 1).pop() else { break };
+      let _ = told[holding.as_str()].send(());
+
+      if let Some(after) =
+        roots.iter().find_map(|queue| queue.iter().skip_while(|name| **name != holding).nth(1))
+      {
+        while !stands(&line.lock, after) && Instant::now() < given_up {
+          std::thread::sleep(Duration::from_millis(5));
+        }
+      }
+
+      taken_in.push(next.clone());
+      holding = next;
+    }
+
+    // Every deployment let go, whatever was taken, so none is left waiting.
+    for tell in told.values() {
+      let _ = tell.send(());
+      let _ = tell.send(());
+    }
 
     assert!(raised.is_ok(), "{raised:?}");
-    assert_eq!(holder.as_deref(), Some("a1"));
-    assert_eq!(before, ["b1", "root:a2", "root:b2", "root:a3"]);
-    assert_eq!(after, ["b1", "root:b2", "root:a2", "root:a3"]);
+    assert_eq!(unmarked, ["y1", "z1", "root:x2", "root:y2", "root:x3"]);
+    assert_eq!(marked, ["y1", "root:x2", "z1", "root:y2", "root:x3"]);
+    assert_eq!(taken_in, ["y1", "x2", "z1", "y2", "x3"]);
     assert!(
       listed
         .lines()
-        .any(|line| line.contains("app a3 (bmo-deploy-a3)") && line.ends_with(&LANES.status.for_root)),
+        .any(|line| line.contains("app x3 (bmo-deploy-x3)") && line.ends_with(&LANES.status.for_root)),
       "{listed}"
     );
   });

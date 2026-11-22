@@ -136,7 +136,7 @@ bmo-testbed status [--json | --free [--narrow]]
   stands here too」), naming the machine, whether it waits or runs there and since when; then the close
   line of the repository it is run in; then the deployment line: a `holding it:` line naming the
   deployment holding it, or one saying nobody, and its waiting deployments in the order the line will
-  serve them, those waiting for their deploy root's turn included after those in the line
+  serve them, those waiting for their deploy root's turn included where they will reach it
   (`docs/deploy.md`, 「The deployment line」), each naming its repository, commit and unit, how long ago it
   asked, `first, by <who>: <why>` where it is marked first, and `for its repository's turn` where it waits
   for its deploy root's turn; then a line for the placed machine the settings name, where they
