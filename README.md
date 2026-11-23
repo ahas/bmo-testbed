@@ -1,3 +1,5 @@
+**English** | [한국어](README.ko.md) | [日本語](README.ja.md) | [简体中文](README.zh-CN.md)
+
 # bmo-testbed
 
 A general-purpose testbed for one machine shared by many callers and many repositories: one queue for
@@ -49,7 +51,7 @@ and a release-based deployment of a repository onto the machine it runs on.
 | `test-support/` | The fixed ids a Rust test names its people, rooms and units by, the same as the test kit's |
 | `scratch-database/` | Per-test PostgreSQL databases cloned from a template a consumer's migrator makes |
 | `testkit/` | The TypeScript test kit a consumer preloads: the test home and the stand-ins |
-| `units/` | The user units this repository's deployment keeps: the Cargo build directory's prune, the data backup's snapshot, media and drill, and their timers |
+| `units/` | The user units this repository's deployment keeps: the Cargo build directory's prune, the data backup's snapshot, media and drill, their timers, and the slices every unit the testbed starts or ships runs in |
 | `policy/` | The testbed's own fixed numbers and words, read by `core`'s policy loader |
 | `docs/` | The documents above |
 
