@@ -10,6 +10,7 @@ use bmo_testbed_core::policy::install::INSTALL;
 use bmo_testbed_core::policy::prune::PRUNE;
 use bmo_testbed_core::policy::service::SERVICE;
 use bmo_testbed_core::policy::suite::SUITE;
+use bmo_testbed_core::policy::supervise::SUPERVISE;
 use bmo_testbed_core::policy::verbs::VERBS;
 use bmo_testbed_suite::template::is_database_name;
 use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
@@ -52,6 +53,7 @@ pub enum Verb {
   Mcp(McpArgs),
   Notice(NoticeArgs),
   Install(InstallArgs),
+  Supervise(SuperviseArgs),
   /// The nouns `bmo` dispatches to this binary, one a line.
   Nouns,
   /// The platform's names for the suite verbs.
@@ -503,6 +505,42 @@ pub struct InstallArgs {
   pub dry_run: bool,
 }
 
+/// `supervise`: the set's services run without systemd, and what is asked of them (docs/supervise.md).
+#[derive(Debug, Args)]
+#[command(disable_help_subcommand = true)]
+pub struct SuperviseArgs {
+  #[command(subcommand)]
+  pub word: SuperviseWord,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum SuperviseWord {
+  /// The supervisor run in the foreground until it is stopped.
+  Serve {
+    #[arg(long)]
+    data_root: Option<PathBuf>,
+    #[arg(long)]
+    anyway: bool,
+  },
+  /// Each unit's state, main process, restarts and health.
+  Status {
+    #[arg(long)]
+    json: bool,
+    #[arg(long)]
+    data_root: Option<PathBuf>,
+  },
+  /// The lines that put a command under the supervisor.
+  Env {
+    #[arg(long)]
+    data_root: Option<PathBuf>,
+  },
+  /// Every unit stopped and the supervisor ended.
+  StopAll {
+    #[arg(long)]
+    data_root: Option<PathBuf>,
+  },
+}
+
 /// `notice`: the event a hook is handed, by its name.
 #[derive(Debug, Args)]
 pub struct NoticeArgs {
@@ -593,6 +631,13 @@ pub fn read(args: impl IntoIterator<Item = OsString>) -> Result<Words, clap::Err
     .mut_subcommand("mcp", |verb| verb.override_help(usage(&said.mcp)))
     .mut_subcommand("notice", |verb| verb.override_help(usage(&said.notice)))
     .mut_subcommand("install", |verb| verb.override_help(usage(&INSTALL.usage)))
+    .mut_subcommand("supervise", |verb| {
+      ["serve", "status", "env", "stop-all"]
+        .iter()
+        .fold(verb.override_help(usage(&SUPERVISE.usage)), |verb, word| {
+          verb.mut_subcommand(word, |word| word.override_help(usage(&SUPERVISE.usage)))
+        })
+    })
     .mut_subcommand("test", |verb| {
       verb
         .mut_subcommand("suite", |word| word.override_help(usage(&said.suite)))

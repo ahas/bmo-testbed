@@ -24,6 +24,7 @@ pub mod said;
 pub mod serve;
 pub mod shell;
 pub mod suite;
+pub mod supervise;
 pub mod words;
 
 use std::ffi::OsString;
@@ -402,6 +403,16 @@ fn print_nouns() -> u8 {
 pub fn main(args: impl IntoIterator<Item = OsString>) -> u8 {
   bmo_testbed_core::open_files::raise_open_files();
 
+  // Called by a stand-in's name from the supervisor's folder, the binary answers as that program
+  // (docs/supervise.md, 「The stand-ins」).
+  let args: Vec<OsString> = args.into_iter().collect();
+
+  if let Some(name) = args.first().and_then(bmo_testbed_supervise::stand_in::stand_in_name) {
+    let code = bmo_testbed_supervise::stand_in::main(&name, args);
+
+    return u8::try_from(code).unwrap_or(1);
+  }
+
   let words = match words::read(args) {
     Ok(words) => words,
     Err(error) => {
@@ -458,6 +469,7 @@ pub fn main(args: impl IntoIterator<Item = OsString>) -> u8 {
     Verb::Mcp(args) => serve::mcp(&args),
     Verb::Notice(args) => notice::notice(&args.event),
     Verb::Install(args) => install::install(&args),
+    Verb::Supervise(args) => supervise::supervise(args.word),
     Verb::Nouns => print_nouns(),
     Verb::Test(args) => run_test(args),
   }

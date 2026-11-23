@@ -38,6 +38,8 @@ backup    the machine's databases and data folders backed up to its destinations
 serve     the HTTP service: the record and the lanes, read-only behind a token
 mcp       the harness plugin's MCP server, on standard input and output
 notice    an event a hook is handed, told to the owner's supervisor through the receiver
+supervise the set's services run on a machine with no systemd user manager, and the stand-ins
+          for systemctl, systemd-run and journalctl that ask it
 nouns     the nouns `bmo` dispatches to this binary, one a line
 test      the platform's names for the suite verbs: test suite, test count, test log,
           test template and test full

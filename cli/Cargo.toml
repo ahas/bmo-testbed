@@ -28,6 +28,7 @@ bmo-testbed-plugin = { path = "../plugin" }
 bmo-testbed-record = { path = "../record" }
 bmo-testbed-service = { path = "../service" }
 bmo-testbed-suite = { path = "../suite" }
+bmo-testbed-supervise = { path = "../supervise" }
 bmo-text.workspace = true
 brush-parser.workspace = true
 chrono = { workspace = true, features = ["clock"] }

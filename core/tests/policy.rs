@@ -20,6 +20,7 @@ use bmo_testbed_core::policy::record::RECORD;
 use bmo_testbed_core::policy::service::SERVICE;
 use bmo_testbed_core::policy::static_check::STATIC_CHECK;
 use bmo_testbed_core::policy::suite::SUITE;
+use bmo_testbed_core::policy::supervise::SUPERVISE;
 use bmo_testbed_core::policy::verbs::VERBS;
 use bmo_testbed_core::policy::versions::VERSIONS;
 use bmo_testbed_core::policy::{fill_marks, fill_shown};
@@ -49,6 +50,7 @@ fn every_part_reads_as_its_type() {
   LazyLock::force(&MAIN_BRANCH);
   LazyLock::force(&VERSIONS);
   LazyLock::force(&INSTALL);
+  LazyLock::force(&SUPERVISE);
 
   assert_eq!(ANSWER.ceiling_chars, 30_000);
   assert_eq!(SUITE.lines.mark, "suite:");

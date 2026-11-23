@@ -15,6 +15,7 @@ members = [
   "scratch-database",
   "service",
   "suite",
+  "supervise",
   "test-support",
   "tools/deploy",
 ]
@@ -47,10 +48,14 @@ console = { version = "0.16.6", default-features = false, features = ["ansi-pars
 # A placed run's event stream, read event by event as it comes.
 futures-util = { version = "0.3.31", default-features = false, features = ["std"] }
 glob = "0.3.4"
+# The calendar a timer's elapses are worked out in, by the supervisor.
+jiff = { version = "1.0.2", default-features = false, features = ["std", "tz-system", "tzdb-zoneinfo", "tzdb-bundle-platform"] }
 # Process groups, signals and file locks.
 libc = "0.2.177"
 # The README's folder table, read by the layout check.
 markdown = "1.0.0"
+# A timer's OnCalendar= read and its next elapse worked out, by the supervisor.
+oncalendar = { version = "0.1.0", default-features = false, features = ["jiff"] }
 # TypeScript read by its parser, for imports, test titles and the quick checks.
 oxc_allocator = "=0.153.0"
 oxc_ast = "=0.153.0"
@@ -84,6 +89,9 @@ shlex = "2.0.1"
 # A placed run's output and result, read off its event stream.
 sse-stream = "0.2.6"
 # The members' closed sets of words, listed whole for the OpenAPI document.
+# A unit file read as systemd reads it, by the supervisor: sections, repeated keys, continued lines, specifiers
+# and time spans.
+systemd-unit-edit = "0.1.5"
 strum = { version = "0.28.0", features = ["derive"] }
 sqlx = { version = "0.8.6", default-features = false, features = ["any", "postgres", "sqlite", "runtime-tokio"] }
 tempfile = "3.20.0"

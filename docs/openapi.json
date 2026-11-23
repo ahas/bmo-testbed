@@ -1418,7 +1418,8 @@
     "serve",
     "mcp",
     "notice",
-    "install"
+    "install",
+    "supervise"
   ],
   "x-events": [
     "queue.changed",

@@ -29,6 +29,7 @@ and a release-based deployment of a repository onto the machine it runs on.
 | `docs/checks.md` | Which tests a change runs, the static check, the quick checks, the change check, imports, the test count |
 | `docs/deploy.md` | Releases, adoption, unit marks, the deploy run, progress, the hosted deploy tool, rollback, refusals, backups, the Cargo build directory |
 | `docs/install.md` | The install: a preset of an index's presets file laid onto a fresh machine, each repository's `install.toml`, the steps in order, each printed as one JSON line |
+| `docs/supervise.md` | The supervisor: the set's services run on a machine with no systemd user manager, from the same unit files, with stand-ins for `systemctl`, `systemd-run` and `journalctl` |
 | `docs/backup.md` | The data backup: what is backed up, where, how often, the rotation, the restore drill, restoring by hand, the settings |
 | `docs/declaration.md` | The `testbed.toml` schema |
 | `docs/boundary.md` | Every verb, exit code, status field, environment variable, event, the record, the HTTP service, the harness plugin, the hosted deploy tool, the placement endpoint and the version rules |
@@ -43,6 +44,7 @@ and a release-based deployment of a repository onto the machine it runs on.
 | `suite/` | The whole-suite runner, change selection, the static check, the quick checks, the Cargo verb and the build directory prune |
 | `deploy/` | Releases, the deploy tree link, unit links, the deploy run, progress, rollback and backups |
 | `install/` | The install: the presets file, the install declaration, a template's marks, and the run's stages against the machine |
+| `supervise/` | The supervisor: unit files read, their processes run, restarted and stopped, the control socket and the stand-ins |
 | `backup/` | The data backup: a machine's databases and data folders dumped, packed, sent to its destinations, rotated and restored by a drill |
 | `cli/` | The `bmo-testbed` binary: reading the words of each verb and handing them to the crates |
 | `client/` | The published client: the HTTP service's members, queries and error codes, and the client calling each route |

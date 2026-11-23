@@ -24,6 +24,7 @@ pub mod record;
 pub mod service;
 pub mod static_check;
 pub mod suite;
+pub mod supervise;
 pub mod verbs;
 pub mod versions;
 

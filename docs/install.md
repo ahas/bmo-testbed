@@ -287,13 +287,15 @@ runs this verb unchanged:
   the screen.
 - **Each repository's services as processes.** A repository's services are user units of systemd on a server, which
   its deployment keeps (`docs/deploy.md`, 「The unit links」); each unit runs one program with its settings read from
-  the data root, so a packager with no user manager can run the same programs as a plain list of processes it
-  starts and stops itself. Systemd stays the default on a server.
-- **Running without systemd is not provided yet, and is the next stage's work.** Today every deployment, every
-  restart, every after-step that links a unit and every health read goes through the systemd user manager, and the
-  testbed's own declaration needs one, so a machine without it fails at `needs:` and is not installed. A packaged BMO
-  on a person's own computer, the all-in-one desktop app among them, needs a supervisor of its own that starts,
-  restarts and stops the same programs from the same settings; until it stands, such a package is not offered.
+  the data root, so the same unit files run under a supervisor that is not systemd. Systemd stays the default on a
+  server.
+- **A machine without systemd runs the set under the testbed's supervisor** (`docs/supervise.md`). The packager
+  starts `bmo-testbed supervise serve` and runs this verb with the lines `bmo-testbed supervise env` prints in its
+  environment: the stand-ins first on the PATH and `BMO_SUPERVISOR` naming the supervisor's socket. Every deployment,
+  restart, after-step and health read then reaches the supervisor through the same `systemctl --user`,
+  `systemd-run --user` and `journalctl --user` calls it makes under systemd, and the testbed's own `needs:` takes the
+  supervisor for the user manager and for lingering, since whatever starts the supervisor starts the set. The
+  all-in-one desktop app is such a packager.
 
 ## The install's own state
 

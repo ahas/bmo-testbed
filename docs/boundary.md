@@ -28,6 +28,8 @@ release. The version rules at the end are over this document.
 - **Every verb's answer is English,** thin by default; `--json`, where a verb takes it, gives the
   structure instead, and no verb carries a third width between the two.
 - **A verb handed the wrong thing** names that one thing in a line, points at `--help`, and exits 2.
+- **Called by a stand-in's name,** `systemctl`, `systemd-run` or `journalctl`, as the links in the supervisor's
+  folder call it, the binary answers as that program does, through the supervisor (「`supervise`」).
 - **A checkout of the testbed runs its own.** Run inside a checkout of this repository, `suite`,
   `check` and `template` build that checkout's own binary through the Cargo verb, in the wide lane,
   and hand it the same words in the checkout's root, the directory they were given in named in
@@ -515,6 +517,24 @@ bmo-testbed install --set <input> [<places>]
 - `--add` on a machine already serving people is the supervising agent's alone, on the owner's approval for that
   repository (`docs/install.md`, 「The words」).
 
+### `supervise`
+
+```
+bmo-testbed supervise serve [--data-root <dir>] [--anyway]
+bmo-testbed supervise status [--json] [--data-root <dir>]
+bmo-testbed supervise env [--data-root <dir>]
+bmo-testbed supervise stop-all [--data-root <dir>]
+```
+
+- Runs the set's services on a machine with no systemd user manager, as `docs/supervise.md` states whole: the unit
+  files a deployment links read and run, each restarted by its own `Restart=`, its output kept under the data
+  root's `supervise/logs/`, a control socket at `supervise/control.sock`, and stand-ins for `systemctl`,
+  `systemd-run` and `journalctl` in `supervise/bin/` that ask it. `serve` refuses with 2 where a systemd user
+  manager answers, unless `--anyway`, and where another supervisor holds the data root.
+- `status --json` prints one object whose `units` holds each unit's state: `id`, `description`, `loadState`,
+  `activeState`, `subState`, `result`, `mainPID`, `nRestarts`, `execMainStatus`, `unitFileState`, `mark`,
+  `health` (`healthy`, `unhealthy` or `unknown`), `activeSinceMs` and `notApplied`.
+
 ### `backups`
 
 ```
@@ -640,6 +660,7 @@ verb's own name, and each noun takes what that verb takes.
 | `BMO_TEST_PARALLEL` | the turn, the suite | The wide lane's width; set by the turn for a language's runner, to the holder's share |
 | `CLAUDE_PID` | the turn, `deploy`, `install` | The process of the harness whose call the caller runs in: a caller with one is inside a harness's call, its holder is watched, and `deploy` refuses it; `install` hands a first deployment on without it (`docs/install.md`, 「Deploying」) |
 | `BMO_INDEX` | `install` | The index checkout, where `--index` names none |
+| `BMO_SUPERVISOR` | the stand-ins, every unit the supervisor starts | The supervisor's control socket (`docs/supervise.md`); set by the supervisor for what it starts, and by `supervise env` for a command put under it |
 | `PGHOST`, `PGPORT` | `install` | The PostgreSQL server, where `--postgres-host` and `--postgres-port` name none |
 | `BMO_INSTALL_VALKEY` | `install` | The Valkey, where `--valkey` names none |
 | `BMO_INSTALL_PREFIX` | an install's after-steps, restarts and verifications | Set by `install`: the install prefix |
@@ -1286,6 +1307,9 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   install declaration read, a template's marks filled, and the run's stages against a machine of its trait, which
   the binary answers with this machine and a test with one of its own; it depends on no crate of the testbed but
   `core`.
+- **`supervise`:** the supervisor (`docs/supervise.md`): a unit file read, its processes started, watched,
+  restarted and stopped, timers and transient runs, the health of a bot unit, the control socket and its
+  requests, and the stand-ins' words and answers; it depends on no crate of the testbed but `core`.
 - **`backup`:** the data backup (`docs/backup.md`): the settings read into a plan, the stores a
   destination is reached through, the dumps and their counts, the archives, the snapshot, the media,
   the rotation and the drill.

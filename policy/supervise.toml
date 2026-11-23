@@ -1,0 +1,74 @@
+# What the supervisor says and the numbers it keeps (docs/supervise.md): its usage, the stand-ins' answers, the
+# defaults systemd gives a unit that names none, and its own paces. An agent and a screen read them, so they are
+# English. Each `{name}` is filled in with what it names.
+
+usage = """
+usage: {verb} supervise serve [--data-root <dir>] [--anyway]
+       {verb} supervise status [--json] [--data-root <dir>]
+       {verb} supervise env [--data-root <dir>]
+       {verb} supervise stop-all [--data-root <dir>]
+
+Runs the set's services on a machine with no systemd user manager (docs/supervise.md): the same unit files a
+deployment links under the user unit directory, started, watched, restarted on a crash by their own Restart= and
+stopped, each one's output kept in a log of its own under the data root's supervise/. Everything it starts finds
+stand-ins for systemctl, systemd-run and journalctl first on its PATH, which answer the set's calls as the user
+manager would.
+
+serve     run the supervisor in the foreground until it is stopped, every enabled unit with it
+status    each unit's state, its main process, its restarts and its health; --json prints one JSON object
+env       the two lines that put a command under the supervisor: its PATH and BMO_SUPERVISOR
+stop-all  every unit stopped and the supervisor ended, as a SIGTERM to it does
+--data-root  the data root the supervisor keeps supervise/ under, over BMO_DATA_DIR
+--anyway  serve even where a systemd user manager answers, for a test on a machine that has one
+
+Exit codes: 0 done, 1 it failed, 2 refused."""
+
+[numbers]
+# What systemd gives a unit that names none, in seconds and counts (systemd.service(5), systemd.unit(5)).
+default_restart_seconds = 0.1
+default_stop_seconds = 90
+default_start_limit_seconds = 10
+default_start_limit_burst = 5
+# How often a unit marked `bot` whose repository declares a health has it asked while it runs, and how long one ask
+# may take before it reads as unhealthy, in seconds.
+health_every_seconds = 30
+health_bound_seconds = 30
+# The size a unit's log grows to before it is moved aside as `<unit>.log.1`, in bytes.
+log_cap_bytes = 8388608
+# How many lines `journalctl` prints where `-n` names no number.
+journal_lines = 10
+# How often `journalctl -f` and `systemd-run --wait` look again, in milliseconds. A pace, never a bound.
+follow_poll_ms = 250
+
+[places]
+# The supervisor's folder under the data root, and what stands in it.
+folder = "supervise"
+socket = "control.sock"
+state = "state.json"
+lock = "lock"
+logs = "logs"
+stand_ins = "bin"
+# The variable naming the control socket, handed to everything the supervisor starts and read by the stand-ins.
+variable = "BMO_SUPERVISOR"
+# The names the binary answers to as a stand-in.
+names = ["systemctl", "systemd-run", "journalctl"]
+
+[said]
+started = "the supervisor serves {units} units from {dir}, its socket at {socket}"
+stopping = "the supervisor stops every unit and ends"
+ended = "the supervisor has stopped every unit and ended"
+systemd_stands = "a systemd user manager answers on this machine, which runs the set itself; the supervisor serves only where none does (pass --anyway for a test)"
+held = "another supervisor already serves the data root {dir}"
+no_socket = "the supervisor cannot listen at {socket}: {why}"
+unreachable = "Failed to connect to the supervisor at {socket}: {why}"
+not_found = "Unit {unit} not found."
+unreadable = "Unit {unit} does not read: {why}"
+not_applied = "{unit}: {keys} read and not applied, since the supervisor holds no control groups"
+start_failed = "Job for {unit} failed: {why}"
+start_limit = "Job for {unit} failed because the start of the unit was repeated too quickly."
+no_command = "the unit names no ExecStart"
+no_verb = "Unknown command verb {verb}."
+transient_exists = "Unit {unit} was already loaded or has a fragment file."
+enable_link = "Created symlink {link} → {target}."
+disable_link = "Removed {link}."
+words_refused = "{program}: {why}"
