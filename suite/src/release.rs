@@ -7,8 +7,8 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::declaration::DECLARATION;
+use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::versions::{FileWords, VERSIONS};
 use bmo_testbed_core::version::{last_release, release_of_tag, release_tag};
 use regex::Regex;
@@ -257,7 +257,11 @@ impl Standing {
   fn mention(&self) -> Regex {
     let pattern = match self {
       Self::Before => {
-        format!(r"\b{}-{}\.[0-9]+\b", regex::escape(&base().to_string()), regex::escape(&read_words().revision))
+        format!(
+          r"\b{}-{}\.[0-9]+\b",
+          regex::escape(&base().to_string()),
+          regex::escape(&read_words().revision)
+        )
       }
       Self::At(version) => format!(r"(^|[^0-9.]){}($|[^0-9])", regex::escape(&version.to_string())),
     };
@@ -530,7 +534,9 @@ fn fixed_at(text: &str, standing: &Standing, to: &Version) -> Rewritten {
 
 // Whether a file is left unread: inside an installed package or a fixture, or one an exclude glob reaches.
 fn excluded(path: &str, exclude: &[String]) -> bool {
-  path.split('/').any(|part| read_words().unread_folders.iter().any(|folder| folder == part))
+  path
+    .split('/')
+    .any(|part| read_words().unread_folders.iter().any(|folder| folder == part))
     || exclude.iter().any(|glob| glob_matches(glob, path))
 }
 
