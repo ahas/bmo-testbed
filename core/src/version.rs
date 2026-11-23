@@ -85,7 +85,7 @@ pub fn declared_version(read: &dyn Fn(&str) -> Option<String>) -> String {
     return text.trim().to_owned();
   }
 
-  let cargo = read("Cargo.toml")
+  let cargo = read(&VERSIONS.release.files.cargo_manifest)
     .and_then(|text| text.parse::<toml::Table>().ok())
     .and_then(|manifest| {
       let workspace = manifest.get("workspace").and_then(|workspace| workspace.get("package"));
@@ -101,7 +101,7 @@ pub fn declared_version(read: &dyn Fn(&str) -> Option<String>) -> String {
     return version;
   }
 
-  read("package.json")
+  read(&VERSIONS.release.files.package_manifest)
     .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
     .and_then(|manifest| manifest.get("version").and_then(serde_json::Value::as_str).map(str::to_owned))
     .unwrap_or_default()

@@ -4,6 +4,24 @@
 
 use serde::Deserialize;
 
+/// The files the `release` verb reads, and what of them.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FileWords {
+  pub base: String,
+  pub revision: String,
+  pub cargo_manifest: String,
+  pub cargo_lock: String,
+  pub package_manifest: String,
+  pub pyproject: String,
+  pub json_suffix: String,
+  pub markdown_suffix: String,
+  pub dependency_tables: Vec<String>,
+  pub python_tables: Vec<Vec<String>>,
+  pub unread_folders: Vec<String>,
+  pub left_shown: usize,
+}
+
 /// How the `release` verb names what it sets in a file.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -52,6 +70,7 @@ pub struct ReleaseWords {
   pub nothing: String,
   pub cut_unit: String,
   pub cut_how: String,
+  pub files: FileWords,
   pub what: WhatWords,
 }
 

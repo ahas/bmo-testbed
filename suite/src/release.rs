@@ -8,7 +8,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use bmo_testbed_core::policy::fill_marks;
-use bmo_testbed_core::policy::versions::VERSIONS;
+use bmo_testbed_core::policy::declaration::DECLARATION;
+use bmo_testbed_core::policy::versions::{FileWords, VERSIONS};
 use bmo_testbed_core::version::{last_release, release_of_tag, release_tag};
 use regex::Regex;
 use semver::{BuildMetadata, Prerelease, Version};
@@ -120,10 +121,10 @@ pub fn read_set(set: &Path, git: Git) -> SetRead {
     };
     let remote = remote.trim().to_owned();
     let declaration =
-      read_declaration(&std::fs::read_to_string(checkout.join("testbed.toml")).unwrap_or_default());
+      read_declaration(&std::fs::read_to_string(checkout.join(&DECLARATION.file)).unwrap_or_default());
     let main = declared(&declaration, &["check", "main"])
       .and_then(toml::Value::as_str)
-      .unwrap_or("main")
+      .unwrap_or(&DECLARATION.defaults.check.main)
       .to_owned();
 
     by_remote.entry(remote.clone()).or_default().push(Member {
@@ -170,8 +171,13 @@ pub enum Standing {
   At(Version),
 }
 
+fn read_words() -> &'static FileWords {
+  &VERSIONS.release.files
+}
+
+// The base every unit stood at before the set's first release.
 fn base() -> Version {
-  Version::new(0, 1, 0)
+  Version::parse(&read_words().base).unwrap_or_else(|_| Version::new(0, 1, 0))
 }
 
 impl Standing {
@@ -221,10 +227,13 @@ impl Standing {
         let revision = bare
           .pre
           .as_str()
-          .strip_prefix("rev.")
+          .strip_prefix(&format!("{}.", read_words().revision))
           .is_some_and(|count| !count.is_empty() && count.bytes().all(|byte| byte.is_ascii_digit()));
 
-        (bare.major, bare.minor, bare.patch) == (0, 1, 0) && (bare.pre.is_empty() || revision)
+        let base = base();
+
+        (bare.major, bare.minor, bare.patch) == (base.major, base.minor, base.patch)
+          && (bare.pre.is_empty() || revision)
       }
     }
   }
@@ -238,7 +247,7 @@ impl Standing {
   // The pattern the files that may declare an own version are found by.
   fn candidates(&self) -> String {
     match self {
-      Self::Before => r"0\.1\.0".to_owned(),
+      Self::Before => regex::escape(&base().to_string()),
       Self::At(version) => regex::escape(&version.to_string()),
     }
   }
@@ -247,7 +256,9 @@ impl Standing {
   // release, the release's version after it.
   fn mention(&self) -> Regex {
     let pattern = match self {
-      Self::Before => r"\b0\.1\.0-rev\.[0-9]+\b".to_owned(),
+      Self::Before => {
+        format!(r"\b{}-{}\.[0-9]+\b", regex::escape(&base().to_string()), regex::escape(&read_words().revision))
+      }
       Self::At(version) => format!(r"(^|[^0-9.]){}($|[^0-9])", regex::escape(&version.to_string())),
     };
 
@@ -304,6 +315,11 @@ fn own_in(item: &Item, standing: &Standing) -> Option<(String, Version)> {
   Some((operator, version))
 }
 
+// The item at a dotted path, reached only where every table on the way stands: no step adds one.
+fn reach<'a>(item: &'a mut Item, path: &[&str]) -> Option<&'a mut Item> {
+  path.iter().try_fold(item, |item, key| item.as_table_like_mut()?.get_mut(key))
+}
+
 // Each entry of a dependency table taken from a sibling by path, its `version` handed to `own` with its label.
 fn pinned_siblings(table: &mut dyn TableLike, named: &str, own: &mut dyn FnMut(&mut Item, String)) {
   for (name, entry) in table.iter_mut() {
@@ -339,29 +355,25 @@ fn cargo_manifest(text: &str, standing: &Standing, to: &Version) -> Result<Rewri
     }
   };
 
-  if let Some(item) = document.get_mut("package").and_then(|package| package.get_mut("version")) {
+  if let Some(item) = reach(document.as_item_mut(), &["package", "version"]) {
     own(item, what.package.clone(), &mut set);
   }
 
-  if let Some(item) = document
-    .get_mut("workspace")
-    .and_then(|workspace| workspace.get_mut("package"))
-    .and_then(|package| package.get_mut("version"))
-  {
+  if let Some(item) = reach(document.as_item_mut(), &["workspace", "package", "version"]) {
     own(item, what.workspace.clone(), &mut set);
   }
 
-  let kinds = ["dependencies", "dev-dependencies", "build-dependencies"];
+  let kinds = &read_words().dependency_tables;
 
   for (key, item) in document.as_table_mut().iter_mut() {
     let key = key.get().to_owned();
 
-    if kinds.contains(&key.as_str()) {
+    if kinds.contains(&key) {
       if let Some(table) = item.as_table_like_mut() {
         pinned_siblings(table, &key, &mut |item, label| own(item, label, &mut set));
       }
     } else if key == "workspace" {
-      if let Some(table) = item.get_mut("dependencies").and_then(Item::as_table_like_mut) {
+      if let Some(table) = reach(item, &["dependencies"]).and_then(Item::as_table_like_mut) {
         pinned_siblings(table, "workspace.dependencies", &mut |item, label| own(item, label, &mut set));
       }
     } else if key == "target"
@@ -373,7 +385,7 @@ fn cargo_manifest(text: &str, standing: &Standing, to: &Version) -> Result<Rewri
         };
 
         for (kind, item) in platform_table.iter_mut() {
-          if kinds.contains(&kind.get())
+          if kinds.iter().any(|one| one == kind.get())
             && let Some(table) = item.as_table_like_mut()
           {
             let named = format!("target.{}.{}", platform.get(), kind.get());
@@ -420,10 +432,10 @@ fn pyproject(text: &str, standing: &Standing, to: &Version) -> Result<Rewritten,
   let mut document: DocumentMut = text.parse().map_err(|why: toml_edit::TomlError| why.to_string())?;
   let mut set = Vec::new();
 
-  for path in [&["project"][..], &["tool", "poetry"][..]] {
-    let item = path.iter().try_fold(document.as_item_mut(), |item, key| item.get_mut(*key));
+  for path in &read_words().python_tables {
+    let reached: Vec<&str> = path.iter().map(String::as_str).chain(["version"]).collect();
 
-    if let Some(item) = item.and_then(|table| table.get_mut("version"))
+    if let Some(item) = reach(document.as_item_mut(), &reached)
       && let Some((_, version)) = own_in(item, standing)
     {
       set.push((
@@ -518,7 +530,7 @@ fn fixed_at(text: &str, standing: &Standing, to: &Version) -> Rewritten {
 
 // Whether a file is left unread: inside an installed package or a fixture, or one an exclude glob reaches.
 fn excluded(path: &str, exclude: &[String]) -> bool {
-  path.split('/').any(|part| part == "node_modules" || part == "fixtures")
+  path.split('/').any(|part| read_words().unread_folders.iter().any(|folder| folder == part))
     || exclude.iter().any(|glob| glob_matches(glob, path))
 }
 
@@ -546,17 +558,17 @@ pub fn plan_files(
     }
 
     let name = path.rsplit('/').next().unwrap_or(path);
-    let rewritten = if name == "Cargo.toml" {
+    let rewritten = if name == read_words().cargo_manifest {
       cargo_manifest(text, standing, to)
-    } else if name == "Cargo.lock" {
+    } else if name == read_words().cargo_lock {
       cargo_lock(text, standing, to)
-    } else if name == "pyproject.toml" {
+    } else if name == read_words().pyproject {
       pyproject(text, standing, to)
     } else if name == VERSIONS.version_file {
       Ok(version_file(text, standing, to))
-    } else if name.ends_with(".json") {
+    } else if name.ends_with(&read_words().json_suffix) {
       json_document(text, standing, to)
-    } else if name.ends_with(".md") {
+    } else if name.ends_with(&read_words().markdown_suffix) {
       Ok(fixed_at(text, standing, to))
     } else {
       Ok((Vec::new(), text.clone()))
@@ -615,7 +627,7 @@ pub fn read_member(
     .filter_map(|line| line.strip_prefix(&format!("{head}:")).map(str::to_owned))
     .collect();
   let show = |path: &str| git(&["show", &format!("{head}:{path}")], root);
-  let declaration = read_declaration(&show("testbed.toml").unwrap_or_default());
+  let declaration = read_declaration(&show(&DECLARATION.file).unwrap_or_default());
   let exclude: Vec<String> = declared(&declaration, &["check", "shared_versions", "exclude"])
     .and_then(toml::Value::as_array)
     .map(|globs| globs.iter().filter_map(toml::Value::as_str).map(str::to_owned).collect())
@@ -651,7 +663,7 @@ pub fn member_lines(read: &MemberRead, to: &Version) -> Vec<String> {
 
   for change in &read.plan.changes {
     // A lock's packages are many and move together, so a lock is one line.
-    if change.path.rsplit('/').next() == Some("Cargo.lock") {
+    if change.path.rsplit('/').next() == Some(read_words().cargo_lock.as_str()) {
       match locks.iter_mut().find(|(path, _)| *path == change.path) {
         Some((_, count)) => *count += 1,
         None => locks.push((&change.path, 1)),
@@ -679,7 +691,7 @@ pub fn member_lines(read: &MemberRead, to: &Version) -> Vec<String> {
   }
 
   if !read.plan.left.is_empty() {
-    let shown_count = 5;
+    let shown_count = read_words().left_shown;
     let shown = read.plan.left.iter().take(shown_count).cloned().collect::<Vec<_>>().join(&said.joiner);
     let files = if read.plan.left.len() > shown_count {
       fill_marks(

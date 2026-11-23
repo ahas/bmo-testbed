@@ -86,6 +86,22 @@ fn a_cargo_manifest_moves_its_own_versions_and_its_siblings_pins_and_nothing_els
   );
 }
 
+// A table the manifest does not hold is never added on the way to a value: only the value that stands moves.
+#[test]
+fn a_manifest_holding_no_package_table_gains_none() {
+  let manifest = "[workspace]\nmembers = []\n\n[workspace.dependencies]\nsibling = { path = \"../sibling\", version = \"=0.1.0-rev.5\" }\n";
+  let project = "[project]\nname = \"kit\"\nversion = \"0.1.0\"\n";
+  let plan = plan_files(
+    &files(&[("Cargo.toml", manifest), ("pyproject.toml", project)]),
+    &Standing::Before,
+    &version("1.0.0"),
+    &[],
+  );
+
+  assert_eq!(edited(&plan, "Cargo.toml"), manifest.replace("=0.1.0-rev.5", "=1.0.0"));
+  assert_eq!(edited(&plan, "pyproject.toml"), project.replace("0.1.0", "1.0.0"));
+}
+
 // "a Cargo.lock's packages read from a path, never a registry's"
 #[test]
 fn a_lock_moves_its_path_packages_and_leaves_the_registrys() {

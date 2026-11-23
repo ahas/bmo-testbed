@@ -45,6 +45,24 @@ nothing = "none"
 cut_unit = "repositories"
 cut_how = "ask for them by name with --repository <name>"
 
+# The files the release reads, and what of them.
+[release.files]
+# The base every unit stood at before the set's first release, and the word its revisions are counted after.
+base = "0.1.0"
+revision = "rev"
+cargo_manifest = "Cargo.toml"
+cargo_lock = "Cargo.lock"
+package_manifest = "package.json"
+pyproject = "pyproject.toml"
+json_suffix = ".json"
+markdown_suffix = ".md"
+dependency_tables = ["dependencies", "dev-dependencies", "build-dependencies"]
+python_tables = [["project"], ["tool", "poetry"]]
+# Folders whose files are another's: installed packages and recorded test input.
+unread_folders = ["node_modules", "fixtures"]
+# How many files left naming an own version a repository's lines name before counting the rest.
+left_shown = 5
+
 [release.what]
 package = "[package] version"
 workspace = "[workspace.package] version"
