@@ -264,9 +264,10 @@
   from which the deployment reads the built binaries back over `rsync` into its own build directory
   before it places them. The declared `[build]` steps, which write into the release and read the data
   root, run where the deployment runs, as does everything after the build. **The gate and the build never
-  run on this machine where the settings name a placed machine:** a placed machine that cannot be
-  reached, before the deployment has begun there or after, is waited for and the work tried again (「A
-  connection that breaks under the placed machine」), and once the tries are spent the stage fails; a
+  run on this machine where the settings name a placed machine, unless that machine breaks under them:** a
+  placed machine that cannot be reached, before the deployment has begun there or after, hands the work to
+  this machine where the placement order names it, and is otherwise waited for and the work tried again
+  (「A connection that breaks under the placed machine」), the stage failing once the tries are spent; a
   bench that cannot be made ready while the machine answers fails the stage. The flaky tests a placed
   gate found stay in that machine's record, so the deployment reports none.
 - **The placed machine runs this machine's live testbed release, or nothing runs there.** Before the
@@ -479,17 +480,23 @@ flowchart TD
 - **The pause and the tries are the policy's:** a pause of sixty seconds between tries, and as many tries
   as half an hour of pauses holds, thirty-one, so a machine that drops away for a few minutes, or keeps
   dropping away and coming back, is waited out, and one away for half an hour fails the stage.
-- **A try waits for the placed machine.** A try that finds the machine not answering is one more broken
-  try, whether or not the deployment has begun there; nothing moves to the machine the deployment runs
-  on, since the check judged there and the build read back from there are that machine's, and the
-  machine that serves is kept apart from the machine that checks and builds.
+- **Where the placement order names this machine, the work comes here instead of waiting.** The order the
+  placed machine's settings keep (`docs/boundary.md`, 「The placed machine」) says where runs may go; a
+  deployment whose placed machine does not answer, or breaks under the gate or the build, says so on a line
+  naming the machine and the work, and runs that work here from its beginning: the whole gate as this
+  machine's own, or the build in this machine's build directory. A machine that is down never holds a
+  deployment.
+- **Where the order does not name this machine, a try waits for the placed machine.** A try that finds the
+  machine not answering is one more broken try, whether or not the deployment has begun there; nothing
+  moves to the machine the deployment runs on, since the order keeps the machine that serves apart from
+  the machine that checks and builds.
 - **Once the tries are spent, the stage fails naming the connection:** the machine and how many tries
   running it broke on. No exit code stands in for it. The deployment's `deploy-failed` carries that
   reason, which is how the failure is told.
 - **A failure of the work's own is not tried again:** a check or a suite that fails, or a build that
   fails, ends its stage at once with its own exit code, as the build's line names it.
-- **A run that is no deployment's is not tried again:** it ends as not run, exit code 75 (`docs/testbed.md`,
-  「A run on another machine」), and its caller runs it again.
+- **A run that is no deployment's is not tried there again:** it passes on down the order, to the next
+  machine that takes it or here (`docs/boundary.md`, 「The placed machine」).
 
 ## The hosted deploy tool
 

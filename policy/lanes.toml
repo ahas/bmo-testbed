@@ -38,15 +38,16 @@ working_share_percent = 10
 # one's command line.
 hung_named_processes = 4
 hung_process_chars = 200
-# How often a run placed on a machine that does not answer asks it again, and how long it waits for it before it
-# ends as not run (docs/boundary.md, 「The placed machine」); how long a process waits for the lock every bringing of
-# the placed machine's testbed to the live release holds; how long `status` gives the placed machine to
-# answer before it says it does not; and how often a placed run whose output has not come back says it still
-# runs there (docs/testbed.md, 「A run on another machine」).
-unreached_pause_seconds = 30
-unreached_wait_minutes = 20
+# How long a process waits for the lock every bringing of the placed machine's testbed to the live release holds;
+# how long `status` gives the placed machine to answer before it says it does not; and how often a placed run
+# whose output has not come back says it still runs there (docs/testbed.md, 「A run on another machine」).
 placed_lock_seconds = 300
 status_connect_seconds = 10
+# How often a command run on the placed machine over `ssh` asks the connection to answer, and how many asks in a
+# row may go unanswered before `ssh` ends it as broken: a connection that died under a silent command is found
+# within two minutes and the run passes on (docs/boundary.md, 「The placed machine」).
+alive_seconds = 30
+alive_misses = 4
 placed_standing_seconds = 60
 # The share of the machine's threads, in percent, at or above which its load figure makes it loaded, so it takes
 # no run wherever it stands in a placement order (docs/testbed.md, 「A run on another machine」). A run in the
@@ -188,15 +189,21 @@ brought_live = "testbed: brought the testbed on {machine} to the live release {l
 unbrought = "{stale}; it could not be brought there: {said}"
 live_uncarried = "the live release {release} holds no {binary}"
 # A run whose placed machine answers but whose testbed could not be brought to the live release, {said} the
-# `unbrought` line; it ends as not run.
-release_failed = "testbed: not run: {said}; nothing runs here in its stead"
-# A run waiting for the placed machine to answer (docs/boundary.md, 「The placed machine」): {machine} the
-# machine, {seconds} how long it has waited, {bound} the most it waits, {said} what `ssh` said; and the run that
-# waited its bound, which ends as not run.
-unreached_waiting = "testbed: waiting for {machine} to answer ({seconds}s so far, at most {bound}s): {said}; nothing runs here meanwhile"
-unreached_gave_up = "testbed: not run: {machine} did not answer for {seconds}s ({said}); run the same command again once it answers"
-# The events a run that ends as not run sends (docs/boundary.md, 「Events」), {machine} the machine.
-unreachable_event = "the placed machine {machine} does not answer, so runs placed there do not run until it does"
+# `unbrought` line; the run passes on down the order.
+release_failed = "testbed: {said}; the run passes on"
+# A run whose placed machine does not answer (docs/boundary.md, 「The placed machine」), {machine} the machine and
+# {said} what `ssh` said; whose bench there could not be made ready, {said} why; and whose connection broke
+# under it once it had begun. Each passes the run on down the order, to the next machine that takes it or here.
+unreached_passed_on = "testbed: {machine} does not answer ({said}); the run passes on"
+unready_passed_on = "testbed: the bench on {machine} could not be made ready ({said}); the run passes on"
+broke_passed_on = "testbed: the connection to {machine} broke under the run; it starts again from its beginning further down the order"
+# A deployment's gate or build whose placed machine broke under it, where the order names this machine
+# (docs/deploy.md, 「A connection that breaks under the placed machine」): {machine} the machine, {work} `gate` or
+# `build`, {said} what broke.
+here_instead = "testbed: {machine} broke under the deployment's {work} ({said}); the {work} runs here, as the order names this machine"
+# The event the first run that finds the placed machine not answering sends (docs/boundary.md, 「Events」),
+# {machine} the machine.
+unreachable_event = "the placed machine {machine} does not answer, so the runs placed there pass on down the order until it does"
 # The placed machine answering again after an outage that was told, {since} when the outage began.
 recovered_event = "the placed machine {machine} answers again, after an outage since {since}"
 release_failed_event = "the testbed on the placed machine {machine} could not be brought to the live release {live}, so a run placed there did not run"

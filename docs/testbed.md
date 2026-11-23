@@ -401,18 +401,15 @@ flowchart TD
   running from no release, such as a checkout's own build, compares nothing (`docs/boundary.md`,
   「The placed machine」).
 - **Where the testbed there cannot be brought to the live release while the machine answers,** the run
-  ends as not run, exit code 75, on a line naming the machine, both commits and what the machine
-  answered, and sends `placed-release-failed` once for that live release (`docs/boundary.md`, 「Events」);
-  nothing runs here in its stead. A deployment's gate and build fail their stage instead (`docs/deploy.md`, 「Where a deployment
+  says so on a line naming the machine, both commits and what the machine answered, sends
+  `placed-release-failed` once for that live release (`docs/boundary.md`, 「Events」), and passes on down
+  the order. A deployment's gate and build fail their stage instead (`docs/deploy.md`, 「Where a deployment
   runs」).
-- **A placed machine that cannot be reached is waited for.** The run asks it again every thirty seconds,
-  saying on a line each time that it waits, for how long so far and what the machine's `ssh` said, and
-  goes there once it answers. It holds no seat here and starts nothing here meanwhile, so a wait costs
-  this machine the waiting process alone, where the same run here would take a seat and the memory its
-  command needs. The wait is bounded at twenty minutes (the lanes policy's), which outlasts the few
-  minutes a placed machine whose connection drops stays away: then the run ends as not run, exit code 75.
-  A deployment waits by its own rule (`docs/deploy.md`, 「A connection that breaks under the placed
-  machine」).
+- **A placed machine that cannot be reached passes the run on.** The run says on a line that the machine
+  does not answer and what its `ssh` said, and goes on down the order, to the next machine that takes it
+  or here; nothing waits for a machine to come back. A run whose connection breaks under it once it has
+  begun passes on the same way and starts again from its beginning. A deployment's work comes here or
+  waits by its own rule (`docs/deploy.md`, 「A connection that breaks under the placed machine」).
 - **A placed run says it still runs while nothing comes back.** From the moment a run goes to the placed
   machine until it ends there, every minute in which no byte of its output came over the connection (the
   lanes policy's, or the milliseconds `BMO_TESTBED_PLACED_STANDING_MS` names for a test), the

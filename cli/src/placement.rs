@@ -41,7 +41,7 @@ pub mod git_ignored;
 mod machine_hook;
 mod outage;
 
-pub use far_release::{FarWait, LiveRelease, MachineState, PLACED_TESTBED_LOCK, running_deploy_tree};
+pub use far_release::{LiveRelease, MachineState, PLACED_TESTBED_LOCK, running_deploy_tree};
 pub use machine_hook::{MACHINE_ENV_FILE, machine_hook, notice_hook};
 pub use outage::{OUTAGE_DIR, Outage, RELEASE_FAILED_DIR, ReleaseFailure};
 
@@ -1102,8 +1102,6 @@ pub struct MachinePlacement {
   pub deploy_tree: Option<PathBuf>,
   /// The data root, whose `locks/` holds the lock every bringing of the testbed there to a release holds.
   pub data_root: PathBuf,
-  /// How a run waits for the machine where it does not answer.
-  pub unreached: FarWait,
   /// Where the machine's own events go: its outage, its return and a testbed there that could not be brought to the
   /// live release (docs/boundary.md, 「Events」).
   pub hook: Hook,
@@ -1128,7 +1126,6 @@ impl MachinePlacement {
         home: home.to_path_buf(),
         deploy_tree: running_deploy_tree(),
         data_root: data_root.to_path_buf(),
-        unreached: FarWait::policy(),
         hook: machine_hook(data_root, &process_env()),
       }),
       Err(why) => {
@@ -1147,11 +1144,20 @@ impl MachinePlacement {
       .map_or(("ssh", &[][..]), |(program, options)| (program, options))
   }
 
+  // Every command run there over `ssh`, the connection asked to answer at the lanes policy's pace after the
+  // settings' own options, so one that dies under a silent command ends as broken instead of standing for ever
+  // (docs/boundary.md, 「The placed machine」).
   fn ssh(&self) -> Command {
     let (program, options) = self.ssh_program();
+    let numbers = &LANES.numbers;
     let mut command = Command::new(program);
 
-    command.args(options).arg(self.settings.destination()).stdin(Stdio::null());
+    command
+      .args(options)
+      .args(["-o", &format!("ServerAliveInterval={}", numbers.alive_seconds)])
+      .args(["-o", &format!("ServerAliveCountMax={}", numbers.alive_misses)])
+      .arg(self.settings.destination())
+      .stdin(Stdio::null());
     command
   }
 
@@ -1751,11 +1757,7 @@ impl MachinePlacement {
 
   // The run placed as `placed` places it, every byte of its output that comes back counted into `heard`.
   fn placed_heard(&self, ask: &PlaceAsk<'_>, last: bool, heard: &Arc<AtomicU64>) -> Option<u8> {
-    if let Err(code) = self.waited_ready(ask) {
-      return Some(code);
-    }
-
-    if !self.takes_run(ask.lane, last) {
+    if !self.ready_for(ask) || !self.takes_run(ask.lane, last) {
       return None;
     }
 
@@ -1768,7 +1770,7 @@ impl MachinePlacement {
         within: place_in_checkout(&ask.cwd),
         ..bench
       },
-      Err(said) => return Some(dropped(self.settings.label(), &said)),
+      Err(said) => return self.passed_unready(&said),
     };
     let mut words = vec![self.settings.testbed.clone()];
 
@@ -1791,7 +1793,40 @@ impl MachinePlacement {
       words.extend(ask.command.iter().cloned());
     }
 
-    Some(self.run(&bench, &words, true, Some(&placed), heard))
+    self.ended_there(&bench, &words, Some(&placed), heard)
+  }
+
+  // The words run in the bench: the code they ended with there, or none where the connection broke under them,
+  // said on its line, so the run passes on down the order and starts again from its beginning
+  // (docs/boundary.md, 「The placed machine」).
+  fn ended_there(
+    &self,
+    bench: &ReadyBench,
+    words: &[String],
+    placed: Option<&PlacedRun>,
+    heard: &Arc<AtomicU64>,
+  ) -> Option<u8> {
+    match self.run_there(bench, words, true, placed, heard) {
+      FarEnd::Ended(code) => Some(code),
+      FarEnd::Broken => {
+        eprintln!("{}", fill_marks(&LANES.placed.broke_passed_on, &[("machine", self.settings.label())]));
+        None
+      }
+    }
+  }
+
+  // A run whose bench there could not be made ready: it passes on down the order, said on its line, where the
+  // machine no longer answers, and ends as not run where it still does, the bench being at fault.
+  fn passed_unready(&self, said: &str) -> Option<u8> {
+    if self.answers().is_ok() {
+      return Some(dropped(self.settings.label(), said));
+    }
+
+    eprintln!(
+      "{}",
+      fill_marks(&LANES.placed.unready_passed_on, &[("machine", self.settings.label()), ("said", said)])
+    );
+    None
   }
 
   /// A change check over several checkouts placed on the machine as one run (docs/boundary.md, 「Placement」):
@@ -1808,11 +1843,7 @@ impl MachinePlacement {
 
   // The set placed as `placed_set` places it, every byte of its output that comes back counted into `heard`.
   fn placed_set_heard(&self, ask: &SetAsk<'_>, last: bool, heard: &Arc<AtomicU64>) -> Option<u8> {
-    if let Err(code) = self.waited_ready(&ask.run) {
-      return Some(code);
-    }
-
-    if !self.takes_run(ask.run.lane, last) {
+    if !self.ready_for(&ask.run) || !self.takes_run(ask.run.lane, last) {
       return None;
     }
 
@@ -1831,7 +1862,7 @@ impl MachinePlacement {
 
       match self.made_ready(checkout, &commit, BenchFor::Run, &places) {
         Ok(bench) => benches.push(bench),
-        Err(said) => return Some(dropped(machine, &said)),
+        Err(said) => return self.passed_unready(&said),
       }
     }
 
@@ -1857,7 +1888,7 @@ impl MachinePlacement {
         Repository::read(checkout).is_ok_and(|repo| !repo.declaration.test.setup.is_empty());
 
       if declares_setup {
-        let code = self.run(&knowing(bench), &[SETUP_ALONE.to_owned()], true, None, heard);
+        let code = self.ended_there(&knowing(bench), &[SETUP_ALONE.to_owned()], None, heard)?;
 
         if code != 0 {
           return Some(code);
@@ -1869,7 +1900,7 @@ impl MachinePlacement {
     let words: Vec<String> =
       std::iter::once(self.settings.testbed.clone()).chain((ask.words)(&paths)).collect();
 
-    Some(self.run(&knowing(&benches[0]), &words, true, Some(&placed), heard))
+    self.ended_there(&knowing(&benches[0]), &words, Some(&placed), heard)
   }
 }
 

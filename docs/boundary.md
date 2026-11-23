@@ -46,7 +46,7 @@ release. The version rules at the end are over this document.
 | 1 | Ran and failed: a test, a check, a step, a deployment |
 | 2 | Refused: words that do not read, a declaration that does not read or names another major, a change that cannot be read, a refusal a verb names |
 | 3 | `status --free` only: the machine is loaded past its share, so it takes no run (「`status`」) |
-| 75 | Not run: the harness it waited for went away before the turn came, or a placed machine dropped the run. Run the same command again |
+| 75 | Not run: the harness it waited for went away before the turn came, or the placement endpoint's stream ended with no result. Run the same command again |
 | 124 | Ended as hung: the command holding a lane's turn neither wrote nor worked for the silence limit (`docs/testbed.md`, 「A holder whose command falls silent lets go」) |
 | any other | `run` only: the command's own exit code, passed through |
 
@@ -701,9 +701,9 @@ keep (`docs/deploy.md`, 「The unit links」).
 | `restore-drill-failed` | `verb` (`drill`), `failures`, each with `step`, `target` and `said`, a count mismatch naming its database, table and both counts |
   | `releases-pinned` | `releases`, each with `release` and `processes`, each with `pid`, `unit` and `command` |
   | `cargo-target-over-ceiling` | `bytes` (what the directory holds once the prune's enforcement is done), `ceiling_bytes`, `holders`, each with `path`, `by` (`build-lock` for a profile directory whose build lock a build holds, `deployment` for the directory of a running deployment's checkout or build tree, `program` for a checkout's directory a program built there runs from, `deployment-checkout` for a deployment's checkout, which the directory's ceiling never removes from) and `bytes`. Sent only where the enforcement could not bring the directory under its ceiling |
-  | `placed-unreachable` | `machine` (the placed machine's label), `since` (when the outage began, RFC 3339), `command` (the words of the run that told it), `waited_seconds`, `said` (what `ssh` said last). Sent once for each outage, by the first run that waited its bound for the placed machine to answer and ends as not run (「The placed machine」) |
+  | `placed-unreachable` | `machine` (the placed machine's label), `since` (when the outage began, RFC 3339), `command` (the words of the run that told it), `said` (what `ssh` said). Sent once for each outage, by the first run that found the placed machine not answering and passed on (「The placed machine」) |
   | `placed-recovered` | `machine`, `since` (when the outage began). Sent once the placed machine answers again after an outage `placed-unreachable` told, by the one process that finds it so |
-  | `placed-release-failed` | `machine`, `command`, `live` (the live testbed release's commit), `far` (the commit the testbed there names, or null), `said` (what bringing it came to). Sent once for each live release, by the first run whose placed machine answers but whose testbed could not be brought to that release; that run and every one after it ends as not run. A run that finds the testbed there at the live release clears this, so a failure after it is sent again (「The placed machine」) |
+  | `placed-release-failed` | `machine`, `command`, `live` (the live testbed release's commit), `far` (the commit the testbed there names, or null), `said` (what bringing it came to). Sent once for each live release, by the first run whose placed machine answers but whose testbed could not be brought to that release; that run and every one after it passes on down the order. A run that finds the testbed there at the live release clears this, so a failure after it is sent again (「The placed machine」) |
   | `placed-disk-low` | `machine` (the placed machine's label), `floor_bytes`, `disks`, each with `path` (as the settings name it), `source` (the filesystem's source, the drive itself for a WSL drive mount) and `free_bytes` |
   | `disk-trim-failed` | `path` (the build directory the trim was run on), `said` |
   | `full-suite-failed` | `head`, `log`, `step` (the failing setup or static step, or null), `failures`, each with `unit` and `package` |
@@ -938,17 +938,18 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   saying every seat is held or waited for, the line it gave saying why passed on. A machine full of seats takes
   the run only where it stands last in the order, and then waits for it in its line; a machine loaded past its
   share takes none wherever it stands. Where no machine of the order takes the run, it runs where it was
-  started. A placed machine that cannot be reached is waited for, and one whose testbed is not
-  this machine's live testbed release is brought to it, never passed over (「The placed machine」); where neither can be had,
-  the run ends as not run, exit code 75, and sends an event (「Events」). The placement endpoint chooses
+  started. A placed machine whose testbed is not this machine's live testbed release is brought to it
+  (「The placed machine」); one that cannot be reached, whose testbed cannot be brought there, or whose
+  connection breaks under the run passes the run on down the order, and the
+  first run that finds it not answering sends an event (「Events」). The placement endpoint chooses
   for itself and is told nothing of the order.
 - **A change check over several checkouts is placed as one set** wherever the settings name a placed
   machine that takes it. It walks the placed machine's `combined_order` (「The placed machine」), whose default
   is the placed machine alone, so while that machine is calm it waits in its line however long that takes, and
   the set goes on to the machines that order names after it as any run walks `order`, a loaded machine turning
   it away as any run. Where the
-  machine cannot be reached within the wait, or its testbed cannot be brought to the live release, it ends
-  as not run, exit code 75, on the line naming the machine, as any placed run does. It runs here only where
+  machine cannot be reached, or its testbed cannot be brought to the live release, the set passes on down
+  `combined_order`, on the line naming the machine, as any placed run does. It runs here only where
   `combined_order` names `local` and the walk comes to it.
 - **A testbed whose settings name no placed machine runs the set here,** in this machine's own turn, as the
   change check over every checkout by its path, the same check a placed machine runs; so does a set kept
@@ -1012,9 +1013,8 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   this machine compares and brings at a time, under the lock `placed-testbed.lock` under the data root's
   `locks/`, reading the live release again once it holds the lock. Where that does not take while the
   machine answers, a deployment fails its stage, and a `run`, a suite, a change check or a Cargo verb
-  ends as not run, exit code 75, and sends `placed-release-failed` where no run sent it for that live
-  release (below), each naming both commits and what the machine answered; nothing is run here in its
-  stead. A deployment whose caller sets
+  passes on down the order and sends `placed-release-failed` where no run sent it for that live release
+  (below), each naming both commits and what the machine answered. A deployment whose caller sets
   `BMO_TESTBED_PLACEMENT` empty brings nothing and fails its stage where the releases differ. A testbed
   running from no release, such as a checkout's own build, compares nothing.
 - **The testbed's own deployment brings that machine's testbed to its release.** Once the release is
@@ -1115,18 +1115,27 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   `testbed: the failing log kept on <machine> is brought here: <path>`. A file that cannot be read there or
   written here is said on standard error with what was answered, and the run's exit code stays the one it
   ended with there.
-- **A connection that cannot be made is waited for:** the caller asks the machine again every
-  `unreached_pause_seconds` of the lanes policy (30), saying on a line each time how long it has waited
-  and what `ssh` said, and goes there once it answers; it takes no seat here meanwhile. Once
-  `unreached_wait_minutes` (20) have passed, the run ends as not run, exit code 75, on a line naming the
-  machine and what it said last. A connection that breaks once the run has begun ends the run as not run,
-  exit code 75.
+- **A machine that cannot be reached passes the run on:** where the machine does not answer, or its
+  testbed cannot be brought to the live release, or the machine stops answering while the bench there is
+  made ready, the caller says so on a line naming the machine and what it said, and the run goes on down
+  the order, to the next machine that takes it or here, as a machine that does not take a run passes it
+  on. Nothing waits for a machine to come back: a machine that is down holds no run. A bench that cannot
+  be made ready while the machine answers is the bench's fault, and ends the run as not run, exit code 75,
+  with a line naming the step and what it said.
+- **A connection that dies is found within two minutes:** every command run there over `ssh` asks the
+  connection to answer every `alive_seconds` of the lanes policy (30), after the settings' own `ssh`
+  options, and `ssh` ends it as broken once `alive_misses` (4) asks in a row go unanswered, so a machine
+  that went away under a command writing nothing never holds the run.
+- **A connection that breaks once the run has begun passes the run on too:** the caller says on a line
+  that the connection to the machine broke under the run, and the run starts again from its beginning on
+  the next machine in the order that takes it, or here. What the broken run had done there is not counted:
+  a check, a test or a gate reads only the run that ends.
 - **An outage is remembered under the data root's `testbed/placed-outage/`,** one file for the machine,
   made by the first process of this machine that finds it not answering, a run's or a deployment's, and
-  holding when that was. The first run that gives up on it sends `placed-unreachable` and marks the outage
-  told beside it, so the runs that give up after it send nothing more. The first process that finds the
+  holding when that was. The first run that passes on for it sends `placed-unreachable` and marks the outage
+  told beside it, so the runs that pass on after it send nothing more. The first process that finds the
   machine answering again takes the outage away, and sends `placed-recovered` where it had been told; an
-  outage no run gave up on ends untold. Each mark is made only where it does not stand and taken away
+  outage no run passed on for ends untold. Each mark is made only where it does not stand and taken away
   whole, so of the processes racing over one, one alone sends each event.
 - **A testbed there that could not be brought to the live release is remembered too,** under the data
   root's `testbed/placed-release-failed/`: one file for the machine and the live release's commit, made

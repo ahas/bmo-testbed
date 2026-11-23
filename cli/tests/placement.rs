@@ -39,8 +39,8 @@ use axum::routing::{get, post};
 use bmo_testbed_cli::cargo::placed_disk;
 use bmo_testbed_cli::deploy::{PlacedGate, brings_testbed};
 use bmo_testbed_cli::placement::{
-  BenchFor, FarWait, MACHINE_ENV_FILE, MachinePlacement, MachineSettings, MachineState, Ordered,
-  PlacementState, ReadyBench, STANDING_VARIABLE, machine_hook, reachable_remote,
+  BenchFor, MACHINE_ENV_FILE, MachinePlacement, MachineSettings, MachineState, Ordered, PlacementState,
+  ReadyBench, STANDING_VARIABLE, machine_hook, reachable_remote,
 };
 use bmo_testbed_core::events::Hook;
 use bmo_testbed_core::placement::{
@@ -907,10 +907,6 @@ fn released(dir: &Path, far: Option<&str>, live: Option<&str>) -> MachinePlaceme
     home: dir.to_path_buf(),
     deploy_tree: live.map(|_| dir.join("deploy")),
     data_root: dir.join("data"),
-    unreached: FarWait {
-      pause: Duration::ZERO,
-      bound: Duration::ZERO,
-    },
     hook: Hook {
       command: None,
       time: Duration::from_secs(60),
@@ -1430,10 +1426,10 @@ fn sent(dir: &Path) -> (String, Value) {
   (std::fs::read_to_string(dir.join("events")).unwrap(), payload)
 }
 
-// "Where that does not take while the machine answers ... a `run`, a suite, a change check or a Cargo verb ends as
-// not run, exit code 75, and sends `placed-release-failed` ...; nothing is run here in its stead"
+// "Where that does not take while the machine answers ... a `run`, a suite, a change check or a Cargo verb passes
+// on down the order and sends `placed-release-failed`"
 #[test]
-fn a_run_whose_machine_cannot_be_brought_to_the_live_release_ends_not_run_and_sends_its_event() {
+fn a_run_whose_machine_cannot_be_brought_to_the_live_release_passes_on_and_sends_its_event() {
   let dir = tempfile::tempdir().unwrap();
   let dir = std::fs::canonicalize(dir.path()).unwrap();
   let repo = dir.join("repo");
@@ -1454,8 +1450,8 @@ fn a_run_whose_machine_cannot_be_brought_to_the_live_release_ends_not_run_and_se
 
   machine.hook = writing_hook(&dir);
 
-  // The live release holds no testbed to copy.
-  assert_eq!(machine.place(&ask), Some(NOT_RUN_EXIT_CODE));
+  // The live release holds no testbed to copy, so the run passes on and nothing is laid there.
+  assert_eq!(machine.place(&ask), None);
   assert!(!dir.join("bench").exists());
   assert!(!marker.exists());
 
@@ -1490,18 +1486,18 @@ fn a_release_failure_is_told_once_for_each_live_release_and_again_once_a_run_fou
   machine.hook = writing_hook(&dir);
 
   // The live release holds no testbed to copy, so the testbed there is never brought.
-  assert_eq!(machine.waited_ready(&ask), Err(NOT_RUN_EXIT_CODE));
-  assert_eq!(machine.waited_ready(&ask), Err(NOT_RUN_EXIT_CODE));
+  assert!(!machine.ready_for(&ask));
+  assert!(!machine.ready_for(&ask));
   assert_eq!(events(), "placed-release-failed\n", "one live release's failure is told once");
 
   go_live(&dir, NEWER);
-  assert_eq!(machine.waited_ready(&ask), Err(NOT_RUN_EXIT_CODE));
+  assert!(!machine.ready_for(&ask));
   assert_eq!(events(), "placed-release-failed\n".repeat(2), "a newer live release's is told again");
 
   std::fs::write(&built_from, format!("{NEWER}\n")).unwrap();
-  assert_eq!(machine.waited_ready(&ask), Ok(()));
+  assert!(machine.ready_for(&ask));
   std::fs::write(&built_from, format!("{FAR}\n")).unwrap();
-  assert_eq!(machine.waited_ready(&ask), Err(NOT_RUN_EXIT_CODE));
+  assert!(!machine.ready_for(&ask));
   assert_eq!(
     events(),
     "placed-release-failed\n".repeat(3),
@@ -1541,14 +1537,14 @@ fn an_outage_and_its_end_reach_the_owner_s_supervisor_as_one_notice_each_through
   };
   let codes = || receiver.noticed().iter().map(|one| one.body["kind"].clone()).collect::<Vec<_>>();
 
-  assert_eq!(machine.waited_ready(&ask), Err(NOT_RUN_EXIT_CODE));
-  assert_eq!(machine.waited_ready(&ask), Err(NOT_RUN_EXIT_CODE));
+  assert!(!machine.ready_for(&ask));
+  assert!(!machine.ready_for(&ask));
   assert_eq!(codes(), [json!("testbed:placed-unreachable")], "one outage is one notice");
   assert_eq!(receiver.noticed()[0].body["said"]["fact"]["detail"]["machine"], "machine-2");
 
   machine.settings.ssh = answering;
-  assert_eq!(machine.waited_ready(&ask), Ok(()));
-  assert_eq!(machine.waited_ready(&ask), Ok(()));
+  assert!(machine.ready_for(&ask));
+  assert!(machine.ready_for(&ask));
   assert_eq!(
     codes(),
     [json!("testbed:placed-unreachable"), json!("testbed:placed-recovered")],
@@ -1556,12 +1552,12 @@ fn an_outage_and_its_end_reach_the_owner_s_supervisor_as_one_notice_each_through
   );
 }
 
-// "A placed machine that cannot be reached is waited for ... Once `unreached_wait_minutes` have passed, the run
-// ends as not run, exit code 75 ... and sends `placed-unreachable`", once for the outage however many runs give up
-// on it; the machine answering again ends the outage and sends `placed-recovered` once; the events go to the hook
-// the machine's testbed environment file names, plain or in quotes
+// "A machine that cannot be reached passes the run on ... The first run that passes on for it sends
+// `placed-unreachable`", once for the outage however many runs pass on; the machine answering again ends the outage
+// and sends `placed-recovered` once; the events go to the hook the machine's testbed environment file names, plain
+// or in quotes
 #[test]
-fn an_outage_is_told_once_however_many_runs_give_up_and_its_end_once_to_the_machine_s_hook() {
+fn an_outage_is_told_once_however_many_runs_pass_on_and_its_end_once_to_the_machine_s_hook() {
   let dir = tempfile::tempdir().unwrap();
   let dir = std::fs::canonicalize(dir.path()).unwrap();
   let repo = dir.join("repo");
@@ -1592,9 +1588,10 @@ fn an_outage_is_told_once_however_many_runs_give_up_and_its_end_once_to_the_mach
     env: &env,
   };
 
-  assert_eq!(machine.place(&ask), Some(NOT_RUN_EXIT_CODE));
-  assert_eq!(machine.place(&ask), Some(NOT_RUN_EXIT_CODE));
-  assert!(!marker.exists(), "nothing runs here in its stead");
+  // The order names this machine after the one away, so each run passes on to run here.
+  assert_eq!(machine.place(&ask), None);
+  assert_eq!(machine.place(&ask), None);
+  assert!(!marker.exists(), "the placement runs nothing itself");
 
   let (events, payload) = sent(&dir);
 
@@ -1615,7 +1612,7 @@ fn an_outage_is_told_once_however_many_runs_give_up_and_its_end_once_to_the_mach
   assert_eq!(payload["detail"]["since"], since);
 
   machine.settings.ssh = vec![refusing.to_string_lossy().into_owned()];
-  assert_eq!(machine.place(&ask), Some(NOT_RUN_EXIT_CODE));
+  assert_eq!(machine.place(&ask), None);
   assert_eq!(
     sent(&dir).0,
     "placed-unreachable\nplaced-recovered\nplaced-unreachable\n",
@@ -1623,9 +1620,9 @@ fn an_outage_is_told_once_however_many_runs_give_up_and_its_end_once_to_the_mach
   );
 }
 
-// An outage that ends before any run gave up on it was never told, so its end is not told either.
+// An outage that ends before any run passed on for it was never told, so its end is not told either.
 #[test]
-fn an_outage_no_run_gave_up_on_ends_untold() {
+fn an_outage_no_run_passed_on_for_ends_untold() {
   let dir = tempfile::tempdir().unwrap();
   let dir = std::fs::canonicalize(dir.path()).unwrap();
   let refusing = dir.join("refusing-ssh");
@@ -1670,16 +1667,16 @@ fn the_machine_s_hook_is_the_environment_s_else_its_testbed_environment_file_s()
   assert_eq!(named(&set).as_deref(), Some("/opt/other"));
 }
 
-// "The run asks it again every thirty seconds ... and goes there once it answers"
+// "Nothing waits for a machine to come back": a machine that does not answer is asked once, and the run passes on
 #[test]
-fn a_run_waits_for_a_machine_out_of_reach_and_goes_there_once_it_answers() {
+fn a_run_passes_on_at_once_from_a_machine_out_of_reach() {
   let dir = tempfile::tempdir().unwrap();
   let dir = std::fs::canonicalize(dir.path()).unwrap();
   let ssh = dir.join("ssh");
   let asked = dir.join("asked");
   let mut machine = released(&dir, None, None);
 
-  // The machine answers from the fourth time it is asked on.
+  // The machine would answer from the fourth time it is asked on.
   install(
     &dropping_ssh(&dir, 0).replacen(
       "shift\n",
@@ -1694,7 +1691,6 @@ fn a_run_waits_for_a_machine_out_of_reach_and_goes_there_once_it_answers() {
   );
   machine.settings.ssh = vec![ssh.to_string_lossy().into_owned()];
   machine.settings.testbed = env!("CARGO_BIN_EXE_bmo-testbed").to_owned();
-  machine.unreached.bound = Duration::from_secs(60);
   checkout(&dir.join("repo"), "testbed = 0\n");
 
   let command = vec!["sh".to_owned(), "-c".to_owned(), "exit 7".to_owned()];
@@ -1707,11 +1703,40 @@ fn a_run_waits_for_a_machine_out_of_reach_and_goes_there_once_it_answers() {
     env: &env,
   };
 
-  assert_eq!(machine.place(&ask), Some(7));
+  assert_eq!(machine.place(&ask), None);
 
   let times: usize = std::fs::read_to_string(&asked).unwrap().trim().parse().unwrap();
 
-  assert!(times > 3, "it was asked {times} times");
+  assert_eq!(times, 1, "it was asked {times} times");
+}
+
+// "A connection that breaks once the run has begun passes the run on too ... the run starts again from its
+// beginning on the next machine in the order that takes it, or here"
+#[test]
+fn a_run_whose_connection_breaks_under_it_passes_on() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let ssh = dir.join("ssh");
+  let mut machine = released(&dir, None, None);
+
+  // The run's own line there breaks; every other line answers.
+  install(&dropping_ssh(&dir, 1), &ssh);
+  machine.settings.ssh = vec![ssh.to_string_lossy().into_owned()];
+  machine.settings.testbed = env!("CARGO_BIN_EXE_bmo-testbed").to_owned();
+  checkout(&dir.join("repo"), "testbed = 0\n");
+
+  let command = vec!["sh".to_owned(), "-c".to_owned(), "exit 7".to_owned()];
+  let env = Env::new();
+  let ask = PlaceAsk {
+    command: &command,
+    adapter: Some("plain"),
+    lane: Lane::Wide,
+    cwd: dir.join("repo"),
+    env: &env,
+  };
+
+  assert_eq!(machine.place(&ask), None, "the broken run passes on");
+  assert_eq!(machine.place(&ask), Some(7), "a run that ends there gives its own code");
 }
 
 // `status` reads the placed machine: "whether it answers, and where it does, the commit its testbed is built from and
@@ -2499,12 +2524,14 @@ exec sh -c "$*"
 }
 
 // A deployment's gate on the placed machine whose `ssh` drops the first `drops` runs there, its testbed this
-// binary, over a checkout whose static check is one step that passes.
+// binary, over a checkout whose static check is one step that passes; its order names the placed machine alone,
+// so broken work is tried there again rather than coming here.
 fn dropping_gate(dir: &Path, drops: usize) -> PlacedGate<'static> {
   let mut machine = released(dir, None, None);
   let ssh = dir.join("ssh");
 
   install(&dropping_ssh(dir, drops), &ssh);
+  machine.settings.order = Some(vec!["machine-2".to_owned()]);
   machine.settings.ssh = vec![ssh.to_string_lossy().into_owned()];
   machine.settings.testbed = env!("CARGO_BIN_EXE_bmo-testbed").to_owned();
   checkout(
@@ -2554,8 +2581,39 @@ fn a_static_check_the_connection_breaks_under_answers_broken_and_passes_when_ask
   assert_eq!(again.steps[0].code, 0);
 }
 
-// "A try that finds the machine not answering is one more broken try, whether or not the deployment has begun
-// there; nothing moves to the machine the deployment runs on"
+// "Where the placement order names this machine, the work comes here instead of waiting ... the whole gate as
+// this machine's own, or the build in this machine's build directory"
+#[test]
+fn a_deployment_s_work_comes_here_where_the_order_names_this_machine_and_its_placed_machine_is_away() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let refusing = dir.join("refusing-ssh");
+  let repo = dir.join("repo");
+  let mut gate = dropping_gate(&dir, 0);
+
+  install("#!/bin/sh\necho 'no agent named stand is attached' >&2\nexit 255\n", &refusing);
+  gate.machine.settings.order = Some(vec!["machine-2".to_owned(), LANES.placed.here.clone()]);
+  gate.machine.settings.ssh = vec![refusing.to_string_lossy().into_owned()];
+
+  let judged = passed_at(&gate, &dir);
+
+  assert!(judged.passed && !judged.broken, "the gate is this machine's own: {judged:?}");
+
+  let built = gate.build(&BuildAsk {
+    root: &repo,
+    commit: &git(&repo, &["rev-parse", "HEAD"]),
+    tree: &repo,
+    profile: "release",
+    binaries: &[],
+    built: &dir.join("built"),
+  });
+
+  assert_eq!(built, None, "the build runs here");
+}
+
+// "Where the order does not name this machine, a try waits for the placed machine. A try that finds the machine
+// not answering is one more broken try, whether or not the deployment has begun there; nothing moves to the
+// machine the deployment runs on"
 #[test]
 fn a_machine_out_of_reach_answers_broken_whether_or_not_begun_there_and_nothing_runs_here() {
   let dir = tempfile::tempdir().unwrap();
@@ -2769,4 +2827,32 @@ fn a_set_runs_here_where_no_placed_machine_is_named_and_is_refused_where_one_wou
     here.err
   );
   assert!(checked_here(&here), "{}", here.out);
+}
+
+// "every command run there over `ssh` asks the connection to answer every `alive_seconds` of the lanes policy
+// (30), after the settings' own `ssh` options, and `ssh` ends it as broken once `alive_misses` (4) asks in a
+// row go unanswered"
+#[test]
+fn every_command_there_asks_the_connection_to_keep_answering() {
+  let dir = tempfile::tempdir().unwrap();
+  let mut placement = released(dir.path(), None, None);
+  let ssh = dir.path().join("recording-ssh");
+  let heard = dir.path().join("ssh-args");
+
+  install(&format!("#!/bin/sh\necho \"$*\" > '{}'\n", heard.display()), &ssh);
+  placement.settings.ssh =
+    vec![ssh.to_string_lossy().into_owned(), "-o".to_owned(), "BatchMode=yes".to_owned()];
+
+  assert_eq!(placement.answers(), Ok(()));
+
+  let numbers = &LANES.numbers;
+  let asked = std::fs::read_to_string(&heard).unwrap();
+
+  assert_eq!(
+    asked.trim(),
+    format!(
+      "-o BatchMode=yes -o ServerAliveInterval={} -o ServerAliveCountMax={} stand true",
+      numbers.alive_seconds, numbers.alive_misses
+    )
+  );
 }

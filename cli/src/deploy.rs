@@ -46,7 +46,7 @@ use bmo_testbed_suite::static_check::{check_steps, run_static_check, spawn_step}
 use bmo_testbed_suite::toolchain::{toolchain_text, toolchains};
 
 use crate::home_of;
-use crate::placement::{BenchFor, FarEnd, MachinePlacement, PLACEMENT_VARIABLE, ReadyBench};
+use crate::placement::{BenchFor, FarEnd, MachinePlacement, Ordered, PLACEMENT_VARIABLE, ReadyBench};
 use crate::recorded::suite_record;
 use crate::suite::repository;
 use crate::words::{BINARY, DeployFlags, FirstArgs};
@@ -204,10 +204,29 @@ impl PlacedGate<'_> {
     self.machine.settings.testbed.clone()
   }
 
-  // Whether the machine answers for the deployment's work; where it does not, the work is broken and tried again,
-  // never run here.
+  // Whether the machine answers for the deployment's work; where it does not, the work is broken: it comes here
+  // where the order names this machine, and is tried again there otherwise.
   fn reached(&self) -> bool {
     self.machine.reached()
+  }
+
+  // Whether the deployment's work comes here where the placed machine breaks under it: where the placement order
+  // names this machine (docs/deploy.md, 「A connection that breaks under the placed machine」). Said on its line
+  // where it does.
+  fn comes_here(&self, work: &str, said: &str) -> bool {
+    let here = self.machine.settings.order().is_ok_and(|order| order.contains(&Ordered::Here));
+
+    if here {
+      eprintln!(
+        "{}",
+        fill_marks(
+          &LANES.placed.here_instead,
+          &[("machine", self.machine.settings.label()), ("work", work), ("said", said)],
+        )
+      );
+    }
+
+    here
   }
 
   // Work there that failed, as the gate's machine left it: broken where that machine no longer answers, the
@@ -252,6 +271,28 @@ impl PlacedGate<'_> {
       },
       broken,
     }
+  }
+
+  // The gate where the connection to the machine broke under it: judged here where the order names this machine,
+  // and otherwise broken, with the steps it ran there, so the deployment tries it again.
+  fn broken_gate(&self, ask: &GateAsk<'_>, steps: Vec<GateStep>) -> GateOutcome {
+    if self.comes_here("gate", &self.machine.broke()) {
+      return self.here.pass(ask);
+    }
+
+    self.broken(steps)
+  }
+
+  // The build where the connection to the machine broke under it: none, so it runs here, where the order names this
+  // machine, and otherwise broken, so the deployment tries it again.
+  fn broken_build(&self) -> Option<Result<(), GateFault>> {
+    let broke = self.machine.broke();
+
+    if self.comes_here("build", &broke) {
+      return None;
+    }
+
+    Some(Err(GateFault::Broken(broke)))
   }
 
   // The gate's answer where the connection to the machine broke under it, with the steps it ran.
@@ -367,12 +408,12 @@ impl Gate for PlacedGate<'_> {
     }
 
     if !self.reached() {
-      return self.broken(Vec::new());
+      return self.broken_gate(ask, Vec::new());
     }
 
     let bench = match self.bench(ask.root, ask.commit) {
       Ok(bench) => bench,
-      Err(GateFault::Broken(_)) => return self.broken(Vec::new()),
+      Err(GateFault::Broken(_)) => return self.broken_gate(ask, Vec::new()),
       Err(GateFault::Failed { said, .. }) => {
         return GateOutcome {
           passed: false,
@@ -389,10 +430,13 @@ impl Gate for PlacedGate<'_> {
       return passed_before(footing.clone(), earlier);
     }
 
-    GateOutcome {
-      footing,
-      ..self.judged_there(&bench, ask)
+    let judged = self.judged_there(&bench, ask);
+
+    if judged.broken {
+      return self.broken_gate(ask, judged.steps);
     }
+
+    GateOutcome { footing, ..judged }
   }
 
   fn dependents(&self, ask: &GateAsk<'_>) -> GateOutcome {
@@ -401,11 +445,12 @@ impl Gate for PlacedGate<'_> {
 
   fn build(&self, ask: &BuildAsk<'_>) -> Option<Result<(), GateFault>> {
     if !self.reached() {
-      return Some(Err(GateFault::Broken(self.machine.broke())));
+      return self.broken_build();
     }
 
     let bench = match self.bench(ask.root, ask.commit) {
       Ok(bench) => bench,
+      Err(GateFault::Broken(_)) => return self.broken_build(),
       Err(fault) => return Some(Err(fault)),
     };
     let build = [self.testbed(), "cargo".to_owned()]
@@ -415,7 +460,7 @@ impl Gate for PlacedGate<'_> {
     let built = self.step(&bench, OwnStep::CargoRelease.name(), &build, true);
 
     if built.broken {
-      return Some(Err(GateFault::Broken(self.machine.broke())));
+      return self.broken_build();
     }
 
     if built.step.code != 0 {
@@ -430,12 +475,14 @@ impl Gate for PlacedGate<'_> {
       }));
     }
 
-    Some(
-      self
-        .machine
-        .fetch_binaries(&bench, ask.profile, ask.binaries, ask.built)
-        .map_err(|why| self.failed(why)),
-    )
+    match self
+      .machine
+      .fetch_binaries(&bench, ask.profile, ask.binaries, ask.built)
+      .map_err(|why| self.failed(why))
+    {
+      Err(GateFault::Broken(_)) => self.broken_build(),
+      fetched => Some(fetched),
+    }
   }
 
   fn lay_units(&self, ask: &LaidUnits<'_>) -> Option<(String, Result<(), String>)> {

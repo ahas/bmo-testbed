@@ -255,11 +255,11 @@ fn carrying_the_testbed(ssh: impl Fn(&Path) -> String) -> Scene {
   scene
 }
 
-// A stand-in `ssh` whose far side is a home of its own under the directory given: past the destination, the line
-// runs there.
+// A stand-in `ssh` whose far side is a home of its own under the directory given: past the options and the
+// destination, the line runs there.
 fn far_home_ssh(dir: &Path) -> String {
   format!(
-    "#!/bin/sh\nshift\nexport HOME='{}'\nexec sh -c \"$*\"\n",
+    "#!/bin/sh\nwhile [ \"$1\" = -o ]; do shift 2; done\nshift\nexport HOME='{}'\nexec sh -c \"$*\"\n",
     dir.join("far-home").display()
   )
 }

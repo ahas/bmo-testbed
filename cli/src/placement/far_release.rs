@@ -4,14 +4,12 @@
 //! ends as not run instead of running here with the event it sends, and what `status` reads of that machine.
 
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
 
 use bmo_testbed_core::events::Event;
 use bmo_testbed_core::placement::PlaceAsk;
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::queue::{HeldLock, LockWait, take_lock};
-use bmo_testbed_core::turn::NOT_RUN_EXIT_CODE;
 use bmo_testbed_deploy::release::{built_from, link_of, live_release_real};
 use bmo_testbed_deploy::tree::{BUILT_FROM, short};
 use serde::Serialize;
@@ -38,26 +36,6 @@ pub fn running_deploy_tree() -> Option<PathBuf> {
   let link = link_of(release);
 
   (link != release).then_some(link)
-}
-
-/// How a run waits for a placed machine that does not answer: how often it asks again, and how long at most
-/// before it ends as not run.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct FarWait {
-  pub pause: Duration,
-  pub bound: Duration,
-}
-
-impl FarWait {
-  /// The lanes policy's wait.
-  pub fn policy() -> Self {
-    let numbers = &LANES.numbers;
-
-    Self {
-      pause: Duration::from_secs(numbers.unreached_pause_seconds),
-      bound: Duration::from_secs(numbers.unreached_wait_minutes * 60),
-    }
-  }
 }
 
 /// The placed machine as `status` reads it (docs/boundary.md, 「`status`」): whether it answers and what `ssh`
@@ -335,62 +313,38 @@ impl MachinePlacement {
   }
 
   /// A run's way onto the machine (docs/boundary.md, 「The placed machine」): the machine answering and its testbed
-  /// the live release, asked again at the wait's pause while the machine does not answer. The code the run ends with
-  /// where it does not come to that, its line said and its event sent: the wait run out, or the testbed there not
-  /// brought to the live release while the machine answers. Nothing runs here in either case.
-  pub fn waited_ready(&self, ask: &PlaceAsk<'_>) -> Result<(), u8> {
-    let started = Instant::now();
-
-    loop {
-      let unanswered = match self.answers() {
-        Ok(()) => match self.brought_live() {
+  /// the live release. False where it does not come to that, its line said and its event sent: the machine not
+  /// answering, or its testbed not brought to the live release while it answers. The run then passes on.
+  pub fn ready_for(&self, ask: &PlaceAsk<'_>) -> bool {
+    let unanswered = match self.answers() {
+      Ok(()) => match self.brought_live() {
+        Ok(()) => {
+          ReleaseFailure::of(&self.data_root, self.settings.label()).cleared();
+          return true;
+        }
+        Err(why) => match self.answers() {
           Ok(()) => {
-            ReleaseFailure::of(&self.data_root, self.settings.label()).cleared();
-            return Ok(());
+            self.release_failed(ask, &why);
+            return false;
           }
-          Err(why) => match self.answers() {
-            Ok(()) => return Err(self.release_failed(ask, &why)),
-            Err(said) => said,
-          },
+          Err(said) => said,
         },
-        Err(said) => said,
-      };
-      let waited = started.elapsed();
-      let bound = self.unreached.bound;
+      },
+      Err(said) => said,
+    };
 
-      if waited >= bound {
-        return Err(self.gave_up(ask, waited, &unanswered));
-      }
-
-      eprintln!(
-        "{}",
-        fill_marks(
-          &LANES.placed.unreached_waiting,
-          &[
-            ("machine", self.settings.label()),
-            ("seconds", &waited.as_secs().to_string()),
-            ("bound", &bound.as_secs().to_string()),
-            ("said", &unanswered),
-          ],
-        )
-      );
-      std::thread::sleep(self.unreached.pause.min(bound.saturating_sub(waited)));
-    }
+    self.passed_unreached(ask, &unanswered);
+    false
   }
 
-  // A run whose machine did not answer within the wait: its line, the event of the outage where no run told it
-  // before, and the code of a run not run.
-  fn gave_up(&self, ask: &PlaceAsk<'_>, waited: Duration, unanswered: &str) -> u8 {
+  // A run whose machine did not answer: its line, and the event of the outage where no run told it before.
+  fn passed_unreached(&self, ask: &PlaceAsk<'_>, unanswered: &str) {
     let machine = self.settings.label();
-    let seconds = waited.as_secs().to_string();
     let outage = Outage::of(&self.data_root, machine);
 
-    println!(
+    eprintln!(
       "{}",
-      fill_marks(
-        &LANES.placed.unreached_gave_up,
-        &[("machine", machine), ("seconds", &seconds), ("said", unanswered)],
-      )
+      fill_marks(&LANES.placed.unreached_passed_on, &[("machine", machine), ("said", unanswered)])
     );
 
     if outage.first_to_tell() {
@@ -402,25 +356,22 @@ impl MachinePlacement {
           "machine": machine,
           "since": outage.since(),
           "command": ask.command,
-          "waited_seconds": waited.as_secs(),
           "said": unanswered,
         }),
       });
     }
-
-    NOT_RUN_EXIT_CODE
   }
 
-  // A run whose machine answers but whose testbed could not be brought to the live release: its line, the event
-  // where no run told this release's failure before, and the code of a run not run.
-  fn release_failed(&self, ask: &PlaceAsk<'_>, why: &str) -> u8 {
+  // A run whose machine answers but whose testbed could not be brought to the live release: its line, and the event
+  // where no run told this release's failure before.
+  fn release_failed(&self, ask: &PlaceAsk<'_>, why: &str) {
     let machine = self.settings.label();
     let live = self.live().map(|live| live.commit);
 
-    println!("{}", fill_marks(&LANES.placed.release_failed, &[("said", why)]));
+    eprintln!("{}", fill_marks(&LANES.placed.release_failed, &[("said", why)]));
 
     if !ReleaseFailure::of(&self.data_root, machine).first_to_tell(live.as_deref().unwrap_or("none")) {
-      return NOT_RUN_EXIT_CODE;
+      return;
     }
 
     self.hook.send(&Event {
@@ -438,8 +389,6 @@ impl MachinePlacement {
         "said": why,
       }),
     });
-
-    NOT_RUN_EXIT_CODE
   }
 
   /// The machine as `status` reads it: asked over `ssh` for the `built-from` beside its testbed, the connection
