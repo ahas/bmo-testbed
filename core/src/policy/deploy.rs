@@ -99,6 +99,7 @@ pub struct RunWords {
   pub gate_work: String,
   pub again: String,
   pub already_live: String,
+  pub carried_live: String,
   pub attached: String,
   pub failed_unmoved: String,
   pub failed_waiting: String,

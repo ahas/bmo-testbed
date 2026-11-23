@@ -1770,6 +1770,13 @@ async fn laid(
 
   // A commit already live when the turn comes is what this deployment would lay down: it ends there, live.
   let already_live = run.previous.as_ref().is_some_and(|previous| previous.commit == commit);
+  // A commit the live one carries is behind what serves: laying it down would take back what came after it, which
+  // only the rollback verb does, so it ends there too.
+  let carried = !already_live
+    && run.previous.as_ref().is_some_and(|previous| {
+      !previous.commit.is_empty()
+        && run.git(&["merge-base", "--is-ancestor", &commit, &previous.commit], source).ok
+    });
 
   // The deploy root holds the run's own record, log and progress file; the first deployment makes it
   // before the run begins writing there.
@@ -1789,8 +1796,10 @@ async fn laid(
     now_ms,
   ));
 
-  if already_live {
-    run.say(&fill_marks(&said.already_live, &[("commit", &shown)]));
+  if already_live || carried {
+    let words = if carried { &said.carried_live } else { &said.already_live };
+
+    run.say(&fill_marks(words, &[("commit", &shown)]));
 
     if let Some(progress) = &run.progress {
       progress.end(Outcome::Live, None);

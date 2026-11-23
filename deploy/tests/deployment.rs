@@ -1710,6 +1710,29 @@ fn a_commit_already_live_when_its_turn_comes_ends_live_without_a_gate() {
   assert!(restarts > 0);
 }
 
+// "A commit the live commit already carries ends the deployment at its turn the same way ... laying nothing down"
+#[test]
+fn a_commit_the_live_one_carries_ends_live_without_laying_it_down() {
+  let scene = Scene::new();
+  let first = must(&["rev-parse", "HEAD"], &scene.source).trim().to_owned();
+  let gate = Footed::on("cargo: rustc 1.0.0\n");
+
+  scene.declare("v2", "true");
+  scene.push("second");
+  assert_eq!(scene.run_asked_of(&gate, &Hands::default()), 0);
+
+  let back = Hands::default();
+  let ask = DeployAsk {
+    record: Some(scene.at("testbed-data")),
+    commit: Some(first),
+    ..DeployAsk::default()
+  };
+
+  assert_eq!(scene.run_with(&ask, &gate, &back, &scene.env()), 0, "{}", said(&back));
+  assert!(said(&back).contains("is carried by the commit already live"), "{}", said(&back));
+  assert!(back.systemctl.borrow().is_empty(), "{:?}", back.systemctl.borrow());
+}
+
 impl Scene {
   // The deployment run against the scene's record with the gate given.
   fn run_asked_of(&self, gate: &dyn Gate, hands: &Hands) -> u8 {

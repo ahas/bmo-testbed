@@ -144,6 +144,7 @@ gate_work = "gate"
 again = "{commit} is already what is deployed; once its turn comes the deployment ends there if it still is"
 # The commit is still what is deployed once the turn comes, so the deployment ends live at once.
 already_live = "{commit} is already live, so nothing is laid down again and the deployment ends here"
+carried_live = "{commit} is carried by the commit already live, so laying it down would take back what came after it; nothing is laid down and the deployment ends here (the rollback verb takes a deployment back)"
 # A deployment asked again (docs/deploy.md, 「The deployment line」): {unit} the deployment standing or failed,
 # {words} its ticket's words, {seconds} how long ago it asked, {commit} a short commit, {when} when it ended and
 # {reason} its reason.

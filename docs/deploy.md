@@ -435,6 +435,10 @@ flowchart TD
   command runs only in its own restart. A waiting commit whose newest ended deployment in the testbed's record
   failed in its gate is not taken, since its gate would fail again; its own deployment answers for it at its
   own turn.
+- **A commit the live commit already carries ends the deployment at its turn the same way.** Where the commit
+  asked for is an ancestor of the one the record read again names, laying it down would take back every commit
+  after it, so the deployment says so on a line and ends live as below, laying nothing down; taking a deployment
+  back is the rollback verb's (「Rollback」).
 - **A commit already live when its turn comes ends the deployment there.** Where the record read again
   names the commit asked for, the deployment says so on a line, begins its progress record and ends it
   live at once, lets the line go and exits 0: no gate, no backup, no release, no restart and no event,
