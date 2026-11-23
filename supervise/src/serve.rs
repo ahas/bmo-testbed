@@ -20,6 +20,9 @@ use crate::unit::Specifiers;
 /// (docs/supervise.md, 「How it runs a unit」).
 pub const RUNTIME_VARIABLE: &str = "XDG_RUNTIME_DIR";
 
+/// The variables naming the account, which the supervisor hands on as a user manager does.
+pub const ACCOUNT_VARIABLES: [&str; 2] = ["USER", "LOGNAME"];
+
 /// Why the supervisor would not serve.
 #[derive(Debug)]
 pub enum Refused {
@@ -118,6 +121,14 @@ pub async fn serve(
     std::env::vars().filter(|(key, _)| key != RUNTIME_VARIABLE).collect();
 
   env.push((RUNTIME_VARIABLE.to_owned(), runtime.to_string_lossy().into_owned()));
+
+  // The account's name, as a user manager hands it to every unit, where the supervisor's own environment lacks it.
+  for name in ACCOUNT_VARIABLES {
+    if !env.iter().any(|(key, value)| key == name && !value.is_empty()) {
+      env.retain(|(key, _)| key != name);
+      env.push((name.to_owned(), specifiers.user.clone()));
+    }
+  }
 
   let specifiers = Specifiers {
     runtime,

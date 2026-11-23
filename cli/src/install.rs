@@ -37,7 +37,7 @@ pub fn install(args: &InstallArgs) -> u8 {
     index: args.index.clone(),
     data_root: args.data_root.clone().unwrap_or_else(data_root),
     home,
-    user: std::env::var("USER").unwrap_or_default(),
+    user: bmo_testbed_core::account::account_name(),
     dry_run: args.dry_run,
     cwd: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
     prefix,

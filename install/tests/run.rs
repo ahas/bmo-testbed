@@ -187,7 +187,7 @@ text = "PORT={{port.one.web}}\n"
 
 [[after]]
 id = "first-account"
-run = "cat \"$BMO_INPUT_ONE_OWNER\" > made-for && touch account"
+run = "cat \"$BMO_INPUT_ONE_OWNER\" > made-for && printf %s \"$USER $LOGNAME\" > made-by && touch account"
 done = "test -f account"
 inputs = ["one.owner"]
 "#;
@@ -351,6 +351,10 @@ fn a_whole_run_makes_writes_deploys_and_continues_where_it_stopped() {
   assert_eq!(*machine.deployed.borrow(), ["one", "two"]);
   assert!(ground.index.join("services/one/data").is_dir());
   assert_eq!(std::fs::read_to_string(ground.index.join("services/one/made-for")).unwrap(), "owner\n");
+  assert_eq!(
+    std::fs::read_to_string(ground.index.join("services/one/made-by")).unwrap(),
+    "tester tester"
+  );
 
   let console = std::fs::read_to_string(ground.data_root.join("env/console.env")).unwrap();
 

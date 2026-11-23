@@ -105,6 +105,9 @@ continued lines, quoting and the specifiers `%h`, `%u`, `%U`, `%t`, `%n`, `%N`, 
   folder of the supervisor's own, `run/`, readable by the account alone. A unit and a command that each fall back to
   a directory of their own where the variable is unset would otherwise look for each other's sockets in different
   places. `%t` names the same directory.
+- **`USER` and `LOGNAME` name the account,** as a user manager hands them on: the supervisor's own where its
+  environment names them, else the password database's name for its user id, which `%u` names too. A container's
+  command carries neither, and a database client takes `USER` for its role.
 - **A process that ends** is weighed by its unit's `Restart=`: started again after `RestartSec`, the unit reading
   `activating (auto-restart)` while it waits and its restarts counted; left inactive where it ended clean; left
   failed otherwise, with how it ended as its result and its code or signal as its status.

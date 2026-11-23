@@ -244,7 +244,10 @@ runs. A name nothing declares fails the step naming it.
   checkout, and for each input the step names in `inputs` a variable `BMO_INPUT_<NAME>` naming the file the input
   is kept in, its name in capitals with every character that is not a letter or a digit written `_`. A value
   never stands on its command line. Every command, a need's check and a source's build, a restart's and a
-  verification's among them, is handed `BMO_DATA_DIR` and `BMO_INSTALL_PREFIX`, the install prefix.
+  verification's among them, is handed `BMO_DATA_DIR` and `BMO_INSTALL_PREFIX`, the install prefix, and `USER` and
+  `LOGNAME` naming the account the install runs as: `USER` where the install's environment names one, else the
+  password database's name for its user id, since a container's command carries none and a database client takes
+  it for its role.
 - **`done` is a command answering 0 where the step's work already stands,** asked first, so a rerun skips it.
   A step whose `run` ends with any other code than 0 is `failed`, and the run stops there.
 

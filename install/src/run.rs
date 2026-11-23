@@ -1507,6 +1507,13 @@ impl<'a> Install<'a> {
       ("BMO_INSTALL_PREFIX".to_owned(), self.ask.prefix.display().to_string()),
     ];
 
+    // The account's name, which a database client takes for its role, where the install's own environment lacks
+    // it, as a container's command does.
+    if !self.ask.user.is_empty() {
+      env.push(("USER".to_owned(), self.ask.user.clone()));
+      env.push(("LOGNAME".to_owned(), self.ask.user.clone()));
+    }
+
     if let Some(index) = index {
       env.push(("BMO_INSTALL_INDEX".to_owned(), index.display().to_string()));
     }

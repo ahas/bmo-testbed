@@ -6,6 +6,7 @@
 //! names, the watch that ends a held command fallen silent, the witness a run tells its record through, the
 //! verb over them, and the policy every number and word of theirs is read from.
 
+pub mod account;
 pub mod answer;
 pub mod cargo_lock;
 pub mod close_line;

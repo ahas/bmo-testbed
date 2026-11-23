@@ -48,7 +48,7 @@ impl Specifiers {
 
     Self {
       home,
-      user: std::env::var("USER").unwrap_or_default(),
+      user: bmo_testbed_core::account::account_name(),
       uid,
       runtime,
     }
