@@ -23,7 +23,8 @@
 //! and not passed on, and the `placed` verb there passing its command's output on, telling its own holder
 //! while it comes and ending it whole once it falls silent for the declared limit. The units a release marks
 //! for the machine laid in its user units and their timers started there, and the prune's reading of its free
-//! disk against the settings' floor, sending `placed-disk-low` for each disk below it. The settings' order read
+//! disk against the settings' floor, sending `placed-disk-low` for each disk below it, as one comes below and
+//! again only each due span. The settings' order read
 //! by name, and a run going to the first machine in it with a seat of its lane free, falling to the next when
 //! that one is full. The testbed there brought to
 //! a live release carrying one and read back at its commit, unless the caller keeps it as it stands.
@@ -31,7 +32,7 @@
 use std::convert::Infallible;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use axum::Router;
 use axum::response::sse::{Event, Sse};
@@ -55,6 +56,7 @@ use bmo_testbed_core::policy::verbs::VERBS;
 use bmo_testbed_core::queue::process_alive;
 use bmo_testbed_core::turn::{Env, Lane, NOT_RUN_EXIT_CODE, TestbedTurn, TurnAsk, lock_path, take_turn};
 use bmo_testbed_deploy::deployment::{BuildAsk, Gate, GateAsk, GateFault, Passed, none_earlier};
+use bmo_testbed_suite::prune::{HOUR_MS, PLACED_LOW_SENT_MARK_NAME};
 use futures_util::StreamExt as _;
 use serde_json::{Value, json};
 
@@ -2399,7 +2401,7 @@ fn a_disk_of_the_placed_machine_below_its_floor_sends_placed_disk_low_and_one_ab
   machine.settings.disk_paths = vec![gone.clone()];
   machine.settings.disk_free_gigabytes = Some(0.0);
 
-  let above = placed_disk(&machine, true, &hook);
+  let above = placed_disk(&machine, &dir, true, &hook);
 
   assert!(above[1].starts_with(&format!("  {target} on ")), "{above:?}");
   assert!(!above[1].contains("below"), "{above:?}");
@@ -2409,12 +2411,12 @@ fn a_disk_of_the_placed_machine_below_its_floor_sends_placed_disk_low_and_one_ab
   // A floor no disk reaches.
   machine.settings.disk_free_gigabytes = Some(1e9);
 
-  let dry = placed_disk(&machine, false, &hook);
+  let dry = placed_disk(&machine, &dir, false, &hook);
 
   assert!(dry[1].ends_with(" free, below the floor"), "{dry:?}");
   assert!(!dir.join("events").exists());
 
-  placed_disk(&machine, true, &hook);
+  placed_disk(&machine, &dir, true, &hook);
 
   let payload: Value =
     serde_json::from_str(std::fs::read_to_string(dir.join("payloads")).unwrap().trim()).unwrap();
@@ -2426,6 +2428,49 @@ fn a_disk_of_the_placed_machine_below_its_floor_sends_placed_disk_low_and_one_ab
   assert_eq!(payload["detail"]["disks"][0]["path"], target.as_str());
   assert!(payload["detail"]["disks"][0]["free_bytes"].as_u64().unwrap() > 0);
   assert!(!payload["detail"]["disks"][0]["source"].as_str().unwrap().is_empty());
+}
+
+// "It goes out once as a disk there comes to stand below the floor, and again each due span one stays below ... A
+// reading that finds every disk there read and above the floor takes the mark away, so the next time one stands
+// below the event goes out at once"
+#[test]
+fn placed_disk_low_goes_out_as_a_disk_comes_below_its_floor_and_again_only_each_due_span() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let mut machine = released(&dir, None, None);
+  let hook = writing_hook(&dir);
+  let marked = dir.join(PLACED_LOW_SENT_MARK_NAME);
+  let sent = || std::fs::read_to_string(dir.join("events")).unwrap_or_default().lines().count();
+
+  std::fs::create_dir_all(&machine.settings.cargo_target).unwrap();
+  // A floor no disk reaches.
+  machine.settings.disk_free_gigabytes = Some(1e9);
+  placed_disk(&machine, &dir, true, &hook);
+  placed_disk(&machine, &dir, true, &hook);
+
+  assert_eq!(sent(), 1, "a second reading within the span sends nothing");
+
+  let span_ago = SystemTime::now() - Duration::from_millis((PRUNE.due_hours * HOUR_MS) as u64);
+
+  std::fs::File::options()
+    .write(true)
+    .open(&marked)
+    .unwrap()
+    .set_modified(span_ago)
+    .unwrap();
+  placed_disk(&machine, &dir, true, &hook);
+
+  assert_eq!(sent(), 2, "its span passed");
+
+  machine.settings.disk_free_gigabytes = Some(0.0);
+  placed_disk(&machine, &dir, true, &hook);
+
+  assert!(!marked.exists(), "every disk above its floor");
+
+  machine.settings.disk_free_gigabytes = Some(1e9);
+  placed_disk(&machine, &dir, true, &hook);
+
+  assert_eq!(sent(), 3, "below again");
 }
 
 // "Where the machine's disk is a virtual one inside a host drive, as a WSL machine's is, the settings'
@@ -2450,7 +2495,7 @@ fn a_host_drive_below_the_floor_warns_by_its_drive_and_figure_while_the_virtual_
   machine.settings.disk_paths = vec!["/mnt/c".to_owned()];
   machine.settings.disk_free_gigabytes = Some(50.0);
 
-  let lines = placed_disk(&machine, true, &hook);
+  let lines = placed_disk(&machine, &dir, true, &hook);
   let target = machine.settings.cargo_target.clone();
   let payload: Value =
     serde_json::from_str(std::fs::read_to_string(dir.join("payloads")).unwrap().trim()).unwrap();
@@ -2480,7 +2525,7 @@ fn a_placed_machine_out_of_reach_has_its_disk_said_unread_and_sends_nothing() {
   machine.settings.ssh = vec![refusing.to_string_lossy().into_owned()];
   machine.settings.disk_free_gigabytes = Some(1e9);
 
-  let lines = placed_disk(&machine, true, &hook);
+  let lines = placed_disk(&machine, &dir, true, &hook);
 
   assert_eq!(
     lines[1..],

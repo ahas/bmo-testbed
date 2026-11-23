@@ -422,8 +422,8 @@ bmo-testbed prune --all
   to the drive a virtual disk stands on, and sends `disk-trim-failed` where the trim does not run
   (`docs/deploy.md`, 「The Cargo build directory」); a dry run trims nothing.
 - Then reads the free disk of the placed machine the settings name, the host drive a virtual disk stands
-  on among it, and sends `placed-disk-low` where a disk there stands below the floor (「The placed
-  machine」); `--all` reads none.
+  on among it, and sends `placed-disk-low` where a disk there stands below the floor, once as one comes to
+  stand below and again only every two hours one stays below (「The placed machine」); `--all` reads none.
 - Given `--when-due`, as its timer runs it, prunes only where the directory holds more than its ceiling, the
   deployments' checkouts more than theirs, or its last prune ended two hours ago or more, and otherwise says
   on one line what it holds of its ceiling and ends with 0, having removed, trimmed and read nothing more
@@ -781,7 +781,7 @@ keep (`docs/deploy.md`, 「The unit links」).
   | `placed-unreachable` | `machine` (the placed machine's label), `since` (when the outage began, RFC 3339), `command` (the words of the run that told it), `said` (what `ssh` said). Sent once for each outage, by the first run that found the placed machine not answering and passed on (「The placed machine」) |
   | `placed-recovered` | `machine`, `since` (when the outage began). Sent once the placed machine answers again after an outage `placed-unreachable` told, by the one process that finds it so |
   | `placed-release-failed` | `machine`, `command`, `live` (the live testbed release's commit), `far` (the commit the testbed there names, or null), `said` (what bringing it came to). Sent once for each live release, by the first run whose placed machine answers but whose testbed could not be brought to that release; that run and every one after it passes on down the order. A run that finds the testbed there at the live release clears this, so a failure after it is sent again (「The placed machine」) |
-  | `placed-disk-low` | `machine` (the placed machine's label), `floor_bytes`, `disks`, each with `path` (as the settings name it), `source` (the filesystem's source, the drive itself for a WSL drive mount) and `free_bytes` |
+  | `placed-disk-low` | `machine` (the placed machine's label), `floor_bytes`, `disks`, each with `path` (as the settings name it), `source` (the filesystem's source, the drive itself for a WSL drive mount) and `free_bytes`. Sent once as a disk there comes to stand below the floor, and again only every two hours one stays below |
   | `disk-trim-failed` | `path` (the build directory the trim was run on), `said` |
   | `full-suite-failed` | `head`, `log`, `step` (the failing setup or static step, or null), `failures`, each with `unit` and `package` |
   | `suite-flaky` | `tests`, each with `test` and `unit`, `units`, `log` |

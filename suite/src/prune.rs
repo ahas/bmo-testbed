@@ -43,6 +43,10 @@ pub const TRIMMED_MARK_NAME: &str = ".trim-began";
 /// standing only while the directory stays over its ceiling.
 pub const OVER_SENT_MARK_NAME: &str = ".over-ceiling-sent";
 
+/// The mark at the build root whose modification time says when `placed-disk-low` last went out from it, standing
+/// only while a disk of the placed machine stays below its floor.
+pub const PLACED_LOW_SENT_MARK_NAME: &str = ".placed-disk-low-sent";
+
 /// When the mark at `path` was last written, in milliseconds since the epoch; none where it stands nowhere.
 pub fn marked_at(path: &Path) -> Option<i64> {
   let modified = std::fs::metadata(path).ok()?.modified().ok()?;

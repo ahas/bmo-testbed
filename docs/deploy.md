@@ -1291,17 +1291,25 @@ flowchart TD
     stands at none and every write inside fails.
   - The host drive's figure is therefore the one that warns of a full host. The virtual disk's own figure
     is read beside it, since the disk file also stops at its own maximum size.
-- **A disk below the floor sends `placed-disk-low`,** each run it stays below. The floor is the settings'
-  `disk_free_gigabytes`, 50 GB where they name none (the prune policy's). The event names the machine,
-  the floor, and each disk below it by its path, its source (the drive itself, `C:\`, for a WSL drive
-  mount) and its free space (`docs/boundary.md`, 「Events」).
+- **A disk below the floor sends `placed-disk-low`.** The floor is the settings' `disk_free_gigabytes`,
+  50 GB where they name none (the prune policy's). The event names the machine, the floor, and each disk
+  below it by its path, its source (the drive itself, `C:\`, for a WSL drive mount) and its free space
+  (`docs/boundary.md`, 「Events」).
+  - **It goes out once as a disk there comes to stand below the floor, and again each due span one stays
+    below,** two hours, as `cargo-target-over-ceiling` does, not at every prune of a timer that prunes every
+    five minutes while the build directory stands over its ceiling. When it last went out is the
+    modification time of a fourth mark at this machine's build root, written as it is sent. A reading that
+    finds every disk there read and above the floor takes the mark away, so the next time one stands below
+    the event goes out at once; a machine out of reach, or a path that does not read, leaves the mark as it
+    stands.
 - **The event goes to this machine's hook.** The timed prune's service reads `env/testbed.env` under the
   default data root, `$HOME/.local/share/bmo/data`, where that file exists, so the machine names `BMO_TESTBED_EVENT_HOOK` there: the
   command that carries an event to the person who keeps the machine. Where no hook is named, the event is
   the line the prune writes on its standard error, which a timed prune leaves in this machine's journal,
   read with `journalctl --user -u bmo-cargo-prune.service`.
 - A path whose free space does not read is said on a line. A machine that cannot be reached is said on
-  one line, and its disk is not read. A dry run reads and says the free space and sends nothing.
+  one line, and its disk is not read. A dry run reads and says the free space, sends nothing and leaves
+  the mark as it stands.
 - **What it says:** how many units, incremental directories, loose files, checkout target directories and
   stray checkout `target/` directories it removed, about how much disk they held, the disk's free space
   before and after; then the ceiling and how it was computed, what the directory holds against it, and

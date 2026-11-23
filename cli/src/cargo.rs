@@ -30,9 +30,9 @@ use bmo_testbed_suite::ceiling::{Ceiling, CeilingPlan, CeilingSetting, Enforceme
 use bmo_testbed_suite::crates::cargo_target_root;
 use bmo_testbed_suite::dependents::{read_registry, registry_path};
 use bmo_testbed_suite::prune::{
-  DAY_MS, HOUR_MS, MINUTE_MS, OVER_SENT_MARK_NAME, PRUNED_MARK_NAME, PrunePlan, TRIMMED_MARK_NAME,
-  directory_bytes, disk_free_bytes, keeps_access_times, mark, marked_at, plan_clear, plan_prune,
-  take_prune_locks,
+  DAY_MS, HOUR_MS, MINUTE_MS, OVER_SENT_MARK_NAME, PLACED_LOW_SENT_MARK_NAME, PRUNED_MARK_NAME, PrunePlan,
+  TRIMMED_MARK_NAME, directory_bytes, disk_free_bytes, keeps_access_times, mark, marked_at, plan_clear,
+  plan_prune, take_prune_locks,
 };
 use serde_json::json;
 
@@ -220,24 +220,22 @@ fn said_of_ceiling(enforcement: &Enforcement, verb: &str) -> Vec<String> {
   lines
 }
 
-// The mark of the last `cargo-target-over-ceiling` taken from the directory at `root`, found within its ceiling,
-// so the event goes out at once the next time it stands over.
-fn forget_over(root: &Path) {
+// The mark at `marked` of the last time a warning went out taken away, the state it warns of gone, so the warning
+// goes out at once the next time that state comes.
+fn forget_sent(marked: &Path) {
   // A mark that stands nowhere is the state this asks for.
-  let _ = std::fs::remove_file(root.join(OVER_SENT_MARK_NAME));
+  let _ = std::fs::remove_file(marked);
 }
 
-// Whether `cargo-target-over-ceiling` goes out at `now` for the directory at `root` left over its ceiling: where no
-// mark says it went out since the directory last stood within its ceiling, or the mark is the prune policy's due
-// span old or more. The mark is written where it goes out.
-fn over_due(root: &Path, now: i64) -> bool {
-  let marked = root.join(OVER_SENT_MARK_NAME);
-
-  if marked_at(&marked).is_some_and(|sent| now - sent < PRUNE.due_hours * HOUR_MS) {
+// Whether a warning whose last sending the mark at `marked` records goes out at `now` for a state that stands: where
+// no mark says it went out since the state last went, or the mark is the prune policy's due span old or more. The
+// mark is written where it goes out.
+fn sent_due(marked: &Path, now: i64) -> bool {
+  if marked_at(marked).is_some_and(|sent| now - sent < PRUNE.due_hours * HOUR_MS) {
     return false;
   }
 
-  mark(&marked);
+  mark(marked);
   true
 }
 
@@ -245,12 +243,14 @@ fn over_due(root: &Path, now: i64) -> bool {
 // ceiling and the event is due, naming what holds what is left; its mark taken away where the enforcement left
 // the directory within its ceiling.
 fn send_over(root: &Path, enforcement: &Enforcement, hook: &Hook) {
+  let marked = root.join(OVER_SENT_MARK_NAME);
+
   if !enforcement.over() {
-    forget_over(root);
+    forget_sent(&marked);
     return;
   }
 
-  if !over_due(root, now_ms()) {
+  if !sent_due(&marked, now_ms()) {
     return;
   }
 
@@ -623,8 +623,9 @@ pub fn prune_in(
 
 /// The placed machine's free disk read against its floor (docs/deploy.md, 「The Cargo build directory」): what
 /// the prune says of it, and, where `send` holds, a `placed-disk-low` event to the hook naming each disk there
-/// below the floor.
-pub fn placed_disk(machine: &MachinePlacement, send: bool, hook: &Hook) -> Vec<String> {
+/// below the floor where the event is due by its mark at the build root `root`, the mark taken away where every
+/// disk there read and none stands below.
+pub fn placed_disk(machine: &MachinePlacement, root: &Path, send: bool, hook: &Hook) -> Vec<String> {
   let said = &VERBS.prune;
   let label = machine.settings.label();
   let floor = machine.settings.disk_floor_bytes();
@@ -638,10 +639,12 @@ pub fn placed_disk(machine: &MachinePlacement, send: bool, hook: &Hook) -> Vec<S
     }
   };
   let mut low: Vec<(String, FarDisk)> = Vec::new();
+  let mut every_read = true;
 
   for (path, disk) in readings {
     let Some(disk) = disk else {
       lines.push(fill_marks(&said.placed_unread, &[("path", &path)]));
+      every_read = false;
       continue;
     };
     let shown = [
@@ -658,7 +661,13 @@ pub fn placed_disk(machine: &MachinePlacement, send: bool, hook: &Hook) -> Vec<S
     }
   }
 
-  if send && !low.is_empty() {
+  let marked = root.join(PLACED_LOW_SENT_MARK_NAME);
+
+  if send && low.is_empty() && every_read {
+    forget_sent(&marked);
+  }
+
+  if send && !low.is_empty() && sent_due(&marked, now_ms()) {
     let disks = low
       .iter()
       .map(|(path, disk)| {
@@ -701,7 +710,7 @@ pub fn prune(args: &PruneArgs) -> u8 {
   let ceiling = CeilingSetting::of(&env);
 
   if let Some(line) = not_due(args, &root, ceiling, now_ms()) {
-    forget_over(&root);
+    forget_sent(&root.join(OVER_SENT_MARK_NAME));
 
     return Said {
       out: vec![line],
@@ -718,7 +727,7 @@ pub fn prune(args: &PruneArgs) -> u8 {
   if !args.all
     && let Some(machine) = MachinePlacement::named(&data_root(), &home_of(&env))
   {
-    answer.out.extend(placed_disk(&machine, !args.dry_run, &hook));
+    answer.out.extend(placed_disk(&machine, &root, !args.dry_run, &hook));
   }
 
   answer.print()
