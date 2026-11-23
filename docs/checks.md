@@ -137,7 +137,10 @@
   `bmo-check.slice` (`docs/deploy.md`, 「The slices」), the check's process number and the step's own
   count, which the user's service manager starts around a keeper the step holds before its command
   starts. The command moves itself into the scope before it executes, so it and everything it starts are
-  born inside and count against the scope alone. A command run again after an out-of-memory kill runs in
+  born inside and count against the scope alone. A command that may not move itself — one started from a
+  login session's scope, as a placed check is over `ssh`, whose move would need the session's own parent
+  group — tells the step so and waits, and the manager moves it into the scope, delegated for that, before
+  it executes, so it is born inside all the same. A command run again after an out-of-memory kill runs in
   the same scope.
   - **The ceilings** are the static-check policy's: sixteen gigabytes of memory, two of swap beyond it,
     and 8,192 tasks.
@@ -152,8 +155,8 @@
   - **The scope goes with the step:** once the command has ended the keeper is let go, and a process the
     step left running stays in the scope until it ends.
   - **Where the scope cannot be had,** no user service manager reached, the manager refusing it, or the
-    command unable to move into it, a line on standard error says why and the step runs where its caller
-    stands.
+    command moved into it neither by itself nor by the manager, a line on standard error says why and the
+    step runs where its caller stands.
 - **A step a signal ended says the signal.** Its line, and the check's failing line where it is the
   first to fail, name the signal in place of an exit code, so a command killed from outside is never
   read as a lint or a test that failed; it counts as exit code 1 for a caller.

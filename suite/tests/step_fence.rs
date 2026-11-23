@@ -116,12 +116,13 @@ fn a_command_that_cannot_move_into_its_fence_still_runs_and_says_why() {
 
   command.args(["-c", "exit 3"]).stdin(Stdio::null());
 
-  let joining = fence.join(&mut command);
-  let status = command.status().unwrap();
-  let why = joining.missed().unwrap();
+  let (child, missed) = fence.spawn(&mut command);
+  let status = child.unwrap().wait().unwrap();
+  let why = missed.unwrap();
 
   assert_eq!(status.code(), Some(3));
   assert!(why.contains(&fence.unit) && why.contains("No such file or directory"), "{why}");
+  assert!(why.contains("the service manager did not move it"), "{why}");
 }
 
 // "The command moves itself into the scope before it executes, so it ... is born inside"
@@ -138,10 +139,61 @@ fn a_command_started_into_a_fence_of_the_machine_s_manager_is_born_inside_it() {
 
   command.arg("/proc/self/cgroup").stdin(Stdio::null()).stdout(Stdio::piped());
 
-  let joining = fence.join(&mut command);
-  let output = command.output().unwrap();
+  let (child, missed) = fence.spawn(&mut command);
+  let output = child.unwrap().wait_with_output().unwrap();
 
-  assert_eq!(joining.missed(), None);
+  assert_eq!(missed, None);
   assert!(String::from_utf8_lossy(&output.stdout).trim().ends_with(&format!("/{}", fence.unit)));
   assert!(fence.group.ends_with(&format!("/{CHECK_SLICE}/{}", fence.unit)), "{}", fence.group);
+}
+
+// The machine's own manager, standing for a caller in a login session's scope, which may not move itself.
+struct FromSession;
+
+impl FenceSeams for FromSession {
+  fn pid(&self) -> u32 {
+    LiveFence.pid()
+  }
+
+  fn env(&self) -> Vec<(String, String)> {
+    LiveFence.env()
+  }
+
+  fn call(&mut self, command: &[String], env: &[(String, String)]) -> (bool, String) {
+    LiveFence.call(command, env)
+  }
+
+  fn cgroup(&mut self, pid: u32) -> String {
+    LiveFence.cgroup(pid)
+  }
+
+  fn pause(&mut self) {
+    LiveFence.pause();
+  }
+
+  fn offer_first(&mut self) {}
+
+  fn moves_itself(&self) -> bool {
+    false
+  }
+}
+
+// "where it may not, as from a login session's scope, the manager moves it there while it waits to execute, so
+// it is born inside all the same"
+#[test]
+fn a_command_that_may_not_move_itself_is_moved_by_the_manager_before_it_executes() {
+  if user_bus_refusal(&user_bus()).is_some() {
+    return;
+  }
+
+  let fence = StepFence::open(step_limits(), &mut FromSession).unwrap();
+  let mut command = Command::new("cat");
+
+  command.arg("/proc/self/cgroup").stdin(Stdio::null()).stdout(Stdio::piped());
+
+  let (child, missed) = fence.spawn(&mut command);
+  let output = child.unwrap().wait_with_output().unwrap();
+
+  assert_eq!(missed, None);
+  assert!(String::from_utf8_lossy(&output.stdout).trim().ends_with(&format!("/{}", fence.unit)));
 }

@@ -14,6 +14,7 @@ pub struct StaticCheck {
   pub failed: String,
   pub fence_none: String,
   pub fence_unjoined: String,
+  pub fence_unmoved: String,
   pub fence: StepFenceCeilings,
 }
 

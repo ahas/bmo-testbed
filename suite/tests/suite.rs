@@ -760,8 +760,8 @@ mod fence {
     assert_eq!(call[..3], words(&["busctl", "--user", "call"]));
     assert!(call.contains(&"bmo-suite-7.scope".to_owned()));
     assert!(call.join(" ").contains(
-      "7 PIDs au 1 7 MemoryMax t 8589934592 MemorySwapMax t 1073741824 TasksMax t 8192 OOMPolicy s continue \
-       Slice s bmo-suite.slice"
+      "8 PIDs au 1 7 MemoryMax t 8589934592 MemorySwapMax t 1073741824 TasksMax t 8192 OOMPolicy s continue \
+       Slice s bmo-suite.slice CollectMode s inactive-or-failed Delegate b true"
     ));
     assert_eq!(call.last().map(String::as_str), Some("0"));
     assert!(Path::new(env!("CARGO_MANIFEST_DIR")).join("../units").join(SUITE_SLICE).is_file());

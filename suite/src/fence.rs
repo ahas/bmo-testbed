@@ -72,6 +72,27 @@ pub fn other_fence_listed(listed: &str, pid: u32) -> bool {
     .any(|unit| unit != own)
 }
 
+/// The manager's own call that moves a process already running into the scope `unit`, which it started.
+pub fn attach_call(unit: &str, pid: u32) -> Vec<String> {
+  [
+    "busctl",
+    "--user",
+    "call",
+    "org.freedesktop.systemd1",
+    "/org/freedesktop/systemd1",
+    "org.freedesktop.systemd1.Manager",
+    "AttachProcessesToUnit",
+    "ssau",
+    unit,
+    "",
+    "1",
+  ]
+  .map(str::to_owned)
+  .into_iter()
+  .chain(std::iter::once(pid.to_string()))
+  .collect()
+}
+
 /// The manager's own call that starts a scope around a process already running, in `slice`.
 pub fn fence_call(unit: &str, slice: &str, pid: u32, limits: FenceLimits) -> Vec<String> {
   let properties = [
@@ -81,6 +102,8 @@ pub fn fence_call(unit: &str, slice: &str, pid: u32, limits: FenceLimits) -> Vec
     ("OOMPolicy", "s", "continue".to_owned()),
     ("Slice", "s", slice.to_owned()),
     ("CollectMode", "s", "inactive-or-failed".to_owned()),
+    // Delegated, so the manager may move a process into it after it started: one from a login session's scope.
+    ("Delegate", "b", "true".to_owned()),
   ];
   let mut call: Vec<String> = [
     "busctl",
@@ -162,6 +185,11 @@ pub trait FenceSeams {
   fn pause(&mut self);
   /// Raises the process's own OOM score to the most; its children inherit it.
   fn offer_first(&mut self);
+  /// Whether a command started into a step's fence moves itself into it, or is moved there by the manager at
+  /// once: a process in a login session's scope, such as a run over `ssh`, may not move itself.
+  fn moves_itself(&self) -> bool {
+    true
+  }
 }
 
 /// The fence as this process stands.

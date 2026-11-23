@@ -14,6 +14,9 @@ failed = "static check: FAILED, {step}, {end}"
 fence_none = "static check: {name} runs where its caller stands, with no fence of its own: {why}"
 # Why, where the command could not move itself into the scope its step holds.
 fence_unjoined = "the command could not move into {unit}: {why}"
+# Why, where neither the command moved itself nor the service manager moved it: {own} why its own move failed, or
+# that it was not tried, {said} what the manager answered.
+fence_unmoved = "{own}, and the service manager did not move it: {said}"
 
 # Each step's fence (docs/checks.md, 「The static check」): its memory ceiling and the swap beyond it, in
 # gigabytes, and the tasks it may hold.

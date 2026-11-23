@@ -353,12 +353,12 @@ fn output_of(
         .stdout(out)
         .stderr(errors);
 
-      let joining = fence.map(|(name, fence)| (name, fence.join(&mut started)));
-      let child = started.spawn();
+      let Some((name, fence)) = fence else {
+        return started.spawn();
+      };
+      let (child, missed) = fence.spawn(&mut started);
 
-      if let Some((name, joining)) = joining
-        && let Some(why) = joining.missed()
-      {
+      if let Some(why) = missed {
         say_none(name, &why);
       }
 
