@@ -279,12 +279,13 @@ fn prune_shared(
     };
   }
 
-  let building = deployments.building();
-  let plan_at = |now: i64| {
+  // What the prune removes at `now` while the deployments `building` names run, which are read once the prune
+  // holds the build locks, so a deployment that began while it waited on them is among them.
+  let plan_at = |now: i64, building: &[PathBuf]| {
     if args.all {
       plan_clear(root)
     } else {
-      plan_prune(root, (days * DAY_MS as f64) as i64, now, (hours * HOUR_MS as f64) as i64, &building)
+      plan_prune(root, (days * DAY_MS as f64) as i64, now, (hours * HOUR_MS as f64) as i64, building)
     }
   };
 
@@ -300,7 +301,8 @@ fn prune_shared(
 
   if args.dry_run {
     let now = now_ms();
-    let planned = plan_at(now);
+    let building = deployments.building();
+    let planned = plan_at(now, &building);
     let mut out = said_of(root, args, days, hours, &planned, &said.dry);
 
     // The enforcement plans as though it held every build lock the prune would wait for.
@@ -321,7 +323,8 @@ fn prune_shared(
   });
   let before = disk_free_bytes(root);
   let now = now_ms();
-  let planned = plan_at(now);
+  let building = deployments.building();
+  let planned = plan_at(now, &building);
   let enforcing = (!args.all).then(|| ceiling_plan(&planned, now));
 
   planned.apply();
