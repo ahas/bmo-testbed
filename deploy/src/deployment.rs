@@ -29,6 +29,7 @@ use bmo_testbed_core::turn::{
   Env, FRONT_VARIABLE, Lane, NOT_RUN_EXIT_CODE, TurnAsk, harness_pid, process_env, take_turn,
 };
 use bmo_testbed_core::verb::REFUSED_EXIT_CODE;
+use bmo_testbed_core::version::{declared_version, deployed_version, platform_day};
 use bmo_testbed_record::{GateGround, GatePass, Record, say_unwritten};
 use serde_json::{Value, json};
 
@@ -716,7 +717,8 @@ struct Laying<'a> {
   progress: Option<DeployRun>,
   commit: String,
   subject: String,
-  /// The release's `VERSION` file content at the commit, empty where it carries none.
+  /// The deployed version: the release the commit's tag names, else the day's nightly; empty where the
+  /// commit declares none.
   version: String,
   previous: Option<DeployRecord>,
   restarted_at: std::cell::Cell<i64>,
@@ -1605,9 +1607,21 @@ async fn laid(
   }
 
   run.subject = run.git(&["log", "-1", "--format=%s", &run.commit], source).out.trim().to_owned();
-  // The release's version, as the commit's `VERSION` file holds it; a commit with none deploys all the same.
-  let shown_version = run.git(&["show", &format!("{}:VERSION", run.commit)], source);
-  run.version = if shown_version.ok { shown_version.out.trim().to_owned() } else { String::new() };
+  // The deployed version (docs/deploy.md, 「The deployed version」): the release the commit's tag names, else the
+  // day's nightly after the version the commit declares; a commit declaring none deploys all the same.
+  let declared = declared_version(&|file: &str| {
+    let shown = run.git(&["show", &format!("{}:{file}", run.commit)], source);
+
+    shown.ok.then_some(shown.out)
+  });
+  let tags: Vec<String> = run
+    .git(&["tag", "--points-at", &run.commit], source)
+    .out
+    .lines()
+    .map(str::to_owned)
+    .collect();
+
+  run.version = deployed_version(&declared, &tags, platform_day(hands.now_ms()));
   run.previous = read_deploy_record(&places.record);
 
   let commit = run.commit.clone();

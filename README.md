@@ -60,8 +60,8 @@ formatter's settings, this repository's own `testbed.toml`, and `CLAUDE.md`.
 
 ## Version
 
-- **One version for the whole repository,** the workspace's, over the boundary that `docs/boundary.md`
-  states: `0.1.0` and a `-rev.N` revision until the first release, and semantic versioning from it
-  (`docs/boundary.md`, 「Versions」).
-- **A declaration names the major it is written for,** and a testbed of another major refuses it, so
-  a consumer moves to a new major on purpose.
+- **One version for the whole repository,** the workspace's, which is the BMO set's: it moves by semantic
+  versioning only at a release of the whole set the owner declares, and a deployment between releases is
+  named for the day's nightly (`docs/boundary.md`, 「Versions」; `docs/deploy.md`, 「The deployed version」).
+- **A declaration names the major of its schema,** and a testbed reading another major refuses it, so a
+  consumer moves to a new schema on purpose; the set's version moves it not at all.

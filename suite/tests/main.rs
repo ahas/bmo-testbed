@@ -21,6 +21,7 @@ mod quick_personal_data;
 mod quick_shared_versions;
 mod quick_source;
 mod quick_wording;
+mod release;
 mod selection;
 mod static_check;
 mod step_fence;

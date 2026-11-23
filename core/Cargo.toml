@@ -13,6 +13,7 @@ autotests = false
 chrono = { workspace = true, features = ["clock"] }
 libc.workspace = true
 regex.workspace = true
+semver.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 serde_path_to_error.workspace = true

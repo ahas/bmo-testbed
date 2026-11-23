@@ -4,6 +4,10 @@
 
 # The declaration's file, at the checkout's root.
 file = "testbed.toml"
+# The major of the declaration's schema, which a declaration names in `testbed`. It moves only with a change to
+# the declaration one written before it cannot read, never with the set's version (docs/boundary.md,
+# 「Versions」).
+schema_major = 0
 
 # The defaults, one for each key whose default is a number or a word, under the table that key stands in.
 [defaults.test]
@@ -44,8 +48,8 @@ keep = 5
 unreadable = "the declaration {file} does not read at {table}: {error}"
 # The {table} of a key standing at the top level.
 top_level = "the top level"
-# {declared} is the major the declaration names, {own} this testbed's.
-other_major = "the declaration {file} is written for testbed major {declared}, and this testbed is major {own}"
+# {declared} is the major the declaration names, {own} the schema's this testbed reads.
+other_major = "the declaration {file} is written for testbed major {declared}, and this testbed reads major {own}"
 # {key} is the dotted key, {why} what it asks for.
 breaks = "the declaration {file} is refused at {key}: {why}"
 

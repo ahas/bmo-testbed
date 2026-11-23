@@ -367,6 +367,12 @@ fn a_declaration_of_another_major_is_refused_naming_both_majors() {
   assert!(refusal.contains(&format!("major {}", own_major())), "{refusal}");
 }
 
+// "The declaration names its schema's major", which the policy holds apart from the set's version
+#[test]
+fn the_declarations_major_is_the_schemas_the_policy_holds() {
+  assert_eq!(own_major(), bmo_testbed_core::policy::declaration::DECLARATION.schema_major);
+}
+
 // "a language the testbed has no member for is refused, naming the ones there are"
 #[test]
 fn a_language_the_testbed_has_no_member_for_is_refused_naming_those_there_are() {

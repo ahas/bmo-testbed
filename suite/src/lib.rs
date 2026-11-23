@@ -18,6 +18,7 @@ pub mod once_more;
 pub mod own_binary;
 pub mod prune;
 pub mod quick;
+pub mod release;
 pub mod run;
 pub mod selection;
 pub mod static_check;

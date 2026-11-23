@@ -25,7 +25,7 @@
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `testbed` | integer | required | The major version of the testbed this declaration is written for. A testbed of another major refuses it, naming both |
+| `testbed` | integer | required | The major of the declaration's schema this declaration is written for, which the testbed's policy holds and which moves only with a change to the declaration a declaration written before it cannot read: a key removed, or one whose meaning changes. A testbed reading another major refuses it, naming both. The set's version moves it not at all (`docs/boundary.md`, 「Versions」) |
 | `name` | string | the root directory's name | The repository's name, used in unit names, backup names and events |
 | `upstreams` | list of strings | `[]` | The repositories this one builds on, by their declared names. A major change to one of them runs this repository's suite through `dependents` (`docs/suite.md`, 「The dependents of a major change」). `[check] upstreams` names the same list beside the dependency check, and a declaration naming both adds them |
 

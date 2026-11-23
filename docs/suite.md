@@ -434,11 +434,12 @@
   where none failed but a consumer's suite did not run; 2 where the registry or a consumer's
   declaration does not read. The consumers are refused before any suite starts.
 - **How a change is known to be major:** a caller names it by running `dependents --run`. A deployment
-  decides for itself: it compares the major of the commit's `VERSION` with the version in the deployment
-  record of the release live before it, and a different major runs the same `dependents --run` after its gate
-  and before its backup (`docs/deploy.md`). A first deployment, a commit carrying no `VERSION`, and a record
-  carrying none are not known to be major by that comparison. The testbed's own versions stay at major 0
-  before its first release, so a change there is named by its caller.
+  decides for itself: it compares the major of the commit's deployed version (`docs/deploy.md`, 「The
+  deployed version」) with the version in the deployment record of the release live before it, and a
+  different major runs the same `dependents --run` after its gate and before its backup (`docs/deploy.md`).
+  A first deployment, a commit declaring no version, and a record carrying none are not known to be major by
+  that comparison. Since the set's version moves only at a release, a nightly keeps the last release's major,
+  and only the commit a major release moved to its new major makes a deployment major.
 
 ## The lines the run writes about itself
 

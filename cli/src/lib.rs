@@ -18,6 +18,7 @@ pub mod nouns;
 pub mod own;
 pub mod placement;
 pub mod recorded;
+pub mod release;
 pub mod said;
 pub mod serve;
 pub mod shell;
@@ -449,6 +450,7 @@ pub fn main(args: impl IntoIterator<Item = OsString>) -> u8 {
     Verb::Prune(args) => cargo::prune(&args),
     Verb::Full(args) => full::full(&args),
     Verb::Deploy(args) => run_deploy(args),
+    Verb::Release(args) => release::release(&args),
     Verb::Backups => deploy::backups(),
     Verb::Backup(args) => backup::backup(&args.word),
     Verb::Serve(args) => serve::serve(&args, &data_root(), process_env()),

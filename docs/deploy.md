@@ -33,7 +33,7 @@
 | Build tree | `deploy-expand` beside the link, a detached worktree moved to each commit, where the gate run on this machine and the release build run, its target directory kept warm between deployments until the prune takes it (「The releases」) |
 | Committed trees | `deploy-trees/` beside the link, one detached worktree for each repository holding a tree outside the repository its build reads by a path, moved to the head of that repository's main branch, which the release and the build tree read such a tree from (「The releases」) |
 | Data root | The repository's runtime data, inside no checkout and inside no release |
-| Deployment record | `deployed.json` under the deploy root, naming the commit that runs, its subject, the reason it was deployed, the release's version, when it was laid down and the backup behind it |
+| Deployment record | `deployed.json` under the deploy root, naming the commit that runs, its subject, the reason it was deployed, its deployed version (「The deployed version」), when it was laid down and the backup behind it |
 | Deployment log | `deployed.log` under the deploy root, one line per deployment |
 | Progress record | `deploy-progress.json` under the deploy root, where a run stands while it runs |
 | Run lock | `deploy-run.lock` under the deploy root, the deploy root's turn, which the deployment under way holds to its end (「The deployment line」) |
@@ -654,9 +654,9 @@ flowchart TD
      build (「The Cargo build directory」). A sibling whose committed head does not compile still fails
      the gate, since the repository's crates that depend on it cannot be checked, and the release build,
      which reads the same committed tree (「The releases」), would fail on it as well.
-   - **A major change runs its consumer's suites as well.** The major of the commit's `VERSION` is
-     compared with the version in the deployment record of the release live before it; where they
-     differ, the deployment runs `dependents --run` (`docs/suite.md`, 「The dependents of a major
+   - **A major change runs its consumer's suites as well.** The major of the commit's deployed version
+     (「The deployed version」) is compared with the version in the deployment record of the release live
+     before it; where they differ, the deployment runs `dependents --run` (`docs/suite.md`, 「The dependents of a major
      change」) after the gate and before the backup. A consumer's failure stops the deployment with
      nothing changed. `--no-check` leaves the gate out but not this run.
 4. **Take the backup,** before anything changes (「Backups」).
@@ -695,8 +695,8 @@ flowchart TD
    stop.
 9. **Record it** in `deployed.json` and `deployed.log` under the deploy root. The record names, beside
    the commit, its subject, when it was laid down and the backup, the reason the deploy was made and
-   the release's version: the reason is `--message` where the caller gave one, else the commit's
-   subject; the version is the commit's `VERSION` file content, empty where it carries none. A
+   the deployed version: the reason is `--message` where the caller gave one, else the commit's
+   subject; the version is the one 「The deployed version」 names, read when the commit was picked. A
    relaunched session reads the reason and the version to say which unit was deployed and why.
 10. **Flip the deploy tree:** confirm every unit link will resolve in the release, write a new link
    beside the deploy tree and rename it over the old one.
@@ -746,6 +746,87 @@ flowchart TD
   warnings. A deployment that does not go live likewise writes its outcome before it sends
   `deploy-rolled-back` and `deploy-failed`, so an event hook that is slow never holds a deployment
   unended (`docs/boundary.md`, 「Events」).
+
+## The deployed version
+
+The set the repository belongs to stands at one version, which moves only at a release the owner declares
+(bmo-chat's `docs/conventions.md`, 「Versions」); between releases the deployed state is the day's nightly.
+The deployment names which of the two it laid, as its record's `version`, read once it has picked its
+commit.
+
+- **The declared version** is the one the commit itself carries: its `VERSION` file's content where it
+  holds one, else the version its root `Cargo.toml` names in `[workspace.package]` or `[package]`, else the
+  `version` of its root `package.json`. A commit declaring none is deployed all the same, its version left
+  empty.
+- **A commit the release tag names is that release.** Where a tag `v<declared version>` points at the commit
+  itself, the deployed version is the declared one, as `1.0.0` for the commit tagged `v1.0.0`. The tags are
+  read from the repository as the deployment's fetch left it.
+- **Any other commit is the day's nightly:** `<major>.<minor + 1>.0-nightly.<YYYYMMDD>`, the minor above the
+  declared version, which names the last release, then the day the deployment picked its commit in the
+  platform's time zone, Asia/Seoul, which the testbed's policy holds as its distance from UTC: so
+  `1.1.0-nightly.20261124` for a commit after `1.0.0` deployed on that day. A declared version carrying a
+  pre-release of its own counts from its major and minor alone. Semver orders every nightly after the
+  release before it and before the release it leads to. A declared version that is no semantic version is
+  recorded as it is written.
+- **The nightly is a name, never a version anything declares.** No manifest and no tag holds it; which
+  change is live is the record's commit, which the record names beside it.
+
+## The set's release
+
+The `release` verb moves every repository of the set onto the version the owner declares, each in one commit
+of its own, and tags each `v<version>` (bmo-chat's `docs/conventions.md`, 「Versions」). It knows no repository
+by name: the set is what stands in the folder `--set` names.
+
+- **The set's repositories:** the git repository whose root is that folder, which holds the set's index, and
+  every one whose root stands directly in a folder directly inside it, each read through its primary
+  checkout. A folder whose `.git` is a file is a linked worktree, a job's, and is passed over unsaid. A
+  repository two clones reach, by one `origin` remote, is released once, from the clone whose folder's name
+  ends the remote's repository name, else from the first by path; the other clone is named as passed over,
+  and so is a repository with no `origin` remote, since nothing of it can be pushed.
+- **Each is read as its remote's main holds it:** fetched with its tags, then read at `origin/<main>`, the
+  main branch its own declaration names, never from a working tree.
+- **The last release** is the newest tag `v<major>.<minor>.<patch>` carrying no pre-release that more than
+  half of the set's repositories hold, so an upstream's own tags kept in a fork never count. The version asked for is a semantic version with no pre-release above it, or
+  above `0.1.0` before the set's first release. A version a repository already holds a tag of is refused.
+- **What it sets:** a unit's own version, which is the last release's version, or before the first release
+  `0.1.0` or `0.1.0-rev.<n>`, wherever a repository declares it. Any other value, an upstream's package
+  kept under a fork among them, is left as it stands. Each file is read with its format's own reader and
+  changed where the value stands, so every other byte keeps its layout:
+  - a `Cargo.toml`'s `[package]` and `[workspace.package]` `version`, and in each of its dependency tables
+    the `version` of an entry taken from a sibling by `path`, its operator kept;
+  - a `Cargo.lock`'s packages read from a path, never a registry's;
+  - a `pyproject.toml`'s `[project]` and `[tool.poetry]` `version`;
+  - a `VERSION` file;
+  - in a JSON document, each member of its top-level object whose value is the unit's own version, a build
+    suffix such as `+source` kept, and an OpenAPI document's `info.version`: the `version` of a package
+    manifest, a plugin manifest and an application's configuration among them;
+  - and in a markdown document, the version after "Fixed at" on the line that fixes it.
+
+  The major a declaration names in `testbed` is its schema's, not the set's, and a release leaves it
+  (`docs/declaration.md`).
+
+  A file under a `node_modules/` or a `fixtures/` folder, or one the declaration's
+  `[check.shared_versions] exclude` reaches, is not read. Every other file still naming a unit's own
+  version in a form that can only be one is named as left as it stands, for its repository to move.
+- **The release, in order:** every repository read and its changes worked out before anything changes, so a
+  file that does not read refuses the whole release; then for each repository a detached worktree of
+  `origin/<main>` in a scratch folder, the changes written there and committed as `Release <version>` where
+  anything changed; then each commit pushed onto the remote's main; then each repository tagged
+  `v<version>` with an annotated tag, on its release commit or, where it changed nothing, on its main's head,
+  and the tag pushed; then the scratch worktrees removed. A push that fails stops the release there, naming
+  what landed and what did not, and no tag is made before every push has landed. A repository that declares
+  no version is tagged all the same, so every repository of the set names the release.
+- **`--dry-run`** reads and works everything out the same way and prints it, changing nothing but the
+  fetch.
+- **`--propose`** reads, in each repository, the commits on its main since its last release tag, or every
+  commit before the first, and proposes a step by each commit's subject: one marked breaking, or opening
+  with a word the policy names for taking away or renaming, proposes a major release; one opening with a
+  word for adding, a minor one; any other, a patch. It prints each repository's counts with one subject of
+  its strongest step, then the set's step, the strongest of them, and the version it leads to. It proposes
+  only: the owner's word settles the release.
+- **`--repository <name>`** limits what a dry run or a proposal prints to the repositories of that name,
+  their remote's repository name, so an answer cut at the ceiling is read whole by parts. A release itself
+  always moves the whole set.
 
 ## The console probe
 

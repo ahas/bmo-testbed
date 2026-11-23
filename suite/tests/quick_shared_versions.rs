@@ -481,6 +481,38 @@ fn an_entry_outside_the_pins_range_is_named_with_the_range() {
   );
 }
 
+// "each a release of the set or a day's nightly packed between releases": a pin on a nightly with the release
+// before it and an earlier nightly compatible holds an entry on any of them, and names the range in semver's
+// order, every nightly after the release before it
+#[test]
+fn a_pin_on_a_nightly_holds_its_range_of_releases_and_nightlies_in_semvers_order() {
+  let pinned = "1.1.0-nightly.20261124.2";
+  let text = format!(
+    "{SHARED}\n[packages.pkg]\nversion = \"{pinned}\"\nfile = \"pkg-{pinned}.tgz\"\nsha256 = \"{}\"\n\n[[compatible.pkg]]\nversion = \"1.1.0-nightly.20261124\"\nfile = \"pkg-1.1.0-nightly.20261124.tgz\"\nsha256 = \"{}\"\n\n[[compatible.pkg]]\nversion = \"1.0.0\"\nfile = \"pkg-1.0.0.tgz\"\nsha256 = \"{}\"\n",
+    sha256_of(RELEASE),
+    sha256_of(EARLIER),
+    sha256_of("the release before")
+  );
+  let shared = read_shared(&text).unwrap();
+  let dir = checkout(&[
+    (
+      "client/package.json",
+      "{\"dependencies\": {\"pkg\": \"file:vendor/pkg-1.1.0-nightly.20261124.tgz\"}, \"peerDependencies\": {\"pkg\": \"1.0.0\"}, \"overrides\": {\"pkg\": \"0.1.0-rev.73\"}}",
+    ),
+    ("client/vendor/pkg-1.1.0-nightly.20261124.tgz", EARLIER),
+  ]);
+  let held = hold(dir.path(), &shared, &BTreeMap::new(), &[]);
+
+  assert_eq!(shared.packages["pkg"].range(), format!("1.0.0, 1.1.0-nightly.20261124, {pinned}"));
+  assert_eq!(held.entries, 3);
+  assert_eq!(
+    said(&held),
+    [format!(
+      "client/package.json: overrides pkg = 0.1.0-rev.73; write a version of the range 1.0.0, 1.1.0-nightly.20261124, {pinned}, or file: naming its release's file; the pinned release is {pinned}, its file pkg-{pinned}.tgz"
+    )]
+  );
+}
+
 // "the report names, beside the pin, what each checkout writes for a pinned package, clean or not"
 #[test]
 fn the_report_names_what_each_checkout_writes_for_a_pinned_package_beside_the_pin() {

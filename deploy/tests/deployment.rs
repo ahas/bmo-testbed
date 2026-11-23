@@ -17,6 +17,7 @@ use bmo_testbed_core::events::Hook;
 use bmo_testbed_core::policy::deploy::DEPLOY;
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::turn::Env;
+use bmo_testbed_core::version::platform_day;
 use bmo_testbed_deploy::console::{ConsoleHands, MachineConsole};
 use bmo_testbed_deploy::deployment::{
   BuildAsk, DeployAsk, DeployHands, DeployPlaces, Gate, GateAsk, GateFault, GateFooting, GateOutcome,
@@ -675,13 +676,26 @@ fn a_commit_goes_live_with_its_bot_restarted_and_watched() {
   );
 }
 
-// "the reason a deploy is made and the release's version are written into the record and the event"
+// "the reason a deploy is made and the deployed version are written into the record and the event": the
+// commit its release tag names records the release, and a later commit the day's nightly after it
 #[test]
-fn the_message_overrides_the_subject_and_the_version_file_is_recorded() {
+fn the_message_overrides_the_subject_and_the_deployed_version_is_recorded() {
   let scene = Scene::new();
   let hands = Hands::default();
 
   scene.write("VERSION", "3.4.0\n");
+  let released = scene.push("the release");
+  must(&["tag", "v3.4.0", &released], &scene.source);
+
+  assert_eq!(
+    scene.run_with(&DeployAsk::default(), &Told(true), &hands, &scene.env()),
+    0,
+    "{}",
+    said(&hands)
+  );
+  assert_eq!(read_deploy_record(&scene.at("live/deployed.json")).unwrap().version, "3.4.0");
+
+  scene.write("later.txt", "a later change\n");
   let head = scene.push("a later commit subject");
 
   let ask = DeployAsk {
@@ -694,11 +708,12 @@ fn the_message_overrides_the_subject_and_the_version_file_is_recorded() {
   assert_eq!(code, 0, "{}", said(&hands));
 
   let written = read_deploy_record(&scene.at("live/deployed.json")).unwrap();
+  let day = platform_day(Machine.now_ms()).format("%Y%m%d");
 
   assert_eq!(written.commit, head);
   assert_eq!(written.subject, "a later commit subject");
   assert_eq!(written.message, "hotfix for the placement bug");
-  assert_eq!(written.version, "3.4.0");
+  assert_eq!(written.version, format!("3.5.0-nightly.{day}"));
 
   let events = scene.events();
 

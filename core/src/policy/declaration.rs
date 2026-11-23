@@ -97,6 +97,7 @@ pub struct RefusalWords {
 #[serde(deny_unknown_fields)]
 pub struct Declaration {
   pub file: String,
+  pub schema_major: u64,
   pub defaults: Defaults,
   pub refusal: RefusalWords,
 }

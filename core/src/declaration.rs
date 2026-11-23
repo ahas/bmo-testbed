@@ -17,9 +17,10 @@ use crate::policy::fill_marks;
 use crate::silence::Silence;
 use crate::turn::{Env, Lane};
 
-/// The major version of the testbed this build is, the one a declaration names.
+/// The major of the declaration's schema this build reads, the one a declaration names; the set's version
+/// moves it not at all.
 pub fn own_major() -> u64 {
-  env!("CARGO_PKG_VERSION_MAJOR").parse().unwrap_or_default()
+  DECLARATION.schema_major
 }
 
 /// A declaration the testbed refuses, in the words its verb answers with before ending with

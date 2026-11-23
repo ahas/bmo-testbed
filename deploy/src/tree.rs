@@ -24,8 +24,9 @@ pub struct DeployRecord {
   /// subject where it named none. A record written before this field was kept reads it empty.
   #[serde(default)]
   pub message: String,
-  /// The release's `VERSION` file content, empty where the commit carries none, and empty where the record
-  /// was written before this field was kept.
+  /// The deployed version (docs/deploy.md, 「The deployed version」): the release the commit's tag names, else
+  /// the day's nightly after the version it declares; empty where the commit declares none, and empty where
+  /// the record was written before this field was kept.
   #[serde(default)]
   pub version: String,
   /// When it was laid down, in ISO.

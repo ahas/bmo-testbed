@@ -290,9 +290,12 @@
 
     Compatible releases listed for a package the file does not pin leave the file unread.
 
-    The pinned release and the compatible ones are the pin's range. A fault names the manifest, the list,
-    the package, the entry as it reads and what to write instead: an entry standing on no release of the
-    range is named with the range's versions in version order and the pinned release as the one to vendor.
+    The pinned release and the compatible ones are the pin's range, each a release of the set or a day's
+    nightly packed between releases (bmo-chat's `docs/conventions.md`, 「Versions」), whatever its version
+    reads as. A fault names the manifest, the list, the package, the entry as it reads and what to write
+    instead: an entry standing on no release of the range is named with the range's versions in semver's
+    order, every nightly after the release before it and before the release it leads to, and the pinned
+    release as the one to vendor.
     The file names no unit, so a package pinned there holds every checkout alike; a file pinning no package
     holds no package manifest.
   - **An exception** the declaration names for a crate (`docs/declaration.md`) holds the crate's entries to

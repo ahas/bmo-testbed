@@ -13,3 +13,4 @@ mod run;
 mod silence;
 mod turn;
 mod verb;
+mod version;

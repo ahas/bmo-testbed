@@ -471,6 +471,27 @@ bmo-testbed deploy first <unit> --why <why> [--by <who>]
   not a running deployment unit, one the testbed's record already holds, the one holding the line and
   one already marked first.
 
+### `release`
+
+```
+bmo-testbed release --version <X.Y.Z> --set <folder> [--dry-run] [--repository <name>]…
+bmo-testbed release --propose --set <folder> [--repository <name>]…
+```
+
+- Moves every repository of the set standing in `--set`'s folder onto the version given, each in a commit
+  `Release <version>` pushed onto its remote's main, then tags each `v<version>` and pushes the tag
+  (`docs/deploy.md`, 「The set's release」). It prints, for each repository, every value it sets, from what
+  to what, the files it leaves naming an own version, and what it does in git; and the repositories it
+  passed over, with why.
+- **`--dry-run`** prints the same and changes nothing but the fetch. **`--propose`** prints the step the
+  commits since the last release propose, each repository's and the set's, and the version it leads to,
+  and changes nothing but the fetch. **`--repository`** limits what either prints to the repositories of
+  that name; a release is always of the whole set.
+- Exits 0 where it released, printed a dry run or proposed; 1 where a commit, a push or a tag failed, naming
+  what landed; 2 where it refused before changing anything: words that do not read, a version that is not a
+  plain semantic version above the last release or that a repository already holds a tag of, a set holding
+  no repository, and a repository or a file that does not read.
+
 ### `backups`
 
 ```
@@ -1210,7 +1231,8 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   `bmo-testbed-scratch-database` and so on. A hosted tool's crate stands under `tools/` and is named
   for its tool with `-tool` after it, as its executable is: `deploy-tool`.
 - **`core`:** the lanes, the turn, the queue, the close line, the run and its result, the languages,
-  memory limits, the placement, the declaration reader and the policy loader. Its public types are the
+  memory limits, the placement, the declaration reader, the set's version names (a tree's declared
+  version, the release tag and the nightly) and the policy loader. Its public types are the
   ones the status fields above serialise: the lane, the queue, the entry, the close line and its entry;
   the turn's ask and the turn held; the run's result; the language type every language is a member of.
   The close line of a repository stands where `core` names it from a data root and any directory of any
@@ -1226,7 +1248,8 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
 - **`plugin`:** the harness plugin: the tool table, the MCP server `mcp` starts, the OpenAPI document
   generated from the client's types and the tool table, and the `bmo-testbed` skill.
 - **`suite`:** the whole-suite run, change selection, the static and quick checks, the Cargo verb, the
-  superseded removal and the prune.
+  superseded removal, the prune, and the set's release worked out: the set read, each file's change and
+  the proposed step.
 - **`deploy`:** releases, the link flip, unit links, the deploy run, the progress record, rollback
   through the tree's and the services' hands, backups. The run asks its gate through a trait of its
   own, which the binary answers with the suite crate's static check and suite, so `deploy` depends on
@@ -1256,20 +1279,22 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
 ## Versions
 
 - **One version, the workspace's,** over everything this document states: the crates, the binary, the
-  health's `version`, the OpenAPI document and the MCP server all answer it.
-- **Before its first release the testbed is `0.1.0` and counts revisions,** by the conventions'
-  rule: `0.1.0` is the base and no revision, and every later version is one revision more, written
-  `0.1.0-rev.<n>`, whatever the change, a breaking one included. Major, minor and patch never move
-  before the first release.
-- **From the first release on, the version moves by semver.** A major release removes or renames a
-  verb, a flag, an environment variable, a route, a member's field or a tool; changes what an exit
+  health's `version`, the OpenAPI document and the MCP server all answer it. It is the set's version
+  (bmo-chat's `docs/conventions.md`, 「Versions」): it moves only at a release of the whole set the owner
+  declares, which the `release` verb makes, and between releases a deployment names the day's nightly
+  (`docs/deploy.md`, 「The deployed version」).
+- **What this document states counts toward the set's next step by semver.** A major release removes or
+  renames a verb, a flag, an environment variable, a route, a member's field or a tool; changes what an exit
   code, a field, an event, a payload field or a declaration key means; removes an event, a payload
   field or a declaration key; makes an optional declaration key or a field required; or changes the
   placement endpoint's request or answer incompatibly. A minor release adds a verb, a flag, an
   environment variable, an optional declaration key, a route, a field, an event, a tool, a payload
   field, a language or a quick check, or widens what a verb accepts. A patch release changes nothing
   this document states.
-- **The declaration names its major** in `testbed`; a testbed of another major refuses it with exit
-  code 2, naming both, and accepts a declaration of its own major whatever revision or minor wrote it,
-  refusing only keys it does not know.
+- **The declaration names its schema's major** in `testbed`, which the testbed's policy holds apart from
+  the set's version: it moves only with a change to the declaration a declaration written before it cannot
+  read, a key removed or one whose meaning changes, so a major release of the set made for any other reason
+  leaves every declaration as it stands. A testbed reading another major refuses the declaration with exit
+  code 2, naming both, and accepts one of its own whatever release or nightly wrote it, refusing only keys
+  it does not know.
 - **The payload's `version`** moves only with a major release.
