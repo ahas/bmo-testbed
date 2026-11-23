@@ -128,6 +128,8 @@ bmo-testbed install --set <input> [<places>]
   with `--no-check`, since every commit on a main branch passed its close's suite and a fresh machine holds no record
   of it to take instead, and with `--force-live`, since nothing of the repository is live for a quiet to count, and
   a quiet that reads another repository not deployed yet could never tell.
+- **The repository's declared data root is made before its first deployment** where it does not stand, since the
+  deployment refuses a data root that does not exist (`docs/deploy.md`) and on a fresh machine nothing has made it.
 - **A first deployment is not a harness's deployment.** `deploy` refuses a process a harness started, so its
   session never cuts a live service short (`docs/deploy.md`, 「What it refuses」). A repository with no deploy tree
   has nothing live to cut, so the install hands its first deployment on without the harness's mark; the install

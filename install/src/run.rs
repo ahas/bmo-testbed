@@ -130,6 +130,12 @@ impl Unit {
     self.deploy_tree(ask).and_then(|tree| tree.parent().map(Path::to_path_buf))
   }
 
+  fn data_root(&self, ask: &Ask) -> Option<PathBuf> {
+    let data_root = self.testbed.as_ref()?.deploy.data_root.as_ref()?;
+
+    Some(resolve(&data_root.to_string_lossy(), &self.checkout, &ask.home))
+  }
+
   fn deployed(&self, ask: &Ask) -> bool {
     self.deploy_tree(ask).is_some_and(|tree| tree.exists())
   }
@@ -1393,6 +1399,21 @@ impl<'a> Install<'a> {
         "",
       );
       return true;
+    }
+
+    // The deployment refuses a data root that does not stand; on a fresh machine nothing made it yet.
+    if let Some(data_root) = unit.data_root(&self.ask)
+      && let Err(error) = std::fs::create_dir_all(&data_root)
+    {
+      let why = format!("its data root {} could not be made: {error}", data_root.display());
+
+      self.line(
+        step,
+        Status::Failed,
+        mark(&said.deploy_failed, &[("name", &unit.name), ("said", &why)]),
+        &INSTALL.next.mend_and_rerun,
+      );
+      return false;
     }
 
     let Some(commit) = self.machine.main_head(&unit.checkout, &main) else {

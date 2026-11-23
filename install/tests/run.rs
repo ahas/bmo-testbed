@@ -89,9 +89,20 @@ impl Machine for Stand {
     Ok(vec![7; bytes])
   }
 
-  // A deployment lays the deploy tree's link and the record naming the commit, as the deploy verb does.
+  // A deployment lays the deploy tree's link and the record naming the commit, as the deploy verb does, and refuses
+  // a data root that does not stand, as it does too.
   fn deploy(&self, checkout: &Path, commit: &str, _message: &str) -> (Ran, Option<String>) {
     let root = checkout.join("deploy-root");
+
+    if !checkout.join("data").is_dir() {
+      return (
+        Ran {
+          code: 1,
+          said: "the data root does not exist".to_owned(),
+        },
+        None,
+      );
+    }
 
     std::fs::create_dir_all(root.join("deploy-releases/one")).unwrap();
     std::os::unix::fs::symlink(root.join("deploy-releases/one"), root.join("deploy")).unwrap();
@@ -307,6 +318,7 @@ fn a_dry_run_says_the_whole_plan_and_changes_nothing() {
   assert_eq!(status_of(&lines, "verify:two:hello").unwrap().status, Status::Planned);
   assert!(!ground.data_root.exists());
   assert!(machine.deployed.borrow().is_empty());
+  assert!(!ground.index.join("services/one/data").exists());
   assert!(machine.databases.borrow().is_empty());
 }
 
@@ -337,6 +349,7 @@ fn a_whole_run_makes_writes_deploys_and_continues_where_it_stopped() {
   );
   assert!(machine.databases.borrow().contains("one"));
   assert_eq!(*machine.deployed.borrow(), ["one", "two"]);
+  assert!(ground.index.join("services/one/data").is_dir());
   assert_eq!(std::fs::read_to_string(ground.index.join("services/one/made-for")).unwrap(), "owner\n");
 
   let console = std::fs::read_to_string(ground.data_root.join("env/console.env")).unwrap();
