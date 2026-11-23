@@ -89,7 +89,10 @@ bmo-testbed install --set <input> [<places>]
    here with `needs-input`.
 2. **`clone:<repository>`:** each repository of the preset's `clone` and `units` cloned into the index checkout's
    folder the presets file names for it, from the address it names. A checkout that stands is fetched, but in a
-   dry run, and left on whatever branch it stands on.
+   dry run, and left on whatever branch it stands on. Then **`checkouts`:** every checkout standing named in the
+   machine's registry of checkouts (`docs/suite.md`, 「The dependents of a major change」) where it is not yet, its
+   other lines kept, since the set's later deployments read it: the hosted deploy tool finds a repository's
+   checkout there, and a deployment's gate the repository holding the shared versions.
 3. **`declaration:<repository>`:** each installed repository's `install.toml` read, and its `testbed.toml` with
    it. A repository with no install declaration fails here: its settings are its own documents' to give, and the
    install does not guess them.

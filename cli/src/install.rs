@@ -3,8 +3,10 @@
 
 use std::path::PathBuf;
 
+use bmo_testbed_core::turn::process_env;
 use bmo_testbed_core::verb::data_root;
 use bmo_testbed_install::{Ask, Host, Install, Line, Mode, Services, exit_code};
+use bmo_testbed_suite::dependents::registry_path;
 
 use crate::words::InstallArgs;
 
@@ -32,16 +34,19 @@ pub fn install(args: &InstallArgs) -> u8 {
     postgres_port: named(&args.postgres_port, "PGPORT", defaults.postgres_port),
     valkey: named(&args.valkey, "BMO_INSTALL_VALKEY", defaults.valkey),
   };
+  let data_root = args.data_root.clone().unwrap_or_else(data_root);
+  let checkouts = registry_path(&data_root, &process_env());
   let ask = Ask {
     mode,
     index: args.index.clone(),
-    data_root: args.data_root.clone().unwrap_or_else(data_root),
+    data_root,
     home,
     user: bmo_testbed_core::account::account_name(),
     dry_run: args.dry_run,
     cwd: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
     prefix,
     services: services.clone(),
+    checkouts,
   };
   let host = Host::new(&services.postgres_host, &services.postgres_port);
   let mut say = |line: &Line| println!("{}", line.json());

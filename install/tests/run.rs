@@ -262,6 +262,7 @@ fn ask(ground: &Ground, mode: Mode, dry_run: bool) -> Ask {
     cwd: ground.index.clone(),
     prefix: ground.index.clone(),
     services: Services::default(),
+    checkouts: ground.data_root.join("testbed/checkouts.toml"),
   }
 }
 
@@ -350,6 +351,11 @@ fn a_whole_run_makes_writes_deploys_and_continues_where_it_stopped() {
   assert!(machine.databases.borrow().contains("one"));
   assert_eq!(*machine.deployed.borrow(), ["one", "two"]);
   assert!(ground.index.join("services/one/data").is_dir());
+  let registry = std::fs::read_to_string(ground.data_root.join("testbed/checkouts.toml")).unwrap();
+  for name in ["one", "two"] {
+    let path = std::fs::canonicalize(ground.index.join("services").join(name)).unwrap();
+    assert_eq!(registry.matches(&format!("path = \"{}\"", path.display())).count(), 1, "{registry}");
+  }
   assert_eq!(std::fs::read_to_string(ground.index.join("services/one/made-for")).unwrap(), "owner\n");
   assert_eq!(
     std::fs::read_to_string(ground.index.join("services/one/made-by")).unwrap(),
@@ -389,12 +395,48 @@ fn a_whole_run_makes_writes_deploys_and_continues_where_it_stopped() {
     "first-account already stands"
   );
   assert_eq!(status_of(&lines, "deploy:one").unwrap().detail, "one is live already");
+  assert_eq!(status_of(&lines, "checkouts").unwrap().status, Status::Ok);
+  assert_eq!(
+    std::fs::read_to_string(ground.data_root.join("testbed/checkouts.toml")).unwrap(),
+    registry,
+    "a rerun names no checkout twice"
+  );
   assert_eq!(console, std::fs::read_to_string(ground.data_root.join("env/console.env")).unwrap());
 
   let done = lines.last().unwrap();
 
   assert_eq!(done.status, Status::Ok);
   assert_eq!(done.next, "open http://127.0.0.1:4100/");
+}
+
+#[test]
+fn the_registry_of_checkouts_keeps_what_it_named_and_gains_the_install_s() {
+  let ground = ground();
+  let machine = Stand::default();
+  let registry = ground.data_root.join("testbed/checkouts.toml");
+  let elsewhere = ground.home.join("elsewhere");
+  let one = std::fs::canonicalize(ground.index.join("services/one")).unwrap();
+
+  std::fs::create_dir_all(registry.parent().unwrap()).unwrap();
+  std::fs::write(
+    &registry,
+    format!("# kept\ncheckouts = [\"{}\", \"{}\"]\n", elsewhere.display(), one.display()),
+  )
+  .unwrap();
+
+  let (_, lines) = run(&ground, &machine, solo(), true);
+
+  assert_eq!(status_of(&lines, "checkouts").unwrap().status, Status::Planned);
+  assert!(!std::fs::read_to_string(&registry).unwrap().contains("[[checkout]]"));
+
+  run(&ground, &machine, solo(), false);
+
+  let text = std::fs::read_to_string(&registry).unwrap();
+  let two = std::fs::canonicalize(ground.index.join("services/two")).unwrap();
+
+  assert!(text.starts_with("# kept\n"), "{text}");
+  assert_eq!(text.matches(&one.display().to_string()).count(), 1, "{text}");
+  assert!(text.contains(&format!("[[checkout]]\npath = \"{}\"", two.display())), "{text}");
 }
 
 #[test]

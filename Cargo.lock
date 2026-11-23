@@ -436,10 +436,12 @@ version = "0.1.0-rev.78"
 dependencies = [
  "base64 0.22.1",
  "bmo-testbed-core",
+ "bmo-testbed-suite",
  "serde",
  "serde_json",
  "tempfile",
  "toml",
+ "toml_edit",
 ]
 
 [[package]]

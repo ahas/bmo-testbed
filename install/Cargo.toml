@@ -12,9 +12,11 @@ autotests = false
 [dependencies]
 base64.workspace = true
 bmo-testbed-core = { path = "../core" }
+bmo-testbed-suite = { path = "../suite" }
 serde.workspace = true
 serde_json.workspace = true
 toml.workspace = true
+toml_edit.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

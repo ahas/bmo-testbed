@@ -10,6 +10,8 @@ use base64::Engine;
 use bmo_testbed_core::declaration::{Declaration, Repository};
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::install::INSTALL;
+use bmo_testbed_core::turn::process_env;
+use bmo_testbed_suite::dependents::read_registry;
 use serde::{Deserialize, Serialize};
 
 use crate::declaration::{Encoding, InstallDeclaration, NeedSource, Read};
@@ -57,6 +59,8 @@ pub struct Ask {
   pub prefix: PathBuf,
   /// Where the services reach PostgreSQL and Valkey: a system's own or ones a packager bundles.
   pub services: Services,
+  /// The machine's registry of checkouts, which the install names every checkout it holds in.
+  pub checkouts: PathBuf,
 }
 
 /// The servers the installed services reach, as the install's values name them (docs/install.md, 「Values」).
@@ -485,6 +489,8 @@ impl<'a> Install<'a> {
       }
     }
 
+    self.register(index, presets, &standing);
+
     if self.stops() {
       return self.finish(index, None, &[]);
     }
@@ -852,6 +858,78 @@ impl<'a> Install<'a> {
     // 12. The verifications.
     self.verify(&units);
     self.finish(index, Some(&values), &units)
+  }
+
+  // Every checkout the install holds named in the machine's registry of checkouts (docs/suite.md, 「The dependents
+  // of a major change」), which the set's later deployments read: the hosted deploy tool finds a repository's
+  // checkout there, and a deployment's gate the repository holding the shared versions.
+  fn register(&mut self, index: &Path, presets: &PresetsFile, standing: &BTreeSet<String>) {
+    let said = &INSTALL.detail;
+    let env = process_env();
+    let registry = self.ask.checkouts.clone();
+    let file = registry.display().to_string();
+    let step = "checkouts".to_owned();
+    let failed = |run: &mut Self, why: String| {
+      run.line(
+        step.clone(),
+        Status::Failed,
+        mark(&said.checkouts_failed, &[("file", &file), ("said", &why)]),
+        &INSTALL.next.mend_and_rerun,
+      );
+    };
+    let listed: Vec<PathBuf> = match read_registry(&registry, &env) {
+      Ok(listed) => listed.iter().map(|path| canonical(path)).collect(),
+      Err(fault) => return failed(self, fault.why),
+    };
+    let missing: Vec<PathBuf> = standing
+      .iter()
+      .filter_map(|name| presets.repository(name))
+      .map(|entry| canonical(&index.join(&entry.folder)))
+      .filter(|path| !listed.contains(path))
+      .collect();
+    let count = missing.len().to_string();
+    let values = [("file", file.as_str()), ("count", count.as_str())];
+
+    if missing.is_empty() {
+      self.line(step, Status::Ok, mark(&said.checkouts_stand, &values), "");
+      return;
+    }
+
+    if self.ask.dry_run {
+      self.line(step, Status::Planned, mark(&said.checkouts_planned, &values), "");
+      return;
+    }
+
+    // Laid onto the registry as it reads, every line of it kept.
+    let text = std::fs::read_to_string(&registry).unwrap_or_default();
+    let mut document: toml_edit::DocumentMut = match text.parse() {
+      Ok(document) => document,
+      Err(error) => return failed(self, error.to_string()),
+    };
+    let tables = document
+      .entry("checkout")
+      .or_insert_with(|| toml_edit::Item::ArrayOfTables(toml_edit::ArrayOfTables::new()));
+    let Some(tables) = tables.as_array_of_tables_mut() else {
+      return failed(self, "its `checkout` is not a list of tables".to_owned());
+    };
+
+    for path in &missing {
+      let mut table = toml_edit::Table::new();
+
+      table.insert("path", toml_edit::value(path.display().to_string()));
+      tables.push(table);
+    }
+
+    let text = document.to_string();
+    let written = registry
+      .parent()
+      .map_or(Ok(()), std::fs::create_dir_all)
+      .and_then(|()| std::fs::write(&registry, text));
+
+    match written {
+      Ok(()) => self.line(step, Status::Ok, mark(&said.checkouts_made, &values), ""),
+      Err(error) => failed(self, error.to_string()),
+    }
   }
 
   // Every repository's deploy root and data root under the install prefix, so a packager that names one finds the
@@ -1825,4 +1903,9 @@ impl<'a> Install<'a> {
     );
     Outcome::Done
   }
+}
+
+// A path as the file system resolves it, or as given where it does not stand.
+fn canonical(path: &Path) -> PathBuf {
+  std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
