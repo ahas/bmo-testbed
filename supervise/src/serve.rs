@@ -16,6 +16,10 @@ use crate::manager::{Event, Supervisor, serve_socket};
 use crate::places::Places;
 use crate::unit::Specifiers;
 
+/// The variable naming the runtime directory, which the supervisor hands on as a user manager does
+/// (docs/supervise.md, 「How it runs a unit」).
+pub const RUNTIME_VARIABLE: &str = "XDG_RUNTIME_DIR";
+
 /// Why the supervisor would not serve.
 #[derive(Debug)]
 pub enum Refused {
@@ -109,7 +113,17 @@ pub async fn serve(
       &[("socket", &socket.to_string_lossy()), ("why", &why.to_string())],
     ))
   })?;
-  let (supervisor, received) = Supervisor::new(places.clone(), specifiers, std::env::vars().collect());
+  let runtime = places.runtime(&specifiers.runtime).map_err(|why| Refused::Unready(why.to_string()))?;
+  let mut env: Vec<(String, String)> =
+    std::env::vars().filter(|(key, _)| key != RUNTIME_VARIABLE).collect();
+
+  env.push((RUNTIME_VARIABLE.to_owned(), runtime.to_string_lossy().into_owned()));
+
+  let specifiers = Specifiers {
+    runtime,
+    ..specifiers
+  };
+  let (supervisor, received) = Supervisor::new(places.clone(), specifiers, env);
   let events = supervisor.sender();
 
   say(&fill_marks(

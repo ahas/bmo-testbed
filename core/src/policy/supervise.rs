@@ -35,6 +35,7 @@ pub struct Places {
   pub lock: String,
   pub logs: String,
   pub stand_ins: String,
+  pub runtime: String,
   pub variable: String,
   pub names: Vec<String>,
 }

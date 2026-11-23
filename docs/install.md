@@ -293,7 +293,8 @@ runs this verb unchanged:
   server.
 - **A machine without systemd runs the set under the testbed's supervisor** (`docs/supervise.md`). The packager
   starts `bmo-testbed supervise serve` and runs this verb with the lines `bmo-testbed supervise env` prints in its
-  environment: the stand-ins first on the PATH and `BMO_SUPERVISOR` naming the supervisor's socket. Every deployment,
+  environment: the stand-ins first on the PATH, `BMO_SUPERVISOR` naming the supervisor's socket and the runtime
+  directory every unit reads. Every deployment,
   restart, after-step and health read then reaches the supervisor through the same `systemctl --user`,
   `systemd-run --user` and `journalctl --user` calls it makes under systemd, and the testbed's own `needs:` takes the
   supervisor for the user manager and for lingering, since whatever starts the supervisor starts the set. The

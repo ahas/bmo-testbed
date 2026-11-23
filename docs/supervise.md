@@ -31,8 +31,9 @@ bmo-testbed supervise stop-all [--data-root <dir>]
   the all-in-one desktop app, or a line of the machine's own start-up.
 - **`status`** prints each unit's state, its main process, its restarts and its health, one line a unit;
   `--json` prints one object whose `units` holds each unit's state as the state file writes it.
-- **`env`** prints the two lines that put a command under the supervisor: `PATH=` with the stand-ins' folder
-  first, and `BMO_SUPERVISOR=` naming the control socket.
+- **`env`** prints the lines that put a command under the supervisor: `PATH=` with the stand-ins' folder
+  first, `BMO_SUPERVISOR=` naming the control socket, and `XDG_RUNTIME_DIR=` naming the runtime directory every
+  unit reads (「How it runs a unit」).
 - **`stop-all`** stops every unit and ends the supervisor, as a SIGTERM to it does, and returns once it has.
 - **`--data-root`** names the data root the supervisor keeps its folder under, over `BMO_DATA_DIR` and the
   default, `$HOME/.local/share/bmo/data`.
@@ -57,6 +58,7 @@ bmo-testbed supervise stop-all [--data-root <dir>]
 | `lock` | Held by the supervisor serving this data root, so a second one refuses |
 | `logs/<unit>.log` | The unit's output, one line each with the time it was written, moved aside as `<unit>.log.1` past its cap |
 | `bin/` | The stand-ins, `systemctl`, `systemd-run` and `journalctl`, each a link to the binary |
+| `run/` | The runtime directory of the supervisor's own, where the account has none (「How it runs a unit」) |
 
 ## What of a unit it reads
 
@@ -98,6 +100,11 @@ continued lines, quoting and the specifiers `%h`, `%u`, `%U`, `%t`, `%n`, `%N`, 
 - **Its environment** is the supervisor's own, then each `Environment=`, then each environment file, with
   `BMO_SUPERVISOR` naming the socket and the stand-ins' folder first on whatever PATH the unit names, so a unit
   that sets its own PATH still finds them.
+- **`XDG_RUNTIME_DIR` names a runtime directory, as a user manager hands one on:** the one the supervisor's own
+  environment names, or `/run/user/<uid>`, where it stands; on a machine with no login manager to make either, a
+  folder of the supervisor's own, `run/`, readable by the account alone. A unit and a command that each fall back to
+  a directory of their own where the variable is unset would otherwise look for each other's sockets in different
+  places. `%t` names the same directory.
 - **A process that ends** is weighed by its unit's `Restart=`: started again after `RestartSec`, the unit reading
   `activating (auto-restart)` while it waits and its restarts counted; left inactive where it ended clean; left
   failed otherwise, with how it ended as its result and its code or signal as its status.
@@ -177,7 +184,7 @@ continued lines, quoting and the specifiers `%h`, `%u`, `%U`, `%t`, `%n`, `%N`, 
 ## Running the install under it
 
 - **A machine without systemd is installed the same way, under the supervisor.** Start `bmo-testbed supervise
-  serve`, then run `bmo-testbed install` with the two lines `bmo-testbed supervise env` prints in its environment.
+  serve`, then run `bmo-testbed install` with the lines `bmo-testbed supervise env` prints in its environment.
   Every command the install runs and every deployment it starts inherits them, so each `systemctl --user`, each
   `systemd-run --user` and each health the deployment reads reaches the supervisor; the testbed's own `needs:`
   takes the supervisor for the user manager and for lingering (`docs/install.md`, 「What a packager relies on」).

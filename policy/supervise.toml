@@ -48,6 +48,8 @@ state = "state.json"
 lock = "lock"
 logs = "logs"
 stand_ins = "bin"
+# The runtime directory of the supervisor's own, handed on as XDG_RUNTIME_DIR where the account has none.
+runtime = "run"
 # The variable naming the control socket, handed to everything the supervisor starts and read by the stand-ins.
 variable = "BMO_SUPERVISOR"
 # The names the binary answers to as a stand-in.

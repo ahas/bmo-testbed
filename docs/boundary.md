@@ -661,6 +661,7 @@ verb's own name, and each noun takes what that verb takes.
 | `CLAUDE_PID` | the turn, `deploy`, `install` | The process of the harness whose call the caller runs in: a caller with one is inside a harness's call, its holder is watched, and `deploy` refuses it; `install` hands a first deployment on without it (`docs/install.md`, 「Deploying」) |
 | `BMO_INDEX` | `install` | The index checkout, where `--index` names none |
 | `BMO_SUPERVISOR` | the stand-ins, every unit the supervisor starts | The supervisor's control socket (`docs/supervise.md`); set by the supervisor for what it starts, and by `supervise env` for a command put under it |
+| `XDG_RUNTIME_DIR` | every unit the supervisor starts | The runtime directory (`docs/supervise.md`, 「How it runs a unit」); set by the supervisor for what it starts, and by `supervise env` for a command put under it |
 | `PGHOST`, `PGPORT` | `install` | The PostgreSQL server, where `--postgres-host` and `--postgres-port` name none |
 | `BMO_INSTALL_VALKEY` | `install` | The Valkey, where `--valkey` names none |
 | `BMO_INSTALL_PREFIX` | an install's after-steps, restarts and verifications | Set by `install`: the install prefix |

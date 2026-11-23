@@ -8,7 +8,7 @@ use bmo_testbed_core::verb::{REFUSED_EXIT_CODE, data_root};
 use bmo_testbed_supervise::control::{Request, ask_blocking};
 use bmo_testbed_supervise::manager::with_stand_ins;
 use bmo_testbed_supervise::places::Places;
-use bmo_testbed_supervise::serve::{Refused, serve};
+use bmo_testbed_supervise::serve::{RUNTIME_VARIABLE, Refused, serve};
 use bmo_testbed_supervise::unit::Specifiers;
 
 use crate::words::SuperviseWord;
@@ -79,9 +79,17 @@ pub fn supervise(word: SuperviseWord) -> u8 {
     SuperviseWord::Env { data_root } => {
       let places = places(data_root);
       let path = std::env::var("PATH").unwrap_or_default();
+      let runtime = match places.runtime(&Specifiers::of_this_process().runtime) {
+        Ok(runtime) => runtime,
+        Err(why) => {
+          eprintln!("{why}");
+          return 1;
+        }
+      };
 
       println!("PATH={}", with_stand_ins(&places.stand_ins(), &path));
       println!("{}={}", SUPERVISE.places.variable, places.socket().display());
+      println!("{RUNTIME_VARIABLE}={}", runtime.display());
       0
     }
     SuperviseWord::StopAll { data_root } => {

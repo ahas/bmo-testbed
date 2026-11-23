@@ -58,6 +58,23 @@ impl Places {
     self.logs().join(format!("{unit}.log"))
   }
 
+  /// The runtime directory every unit and every command under the supervisor reads as `XDG_RUNTIME_DIR`, as a user
+  /// manager hands one on: `named`, the one the account's environment names or `/run/user/<uid>`, where it stands,
+  /// else the supervisor's own, made readable by the account alone. A machine with no login manager has none, and
+  /// a program that falls back to one of its own where the variable is unset would otherwise disagree with a unit
+  /// that falls back to another.
+  pub fn runtime(&self, named: &Path) -> std::io::Result<PathBuf> {
+    if named.is_dir() {
+      return Ok(named.to_path_buf());
+    }
+
+    let own = self.folder.join(&SUPERVISE.places.runtime);
+
+    std::fs::create_dir_all(&own)?;
+    std::fs::set_permissions(&own, std::os::unix::fs::PermissionsExt::from_mode(0o700))?;
+    Ok(own)
+  }
+
   /// The folder the stand-ins stand in, first on every PATH the supervisor hands on.
   pub fn stand_ins(&self) -> PathBuf {
     self.folder.join(&SUPERVISE.places.stand_ins)
