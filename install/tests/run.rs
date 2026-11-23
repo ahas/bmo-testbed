@@ -205,6 +205,10 @@ file = "env/console.env"
 key = "TWO_ADDRESS"
 value = "http://127.0.0.1:4200 {{token.two.console}}"
 
+[[settings]]
+file = "env/two-from-one.toml"
+text = "made = \"{{file.prefix:services/one/made-for}}\"\n"
+
 [[verify]]
 id = "hello"
 run = "true"
@@ -351,6 +355,11 @@ fn a_whole_run_makes_writes_deploys_and_continues_where_it_stopped() {
   assert!(machine.databases.borrow().contains("one"));
   assert_eq!(*machine.deployed.borrow(), ["one", "two"]);
   assert!(ground.index.join("services/one/data").is_dir());
+  // A file under the install prefix that the first repository's after-step made is read before the second deploys.
+  assert_eq!(
+    std::fs::read_to_string(ground.data_root.join("env/two-from-one.toml")).unwrap(),
+    "made = \"owner\"\n"
+  );
   let registry = std::fs::read_to_string(ground.data_root.join("testbed/checkouts.toml")).unwrap();
   for name in ["one", "two"] {
     let path = std::fs::canonicalize(ground.index.join("services").join(name)).unwrap();

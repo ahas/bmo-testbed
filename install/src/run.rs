@@ -1049,6 +1049,7 @@ impl<'a> Install<'a> {
     let mut values = Values {
       data_root: self.ask.data_root.clone(),
       home: self.ask.home.clone(),
+      prefix: self.ask.prefix.clone(),
       ..Values::default()
     };
     let mut declared_by: BTreeMap<String, String> = BTreeMap::new();
