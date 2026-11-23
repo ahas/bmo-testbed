@@ -404,7 +404,7 @@ bmo-testbed cargo <cargo arguments…>
 ### `prune`
 
 ```
-bmo-testbed prune [--dry-run] [--older-than <days>] [--incremental-older-than <hours>]
+bmo-testbed prune [--when-due] [--dry-run] [--older-than <days>] [--incremental-older-than <hours>]
 bmo-testbed prune --all
 ```
 
@@ -417,12 +417,17 @@ bmo-testbed prune --all
   more, and sends `cargo-target-over-ceiling` where it stays over (`docs/deploy.md`, 「The Cargo build
   directory」); a dry run says what it would remove and how far over the directory stands, and `--all`
   enforces nothing.
-- Then trims the filesystem holding the build directory with the prune policy's trim command, so the
-  blocks it freed go back to the drive a virtual disk stands on, and sends `disk-trim-failed` where the
-  trim does not run (`docs/deploy.md`, 「The Cargo build directory」); a dry run trims nothing.
+- Then, where its last trim began two hours ago or more, none is recorded or it ran with `--all`, trims the
+  filesystem holding the build directory with the prune policy's trim command, so the blocks it freed go back
+  to the drive a virtual disk stands on, and sends `disk-trim-failed` where the trim does not run
+  (`docs/deploy.md`, 「The Cargo build directory」); a dry run trims nothing.
 - Then reads the free disk of the placed machine the settings name, the host drive a virtual disk stands
   on among it, and sends `placed-disk-low` where a disk there stands below the floor (「The placed
   machine」); `--all` reads none.
+- Given `--when-due`, as its timer runs it, prunes only where the directory holds more than its ceiling, the
+  deployments' checkouts more than theirs, or its last prune ended two hours ago or more, and otherwise says
+  on one line what it holds of its ceiling and ends with 0, having removed, trimmed and read nothing more
+  (`docs/deploy.md`, 「The Cargo build directory」).
 
 ### `full`
 

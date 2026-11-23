@@ -1,14 +1,16 @@
 [Unit]
 Description=Prune of the shared Cargo build directory: what no live checkout's build stands on, gone checkouts' target directories, rebuildable output by least recent read while it is over its ceiling, and the target directories of deploy build trees idle three days, then a trim of its filesystem
-# docs/deploy.md, 「The Cargo build directory」. Started by its timer, which every deployment of this
-# repository links with this unit and starts, here and on the placed machine (docs/deploy.md, 「The unit
-# links」). It waits at the front of Cargo's own build locks, never in the testbed's line, so it never
-# removes anything under a build and never waits out a queue of heavy commands while the disk fills. While the
-# directory stands over its ceiling, `BMO_CARGO_TARGET_CEILING_GB` from the environment file below, it then
-# removes rebuildable output by least recent read until it is under. It then trims the filesystem holding the
-# directory, so a virtual disk gives the freed blocks back to its host drive. Where the directory stays over
-# its ceiling, the trim does not run, or a disk of the placed machine its settings name stands below its
-# floor, it sends an event to the hook its environment or the declaration names.
+# docs/deploy.md, 「The Cargo build directory」. Started by its timer every five minutes, which every
+# deployment of this repository links with this unit and starts, here and on the placed machine
+# (docs/deploy.md, 「The unit links」). It prunes only where the directory stands over its ceiling or its last
+# prune ended two hours ago or more, and otherwise says what the directory holds and ends. It waits at the
+# front of Cargo's own build locks, never in the testbed's line, so it never removes anything under a build
+# and never waits out a queue of heavy commands while the disk fills. While the directory stands over its
+# ceiling, `BMO_CARGO_TARGET_CEILING_GB` from the environment file below, it then removes rebuildable output
+# by least recent read until it is under. It then trims the filesystem holding the directory where its last
+# trim began two hours ago or more, so a virtual disk gives the freed blocks back to its host drive. Where the
+# directory stays over its ceiling, the trim does not run, or a disk of the placed machine its settings name
+# stands below its floor, it sends an event to the hook its environment or the declaration names.
 
 [Service]
 Type=oneshot
@@ -16,7 +18,7 @@ Type=oneshot
 Slice=bmo-upkeep.slice
 # The deploy tree, whose binary it runs and whose declaration names the hook.
 WorkingDirectory=%h/.local/share/bmo-testbed/deploy
-ExecStart=%h/.local/share/bmo-testbed/deploy/bin/bmo-testbed prune
+ExecStart=%h/.local/share/bmo-testbed/deploy/bin/bmo-testbed prune --when-due
 Environment=PATH=%h/.local/bin:%h/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # The machine's own environment for its timed prune, the event hook and the ceiling among it, where the file
 # exists

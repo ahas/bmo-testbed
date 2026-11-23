@@ -449,6 +449,8 @@ pub enum TestWord {
 
 #[derive(Debug, Args)]
 pub struct PruneArgs {
+  #[arg(long, conflicts_with = "all")]
+  pub when_due: bool,
   #[arg(long)]
   pub dry_run: bool,
   #[arg(long, value_name = "days", conflicts_with = "all")]
@@ -557,6 +559,7 @@ fn usage(text: &str) -> String {
       ("days", &PRUNE.older_than_days.to_string()),
       ("hours", &PRUNE.incremental_hours.to_string()),
       ("build_days", &PRUNE.deploy_build_days.to_string()),
+      ("due_hours", &PRUNE.due_hours.to_string()),
       ("listen", &SERVICE.listen),
     ],
   )

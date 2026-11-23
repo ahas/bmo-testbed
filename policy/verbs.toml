@@ -218,7 +218,7 @@ turn behind the other heavy commands on this machine, runs again where the kerne
 want of memory, and once it has passed removes what this checkout's earlier build of its shape
 left. Exits with Cargo's own code, 75 where the turn did not come."""
 prune = """
-usage: {verb} prune [--dry-run] [--older-than <days>] [--incremental-older-than <hours>]
+usage: {verb} prune [--when-due] [--dry-run] [--older-than <days>] [--incremental-older-than <hours>]
        {verb} prune --all
 
 Removes from the shared Cargo build directory what no build stands on any more: a checkout's own
@@ -227,6 +227,8 @@ unchanged for its span, and the target directories of checkouts that are gone, h
 build lock in every profile directory at the front of its line; then the target directory of every
 deployment's build tree last deployed more than {build_days} days ago (docs/deploy.md).
 
+--when-due                prunes only where the directory stands over its ceiling or its last
+                          prune ended {due_hours} hours ago or more, as its timer runs it
 --dry-run                 says what it would remove and removes nothing
 --older-than              days a unit no build read is kept, more than one (default {days})
 --incremental-older-than  hours unchanged incremental state is kept (default {hours})
@@ -499,6 +501,12 @@ registry_unread = "  the checkout registry does not read, so no deploy root was 
 trimmed = "prune: trimmed the filesystem holding {path}: {said}"
 trim_failed = "prune: the filesystem holding {path} was not trimmed: {said}"
 trim_failed_summary = "The filesystem holding the shared Cargo build directory {path} was not trimmed after its prune, so the blocks it freed stay with its disk: {said}"
+# The trim held to its span (docs/deploy.md, 「The Cargo build directory」): {minutes} since the last trim began,
+# {hours} the span.
+trim_waits = "prune: the filesystem holding {path} was last trimmed {minutes} minutes ago, so it is trimmed again once {hours} hours have passed"
+# A prune run with --when-due that is not due: {held} what the directory holds, {ceiling} its ceiling, {minutes}
+# since the last prune ended.
+not_due = "prune: {root} holds {held} of its ceiling {ceiling} and was last pruned {minutes} minutes ago, so no prune is due"
 # The placed machine's free disk (docs/deploy.md, 「The Cargo build directory」): {machine} its label, {floor}
 # the floor, {path} a path as the settings name it, {source} the filesystem holding it by its source (the drive
 # itself for a WSL drive mount), {free} its free space, {said} what `ssh` said, and {disks} the disks below the

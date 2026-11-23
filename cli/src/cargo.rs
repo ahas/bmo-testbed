@@ -2,9 +2,10 @@
 //! directory the way every verb of the testbed runs it, and what no build reads any more removed from that
 //! directory, holding Cargo's own build lock in every profile directory, at the front of each lock's line and
 //! never in the testbed's, and its ceiling enforced; then the target directories of the deployments' build trees
-//! that outlived their span; then the filesystem holding the build directory trimmed, so its freed blocks go back
-//! to the drive it stands on. The invocation, the plan, the removal, the enforcement and the locks are the suite
-//! crate's; this is the verbs' side of them.
+//! that outlived their span; then the filesystem holding the build directory trimmed where its trim is due, so its
+//! freed blocks go back to the drive it stands on. Its timer runs it every few minutes, and it prunes only where
+//! the directory stands over its ceiling or its last prune is old enough. The invocation, the plan, the removal,
+//! the enforcement and the locks are the suite crate's; this is the verbs' side of them.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -29,8 +30,8 @@ use bmo_testbed_suite::ceiling::{Ceiling, CeilingPlan, CeilingSetting, Enforceme
 use bmo_testbed_suite::crates::cargo_target_root;
 use bmo_testbed_suite::dependents::{read_registry, registry_path};
 use bmo_testbed_suite::prune::{
-  DAY_MS, HOUR_MS, PrunePlan, directory_bytes, disk_free_bytes, keeps_access_times, plan_clear, plan_prune,
-  take_prune_locks,
+  DAY_MS, HOUR_MS, MINUTE_MS, PRUNED_MARK_NAME, PrunePlan, TRIMMED_MARK_NAME, directory_bytes,
+  disk_free_bytes, keeps_access_times, mark, marked_at, plan_clear, plan_prune, take_prune_locks,
 };
 use serde_json::json;
 
@@ -487,9 +488,70 @@ pub fn trim_filesystem(root: &Path, trim: &[String], hook: &Hook) -> Option<Stri
   Some(fill_marks(&said.trim_failed, &[("path", &shown), ("said", &failure)]))
 }
 
+// The filesystem holding `root` trimmed with the command `trim` where its last trim began the prune policy's span
+// ago or more, none is recorded or `args` clears the whole directory, its mark written as the trim begins; the line
+// saying when it was last trimmed otherwise.
+fn trim_when_due(args: &PruneArgs, root: &Path, trim: &[String], hook: &Hook) -> Option<String> {
+  let marked = root.join(TRIMMED_MARK_NAME);
+  let since = marked_at(&marked).map(|began| now_ms() - began);
+
+  if !args.all
+    && let Some(since) = since
+    && since < PRUNE.trim_hours * HOUR_MS
+  {
+    return Some(fill_marks(
+      &VERBS.prune.trim_waits,
+      &[
+        ("path", &root.to_string_lossy()),
+        ("minutes", &(since / MINUTE_MS).to_string()),
+        ("hours", &PRUNE.trim_hours.to_string()),
+      ],
+    ));
+  }
+
+  mark(&marked);
+  trim_filesystem(root, trim, hook)
+}
+
+/// Where `args` asks for a prune only where one is due and none is at `now` (docs/deploy.md, 「The Cargo build
+/// directory」): the line saying what the directory at `root` holds of its ceiling under `setting` and how long ago
+/// it was last pruned. None where the prune is to run: it was not asked to wait for its due, the directory does not
+/// exist or holds no mark of a prune, its last prune ended the prune policy's span ago or more, or the directory or
+/// its deployments' checkouts hold more than their ceilings.
+pub fn not_due(args: &PruneArgs, root: &Path, setting: CeilingSetting, now: i64) -> Option<String> {
+  if !args.when_due || !root.exists() {
+    return None;
+  }
+
+  let since = now - marked_at(&root.join(PRUNED_MARK_NAME))?;
+
+  if since >= PRUNE.due_hours * HOUR_MS {
+    return None;
+  }
+
+  let held = directory_bytes(root);
+  let ceiling = Ceiling::of(setting, held, disk_free_bytes(root));
+  let shown = gigabytes(ceiling.bytes);
+  // The deployments' checkouts are read only where the machine sets them a ceiling of their own.
+  let over = held > ceiling.bytes
+    || (setting.deployments.is_some() && CeilingPlan::of(root, &[], ceiling, held, now).is_over());
+
+  (!over).then(|| {
+    fill_marks(
+      &VERBS.prune.not_due,
+      &[
+        ("root", &root.to_string_lossy()),
+        ("held", &gigabytes(held)),
+        ("ceiling", &shown),
+        ("minutes", &(since / MINUTE_MS).to_string()),
+      ],
+    )
+  })
+}
+
 /// `prune` over the build directory at `root`, its ceiling set to `ceiling`, and the build trees of `deployments`,
-/// then, unless it was a dry run, the filesystem holding `root` trimmed with the command `trim`: what it says and
-/// the code it ends with.
+/// then, unless it was a dry run, its mark written and the filesystem holding `root` trimmed with the command `trim`
+/// where its trim is due: what it says and the code it ends with.
 pub fn prune_in(
   args: &PruneArgs,
   root: &Path,
@@ -524,7 +586,8 @@ pub fn prune_in(
   answer.out.extend(prune_build_targets(args, deployments, now_ms()));
 
   if !args.dry_run && root.exists() {
-    answer.out.extend(trim_filesystem(root, trim, hook));
+    mark(&root.join(PRUNED_MARK_NAME));
+    answer.out.extend(trim_when_due(args, root, trim, hook));
   }
 
   answer
@@ -601,22 +664,26 @@ pub fn placed_disk(machine: &MachinePlacement, send: bool, hook: &Hook) -> Vec<S
 }
 
 /// `prune` over the shared build directory and the build trees of the deployments the machine's registry
-/// names, the filesystem holding the build directory trimmed with the prune policy's command, then the placed
-/// machine's free disk read where the settings name one, its events to the hook the
-/// environment or the repository it is run in names.
+/// names where it is due, the filesystem holding the build directory trimmed with the prune policy's command
+/// where its trim is due, then the placed machine's free disk read where the settings name one, its events to the
+/// hook the environment or the repository it is run in names.
 pub fn prune(args: &PruneArgs) -> u8 {
   let env = process_env();
+  let root = cargo_target_root();
+  let ceiling = CeilingSetting::of(&env);
+
+  if let Some(line) = not_due(args, &root, ceiling, now_ms()) {
+    return Said {
+      out: vec![line],
+      ..Said::default()
+    }
+    .print();
+  }
+
   let repo = Repository::read(&std::env::current_dir().unwrap_or_default()).ok();
   let deployments = Deployments::of_registry(&registry_path(&data_root(), &env), &env);
   let hook = Hook::of(repo.as_ref(), &env);
-  let mut answer = prune_in(
-    args,
-    &cargo_target_root(),
-    &deployments,
-    &PRUNE.trim_command,
-    CeilingSetting::of(&env),
-    &hook,
-  );
+  let mut answer = prune_in(args, &root, &deployments, &PRUNE.trim_command, ceiling, &hook);
 
   if !args.all
     && let Some(machine) = MachinePlacement::named(&data_root(), &home_of(&env))

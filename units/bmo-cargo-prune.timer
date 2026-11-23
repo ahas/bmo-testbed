@@ -1,11 +1,10 @@
 [Unit]
-Description=Prune of the shared Cargo build directory, every two hours
-# docs/deploy.md, 「The Cargo build directory」.
+Description=Prune of the shared Cargo build directory where one is due, read every five minutes
+# docs/deploy.md, 「The Cargo build directory」: its service prunes only where the directory stands over its
+# ceiling or its last prune ended two hours ago or more.
 
 [Timer]
-OnCalendar=*-*-* 01/2:10:00
-Persistent=true
-RandomizedDelaySec=600
+OnCalendar=*-*-* *:00/5:00
 
 [Install]
 WantedBy=timers.target

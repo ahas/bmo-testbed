@@ -39,6 +39,16 @@ ceiling_room_gigabytes = 50
 deployment_ceiling_gigabytes = 0
 
 
+# How long after the last prune ended a prune run with `--when-due` runs whole whatever the directory holds, in
+# hours (docs/deploy.md, 「The Cargo build directory」): the cadence its rules counted in days and hours run at,
+# while its timer reads the directory against its ceiling every few minutes.
+due_hours = 2
+
+# How long after the last trim began the prune trims its filesystem again, in hours: a trim takes every free
+# block whatever freed it, and runs for minutes on a large disk, so the frequent prunes share one.
+trim_hours = 2
+
+
 # The trim run once a prune that is not a dry run is done, the build root handed to it as its last word
 # (docs/deploy.md, 「The Cargo build directory」): fstrim needs root, and `-n` keeps sudo from waiting on a
 # password a timer cannot give.

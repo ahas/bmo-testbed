@@ -1,22 +1,26 @@
 //! The `prune` verb (docs/deploy.md, 「The Cargo build directory」): its spans read in days and hours, a clear
 //! taking none, and a span too short to tell refused before anything is read; and the deployments' build trees
 //! found through the registry of checkouts, whose target directories go once they outlived their span; and the
-//! filesystem holding the build directory trimmed after a prune that is not a dry run; and its ceiling enforced,
-//! what a running deployment builds in kept and named in the event a directory left over sends.
+//! filesystem holding the build directory trimmed after a prune that is not a dry run where its trim is due; a
+//! timed prune run only where one is due; and its ceiling enforced, what a running deployment builds in kept and
+//! named in the event a directory left over sends.
 
 use std::collections::HashMap;
 use std::ffi::OsString;
 use std::path::Path;
 
-use bmo_testbed_cli::cargo::{Deployments, prune_in};
+use bmo_testbed_cli::cargo::{Deployments, not_due, prune_in};
 use bmo_testbed_cli::words::{PruneArgs, Verb, read};
 use bmo_testbed_core::events::Hook;
 use bmo_testbed_core::policy::fill_marks;
+use bmo_testbed_core::policy::prune::PRUNE;
 use bmo_testbed_core::policy::verbs::VERBS;
+use bmo_testbed_core::queue::now_ms;
 use bmo_testbed_core::release_target::mark_release_target;
 use bmo_testbed_deploy::progress::{DeployStart, Outcome, begin_deploy};
 use bmo_testbed_suite::ceiling::CeilingSetting;
 use bmo_testbed_suite::crates::{CHECKOUT_RECORD_NAME, checkout_target_name};
+use bmo_testbed_suite::prune::HOUR_MS;
 use bmo_testbed_suite::superseded::CARGO_BUILD_LOCK_NAME;
 use serde_json::Value;
 
@@ -248,6 +252,74 @@ fn a_prune_trims_the_filesystem_holding_its_build_root_and_a_dry_run_trims_nothi
     cleared.out.last().unwrap(),
     &fill_marks(&VERBS.prune.trimmed, &[("path", &shown), ("said", "1 GiB trimmed")])
   );
+
+  // "where the prune policy's trim span ... has passed since the last trim began, or no trim is recorded, and
+  // after every --all. Otherwise the prune says on one line when the filesystem was last trimmed."
+  let soon = prune_in(
+    &prune_words(&[]).unwrap(),
+    &root,
+    &Deployments::default(),
+    &trim,
+    policy_ceiling(),
+    &no_hook(),
+  );
+
+  assert_eq!(soon.code, 0);
+  assert_eq!(std::fs::read_to_string(dir.path().join("trimmed")).unwrap(), format!("{shown}\n"));
+  assert_eq!(
+    soon.out.last().unwrap(),
+    &fill_marks(
+      &VERBS.prune.trim_waits,
+      &[("path", &shown), ("minutes", "0"), ("hours", &PRUNE.trim_hours.to_string())]
+    )
+  );
+
+  prune_in(
+    &prune_words(&["--all"]).unwrap(),
+    &root,
+    &Deployments::default(),
+    &trim,
+    policy_ceiling(),
+    &no_hook(),
+  );
+
+  assert_eq!(
+    std::fs::read_to_string(dir.path().join("trimmed")).unwrap(),
+    format!("{shown}\n{shown}\n")
+  );
+}
+
+// "The timer runs prune --when-due ... prunes only where the directory holds more than its ceiling ... or the
+// last prune ended at least the prune policy's span ago ... A build root holding no mark is due."
+#[test]
+fn a_prune_waiting_for_its_due_runs_only_over_its_ceiling_or_once_its_span_has_passed() {
+  let dir = tempfile::tempdir().unwrap();
+  let root = dir.path().join("target");
+  let when_due = prune_words(&["--when-due"]).unwrap();
+
+  std::fs::create_dir_all(&root).unwrap();
+
+  assert_eq!(not_due(&when_due, &root, policy_ceiling(), now_ms()), None, "no mark of a prune is due");
+
+  prune_in(&when_due, &root, &Deployments::default(), &[], policy_ceiling(), &no_hook());
+
+  let now = now_ms();
+  let shown = root.to_string_lossy();
+  let waits =
+    not_due(&when_due, &root, policy_ceiling(), now).expect("an empty directory just pruned waits");
+
+  assert!(waits.starts_with(&format!("prune: {shown} holds 0.0 GB of its ceiling ")), "{waits}");
+  assert_eq!(not_due(&prune_words(&[]).unwrap(), &root, policy_ceiling(), now), None, "run by hand");
+  assert_eq!(
+    not_due(&when_due, &root, policy_ceiling(), now + PRUNE.due_hours * HOUR_MS),
+    None,
+    "span passed"
+  );
+
+  write(&root.join("debug/deps/unit-0123456789abcdef.rlib"), "built");
+
+  assert_eq!(not_due(&when_due, &root, no_room(), now), None, "over its ceiling");
+  assert!(prune_words(&["--when-due", "--all"]).is_err());
 }
 
 // "Where sudo refuses, or the disk takes no trim, the prune says what was said on a line and sends a

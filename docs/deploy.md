@@ -1116,7 +1116,8 @@ flowchart TD
   place, with the generation it was built in. The removal takes Cargo's build lock only where no build
   holds it at that moment, leaving what it found to the next build otherwise; it stands in no queue of
   its own, and never fails its build.
-- **The prune,** the `prune` verb, run every two hours by `bmo-cargo-prune.timer` in `bmo-upkeep.slice`,
+- **The prune,** the `prune` verb, run every five minutes by `bmo-cargo-prune.timer` in `bmo-upkeep.slice`
+  where one is due (below),
   holding Cargo's own build lock in every profile directory of the build root and of each checkout's
   directory, and standing at the front of each lock's line, never in the testbed's, removes:
   - from a profile directory standing at the build root itself, a unit of a checkout's own crates no live
@@ -1166,9 +1167,31 @@ flowchart TD
   passed over; a checkout whose declaration does not read or deploys nothing names no deploy root. The
   removal is the guarded one (「What it refuses」), and `--all` and the spans of the build root do not
   change it.
-- **The filesystem is trimmed after every prune that is not a dry run,** by the prune itself and not by its
-  timer. Once the removals are done and the build locks let go, the prune runs the prune policy's trim
-  command, which runs `fstrim` through `sudo`, on the build root, and the free blocks of the filesystem
+- **A timed prune runs only where one is due.** The timer runs `prune --when-due`, which first reads what the
+  directory holds against its ceiling and when the last prune ended, and prunes only where the directory
+  holds more than its ceiling, the deployments' checkouts more than theirs where the machine sets one, or
+  the last prune ended at least the prune policy's span ago, two hours. Otherwise it says on one line what
+  the directory holds of its ceiling and how long ago it was last pruned, takes no lock, removes nothing,
+  trims nothing and reads no placed machine.
+  - **It is what bounds the directory between two whole prunes.** A day of many checkouts building at once
+    fills the directory by gigabytes a minute, so a prune spaced hours apart would let it stand over its
+    ceiling by as much as the disk has free. Read every five minutes, the directory stands over its ceiling
+    for no longer than the growth of five minutes and one prune, while the rules counted in days and hours
+    still run at least every two hours.
+  - **Reading what the directory holds costs a walk of it,** seconds on a directory of a hundred gigabytes,
+    with no lock held and at the slice's idle priority, so no build waits on it. Only a prune that is due
+    takes Cargo's build locks, which a build waits on while the prune holds them.
+  - **When the last prune ended is the modification time of a mark** the prune writes at the build root once
+    it has pruned, a dry run excepted, whether timed or run by hand. A build root holding no mark is due.
+- **The filesystem is trimmed after a prune that is not a dry run where its last trim is old enough,** by the
+  prune itself and not by its timer: where the prune policy's trim span, two hours, has passed since the last
+  trim began, or no trim is recorded, and after every `--all`. Otherwise the prune says on one line when the
+  filesystem was last trimmed. A trim takes every free block of the filesystem, whatever freed it, so a trim
+  every two hours gives back what every prune between freed, while a prune every few minutes never waits out
+  a trim that runs for minutes on a large disk. When the last trim began is the modification time of a
+  second mark at the build root, written as the trim command starts, so a trim that failed is tried again at
+  the same span. Once the removals are done and the build locks let go, the prune runs the prune policy's
+  trim command, which runs `fstrim` through `sudo`, on the build root, and the free blocks of the filesystem
   holding it go back to whatever that filesystem stands on. On a virtual disk, as a WSL machine's is inside its host's drive,
   the disk file then shrinks on the host drive. Without the trim, the blocks a prune frees stay allocated
   in the disk file, so the host drive does not get them back.

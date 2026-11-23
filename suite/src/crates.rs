@@ -8,7 +8,7 @@ use bmo_testbed_core::policy::prune::PRUNE;
 use bmo_testbed_core::turn::{Env, process_env, stands_at_front};
 use serde_json::Value;
 
-use crate::prune::DAY_MS;
+use crate::prune::{DAY_MS, mark, marked_at};
 
 /// The paths at a checkout's root that every crate stands on: the workspace's manifest, its lockfile and
 /// the formatting every crate is checked against; and Cargo's own configuration directory.
@@ -194,20 +194,14 @@ pub(crate) fn on_path(name: &str) -> Option<PathBuf> {
 /// caller at the front: a deployment builds there now.
 pub fn mark_deployment_checkout(target: &Path, env: &Env) {
   if stands_at_front(env) {
-    put_in_place(&target.join(DEPLOYMENT_MARK_NAME), |made| std::fs::write(made, ""));
+    mark(&target.join(DEPLOYMENT_MARK_NAME));
   }
 }
 
 /// When a deployment last began a build in a checkout's directory under the build root, in milliseconds since the
 /// epoch: its mark's modification time, none where it carries no mark.
 pub fn deployment_built_at(target: &Path) -> Option<i64> {
-  let modified = std::fs::metadata(target.join(DEPLOYMENT_MARK_NAME)).ok()?.modified().ok()?;
-
-  Some(
-    modified
-      .duration_since(std::time::UNIX_EPOCH)
-      .map_or(0, |since| since.as_millis() as i64),
-  )
+  marked_at(&target.join(DEPLOYMENT_MARK_NAME))
 }
 
 /// Whether a checkout's directory under the build root is a deployment's checkout at `now`: one a deployment

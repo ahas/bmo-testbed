@@ -184,6 +184,8 @@ pub struct PruneWords {
   pub trimmed: String,
   pub trim_failed: String,
   pub trim_failed_summary: String,
+  pub trim_waits: String,
+  pub not_due: String,
   pub placed_heading: String,
   pub placed_free: String,
   pub placed_low: String,

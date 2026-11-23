@@ -19,7 +19,8 @@ use bmo_testbed_core::release_target::is_release_target;
 use serde_json::Value;
 
 use crate::crates::{
-  CHECKOUT_RECORD_NAME, checkout_target_name, deployment_built_at, is_deployment_checkout, resolved,
+  CHECKOUT_RECORD_NAME, checkout_target_name, deployment_built_at, is_deployment_checkout, put_in_place,
+  resolved,
 };
 use crate::superseded::{
   BUILT_UNITS_NAME, CARGO_BUILD_LOCK_NAME, UNIT_DIRS, read_record, recorded_units, unit_hash,
@@ -28,6 +29,31 @@ use crate::superseded::{
 pub const HOUR_MS: i64 = 60 * 60 * 1000;
 
 pub const DAY_MS: i64 = 24 * HOUR_MS;
+
+pub const MINUTE_MS: i64 = 60 * 1000;
+
+/// The mark at the build root whose modification time says when its last prune ended (docs/deploy.md, 「The
+/// Cargo build directory」).
+pub const PRUNED_MARK_NAME: &str = ".prune-ended";
+
+/// The mark at the build root whose modification time says when the last trim of its filesystem began.
+pub const TRIMMED_MARK_NAME: &str = ".trim-began";
+
+/// When the mark at `path` was last written, in milliseconds since the epoch; none where it stands nowhere.
+pub fn marked_at(path: &Path) -> Option<i64> {
+  let modified = std::fs::metadata(path).ok()?.modified().ok()?;
+
+  Some(
+    modified
+      .duration_since(std::time::UNIX_EPOCH)
+      .map_or(0, |since| since.as_millis() as i64),
+  )
+}
+
+/// The mark at `path` written afresh, so its modification time says now.
+pub fn mark(path: &Path) {
+  put_in_place(path, |made| std::fs::write(made, ""));
+}
 
 /// The lock a Cargo run holds in a profile directory of its target directory for its whole build, where it has
 /// no build directory apart from it.

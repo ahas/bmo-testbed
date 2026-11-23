@@ -461,6 +461,13 @@ pub struct CeilingPlan {
 }
 
 impl CeilingPlan {
+  /// Whether the directory holds more than its ceiling, or its deployments' checkouts more than the ceiling the
+  /// machine sets them, so the enforcement has something to remove.
+  pub fn is_over(&self) -> bool {
+    self.held > self.ceiling.bytes
+      || self.ceiling.setting.deployments.is_some_and(|limit| self.deployments_held > limit)
+  }
+
   /// What the enforcement may remove from the build directory at `root`, which holds `held` once the prune's
   /// rules have removed every path `gone` names, its deployments' checkouts judged at `now`: each rule's removals
   /// in its order of least recent read, the working checkouts' rules read only where `held` is over `ceiling` and
