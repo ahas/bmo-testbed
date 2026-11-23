@@ -16,6 +16,10 @@ program = "git"
 what = "git, which every checkout and deployment reads; the system's git package"
 
 [[needs]]
+program = "zstd"
+what = "zstd, which compresses the backup a deployment takes before anything changes; the system's zstd package"
+
+[[needs]]
 check = "systemctl --user show-environment > /dev/null"
 what = "a running systemd user manager for the user who runs the set, which every service and deployment runs under; on a server, enable lingering for the user (`loginctl enable-linger <user>`, as root) so it runs without a login. On a machine with none, the testbed's supervisor stands in for it: run the install under `bmo-testbed supervise serve`, with the lines `bmo-testbed supervise env` prints in its environment (docs/supervise.md)"
 
