@@ -357,6 +357,7 @@ dependencies = [
  "bmo-testbed-client",
  "bmo-testbed-core",
  "bmo-testbed-deploy",
+ "bmo-testbed-install",
  "bmo-testbed-plugin",
  "bmo-testbed-record",
  "bmo-testbed-service",
@@ -426,6 +427,18 @@ dependencies = [
  "tempfile",
  "tokio",
  "url",
+]
+
+[[package]]
+name = "bmo-testbed-install"
+version = "0.1.0-rev.77"
+dependencies = [
+ "base64 0.22.1",
+ "bmo-testbed-core",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "toml",
 ]
 
 [[package]]

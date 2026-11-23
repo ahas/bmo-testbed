@@ -1,0 +1,24 @@
+[package]
+name = "bmo-testbed-install"
+description = "A set of repositories installed onto a fresh machine, step by step, each step one JSON line."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+# One test target, the harness at tests/main.rs, with a module per file of tests (bmo-chat's
+# docs/conventions.md, 「Rust builds」).
+autotests = false
+
+[dependencies]
+base64.workspace = true
+bmo-testbed-core = { path = "../core" }
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[[test]]
+name = "main"
+path = "tests/main.rs"

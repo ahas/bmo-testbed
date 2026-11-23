@@ -6,6 +6,7 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 
 use bmo_testbed_core::policy::fill_marks;
+use bmo_testbed_core::policy::install::INSTALL;
 use bmo_testbed_core::policy::prune::PRUNE;
 use bmo_testbed_core::policy::service::SERVICE;
 use bmo_testbed_core::policy::suite::SUITE;
@@ -50,6 +51,7 @@ pub enum Verb {
   Serve(ServeArgs),
   Mcp(McpArgs),
   Notice(NoticeArgs),
+  Install(InstallArgs),
   /// The nouns `bmo` dispatches to this binary, one a line.
   Nouns,
   /// The platform's names for the suite verbs.
@@ -471,6 +473,36 @@ pub struct McpArgs {
   pub token: String,
 }
 
+/// `install`: a preset installed, a repository added, the install's status, or an input kept (docs/install.md).
+#[derive(Debug, Args)]
+#[command(group(clap::ArgGroup::new("mode").required(true).args(["preset", "add", "status", "set"])))]
+pub struct InstallArgs {
+  #[arg(long, value_parser = named)]
+  pub preset: Option<String>,
+  #[arg(long, value_parser = named, requires = "preset")]
+  pub with: Vec<String>,
+  #[arg(long, value_parser = named)]
+  pub add: Option<String>,
+  #[arg(long)]
+  pub status: bool,
+  #[arg(long, value_parser = named)]
+  pub set: Option<String>,
+  #[arg(long)]
+  pub index: Option<PathBuf>,
+  #[arg(long)]
+  pub data_root: Option<PathBuf>,
+  #[arg(long)]
+  pub prefix: Option<PathBuf>,
+  #[arg(long, value_parser = named)]
+  pub postgres_host: Option<String>,
+  #[arg(long, value_parser = named)]
+  pub postgres_port: Option<String>,
+  #[arg(long, value_parser = named)]
+  pub valkey: Option<String>,
+  #[arg(long, conflicts_with_all = ["status", "set"])]
+  pub dry_run: bool,
+}
+
 /// `notice`: the event a hook is handed, by its name.
 #[derive(Debug, Args)]
 pub struct NoticeArgs {
@@ -560,6 +592,7 @@ pub fn read(args: impl IntoIterator<Item = OsString>) -> Result<Words, clap::Err
     .mut_subcommand("serve", |verb| verb.override_help(usage(&said.serve)))
     .mut_subcommand("mcp", |verb| verb.override_help(usage(&said.mcp)))
     .mut_subcommand("notice", |verb| verb.override_help(usage(&said.notice)))
+    .mut_subcommand("install", |verb| verb.override_help(usage(&INSTALL.usage)))
     .mut_subcommand("test", |verb| {
       verb
         .mut_subcommand("suite", |word| word.override_help(usage(&said.suite)))

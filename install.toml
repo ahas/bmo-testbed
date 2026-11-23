@@ -1,0 +1,24 @@
+# What installing the testbed on a fresh machine needs (docs/install.md, 「The install declaration」). The testbed
+# keeps no settings of its own to write: its data root, its record and its locks are made as it first runs.
+
+install = 1
+
+[[needs]]
+program = "cargo"
+what = "Rust's cargo, which builds every repository of the set; install it with rustup (https://rustup.rs) as the user who runs the set"
+
+[[needs]]
+program = "cc"
+what = "a C compiler and linker, which crates with native parts build with; the system's build-essential package"
+
+[[needs]]
+program = "git"
+what = "git, which every checkout and deployment reads; the system's git package"
+
+[[needs]]
+check = "systemctl --user show-environment > /dev/null"
+what = "a running systemd user manager for the user who runs the set, which every service and deployment runs under; on a server, enable lingering for the user (`loginctl enable-linger <user>`, as root) so it runs without a login"
+
+[[needs]]
+check = "test \"$(loginctl show-user \"$(id -un)\" --property=Linger --value 2>/dev/null)\" = yes"
+what = "lingering for the user who runs the set, so their services start at boot and outlive a logout: `loginctl enable-linger <user>`, run as root"

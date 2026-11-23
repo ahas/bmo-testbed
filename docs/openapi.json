@@ -1417,7 +1417,8 @@
     "backup",
     "serve",
     "mcp",
-    "notice"
+    "notice",
+    "install"
   ],
   "x-events": [
     "queue.changed",

@@ -45,7 +45,7 @@ release. The version rules at the end are over this document.
 | 0 | Done, or passed |
 | 1 | Ran and failed: a test, a check, a step, a deployment |
 | 2 | Refused: words that do not read, a declaration that does not read or names another major, a change that cannot be read, a refusal a verb names |
-| 3 | `status --free` only: the machine is loaded past its share, so it takes no run (「`status`」) |
+| 3 | `status --free`: the machine is loaded past its share, so it takes no run (「`status`」); `install`: the install waits for input (`docs/install.md`) |
 | 75 | Not run: the harness it waited for went away before the turn came, or the placement endpoint's stream ended with no result. Run the same command again |
 | 124 | Ended as hung: the command holding a lane's turn neither wrote nor worked for the silence limit (`docs/testbed.md`, 「A holder whose command falls silent lets go」) |
 | any other | `run` only: the command's own exit code, passed through |
@@ -492,6 +492,25 @@ bmo-testbed release --propose --set <folder> [--repository <name>]…
   plain semantic version above the last release or that a repository already holds a tag of, a set holding
   no repository, and a repository or a file that does not read.
 
+### `install`
+
+```
+bmo-testbed install --preset <name> [--with <repository>]… [<places>] [--dry-run]
+bmo-testbed install --add <repository> [<places>] [--dry-run]
+bmo-testbed install --status [<places>]
+bmo-testbed install --set <input> [<places>]
+
+<places>: [--index <dir>] [--data-root <dir>] [--prefix <dir>] [--postgres-host <host>] [--postgres-port <port>]
+          [--valkey <address>]
+```
+
+- Installs a set of repositories onto this machine, or continues an install that stopped, as `docs/install.md`
+  states whole: the preset an index's `presets.toml` names, each repository's own `install.toml`, one JSON line
+  per step with its `step`, `status`, `detail` and `next`, and nothing asked on a terminal. It exits 0 where every
+  step is done or planned, 1 where one failed, 2 where it refuses, and 3 where it waits for input.
+- It deploys a repository only where its deploy tree does not stand yet, through `deploy` with `--no-check` and `--force-live`, and
+  hands that first deployment on without the harness's mark (`docs/install.md`, 「Deploying」).
+
 ### `backups`
 
 ```
@@ -597,12 +616,13 @@ verb's own name, and each noun takes what that verb takes.
 | `backup media` | nothing | `backup media` |
 | `backup drill` | nothing | `backup drill` |
 | `backup prune` | the words `backup prune` takes | `backup prune` |
+| `install` | the words `install` takes | `install` |
 
 ## The environment
 
 | Variable | Read by | Meaning |
 |---|---|---|
-| `BMO_DATA_DIR` | every verb, the hosted deploy tool | The testbed's data root: logs and the record under `testbed/`, locks under `locks/`, the data backup's and the placement's settings under `env/`. Default `$HOME/.local/share/bmo/data` |
+| `BMO_DATA_DIR` | every verb, the hosted deploy tool | The testbed's data root: logs and the record under `testbed/`, locks under `locks/`, the data backup's and the placement's settings under `env/`, and the install's settings, tokens, inputs and state (`docs/install.md`). Default `$HOME/.local/share/bmo/data` |
 | `TMPDIR` | the turn | Where the lane locks stand. Default `/tmp` |
 | `BMO_TESTBED_LOCK` | the turn | Another first wide seat's lock, the further seats and the narrow lane's beside it |
 | `BMO_TESTBED_SEATS` | the turn | The wide lane's seats, over the lane policy's; anything that is not a positive whole number means the policy's |
@@ -614,7 +634,11 @@ verb's own name, and each noun takes what that verb takes.
 | `BMO_TESTBED_HEARD` | the turn | Set by a holder watching its command for silence: a file of its own. A watch under it touches the file while its own command writes, which the holder counts as its command writing |
 | `BMO_TESTBED_TIMES` | the turn | A file each turn taken adds a line to: the command, its lane, its wait and its run |
 | `BMO_TEST_PARALLEL` | the turn, the suite | The wide lane's width; set by the turn for a language's runner, to the holder's share |
-| `CLAUDE_PID` | the turn, `deploy` | The process of the harness whose call the caller runs in: a caller with one is inside a harness's call, its holder is watched, and `deploy` refuses it |
+| `CLAUDE_PID` | the turn, `deploy`, `install` | The process of the harness whose call the caller runs in: a caller with one is inside a harness's call, its holder is watched, and `deploy` refuses it; `install` hands a first deployment on without it (`docs/install.md`, 「Deploying」) |
+| `BMO_INDEX` | `install` | The index checkout, where `--index` names none |
+| `PGHOST`, `PGPORT` | `install` | The PostgreSQL server, where `--postgres-host` and `--postgres-port` name none |
+| `BMO_INSTALL_VALKEY` | `install` | The Valkey, where `--valkey` names none |
+| `BMO_INSTALL_PREFIX` | an install's after-steps, restarts and verifications | Set by `install`: the install prefix |
 | `BMO_TESTBED_SCOPE` | the turn, the record | The caller's opaque scope, which a ticket, a holder and a test run carry and the testbed never reads |
 | `BMO_TESTBED_TOKEN` | `serve`, `mcp` | The HTTP service's bearer token |
 | `BMO_TESTBED_SERVICE` | `mcp` | The HTTP service's address the reading tools call |
@@ -1254,6 +1278,10 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   through the tree's and the services' hands, backups. The run asks its gate through a trait of its
   own, which the binary answers with the suite crate's static check and suite, so `deploy` depends on
   no other crate of the testbed but `core` and `record`.
+- **`install`:** the install (`docs/install.md`): the presets file read and a preset resolved, a repository's
+  install declaration read, a template's marks filled, and the run's stages against a machine of its trait, which
+  the binary answers with this machine and a test with one of its own; it depends on no crate of the testbed but
+  `core`.
 - **`backup`:** the data backup (`docs/backup.md`): the settings read into a plan, the stores a
   destination is reached through, the dumps and their counts, the archives, the snapshot, the media,
   the rotation and the drill.

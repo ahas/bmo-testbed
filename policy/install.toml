@@ -1,0 +1,134 @@
+# What the install verb says (docs/install.md): its usage, the detail and the next step of each line it prints,
+# and its refusals. An agent reads them, so they are English. Each `{name}` is filled in with what it names.
+
+usage = """
+usage: {verb} install --preset <name> [--with <repository>]… [<places>] [--dry-run]
+       {verb} install --add <repository> [<places>] [--dry-run]
+       {verb} install --status [<places>]
+       {verb} install --set <input> [<places>]
+
+<places>: [--index <dir>] [--data-root <dir>] [--prefix <dir>] [--postgres-host <host>]
+          [--postgres-port <port>] [--valkey <address>]
+
+Installs a set of repositories onto this machine, or continues an install that stopped (docs/install.md): the
+preset's repositories cloned into the index checkout, the programs they need checked, their tokens, databases and
+settings made, each one's first release put live and its after-steps run, and every health read. Each step prints
+one JSON line, its step, status (ok, planned, needs-input, failed), detail and next. Nothing is asked on the
+terminal: a missing value is a needs-input line naming the command that gives it.
+
+--preset     the preset of the index's presets.toml to install
+--with       the repository chosen for one of the preset's choices; once for each choice
+--add        one more repository, into the install the data root holds
+--status     each installed repository's checkout, deployed commit and health; changes nothing
+--set        an input's value, read whole from standard input, kept where its declaration says
+--index      the index checkout; BMO_INDEX, else the checkout the verb runs in, where neither is given
+--data-root  where settings, tokens, inputs and the install's own state are kept, over BMO_DATA_DIR
+--prefix     where every repository's deploy root and data root stand; .local/share under the home
+--postgres-host, --postgres-port  the PostgreSQL server, over PGHOST and PGPORT
+--valkey     the Valkey the console keeps sessions in, over BMO_INSTALL_VALKEY
+--dry-run    read everything and change nothing: every step that would act says planned
+
+Exit codes: 0 done, 1 a step failed, 2 refused, 3 waiting for input."""
+
+[numbers]
+# How often, in seconds, the wait for a deployment's unit asks whether it still runs. A pace, never a bound.
+deployment_poll_seconds = 5
+# The bytes of a token made where its declaration names none.
+token_bytes = 32
+# The characters of what a command said that a line quotes.
+quoted_chars = 400
+
+[next]
+rerun = "bmo install --preset {preset}"
+set = "bmo install --set {name}"
+choose = "bmo install --preset {preset} --with <one of {units}>"
+read_declaration = "read {file} and its repository's documents"
+install_program = "install {program}, then run the install again"
+mend_and_rerun = "mend what the detail names, then run the install again"
+journal = "journalctl --user -u {unit}"
+open = "open {address}"
+
+[detail]
+preset = "preset {preset}: to install {units}; to check out besides {clone}"
+choice_open = "choose {what}: one of {units}"
+clone_made = "{name} cloned from {url} into {path}"
+clone_stands = "{name} stands at {path}"
+clone_planned = "{name} would be cloned from {url} into {path}"
+clone_failed = "{name} could not be cloned from {url}: {said}"
+declaration = "{name} declares {settings} settings, {lines} lines, {inputs} inputs and {after} after-steps"
+declaration_missing = "{name} holds no install.toml, so what installing it needs is not declared"
+declaration_unread = "{name}'s install.toml does not read: {why}"
+testbed_unread = "{name}'s testbed.toml does not read: {why}"
+name_twice = "{name} is declared by both {first} and {second}"
+need_stands = "{program} stands"
+need_missing = "{program} is missing: {what}"
+port_free = "{name} listens on {number}"
+port_kept = "{name} listens on {number}, as the install chose before"
+port_moved = "{name} listens on {number}, since {declared} is taken on this machine"
+place_outside = "{name} stands at {place}, outside the install prefix {prefix} and the data root"
+port_taken = "no port from {number} on is free for {name} on this machine"
+input_given = "{name} is given"
+input_default = "{name} stands at its default"
+input_optional = "{name} is optional and not given"
+input_needed = "{what}"
+token_made = "{name} made at {file}"
+token_stands = "{name} stands at {file}"
+token_planned = "{name} would be made at {file}"
+token_failed = "{name} could not be made at {file}: {said}"
+database_made = "database {name} made"
+database_stands = "database {name} stands"
+database_planned = "database {name} would be made"
+database_failed = "database {name} could not be made: {said}"
+settings_written = "{file} written"
+settings_stands = "{file} stands and is left as it is"
+settings_planned = "{file} would be written"
+settings_waiting = "{file} waits for {waiting}, which a service makes once it runs"
+settings_unknown = "{file} names {name}, which no declaration of the install declares"
+settings_failed = "{file} could not be written: {said}"
+line_added = "{key} added to {file}"
+line_stands = "{file} holds {key} already"
+line_planned = "{key} would be added to {file}"
+line_waiting = "{key} for {file} waits for {waiting}"
+features_written = "{file} written: {features}"
+features_stands = "{file} stands as the install has it"
+features_planned = "{file} would be written: {features}"
+deploy_none = "{name} deploys nothing"
+deploy_live = "{name} is live already"
+deploy_done = "{name}'s first release is live at {commit}"
+deploy_planned = "{name}'s first release would be put live at the head of {main}"
+deploy_failed = "{name}'s first release did not go live: {said}"
+restart_done = "{name} restarted, since {file} changed after its first release"
+restart_failed = "{name} did not restart after {file} changed: {said}"
+restart_none = "{file} changed after {name}'s first release, and {name} declares no restart"
+after_done = "{id} already stands"
+after_ran = "{id} ran"
+after_planned = "{id} would run"
+after_failed = "{id} failed with {code}: {said}"
+health_ok = "{name} answers its health"
+health_none = "{name} declares no health"
+health_failed = "{name}'s health did not answer: {said}"
+verify_ok = "{id}: {what}"
+verify_failed = "{id} failed: {what}; it said {said}"
+verify_planned = "{id} would run: {what}"
+status = "{name}: {checkout}, {deployed}"
+status_cloned = "checked out"
+status_absent = "not checked out"
+status_deployed = "live"
+status_undeployed = "not deployed"
+done = "repositories installed: {count}"
+done_planned = "a dry run: repositories that would be installed: {count}"
+done_waiting = "the install waits for answers a person gives: {count}"
+done_failed = "the install stopped at {step}"
+set = "{name} kept at {file}"
+
+[refusal]
+no_index = "no index checkout was found: name it with --index or BMO_INDEX, or run the verb in a checkout holding {file}"
+presets_unread = "{file} does not read: {why}"
+no_preset = "no preset named {preset} stands in {file}; the presets are {presets}"
+no_repository = "{name} is not a repository of {file}"
+extends_ring = "preset {preset} extends a preset that extends it"
+choice_many = "--with names more than one repository of the choice of {what}: {units}"
+no_install = "the data root {dir} holds no install to add to or read; install a preset first"
+no_input = "no install declaration in {index} declares an input named {name}"
+set_failed = "{file} could not be written: {said}"
+words = "one of --preset, --add, --status or --set is named"

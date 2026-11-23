@@ -23,6 +23,7 @@ bmo-testbed-backup = { path = "../backup" }
 bmo-testbed-client = { path = "../client" }
 bmo-testbed-core = { path = "../core" }
 bmo-testbed-deploy = { path = "../deploy" }
+bmo-testbed-install = { path = "../install" }
 bmo-testbed-plugin = { path = "../plugin" }
 bmo-testbed-record = { path = "../record" }
 bmo-testbed-service = { path = "../service" }

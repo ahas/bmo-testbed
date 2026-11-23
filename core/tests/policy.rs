@@ -10,6 +10,7 @@ use bmo_testbed_core::policy::deploy::DEPLOY;
 use bmo_testbed_core::policy::deploy_steps::{DEPLOY_STEPS, DeployStep};
 use bmo_testbed_core::policy::deploy_tool::DEPLOY_TOOL;
 use bmo_testbed_core::policy::events::EVENTS;
+use bmo_testbed_core::policy::install::INSTALL;
 use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::policy::main_branch::MAIN_BRANCH;
 use bmo_testbed_core::policy::plugin::PLUGIN;
@@ -47,6 +48,7 @@ fn every_part_reads_as_its_type() {
   LazyLock::force(&PLUGIN);
   LazyLock::force(&MAIN_BRANCH);
   LazyLock::force(&VERSIONS);
+  LazyLock::force(&INSTALL);
 
   assert_eq!(ANSWER.ceiling_chars, 30_000);
   assert_eq!(SUITE.lines.mark, "suite:");

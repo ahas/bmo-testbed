@@ -14,6 +14,7 @@ pub mod deploy;
 pub mod deploy_steps;
 pub mod deploy_tool;
 pub mod events;
+pub mod install;
 pub mod lanes;
 pub mod main_branch;
 pub mod plugin;
