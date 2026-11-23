@@ -1,6 +1,7 @@
 use bmo_testbed_core::turn::{Env, FRONT_VARIABLE};
 use bmo_testbed_suite::crates::{
-  DEPLOYMENT_MARK_NAME, cargo_environment, checkout_target_dir, mark_deployment_checkout, set_by_cargo,
+  DEPLOYMENT_MARK_NAME, cargo_environment, checkout_target_dir, deployment_built_at,
+  mark_deployment_checkout, set_by_cargo,
 };
 
 #[test]
@@ -43,16 +44,29 @@ fn a_checkout_builds_in_a_directory_of_its_own_so_builds_of_two_checkouts_take_n
 }
 
 // "the Cargo verb, run for a command standing at the front ..., writes a mark into the checkout's directory under
-// the build root": a deployment's caller marks it, any other caller leaves it unmarked
+// the build root at every such command, so the mark's time says when a deployment last built there": a
+// deployment's caller marks it, any other caller leaves it unmarked, and a mark made long ago is made afresh
 #[test]
-fn a_build_standing_at_the_front_marks_its_checkout_s_directory_as_a_deployment_s() {
+fn a_build_standing_at_the_front_marks_its_checkout_s_directory_as_a_deployment_s_afresh() {
   let dir = tempfile::tempdir().unwrap();
   let working = dir.path().join("working");
   let deployment = dir.path().join("deployment");
+  let front = Env::from([(FRONT_VARIABLE.to_owned(), "1".to_owned())]);
+  let long_ago = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_000_000);
 
   mark_deployment_checkout(&working, &Env::new());
-  mark_deployment_checkout(&deployment, &Env::from([(FRONT_VARIABLE.to_owned(), "1".to_owned())]));
+  mark_deployment_checkout(&deployment, &front);
 
   assert!(!working.join(DEPLOYMENT_MARK_NAME).exists());
-  assert!(deployment.join(DEPLOYMENT_MARK_NAME).exists());
+  assert_eq!(deployment_built_at(&working), None);
+
+  std::fs::File::open(deployment.join(DEPLOYMENT_MARK_NAME))
+    .unwrap()
+    .set_modified(long_ago)
+    .unwrap();
+  assert_eq!(deployment_built_at(&deployment), Some(1_000_000_000));
+
+  mark_deployment_checkout(&deployment, &front);
+
+  assert!(deployment_built_at(&deployment).is_some_and(|at| at > 1_000_000_000));
 }

@@ -177,7 +177,6 @@ pub struct PruneWords {
   pub by_build_lock: String,
   pub by_deployment: String,
   pub by_program: String,
-  pub by_deployment_checkout: String,
   pub build_heading: String,
   pub build_counts: String,
   pub build_not_removed: String,

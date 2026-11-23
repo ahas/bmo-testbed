@@ -1,12 +1,12 @@
 //! The shared Cargo build directory's ceiling and its enforcement (docs/deploy.md, 「The Cargo build
 //! directory」). The ceiling is one size the environment sets, never more than the filesystem holding the
 //! directory leaves it with the policy's room free. Once the prune's rules have run, the enforcement removes
-//! rebuildable output by three rules in order, each taking its own by least recent read, until the directory
-//! holds no more than its ceiling: never in a profile directory whose build lock the prune does not hold, never a
-//! lock file, never what a running deployment builds in or a running program was built in, and never anything in a
-//! deployment's checkout; then, where the machine sets the deployments' checkouts a ceiling of their own, by two
-//! more rules until they hold no more than it. What it may remove is read before the prune removes anything, so a
-//! dry run orders it as the run does.
+//! rebuildable output by five rules in order, each taking its own by least recent read, until the directory
+//! holds no more than its ceiling: the shared units and the working checkouts' first, the deployments' checkouts'
+//! last, never in a profile directory whose build lock the prune does not hold, never a lock file, and never what a
+//! running deployment builds in or a running program was built in. Where the machine sets the deployments'
+//! checkouts a ceiling of their own, the last two rules also run on until they hold no more than it. What it may
+//! remove is read before the prune removes anything, so a dry run orders it as the run does.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::os::unix::fs::MetadataExt as _;
@@ -17,10 +17,10 @@ use bmo_testbed_core::policy::verbs::VERBS;
 use bmo_testbed_core::queue::HeldLock;
 use bmo_testbed_core::turn::{Env, leading_number};
 
-use crate::crates::{checkout_target_name, is_deployment_checkout};
+use crate::crates::is_deployment_checkout;
 use crate::prune::{
-  entries_of, is_cargo_lock, is_dir, name_of, processes, profile_dirs, remove_path, unit_entries, used_at,
-  walk_where,
+  checkout_dirs, entries_of, is_cargo_lock, is_dir, name_of, processes, profile_dirs, remove_path,
+  unit_entries, used_at, walk_where,
 };
 
 /// The variable naming the ceiling, in gigabytes of a thousand million bytes.
@@ -37,13 +37,13 @@ pub struct CeilingSetting {
   pub bytes: u64,
   /// Whether the environment named it.
   pub named: bool,
-  /// The deployments' checkouts' own ceiling, in bytes; none, the default, keeps them whole.
+  /// The deployments' checkouts' own ceiling, in bytes; none, the default, leaves them to the directory's.
   pub deployments: Option<u64>,
 }
 
 impl CeilingSetting {
   /// The setting `env` names: a positive whole number of gigabytes, anything else meaning the policy's; and the
-  /// deployments' own the same way, the policy's none keeping them whole.
+  /// deployments' own the same way, the policy's none leaving them to the directory's.
   pub fn of(env: &Env) -> Self {
     let gigabytes = |variable: &str| {
       env
@@ -108,8 +108,6 @@ pub enum HeldBy {
   Deployment,
   /// A program built in the directory is running.
   Program,
-  /// The directory is a deployment's checkout, which the prune never removes from.
-  DeploymentCheckout,
 }
 
 impl HeldBy {
@@ -119,7 +117,6 @@ impl HeldBy {
       Self::BuildLock => "build-lock",
       Self::Deployment => "deployment",
       Self::Program => "program",
-      Self::DeploymentCheckout => "deployment-checkout",
     }
   }
 
@@ -131,7 +128,6 @@ impl HeldBy {
       Self::BuildLock => &said.by_build_lock,
       Self::Deployment => &said.by_deployment,
       Self::Program => &said.by_program,
-      Self::DeploymentCheckout => &said.by_deployment_checkout,
     }
   }
 }
@@ -165,18 +161,14 @@ impl Keepers {
     Self {
       locked: locks
         .map(|locks| locks.iter().filter_map(|lock| lock.path().parent().map(Path::to_path_buf)).collect()),
-      deploying: deploying
-        .iter()
-        .map(|checkout| root.join("checkouts").join(checkout_target_name(checkout)))
-        .collect(),
+      deploying: checkout_dirs(root, deploying),
       running: processes().into_iter().filter_map(|process| process.exe).collect(),
     }
   }
 
-  // What keeps a removal: a profile directory it stands in whose lock the prune does not hold, the running
-  // deployment or program its directory answers for, or, unless the deployments' own ceiling is the one being
-  // held, a deployment's checkout it stands in.
-  fn holder(&self, candidate: &Candidate, deployments_own: bool) -> Option<(PathBuf, HeldBy)> {
+  // What keeps a removal: a profile directory it stands in whose lock the prune does not hold, or the running
+  // deployment or program its directory answers for.
+  fn holder(&self, candidate: &Candidate) -> Option<(PathBuf, HeldBy)> {
     if let Some(locked) = &self.locked
       && let Some(profile) = candidate.profiles.iter().find(|profile| !locked.contains(*profile))
     {
@@ -187,10 +179,6 @@ impl Keepers {
 
     if self.deploying.contains(dir) {
       return Some((dir.clone(), HeldBy::Deployment));
-    }
-
-    if !deployments_own && is_deployment_checkout(dir) {
-      return Some((dir.clone(), HeldBy::DeploymentCheckout));
     }
 
     self
@@ -353,18 +341,19 @@ impl Rule for SharedUnits {
   }
 }
 
-// The live checkouts' directories a rule takes from: every one, or the deployments' checkouts alone.
-fn checkouts_of(root: &Path, gone: &Gone, deployments: bool) -> Vec<PathBuf> {
+// The live checkouts' directories a rule takes from at `now`: the working checkouts', or the deployments'.
+fn checkouts_of(root: &Path, gone: &Gone, deployments: bool, now: i64) -> Vec<PathBuf> {
   live_checkouts(root, gone)
     .into_iter()
-    .filter(|dir| !deployments || is_deployment_checkout(dir))
+    .filter(|dir| is_deployment_checkout(dir, now) == deployments)
     .collect()
 }
 
 /// A unit in a profile directory of a live checkout's directory, its dependencies as much as its own crates: of
-/// every one, or of the deployments' checkouts alone for their own ceiling.
+/// the working checkouts, or of the deployments' checkouts, judged at `now`.
 struct CheckoutUnits {
   deployments: bool,
+  now: i64,
 }
 
 impl Rule for CheckoutUnits {
@@ -377,7 +366,7 @@ impl Rule for CheckoutUnits {
   }
 
   fn candidates(&self, root: &Path, gone: &Gone) -> Vec<Candidate> {
-    checkouts_of(root, gone, self.deployments)
+    checkouts_of(root, gone, self.deployments, self.now)
       .iter()
       .flat_map(|checkout| {
         profile_dirs(checkout)
@@ -388,10 +377,11 @@ impl Rule for CheckoutUnits {
   }
 }
 
-/// Whatever else a live checkout's profile directories hold but Cargo's lock files, a checkout at a time: of every
-/// one, or of the deployments' checkouts alone for their own ceiling.
+/// Whatever else a live checkout's profile directories hold but Cargo's lock files, a checkout at a time: of the
+/// working checkouts, or of the deployments' checkouts, judged at `now`.
 struct CheckoutDirectories {
   deployments: bool,
+  now: i64,
 }
 
 impl Rule for CheckoutDirectories {
@@ -400,7 +390,7 @@ impl Rule for CheckoutDirectories {
   }
 
   fn candidates(&self, root: &Path, gone: &Gone) -> Vec<Candidate> {
-    checkouts_of(root, gone, self.deployments)
+    checkouts_of(root, gone, self.deployments, self.now)
       .into_iter()
       .filter_map(|checkout| {
         let profiles = profile_dirs(&checkout);
@@ -452,12 +442,12 @@ impl Enforcement {
   }
 }
 
-// One rule's removals in its order of least recent read, each with the name its line gives it, and whether it holds
-// the deployments' checkouts to their own ceiling rather than the directory to its.
+// One rule's removals in its order of least recent read, each with the name its line gives it, and whether it takes
+// from the deployments' checkouts, which their own ceiling may hold as well as the directory's.
 struct RulePlan {
   words: &'static str,
   candidates: Vec<(Candidate, Option<String>)>,
-  deployments_own: bool,
+  deployments: bool,
 }
 
 /// What the enforcement of the ceiling may remove from a build directory, read before anything is removed, so
@@ -472,43 +462,64 @@ pub struct CeilingPlan {
 
 impl CeilingPlan {
   /// What the enforcement may remove from the build directory at `root`, which holds `held` once the prune's
-  /// rules have removed every path `gone` names: each rule's removals in its order of least recent read, the
-  /// directory's rules read only where `held` is over `ceiling` and the deployments' own only where they hold more
-  /// than the ceiling the machine sets them.
-  pub fn of(root: &Path, gone: &[&Path], ceiling: Ceiling, held: u64) -> Self {
+  /// rules have removed every path `gone` names, its deployments' checkouts judged at `now`: each rule's removals
+  /// in its order of least recent read, the working checkouts' rules read only where `held` is over `ceiling` and
+  /// the deployments' checkouts' also where they hold more than the ceiling the machine sets them.
+  pub fn of(root: &Path, gone: &[&Path], ceiling: Ceiling, held: u64, now: i64) -> Self {
     let gone = Gone(gone.iter().map(|path| path.to_path_buf()).collect());
-    let mut rules: Vec<(&dyn Rule, bool)> = Vec::new();
-    let mut deployments_held = 0;
-
-    if held > ceiling.bytes {
-      rules.extend([
-        (&SharedUnits as &dyn Rule, false),
-        (&CheckoutUnits { deployments: false }, false),
-        (&CheckoutDirectories { deployments: false }, false),
-      ]);
-    }
-
-    if let Some(limit) = ceiling.setting.deployments {
-      deployments_held = checkouts_of(root, &gone, true)
+    let over = held > ceiling.bytes;
+    let deployments_held = ceiling.setting.deployments.map_or(0, |_| {
+      checkouts_of(root, &gone, true, now)
         .iter()
         .map(|dir| {
           let seen = Candidate::of(profile_dirs(dir), Vec::new(), dir, &gone);
 
           seen.files.iter().map(|file| file.bytes).sum::<u64>()
         })
-        .sum();
+        .sum()
+    });
+    let deployments_over = ceiling.setting.deployments.is_some_and(|limit| deployments_held > limit);
+    let mut rules: Vec<(Box<dyn Rule>, bool)> = Vec::new();
 
-      if deployments_held > limit {
-        rules.extend([
-          (&CheckoutUnits { deployments: true } as &dyn Rule, true),
-          (&CheckoutDirectories { deployments: true }, true),
-        ]);
-      }
+    if over {
+      rules.push((Box::new(SharedUnits), false));
+      rules.push((
+        Box::new(CheckoutUnits {
+          deployments: false,
+          now,
+        }),
+        false,
+      ));
+      rules.push((
+        Box::new(CheckoutDirectories {
+          deployments: false,
+          now,
+        }),
+        false,
+      ));
+    }
+
+    // The deployments' checkouts come last, for the directory's ceiling as much as for their own.
+    if over || deployments_over {
+      rules.push((
+        Box::new(CheckoutUnits {
+          deployments: true,
+          now,
+        }),
+        true,
+      ));
+      rules.push((
+        Box::new(CheckoutDirectories {
+          deployments: true,
+          now,
+        }),
+        true,
+      ));
     }
 
     let rules = rules
       .into_iter()
-      .map(|(rule, deployments_own)| {
+      .map(|(rule, deployments)| {
         let mut candidates = rule.candidates(root, &gone);
 
         candidates
@@ -524,7 +535,7 @@ impl CeilingPlan {
               (candidate, name)
             })
             .collect(),
-          deployments_own,
+          deployments,
         }
       })
       .collect();
@@ -539,8 +550,9 @@ impl CeilingPlan {
 
   /// The ceiling enforced: while the directory holds more than its ceiling, each rule's removals made in its
   /// order, the next rule beginning only where the one before leaves it over, passing over a removal `keepers`
-  /// keep or that frees nothing; then the deployments' own two rules the same way while they hold more than their
-  /// own ceiling. Where `remove` does not hold, nothing is removed and what would be is counted.
+  /// keep or that frees nothing; the deployments' checkouts' two rules last, running on while those hold more than
+  /// their own ceiling where the machine sets one. Where `remove` does not hold, nothing is removed and what would
+  /// be is counted.
   pub fn enforce(self, keepers: &Keepers, remove: bool) -> Enforcement {
     let ceiling = self.ceiling;
     let mut links = Links::default();
@@ -550,14 +562,12 @@ impl CeilingPlan {
     let mut holders: BTreeMap<(PathBuf, HeldBy), HashMap<(u64, u64), u64>> = BTreeMap::new();
 
     for rule in self.rules {
-      // A rule of the directory's ceiling stops once the directory is under it, one of the deployments' own once
-      // they are under theirs.
+      // A rule stops once the directory is under its ceiling, one of the deployments' checkouts' once they are
+      // under their own as well.
       let under = |after: u64, deployments_after: u64| {
-        if rule.deployments_own {
-          ceiling.setting.deployments.is_none_or(|limit| deployments_after <= limit)
-        } else {
-          after <= ceiling.bytes
-        }
+        after <= ceiling.bytes
+          && (!rule.deployments
+            || ceiling.setting.deployments.is_none_or(|limit| deployments_after <= limit))
       };
 
       if under(after, deployments_after) {
@@ -576,7 +586,7 @@ impl CeilingPlan {
           break;
         }
 
-        if let Some(held_by) = keepers.holder(&candidate, rule.deployments_own) {
+        if let Some(held_by) = keepers.holder(&candidate) {
           let held = holders.entry(held_by).or_default();
 
           held.extend(candidate.files.iter().map(|file| (file.inode, file.bytes)));
@@ -598,7 +608,7 @@ impl CeilingPlan {
         links.take(&candidate.files);
         after = after.saturating_sub(frees);
 
-        if rule.deployments_own {
+        if rule.deployments {
           deployments_after = deployments_after.saturating_sub(frees);
         }
 

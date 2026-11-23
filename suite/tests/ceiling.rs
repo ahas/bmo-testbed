@@ -174,7 +174,7 @@ fn ceiling_of(bytes: u64, deployments: Option<u64>, held: u64) -> Ceiling {
 }
 
 // The enforcement over the build directory with nothing gone before it and the prune holding every lock, the
-// deployments' checkouts kept whole.
+// deployments' checkouts given no ceiling of their own.
 fn enforce(root: &Path, ceiling: u64, keepers: &Keepers, remove: bool) -> Enforcement {
   enforce_with(root, ceiling, None, keepers, remove)
 }
@@ -189,7 +189,7 @@ fn enforce_with(
 ) -> Enforcement {
   let held = directory_bytes(root);
 
-  CeilingPlan::of(root, &[], ceiling_of(ceiling, deployments, held), held).enforce(keepers, remove)
+  CeilingPlan::of(root, &[], ceiling_of(ceiling, deployments, held), held, now()).enforce(keepers, remove)
 }
 
 // "Its ceiling is a setting of the machine: BMO_CARGO_TARGET_CEILING_GB ... and 200 where the environment names
@@ -284,14 +284,16 @@ fn over_its_ceiling_shared_units_go_first_then_checkouts_units_each_by_least_rec
 // "live checkouts' target directories: whatever else a live checkout's profile directories hold"; "It never
 // removes Cargo's lock files and their queues ... and nothing outside the profile directories"
 #[test]
-fn last_the_checkouts_profile_directories_are_emptied_oldest_first_but_their_locks_and_records_stay() {
+fn then_the_checkouts_profile_directories_are_emptied_oldest_first_but_their_locks_and_records_stay() {
   let scratch = tempfile::tempdir().unwrap();
   let built = built(scratch.path());
   let enforcement = enforce(&built.root, 0, &Keepers::default(), true);
-  let last = &enforcement.rules[2];
+  let third = &enforcement.rules[2];
 
-  assert_eq!(enforcement.rules.len(), 3);
-  assert_eq!(last.names, ["a-0123456789ab", "b-0123456789ab"]);
+  // No checkout here is a deployment's, so the deployments' two rules after it find nothing to take.
+  assert_eq!(enforcement.rules.len(), 5);
+  assert!(enforcement.rules[3..].iter().all(|rule| rule.count == 0));
+  assert_eq!(third.names, ["a-0123456789ab", "b-0123456789ab"]);
   assert!(none_exist(&built.a_unit) && none_exist(&built.b_unit));
   assert!(none_exist(&built.a_rest) && none_exist(&built.b_rest));
   assert!(all_exist(&built.locks) && all_exist(&built.records));
@@ -323,34 +325,52 @@ fn checkout_of(
   (first..first + count).map(|index| unit(&dir.join("debug"), index, at)).collect()
 }
 
-// "neither the prune's rules nor its ceiling remove anything in it"; "the enforcement removes every working
-// checkout's rebuildable output and stops there, the directory standing over its ceiling ... which its line and
-// its event name": a deployment's checkout read long before the working one keeps every unit, and is named as
-// what holds the rest
+// "It bounds the deployments' checkouts too, and takes from them last ... What a running deployment builds in
+// stays whatever the directory holds, and its line and its event name it": a deployment's checkout read long
+// before the working one goes only after it, and a running deployment's, read longest ago, stays and holds the rest
 #[test]
-fn a_deployment_s_checkout_keeps_everything_and_holds_the_rest_once_the_working_ones_are_emptied() {
+fn the_deployments_checkouts_go_after_the_working_ones_and_a_running_one_stays_named_as_held() {
   let scratch = tempfile::tempdir().unwrap();
   let root = scratch.path().join("build");
   let now = now();
-  let deployment = checkout_of(&root, "deployed-0123456789ab", 1, 2, now - 50 * HOUR_MS, true);
-  let working = checkout_of(&root, "working-0123456789ab", 3, 2, now - HOUR_MS, false);
-  let enforcement = enforce(&root, 0, &Keepers::default(), true);
+  let running_dir = root.join("checkouts").join("deploying-0123456789ab");
+  let running = checkout_of(&root, "deploying-0123456789ab", 1, 1, now - 60 * HOUR_MS, true);
+  let deployment = checkout_of(&root, "deployed-0123456789ab", 2, 2, now - 50 * HOUR_MS, true);
+  let working = checkout_of(&root, "working-0123456789ab", 4, 2, now - HOUR_MS, false);
+  let keepers = Keepers {
+    deploying: [running_dir.clone()].into(),
+    ..Keepers::default()
+  };
+  let enforcement = enforce(&root, 0, &keepers, true);
+  let said = &VERBS.prune;
 
   assert!(enforcement.over(), "{enforcement:?}");
-  assert!(deployment.iter().all(|one| all_exist(one)));
-  assert!(working.iter().all(|one| none_exist(one)));
+  assert!(working.iter().chain(&deployment).all(|one| none_exist(one)));
+  assert!(all_exist(&running[0]));
+  assert_eq!(
+    enforcement.rules.iter().map(|rule| rule.words).collect::<Vec<_>>(),
+    [
+      said.shared_units.as_str(),
+      said.checkout_units.as_str(),
+      said.checkout_dirs.as_str(),
+      said.deployment_units.as_str(),
+      said.deployment_dirs.as_str(),
+    ]
+  );
+  assert_eq!(enforcement.rules[1].count, 2);
+  assert_eq!(enforcement.rules[3].count, 2);
   assert_eq!(
     enforcement
       .holders
       .iter()
       .map(|holder| (holder.path.clone(), holder.by))
       .collect::<Vec<_>>(),
-    [(root.join("checkouts").join("deployed-0123456789ab"), HeldBy::DeploymentCheckout)]
+    [(running_dir, HeldBy::Deployment)]
   );
 }
 
-// "BMO_CARGO_TARGET_DEPLOYMENT_CEILING_GB ... Where it names no positive whole number, the default, the
-// deployments' checkouts are kept whole"
+// "BMO_CARGO_TARGET_DEPLOYMENT_CEILING_GB ... the prune policy's where the environment names no positive whole
+// number. The policy's is 0, which sets none"
 #[test]
 fn the_deployments_ceiling_is_named_in_gigabytes_and_none_where_nothing_positive_is_named() {
   let named = |given: &str| {

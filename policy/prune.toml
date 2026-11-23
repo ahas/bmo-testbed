@@ -18,8 +18,9 @@ incremental_hours = 3
 # hours: a build that failed leaves such units, and its harness mends it and builds again within that.
 own_grace_hours = 12
 
-# How long a deployment's build tree keeps its target directory after the last deployment was laid down, in
-# days (docs/deploy.md, 「The releases」).
+# How long a deployment's build tree keeps its target directory after the last deployment was laid down, and a
+# checkout's directory under the build root stays a deployment's checkout after a deployment last built there,
+# in days (docs/deploy.md, 「The releases」, 「The Cargo build directory」).
 deploy_build_days = 3
 
 # The build directory's ceiling where `BMO_CARGO_TARGET_CEILING_GB` names none, in gigabytes of a thousand
@@ -33,8 +34,8 @@ ceiling_gigabytes = 200
 ceiling_room_gigabytes = 50
 
 # The deployments' checkouts' own ceiling where `BMO_CARGO_TARGET_DEPLOYMENT_CEILING_GB` names none, in gigabytes
-# of a thousand million bytes; 0 sets none, which keeps them whole, since whatever a prune takes from a
-# deployment's checkout its next deployment compiles again from cold.
+# of a thousand million bytes; 0 sets none, which leaves them to the build directory's ceiling alone, since
+# whatever a prune takes from a deployment's checkout its next deployment compiles again from cold.
 deployment_ceiling_gigabytes = 0
 
 

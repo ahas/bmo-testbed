@@ -18,7 +18,9 @@ use bmo_testbed_core::queue::{HeldLock, LockWait, Rank, now_ms, take_lock};
 use bmo_testbed_core::release_target::is_release_target;
 use serde_json::Value;
 
-use crate::crates::{CHECKOUT_RECORD_NAME, checkout_target_name, is_deployment_checkout, resolved};
+use crate::crates::{
+  CHECKOUT_RECORD_NAME, checkout_target_name, deployment_built_at, is_deployment_checkout, resolved,
+};
 use crate::superseded::{
   BUILT_UNITS_NAME, CARGO_BUILD_LOCK_NAME, UNIT_DIRS, read_record, recorded_units, unit_hash,
 };
@@ -446,17 +448,35 @@ struct Standing {
   live_inodes: HashSet<u64>,
   // The units live checkouts' records name, as `<profile>:<hash>`.
   recorded: HashSet<String>,
-  // When a unit of a checkout's own crates no record names must have been built before, to go.
-  own_cutoff: i64,
 }
 
-fn plan_profile(
-  profile: &Path,
-  cutoff: i64,
-  incremental_cutoff: i64,
-  standing: &Standing,
-  plan: &mut PrunePlan,
-) {
+/// The times a profile directory's output must be older than to go, its spans counted back from one moment.
+#[derive(Clone, Copy)]
+struct Cutoffs {
+  // When a unit or a loose file must have been last read.
+  unread: i64,
+  // When incremental state must have been last changed.
+  incremental: i64,
+  // When a unit of a checkout's own crates no record names must have been built.
+  own: i64,
+}
+
+impl Cutoffs {
+  fn back_from(at: i64, older_than_ms: i64, incremental_older_than_ms: i64) -> Self {
+    Self {
+      unread: at - older_than_ms,
+      incremental: at - incremental_older_than_ms,
+      own: at - PRUNE.own_grace_hours * HOUR_MS,
+    }
+  }
+}
+
+fn plan_profile(profile: &Path, cutoffs: Cutoffs, standing: &Standing, plan: &mut PrunePlan) {
+  let Cutoffs {
+    unread: cutoff,
+    incremental: incremental_cutoff,
+    own: own_cutoff,
+  } = cutoffs;
   let mut units: BTreeMap<String, UnitFiles> = BTreeMap::new();
   let mut fingerprints: HashMap<String, UnitFingerprint> = HashMap::new();
   let mut packages: HashMap<String, String> = HashMap::new();
@@ -492,10 +512,10 @@ fn plan_profile(
     }
   }
 
-  // No profile of the workspace keeps incremental state, so what stands there is an older commit's build or one
-  // run by hand: a session and its lock go once nothing in them changed for the incremental span, judged by
+  // A build reads a crate's incremental state again only while the crate keeps its hash and its session is the
+  // latest: a session and its lock go once nothing in them changed for the incremental span, judged by
   // modification time alone, since a session is written once and only read after; a crate whose every session
-  // goes goes whole.
+  // goes goes whole, as the directory of a hash a moved lock left behind does.
   for krate in entries_of(&profile.join("incremental")) {
     if !is_dir(&krate) {
       continue;
@@ -526,7 +546,7 @@ fn plan_profile(
     }
 
     if packages.get(hash).is_some_and(|package| own.contains(package)) {
-      named(hash) || unit.built >= standing.own_cutoff
+      named(hash) || unit.built >= own_cutoff
     } else {
       unit.used >= cutoff
     }
@@ -584,8 +604,16 @@ fn plan_profile(
 }
 
 /// What a prune of the build directory at `root` removes, leaving alone what was read or changed within
-/// `older_than_ms` of `now`, and incremental state changed within `incremental_older_than_ms`.
-pub fn plan_prune(root: &Path, older_than_ms: i64, now: i64, incremental_older_than_ms: i64) -> PrunePlan {
+/// `older_than_ms` of `now`, and incremental state changed within `incremental_older_than_ms`; a deployment's
+/// checkout counted back from its last deployment's build instead, and nothing of the directories the running
+/// deployments' checkouts and build trees `deploying` build in.
+pub fn plan_prune(
+  root: &Path,
+  older_than_ms: i64,
+  now: i64,
+  incremental_older_than_ms: i64,
+  deploying: &[PathBuf],
+) -> PrunePlan {
   let cutoff = now - older_than_ms;
   let mut plan = PrunePlan::default();
   let mut live_inodes = HashSet::new();
@@ -623,25 +651,32 @@ pub fn plan_prune(root: &Path, older_than_ms: i64, now: i64, incremental_older_t
   let standing = Standing {
     live_inodes,
     recorded,
-    own_cutoff: now - PRUNE.own_grace_hours * HOUR_MS,
   };
+  let cutoffs = |at: i64| Cutoffs::back_from(at, older_than_ms, incremental_older_than_ms);
 
   for profile in profile_dirs(root) {
-    plan_profile(&profile, cutoff, now - incremental_older_than_ms, &standing, &mut plan);
+    plan_profile(&profile, cutoffs(now), &standing, &mut plan);
   }
 
   // A live checkout builds in its own directory, so its files' standing there keeps none of them: what stays is
-  // what its record names and what a build read within the spans, as at the build root. Nothing goes from a
-  // deployment's checkout, which a deployment would build again from cold.
+  // what its record names and what a build read within the spans, as at the build root. A deployment's checkout
+  // is read only when its repository deploys, so its spans count back from its last deployment's build, which
+  // keeps what that build stood on however long ago it ran; a running deployment's directory loses nothing.
   let within = Standing {
     live_inodes: HashSet::new(),
     recorded: standing.recorded.clone(),
-    own_cutoff: standing.own_cutoff,
   };
+  let deploying = checkout_dirs(root, deploying);
 
-  for checkout in live_checkouts.iter().filter(|checkout| !is_deployment_checkout(checkout)) {
+  for checkout in live_checkouts.iter().filter(|checkout| !deploying.contains(*checkout)) {
+    let counted_from = if is_deployment_checkout(checkout, now) {
+      deployment_built_at(checkout).map_or(now, |at| at.min(now))
+    } else {
+      now
+    };
+
     for profile in profile_dirs(checkout) {
-      plan_profile(&profile, cutoff, now - incremental_older_than_ms, &within, &mut plan);
+      plan_profile(&profile, cutoffs(counted_from), &within, &mut plan);
     }
   }
 
@@ -649,6 +684,14 @@ pub fn plan_prune(root: &Path, older_than_ms: i64, now: i64, incremental_older_t
   // away whole, unless a build is working in it or it is a deployment's release build's own.
   plan.stray_targets.extend(stray_targets(root));
   plan.measured()
+}
+
+/// The directories under the build root at `root` that the checkouts at `checkouts` build in.
+pub(crate) fn checkout_dirs(root: &Path, checkouts: &[PathBuf]) -> HashSet<PathBuf> {
+  checkouts
+    .iter()
+    .map(|checkout| root.join("checkouts").join(checkout_target_name(checkout)))
+    .collect()
 }
 
 /// The lock files Cargo keeps in a profile directory and their queues, which a clear and the ceiling's

@@ -279,32 +279,35 @@ fn prune_shared(
     };
   }
 
-  let plan_now = || {
+  let building = deployments.building();
+  let plan_at = |now: i64| {
     if args.all {
       plan_clear(root)
     } else {
-      plan_prune(root, (days * DAY_MS as f64) as i64, now_ms(), (hours * HOUR_MS as f64) as i64)
+      plan_prune(root, (days * DAY_MS as f64) as i64, now, (hours * HOUR_MS as f64) as i64, &building)
     }
   };
 
-  // What the enforcement of the ceiling may remove once the plan is carried out, read before anything is: the
-  // directory's holding then is what it holds now less what the plan takes, and its filesystem's room the same.
-  let ceiling_plan = |planned: &PrunePlan| {
+  // What the enforcement of the ceiling may remove once the plan made at `now` is carried out, read before anything
+  // is: the directory's holding then is what it holds now less what the plan takes, and its filesystem's room the
+  // same.
+  let ceiling_plan = |planned: &PrunePlan, now: i64| {
     let held = directory_bytes(root).saturating_sub(planned.bytes);
     let free = disk_free_bytes(root).saturating_add(planned.bytes);
 
-    CeilingPlan::of(root, &planned.paths(), Ceiling::of(setting, held, free), held)
+    CeilingPlan::of(root, &planned.paths(), Ceiling::of(setting, held, free), held, now)
   };
 
   if args.dry_run {
-    let planned = plan_now();
+    let now = now_ms();
+    let planned = plan_at(now);
     let mut out = said_of(root, args, days, hours, &planned, &said.dry);
 
     // The enforcement plans as though it held every build lock the prune would wait for.
     if !args.all {
-      let keepers = Keepers::read(root, None, &deployments.building());
+      let keepers = Keepers::read(root, None, &building);
 
-      out.extend(said_of_ceiling(&ceiling_plan(&planned).enforce(&keepers, false), &said.dry));
+      out.extend(said_of_ceiling(&ceiling_plan(&planned, now).enforce(&keepers, false), &said.dry));
     }
 
     return Said {
@@ -317,13 +320,14 @@ fn prune_shared(
     eprintln!("{}", fill_marks(&said.locked, &[("profile", &profile.to_string_lossy())]));
   });
   let before = disk_free_bytes(root);
-  let planned = plan_now();
-  let enforcing = (!args.all).then(|| ceiling_plan(&planned));
+  let now = now_ms();
+  let planned = plan_at(now);
+  let enforcing = (!args.all).then(|| ceiling_plan(&planned, now));
 
   planned.apply();
 
-  let enforcement = enforcing
-    .map(|enforcing| enforcing.enforce(&Keepers::read(root, Some(&locks), &deployments.building()), true));
+  let enforcement =
+    enforcing.map(|enforcing| enforcing.enforce(&Keepers::read(root, Some(&locks), &building), true));
 
   drop(locks);
 

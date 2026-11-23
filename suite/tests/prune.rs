@@ -52,13 +52,20 @@ fn date_as(path: &Path, accessed: i64, modified: i64) {
   File::open(path).unwrap().set_times(times).unwrap();
 }
 
-// The prune over the build directory at `root` with the policy's spans, as the verb runs it unless told others.
+// The prune over the build directory at `root` with the policy's spans and no deployment running, as the verb runs
+// it unless told others.
 fn plan_prune(root: &Path, now: i64) -> PrunePlan {
+  plan_prune_deploying(root, now, &[])
+}
+
+// The same while deployments build in the checkouts `deploying`.
+fn plan_prune_deploying(root: &Path, now: i64, deploying: &[PathBuf]) -> PrunePlan {
   bmo_testbed_suite::prune::plan_prune(
     root,
     PRUNE.older_than_days * DAY_MS,
     now,
     PRUNE.incremental_hours * HOUR_MS,
+    deploying,
   )
 }
 
@@ -586,34 +593,56 @@ fn the_locks_are_cargos_own_build_lock_in_each_profile_directory_held_until_let_
   assert!(told.contains(&root.join("debug")), "{told:?}");
 }
 
-// "incremental state unchanged for three hours ... in each live checkout's directory but a deployment's
-// checkout's"; "nor anything in a deployment's checkout's directory": two live checkouts with incremental state
-// past the span, and only the working one's goes
+// "a deployment's checkout's spans counted back from its last deployment's build"; "Once the mark is older than
+// the span ... the directory is a working checkout's again"; "Nothing goes from the directory a running deployment
+// builds in": four live checkouts each holding a crate's incremental state written an hour before a deployment last
+// built there and another's written past the incremental span before it, the working one with no mark at all
 #[test]
-fn a_deployment_s_checkout_keeps_its_stale_incremental_state_while_a_working_one_s_goes() {
+fn a_deployment_s_checkout_counts_its_spans_back_from_its_last_build_and_a_running_one_loses_nothing() {
   let scratch = tempfile::tempdir().unwrap();
   let now = now();
-  let past_span = now - (PRUNE.incremental_hours + 1) * HOUR_MS;
   let root = scratch.path().join("build");
-  let session = |checkout: &Path| {
-    let dir = root.join("checkouts").join(checkout_target_name(checkout));
-    let crate_state = dir.join("debug/incremental/own_crate-0abc");
+  let lately = now - 2 * DAY_MS;
+  let long_ago = now - PRUNE.deploy_build_days * DAY_MS - HOUR_MS;
+  let checkout = |name: &str, built: Option<i64>| {
+    let checkout = scratch.path().join(name);
+    let dir = root.join("checkouts").join(checkout_target_name(&checkout));
+    let at = built.unwrap_or(lately);
+    let state = |name: &str, changed: i64| {
+      let crate_state = dir.join("debug/incremental").join(name);
 
-    std::fs::create_dir_all(checkout).unwrap();
+      write(&crate_state.join("s-session/dep-graph.bin"), "", changed);
+      date_dirs(&crate_state, changed);
+      crate_state
+    };
+
+    std::fs::create_dir_all(&checkout).unwrap();
     std::fs::create_dir_all(dir.join("debug/.fingerprint")).unwrap();
     write(&dir.join(CHECKOUT_RECORD_NAME), &checkout.to_string_lossy(), now);
-    write(&crate_state.join("s-old/dep-graph.bin"), "", past_span);
-    date_dirs(&crate_state, past_span);
-    (dir, crate_state)
+
+    if let Some(built) = built {
+      write(&dir.join(DEPLOYMENT_MARK_NAME), "", built);
+    }
+
+    let current = state("own_crate-0current", at - HOUR_MS);
+    let moved = state("own_crate-0moved", at - (PRUNE.incremental_hours + 1) * HOUR_MS);
+
+    (checkout, current, moved)
   };
-  let (_, working) = session(&scratch.path().join("working"));
-  let (deployment_dir, deployment) = session(&scratch.path().join("deployed"));
+  let (_, working_current, working_moved) = checkout("working", None);
+  let (_, kept_current, kept_moved) = checkout("deployed-lately", Some(lately));
+  let (_, released_current, released_moved) = checkout("deployed-long-ago", Some(long_ago));
+  let (running, running_current, running_moved) = checkout("deploying", Some(lately));
+  let plan = plan_prune_deploying(&root, now, &[running]);
+  let goes = |path: &PathBuf| plan.incremental.contains(path);
 
-  write(&deployment_dir.join(DEPLOYMENT_MARK_NAME), "", now);
-
-  let plan = plan_prune(&root, now);
-
-  assert!(plan.incremental.iter().any(|path| path.starts_with(&working)), "{:?}", plan.incremental);
-  assert!(!plan.paths().iter().any(|path| path.starts_with(&deployment_dir)), "{:?}", plan.paths());
-  assert!(deployment.exists());
+  assert!(goes(&working_current) && goes(&working_moved), "{:?}", plan.incremental);
+  assert!(!goes(&kept_current) && goes(&kept_moved), "{:?}", plan.incremental);
+  assert!(goes(&released_current) && goes(&released_moved), "{:?}", plan.incremental);
+  assert!(
+    !plan
+      .paths()
+      .iter()
+      .any(|path| path.starts_with(&running_current) || path.starts_with(&running_moved))
+  );
 }

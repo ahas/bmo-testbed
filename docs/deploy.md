@@ -1122,12 +1122,13 @@ flowchart TD
   - from a profile directory standing at the build root itself, a unit of a checkout's own crates no live
     checkout's record names, built more than half a day ago, and any other unit no build has read for
     two days, or `--older-than` days, never a day or less;
-  - from a profile directory of a live checkout's own directory, but a deployment's checkout's (below),
-    the same: a unit of the checkout's own crates no record names, built more than half a day ago, and any
-    other unit no build has read for the span. A build leaves a unit behind each time a crate of the
-    checkout changes, so without this a checkout's directory grows with every build it has made;
+  - from a profile directory of a live checkout's own directory the same: a unit of the checkout's own
+    crates no record names, built more than half a day ago, and any other unit no build has read for the
+    span, a deployment's checkout's spans counted back from its last deployment's build (below). A build
+    leaves a unit behind each time a crate of the checkout changes, so without this a checkout's directory
+    grows with every build it has made;
   - incremental state unchanged for three hours, or `--incremental-older-than` hours, at the build root
-    and in each live checkout's directory but a deployment's checkout's;
+    and in each live checkout's directory, a deployment's checkout's counted back the same way;
   - the directory of a checkout that no longer exists, a deployment's bench removed among them, since no
     deployment builds there again;
   - the whole `target/` directory of a live checkout, a stray a build typed outside the Cargo verb
@@ -1137,16 +1138,27 @@ flowchart TD
   - never a unit a live checkout's current outputs or record stand on, nor anything Cargo does not name
     by a unit hash, nor a `target/` a Cargo process is working in or that is the build root
     itself, nor a deployment's build tree's `target/`, which carries the release build's mark and goes only
-    by its own span (「The releases」), nor anything in a deployment's checkout's directory.
-- **A deployment's checkout keeps its builds, unless the machine sets them a ceiling of their own.** A
-  deployment's checkout is one a
-  deployment has built in: the Cargo verb, run for a command standing at the front (`docs/testbed.md`,
-  「The front of the line」), writes a mark into the checkout's directory under the build root, and the
-  mark stays. A deployment's bench on the placed machine and the checkout a deployment checks here carry
-  it, and so does the release build there, which builds in its bench's directory. Such a directory is read
-  only when its repository deploys, so whatever a prune took from it a deployment would compile again from
-  cold. By default neither the prune's rules nor its ceiling remove anything in it; the deployments'
-  ceiling below is the one setting that does. `--all`, run by hand, still clears it.
+    by its own span (「The releases」), nor anything in the directory a running deployment builds in.
+- **A deployment's checkout keeps what its last deployment built there.** A deployment's checkout is one a
+  deployment has built in within the span a deployment's build tree keeps its target directory, three days
+  (「The releases」): the Cargo verb, run for a command standing at the front (`docs/testbed.md`, 「The
+  front of the line」), writes a mark into the checkout's directory under the build root at every such
+  command, so the mark's time says when a deployment last built there. A deployment's bench on the placed
+  machine and the checkout a deployment checks here carry it, and so does the release build there, which
+  builds in its bench's directory. Such a directory is read only when its repository deploys, so the
+  prune's rules judge it by their spans counted back from the mark's time instead of from now: what the
+  last deployment's builds read or wrote stays however long ago that was, and what only earlier
+  deployments' builds left goes once the span before the mark has passed it.
+  - **A lock that moved leaves a crate's whole incremental directory behind.** A crate's incremental state
+    stands in a directory named by the crate's hash, which changes whenever a package the crate is built
+    from moves, a sibling's path package among them; Cargo opens a new directory for the new hash and
+    never removes the old one. The counted spans take those, since no build after the change writes them.
+  - **Once the mark is older than the span,** no deployment has built there since, and the directory is a
+    working checkout's again, its spans counted from now; a deployment building there marks it again.
+  - **Nothing goes from the directory a running deployment builds in,** by the rules or the ceiling: the
+    source checkout or the build tree of a deployment of the machine's registry whose progress record holds
+    a run without an ending whose process is alive.
+  - `--all`, run by hand, still clears it.
 - **The same prune takes the deployments' build trees' target directories** that have outlived their
   span (「The releases」). It finds the deploy roots through the machine's registry of checkouts
   (`docs/suite.md`, 「The dependents of a major change」): each checkout's declaration names its deploy
@@ -1180,36 +1192,34 @@ flowchart TD
     and a checkout is made for each piece of open work, so a ceiling that grows with the checkouts grows
     with the work and bounds nothing on a disk of fixed size. The order of removal below keeps the
     checkouts in use and takes the idle ones first.
-  - **It bounds what the prune may remove beside the deployments' checkouts.** The deployments'
-    checkouts count toward what the directory holds, but nothing of theirs goes for it, so the room the
-    shared units and the working checkouts build in is the ceiling less what the deployments' checkouts
-    hold. Where those alone hold more than the ceiling, the enforcement removes every working checkout's
-    rebuildable output and stops there, the directory standing over its ceiling by what the deployments'
-    checkouts hold past it, which its line and its event name (below). Only the deployments' own ceiling,
-    where the machine sets one, takes from them.
+  - **It bounds the deployments' checkouts too, and takes from them last.** They count toward what the
+    directory holds like any other checkout, and the enforcement takes from them only once the shared units
+    and every working checkout's rebuildable output have gone and the directory is still over, so a
+    deployment compiles from cold only where the directory cannot otherwise stand under its ceiling. What
+    a running deployment builds in stays whatever the directory holds, and its line and its event name it
+    (below).
   - **It is never more than the filesystem can hold.** The ceiling is the lesser of the setting and what
     the filesystem holding the build root leaves the directory with the prune policy's room, 50 GB, still
     free: what the directory holds and the free space this account may write, less that room. On a disk
     whose free space is below that room for other reasons, the ceiling falls with it, to nothing at worst,
     and the prune then takes everything it may.
-- **The deployments' checkouts have a ceiling of their own only where the machine sets one:**
+- **The deployments' checkouts may have a tighter ceiling of their own where the machine sets one:**
   `BMO_CARGO_TARGET_DEPLOYMENT_CEILING_GB`, in gigabytes of a thousand million bytes, read as the ceiling
   is, and the prune policy's where the environment names no positive whole number. The policy's is 0, which
-  sets none: by default the deployments' checkouts are kept whole.
-  Where it names one, the enforcement holds them to it once the directory's own ceiling is dealt with:
-  while they hold more, it removes their rebuildable output by two rules of their own, after the three
-  below and in the same order of least recent read, each removal freeing what it frees from both:
-  4. **deployments' checkouts' own units:** as rule 2, for the deployments' checkouts;
-  5. **deployments' checkouts' target directories:** as rule 3, for the same.
+  sets none: by default the deployments' checkouts answer to the directory's ceiling alone. Where it names
+  one, the enforcement holds them to it as well: rules 4 and 5 below run on while they hold more, even with
+  the directory under its own ceiling, each removal freeing what it frees from both.
 - **The ceiling is enforced as the prune's last stage.** Once the rules above have removed what they
   remove, while the directory still holds more than its ceiling, the prune removes build output Cargo
-  rebuilds when it is next wanted, by three rules in this order, each taking its own in order of least
+  rebuilds when it is next wanted, by five rules in this order, each taking its own in order of least
   recent read and the next rule beginning only where the one before it leaves the directory over:
   1. **shared units:** a unit in a profile directory standing at the build root itself;
-  2. **live checkouts' own units:** a unit in a profile directory of a live checkout's directory, its
-     dependencies as much as its own crates, across every live checkout at once;
-  3. **live checkouts' target directories:** whatever else a live checkout's profile directories hold,
-     its incremental state and the binaries Cargo handed back among it, a checkout's directory at a time.
+  2. **live checkouts' own units:** a unit in a profile directory of a working checkout's directory, its
+     dependencies as much as its own crates, across every working checkout at once;
+  3. **live checkouts' target directories:** whatever else a working checkout's profile directories hold,
+     its incremental state and the binaries Cargo handed back among it, a checkout's directory at a time;
+  4. **deployments' checkouts' own units:** as rule 2, for the deployments' checkouts;
+  5. **deployments' checkouts' target directories:** as rule 3, for the same.
   - **It stops as soon as the directory holds no more than its ceiling,** counting the disk each removal
     frees: a file's allocated size once its last link goes.
   - **Read is measured by the one reading the rules above judge "unread" by:** the newest access or
@@ -1223,15 +1233,15 @@ flowchart TD
     lock the prune does not hold, such as one a build began in after the prune took its locks; the
     directory of the checkout or the build tree of a deployment of the machine's registry that is running,
     whose release build's own target directory stands outside the build root under its own span;
-    the directory of a checkout a program built there is running from; anything in a deployment's
-    checkout's directory; and nothing outside the profile directories, so each live checkout keeps its
-    directory, its records and its locks.
+    the directory of a checkout a program built there is running from; and nothing outside the profile
+    directories, so each live checkout keeps its directory, its records and its locks.
   - **The placed machine keeps no record of the deployments whose builds it carries;** there a
-    deployment's release build is kept as its bench's directory is, by the deployment's mark.
+    deployment's release build is kept as its bench's directory is, by the deployment's mark and the
+    build locks its builds hold, and between two of its builds the ceiling may take from it last.
 - **A timed prune that leaves the directory over its ceiling** sends a `cargo-target-over-ceiling` event,
   each run it stays over, naming what holds what is left: a profile directory a build's lock holds, a
-  checkout's directory a running deployment builds in, one a program built there runs from, or a
-  deployment's checkout, each with about how much disk it holds. A dry run sends nothing.
+  checkout's directory a running deployment builds in, or one a program built there runs from, each with
+  about how much disk it holds. A dry run sends nothing.
 - **The placed machine runs the same prune on the same timer** over its own build root, the settings'
   `cargo_target` (`docs/boundary.md`, 「The placed machine」), where its builds, its benches' checks and
   the deployments' release builds land. `bmo-cargo-prune.timer`, its service and `bmo-upkeep.slice`
