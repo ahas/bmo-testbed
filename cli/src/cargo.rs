@@ -30,8 +30,9 @@ use bmo_testbed_suite::ceiling::{Ceiling, CeilingPlan, CeilingSetting, Enforceme
 use bmo_testbed_suite::crates::cargo_target_root;
 use bmo_testbed_suite::dependents::{read_registry, registry_path};
 use bmo_testbed_suite::prune::{
-  DAY_MS, HOUR_MS, MINUTE_MS, PRUNED_MARK_NAME, PrunePlan, TRIMMED_MARK_NAME, directory_bytes,
-  disk_free_bytes, keeps_access_times, mark, marked_at, plan_clear, plan_prune, take_prune_locks,
+  DAY_MS, HOUR_MS, MINUTE_MS, OVER_SENT_MARK_NAME, PRUNED_MARK_NAME, PrunePlan, TRIMMED_MARK_NAME,
+  directory_bytes, disk_free_bytes, keeps_access_times, mark, marked_at, plan_clear, plan_prune,
+  take_prune_locks,
 };
 use serde_json::json;
 
@@ -219,10 +220,37 @@ fn said_of_ceiling(enforcement: &Enforcement, verb: &str) -> Vec<String> {
   lines
 }
 
+// The mark of the last `cargo-target-over-ceiling` taken from the directory at `root`, found within its ceiling,
+// so the event goes out at once the next time it stands over.
+fn forget_over(root: &Path) {
+  // A mark that stands nowhere is the state this asks for.
+  let _ = std::fs::remove_file(root.join(OVER_SENT_MARK_NAME));
+}
+
+// Whether `cargo-target-over-ceiling` goes out at `now` for the directory at `root` left over its ceiling: where no
+// mark says it went out since the directory last stood within its ceiling, or the mark is the prune policy's due
+// span old or more. The mark is written where it goes out.
+fn over_due(root: &Path, now: i64) -> bool {
+  let marked = root.join(OVER_SENT_MARK_NAME);
+
+  if marked_at(&marked).is_some_and(|sent| now - sent < PRUNE.due_hours * HOUR_MS) {
+    return false;
+  }
+
+  mark(&marked);
+  true
+}
+
 // `cargo-target-over-ceiling` sent to the hook where the enforcement left the directory at `root` over its
-// ceiling, naming what holds what is left.
+// ceiling and the event is due, naming what holds what is left; its mark taken away where the enforcement left
+// the directory within its ceiling.
 fn send_over(root: &Path, enforcement: &Enforcement, hook: &Hook) {
   if !enforcement.over() {
+    forget_over(root);
+    return;
+  }
+
+  if !over_due(root, now_ms()) {
     return;
   }
 
@@ -673,6 +701,8 @@ pub fn prune(args: &PruneArgs) -> u8 {
   let ceiling = CeilingSetting::of(&env);
 
   if let Some(line) = not_due(args, &root, ceiling, now_ms()) {
+    forget_over(&root);
+
     return Said {
       out: vec![line],
       ..Said::default()

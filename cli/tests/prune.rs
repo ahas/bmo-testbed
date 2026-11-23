@@ -3,11 +3,12 @@
 //! found through the registry of checkouts, whose target directories go once they outlived their span; and the
 //! filesystem holding the build directory trimmed after a prune that is not a dry run where its trim is due; a
 //! timed prune run only where one is due; and its ceiling enforced, what a running deployment builds in kept and
-//! named in the event a directory left over sends.
+//! named in the event a directory left over sends, which goes out as it comes over and again only each due span.
 
 use std::collections::HashMap;
 use std::ffi::OsString;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime};
 
 use bmo_testbed_cli::cargo::{Deployments, not_due, prune_in};
 use bmo_testbed_cli::words::{PruneArgs, Verb, read};
@@ -17,10 +18,10 @@ use bmo_testbed_core::policy::prune::PRUNE;
 use bmo_testbed_core::policy::verbs::VERBS;
 use bmo_testbed_core::queue::now_ms;
 use bmo_testbed_core::release_target::mark_release_target;
-use bmo_testbed_deploy::progress::{DeployStart, Outcome, begin_deploy};
+use bmo_testbed_deploy::progress::{DeployRun, DeployStart, Outcome, begin_deploy};
 use bmo_testbed_suite::ceiling::CeilingSetting;
 use bmo_testbed_suite::crates::{CHECKOUT_RECORD_NAME, checkout_target_name};
-use bmo_testbed_suite::prune::HOUR_MS;
+use bmo_testbed_suite::prune::{HOUR_MS, OVER_SENT_MARK_NAME};
 use bmo_testbed_suite::superseded::CARGO_BUILD_LOCK_NAME;
 use serde_json::Value;
 
@@ -397,24 +398,15 @@ fn built_unit(profile: &Path, name: &str) -> std::path::PathBuf {
   library
 }
 
-// "the directory of the checkout or the build tree of a deployment of the machine's registry that is running" is
-// never removed; "A timed prune that leaves the directory over its ceiling sends a cargo-target-over-ceiling
-// event ... naming what holds what is left"; "A dry run sends nothing."
-#[test]
-fn over_its_ceiling_a_prune_keeps_what_a_running_deployment_builds_in_and_names_it_in_the_event() {
-  let dir = tempfile::tempdir().unwrap();
-  let root = dir.path();
-  let target = root.join("target");
-  let env = HashMap::new();
-
+// A deployment of the registry of checkouts under `root`, running while it builds in its checkout's directory under
+// the build root at `target`: the deployments, that directory, the unit built there, and the run, held while it lives.
+fn running_deployment(root: &Path, target: &Path) -> (Deployments, PathBuf, PathBuf, DeployRun) {
   deployed_checkout(root, "app", &chrono::Utc::now().to_rfc3339());
   write(&root.join("checkouts.toml"), "checkouts = [\"app\"]\n");
 
-  let deployments = Deployments::of_registry(&root.join("checkouts.toml"), &env);
-  let shared = built_unit(&target.join("debug"), "shared");
+  let deployments = Deployments::of_registry(&root.join("checkouts.toml"), &HashMap::new());
   let building = target.join("checkouts").join(checkout_target_name(&root.join("app")));
   let deploying = built_unit(&building.join("debug"), "app");
-  let hook = recording_hook(root);
   let running = DeployStart {
     unit: None,
     pid: i64::from(std::process::id()),
@@ -424,7 +416,22 @@ fn over_its_ceiling_a_prune_keeps_what_a_running_deployment_builds_in_and_names_
     repository: None,
     record: None,
   };
-  let _run = begin_deploy(&deployments.places[0].progress, &running, || 0);
+  let run = begin_deploy(&deployments.places[0].progress, &running, || 0);
+
+  (deployments, building, deploying, run)
+}
+
+// "the directory of the checkout or the build tree of a deployment of the machine's registry that is running" is
+// never removed; "A timed prune that leaves the directory over its ceiling sends a cargo-target-over-ceiling
+// event ... naming what holds what is left"; "A dry run sends nothing."
+#[test]
+fn over_its_ceiling_a_prune_keeps_what_a_running_deployment_builds_in_and_names_it_in_the_event() {
+  let dir = tempfile::tempdir().unwrap();
+  let root = dir.path();
+  let target = root.join("target");
+  let shared = built_unit(&target.join("debug"), "shared");
+  let (deployments, building, deploying, _run) = running_deployment(root, &target);
+  let hook = recording_hook(root);
   let dry = prune_in(&prune_words(&["--dry-run"]).unwrap(), &target, &deployments, &[], no_room(), &hook);
 
   assert_eq!(dry.code, 0);
@@ -452,6 +459,46 @@ fn over_its_ceiling_a_prune_keeps_what_a_running_deployment_builds_in_and_names_
   assert_eq!(payload["detail"]["holders"][0]["path"], building.to_string_lossy().as_ref());
   assert_eq!(payload["detail"]["holders"][0]["by"], "deployment");
   assert!(payload["detail"]["holders"][0]["bytes"].as_u64().unwrap() > 0);
+}
+
+// "It goes out once each time the directory comes to stand over, and again each due span it stays over ... A prune
+// that leaves the directory within its ceiling ... take[s] the mark away, so the next time the directory stands over
+// the event goes out at once."
+#[test]
+fn the_over_ceiling_event_goes_out_as_the_directory_comes_over_and_again_only_each_due_span() {
+  let dir = tempfile::tempdir().unwrap();
+  let root = dir.path();
+  let target = root.join("target");
+  let (deployments, ..) = running_deployment(root, &target);
+  let hook = recording_hook(root);
+  let prune = |ceiling| prune_in(&prune_words(&[]).unwrap(), &target, &deployments, &[], ceiling, &hook);
+  let sent = || std::fs::read_to_string(root.join("events")).unwrap_or_default().lines().count();
+  let marked = target.join(OVER_SENT_MARK_NAME);
+
+  prune(no_room());
+  prune(no_room());
+
+  assert_eq!(sent(), 1, "a second prune within the span sends nothing");
+
+  let span_ago = SystemTime::now() - Duration::from_millis((PRUNE.due_hours * HOUR_MS) as u64);
+
+  std::fs::File::options()
+    .write(true)
+    .open(&marked)
+    .unwrap()
+    .set_modified(span_ago)
+    .unwrap();
+  prune(no_room());
+
+  assert_eq!(sent(), 2, "its span passed");
+
+  prune(policy_ceiling());
+
+  assert!(!marked.exists(), "within its ceiling");
+
+  prune(no_room());
+
+  assert_eq!(sent(), 3, "over again");
 }
 
 // A checkout at `checkout` the Cargo verb has built in under the build root at `target`, as its record there names

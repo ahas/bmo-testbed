@@ -39,6 +39,10 @@ pub const PRUNED_MARK_NAME: &str = ".prune-ended";
 /// The mark at the build root whose modification time says when the last trim of its filesystem began.
 pub const TRIMMED_MARK_NAME: &str = ".trim-began";
 
+/// The mark at the build root whose modification time says when `cargo-target-over-ceiling` last went out for it,
+/// standing only while the directory stays over its ceiling.
+pub const OVER_SENT_MARK_NAME: &str = ".over-ceiling-sent";
+
 /// When the mark at `path` was last written, in milliseconds since the epoch; none where it stands nowhere.
 pub fn marked_at(path: &Path) -> Option<i64> {
   let modified = std::fs::metadata(path).ok()?.modified().ok()?;

@@ -414,9 +414,9 @@ bmo-testbed prune --all
   releases」). Exits 2 for a unit span of a day or less or a disk that keeps no access times.
 - Then, while the directory holds more than its ceiling, `BMO_CARGO_TARGET_CEILING_GB` held to what its
   filesystem can hold, removes the rebuildable output its rules name by least recent read until it holds no
-  more, and sends `cargo-target-over-ceiling` where it stays over (`docs/deploy.md`, 「The Cargo build
-  directory」); a dry run says what it would remove and how far over the directory stands, and `--all`
-  enforces nothing.
+  more, and sends `cargo-target-over-ceiling` where it stays over, once as it comes to stand over and again
+  only every two hours it stays over (`docs/deploy.md`, 「The Cargo build directory」); a dry run says what
+  it would remove and how far over the directory stands, and `--all` enforces nothing.
 - Then, where its last trim began two hours ago or more, none is recorded or it ran with `--all`, trims the
   filesystem holding the build directory with the prune policy's trim command, so the blocks it freed go back
   to the drive a virtual disk stands on, and sends `disk-trim-failed` where the trim does not run
@@ -777,7 +777,7 @@ keep (`docs/deploy.md`, 「The unit links」).
 | `data-backup-failed` | `verb` (`snapshot`, `media` or `prune`), `failures`, each with `step`, `target` and `said` |
 | `restore-drill-failed` | `verb` (`drill`), `failures`, each with `step`, `target` and `said`, a count mismatch naming its database, table and both counts |
   | `releases-pinned` | `releases`, each with `release` and `processes`, each with `pid`, `unit` and `command` |
-  | `cargo-target-over-ceiling` | `bytes` (what the directory holds once the prune's enforcement is done), `ceiling_bytes`, `holders`, each with `path`, `by` (`build-lock` for a profile directory whose build lock a build holds, `deployment` for the directory of a running deployment's checkout or build tree, or `program` for a checkout's directory a program built there runs from) and `bytes`. Sent only where the enforcement could not bring the directory under its ceiling |
+  | `cargo-target-over-ceiling` | `bytes` (what the directory holds once the prune's enforcement is done), `ceiling_bytes`, `holders`, each with `path`, `by` (`build-lock` for a profile directory whose build lock a build holds, `deployment` for the directory of a running deployment's checkout or build tree, or `program` for a checkout's directory a program built there runs from) and `bytes`. Sent only where the enforcement could not bring the directory under its ceiling: once as it comes to stand over, and again only every two hours it stays over |
   | `placed-unreachable` | `machine` (the placed machine's label), `since` (when the outage began, RFC 3339), `command` (the words of the run that told it), `said` (what `ssh` said). Sent once for each outage, by the first run that found the placed machine not answering and passed on (「The placed machine」) |
   | `placed-recovered` | `machine`, `since` (when the outage began). Sent once the placed machine answers again after an outage `placed-unreachable` told, by the one process that finds it so |
   | `placed-release-failed` | `machine`, `command`, `live` (the live testbed release's commit), `far` (the commit the testbed there names, or null), `said` (what bringing it came to). Sent once for each live release, by the first run whose placed machine answers but whose testbed could not be brought to that release; that run and every one after it passes on down the order. A run that finds the testbed there at the live release clears this, so a failure after it is sent again (「The placed machine」) |

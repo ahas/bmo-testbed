@@ -1261,10 +1261,15 @@ flowchart TD
   - **The placed machine keeps no record of the deployments whose builds it carries;** there a
     deployment's release build is kept as its bench's directory is, by the deployment's mark and the
     build locks its builds hold, and between two of its builds the ceiling may take from it last.
-- **A timed prune that leaves the directory over its ceiling** sends a `cargo-target-over-ceiling` event,
-  each run it stays over, naming what holds what is left: a profile directory a build's lock holds, a
-  checkout's directory a running deployment builds in, or one a program built there runs from, each with
-  about how much disk it holds. A dry run sends nothing.
+- **A timed prune that leaves the directory over its ceiling** sends a `cargo-target-over-ceiling` event
+  naming what holds what is left: a profile directory a build's lock holds, a checkout's directory a running
+  deployment builds in, or one a program built there runs from, each with about how much disk it holds. A
+  dry run sends nothing.
+  - **It goes out once each time the directory comes to stand over, and again each due span it stays
+    over,** two hours, not at every run of a timer that reads the directory every five minutes. When it last
+    went out is the modification time of a third mark at the build root, written as it is sent. A prune that
+    leaves the directory within its ceiling, and a timed run that finds it within its ceiling and is not due,
+    take the mark away, so the next time the directory stands over the event goes out at once.
 - **The placed machine runs the same prune on the same timer** over its own build root, the settings'
   `cargo_target` (`docs/boundary.md`, 「The placed machine」), where its builds, its benches' checks and
   the deployments' release builds land. `bmo-cargo-prune.timer`, its service and `bmo-upkeep.slice`
