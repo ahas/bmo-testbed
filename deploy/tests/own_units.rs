@@ -44,7 +44,7 @@ fn the_repositorys_deployment_keeps_the_prune_the_data_backup_and_their_timers()
     .map(|one| glob::Pattern::new(one).unwrap())
     .collect();
   let timers = [
-    ("units/bmo-cargo-prune.timer", "bmo-cargo-prune.service", " prune"),
+    ("units/bmo-cargo-prune.timer", "bmo-cargo-prune.service", " prune --when-due"),
     ("units/bmo-data-backup-drill.timer", "bmo-data-backup-drill.service", " backup drill"),
     ("units/bmo-data-backup-media.timer", "bmo-data-backup-media.service", " backup media"),
     ("units/bmo-data-backup.timer", "bmo-data-backup.service", " backup snapshot"),
