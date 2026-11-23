@@ -127,9 +127,11 @@
   is moved from another commit, every file the new commit does not track, untracked and ignored alike, is
   taken away once it stands at the commit, all but its target directory, which stays warm. A package an
   earlier commit's setup installed, a tree its steps vendored, or a file a removed step wrote therefore
-  never reaches the gate of the next commit, which judges exactly what that commit holds. Put again at
-  the commit it already stands on, the tree keeps what that commit's own setup laid there, so the build
-  after the gate reads the tree the gate set up. A committed tree outside the repository is put at its
+  never reaches the gate of the next commit, which judges exactly what that commit holds. A run that starts
+  on the tree, the gate on this machine, finds the same taken away even where the tree already stands at
+  the commit, so nothing a failed run at that commit wrote reaches it. Put again within that run, at the
+  commit it already stands on, the tree keeps what the run's own setup laid there, so the build after the
+  gate reads the tree the gate set up. A committed tree outside the repository is put at its
   main head the same way.
 - **The build tree's target directory lasts three days past the last deployment.** The prune (「The Cargo
   build directory」) removes it once the deployment record was written more than three days ago and no

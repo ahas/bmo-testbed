@@ -84,6 +84,9 @@ pub struct BuildTree<'a> {
   pub head: &'a str,
   /// The runtime data root, which nothing the build tree takes away may hold.
   pub data_root: &'a Path,
+  /// Whether a run starts on the tree, which then holds nothing an earlier run left even at the same commit;
+  /// otherwise the tree put again at its own commit keeps what this run's setup laid.
+  pub fresh: bool,
 }
 
 // Git run through the command runner, in a directory.
@@ -182,8 +185,9 @@ pub fn put_build_tree(build: &BuildTree<'_>, run: CommandRun<'_>) -> Result<(), 
     ));
   }
 
-  // A tree moved from another commit holds that commit's leftovers, which the new one is judged without.
-  if owned && before.as_deref() != Some(build.head) {
+  // A tree moved from another commit holds that commit's leftovers, and one a run starts on holds what an
+  // earlier run at the same commit left: either is judged without them.
+  if owned && (build.fresh || before.as_deref() != Some(build.head)) {
     clean(tree, run)?;
   }
 
@@ -540,6 +544,7 @@ pub fn lay_outside_trees(
         tree: worktree.clone(),
         head: &committed.head,
         data_root: store.data_root,
+        fresh: false,
       },
       run,
     )?;

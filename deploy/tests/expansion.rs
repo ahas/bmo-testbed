@@ -709,6 +709,7 @@ fn tree_at<'a>(
     tree: tree.to_path_buf(),
     head,
     data_root,
+    fresh: false,
   }
 }
 
@@ -787,6 +788,39 @@ fn a_build_tree_moved_to_another_commit_keeps_nothing_the_commit_before_left_but
   assert!(!tree.join("installed").exists(), "an ignored file of the commit before is taken away");
   assert!(tree.join("target/release/app").exists(), "the target directory stays warm");
   assert_eq!(std::fs::read_to_string(tree.join("src/lib.rs")).unwrap(), "two\n");
+}
+
+// "a run that starts on the tree finds nothing an earlier run left, even at the same commit"
+#[test]
+fn a_run_starting_on_the_build_tree_at_its_own_commit_finds_nothing_an_earlier_run_left() {
+  use bmo_testbed_deploy::expansion::put_build_tree;
+
+  let root = tempfile::tempdir().unwrap();
+  let source = root.path().join("source");
+  let tree = root.path().join("deploy-expand");
+  let run = runner();
+
+  init_repo(&source);
+  std::fs::write(source.join(".gitignore"), "/target/\n").unwrap();
+  let one = commit(&source, "one\n");
+
+  put_build_tree(&tree_at(&source, &tree, root.path(), &one), &run).unwrap();
+  std::fs::create_dir_all(tree.join("vendored")).unwrap();
+  std::fs::write(tree.join("vendored/package.json"), "left\n").unwrap();
+  std::fs::create_dir_all(tree.join("target/release")).unwrap();
+  std::fs::write(tree.join("target/release/app"), "warm\n").unwrap();
+
+  let fresh = bmo_testbed_deploy::expansion::BuildTree {
+    fresh: true,
+    ..tree_at(&source, &tree, root.path(), &one)
+  };
+  put_build_tree(&fresh, &run).unwrap();
+
+  assert!(
+    !tree.join("vendored").exists(),
+    "what a failed run at the same commit wrote is taken away"
+  );
+  assert!(tree.join("target/release/app").exists(), "the target directory stays warm");
 }
 
 // "whether a tree is a worktree of the source: the common git directory each names"

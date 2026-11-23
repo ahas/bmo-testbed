@@ -1053,7 +1053,7 @@ impl<'a> Laying<'a> {
 
   // The build tree put at the commit with its outside trees laid at their committed heads, which the gate on
   // this machine and the release build read: its path, and the heads laid beside it.
-  fn put_commit_tree(&self) -> Result<(PathBuf, Vec<String>), String> {
+  fn put_commit_tree(&self, fresh: bool) -> Result<(PathBuf, Vec<String>), String> {
     let places = &self.places;
     let tree = expansion_tree(&places.deploy_dir);
     let run = |line: &[String], cwd: &Path| self.hands.run(line, cwd);
@@ -1064,6 +1064,7 @@ impl<'a> Laying<'a> {
         tree: tree.clone(),
         head: &self.commit,
         data_root: &places.data_root,
+        fresh,
       },
       &run,
     )?;
@@ -1079,7 +1080,7 @@ impl<'a> Laying<'a> {
     let said = &DEPLOY.run;
     let places = &self.places;
     let build = &self.repo.declaration.build;
-    let (tree, _) = self.put_commit_tree()?;
+    let (tree, _) = self.put_commit_tree(false)?;
 
     let profile = &build.cargo_profile;
     let target = build_target(&places.deploy_dir);
@@ -1861,7 +1862,7 @@ async fn laid(
     // build tree put at the commit with its outside trees laid at their committed heads, set up by the steps
     // the commit declares so a fresh tree holds the packages its check needs (docs/deploy.md, 「What the deploy
     // run does, in order」).
-    let tree = run.put_commit_tree().and_then(|(tree, heads)| {
+    let tree = run.put_commit_tree(true).and_then(|(tree, heads)| {
       run.set_up_test_tree(&repo.declaration.test.setup, &tree).map(|()| (tree, heads))
     });
     let (tree, heads) = match tree {
