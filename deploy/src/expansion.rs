@@ -29,9 +29,12 @@ pub fn expansion_tree(deploy_dir: &Path) -> PathBuf {
   beside(deploy_dir, "-expand")
 }
 
+/// The name of the build tree's target directory, which a move to another commit leaves standing.
+const TARGET_DIR: &str = "target";
+
 /// The build tree's target directory, where the release build keeps its output between deployments.
 pub fn build_target(deploy_dir: &Path) -> PathBuf {
-  expansion_tree(deploy_dir).join("target")
+  expansion_tree(deploy_dir).join(TARGET_DIR)
 }
 
 /// Whether a deployment of the deploy root is running: its progress record holds a run with no ending whose
@@ -127,7 +130,8 @@ fn discard_build_tree(tree: &Path, data_root: &Path, run: CommandRun<'_>) -> Res
 }
 
 /// Puts the build tree at the commit, made where it is not there yet, with the submodules the commit pins
-/// brought to their pins, and every file the commit moved made new to the clock a build reads. A tree made
+/// brought to their pins, every file a tree moved from another commit holds beyond the commit's own taken
+/// away but its target directory, and every file the commit moved made new to the clock a build reads. A tree made
 /// from another checkout, or one whose git directory cannot be read, is discharged and made again from the
 /// source, so a checkout the deployment's source has moved away from leaves no stale tree behind. A source
 /// whose own git directory cannot be read says nothing about whose tree it is, so the tree is left as it
@@ -178,11 +182,35 @@ pub fn put_build_tree(build: &BuildTree<'_>, run: CommandRun<'_>) -> Result<(), 
     ));
   }
 
+  // A tree moved from another commit holds that commit's leftovers, which the new one is judged without.
+  if owned && before.as_deref() != Some(build.head) {
+    clean(tree, run)?;
+  }
+
   if let Some(before) = &before.filter(|before| before.as_str() != build.head) {
     refresh(tree, before, build.head, run)?;
   }
 
   bring_submodules(tree, build.data_root, run)
+}
+
+// Every file the tree's commit does not track taken away, untracked and ignored alike, nested repositories
+// with them, all but the target directory the release build keeps warm between deployments.
+fn clean(tree: &Path, run: CommandRun<'_>) -> Result<(), String> {
+  let kept = format!("/{TARGET_DIR}");
+  let cleaned = git(run, &["clean", "-ffdxq", "--exclude", &kept], tree);
+
+  if !cleaned.ok {
+    return Err(fill_shown(
+      &DEPLOY.expansion.failed,
+      &[
+        ("what", &"the files the commit does not hold"),
+        ("said", &first_chars(&cleaned.out, DEPLOY.numbers.quoted_chars)),
+      ],
+    ));
+  }
+
+  Ok(())
 }
 
 // Every path the commit moved in the tree, stamped with the moment the tree was put at it: a build reads a

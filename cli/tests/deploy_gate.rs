@@ -178,6 +178,35 @@ fn the_gate_reads_a_tree_its_declared_setup_has_set_up() {
   assert!(scene.deployed(), "{}", done.err);
 }
 
+// "a commit that changes its own steps is therefore judged ... by the steps it changes them to"; "the checkout's
+// working tree, which may stand at an older commit, declares none of them"
+#[test]
+fn the_gate_runs_the_setup_the_deployed_commit_declares_not_the_checkouts() {
+  // The commit before declares a setup step the next commit no longer carries what it needs for.
+  let scene = Scene::new("[test]\nsetup = [\"test -f vendored.txt\"]\n");
+  let declaration = scene.repo.join("testbed.toml");
+  let before = std::fs::read_to_string(&declaration).unwrap();
+
+  std::fs::write(&declaration, before.replace("[test]\nsetup = [\"test -f vendored.txt\"]\n", PASSING))
+    .unwrap();
+  git(&scene.repo, &["commit", "-q", "-am", "set up without vendoring"]);
+  git(&scene.repo, &["push", "-q", "origin", "HEAD:main"]);
+  let deployed = git(&scene.repo, &["rev-parse", "HEAD"]);
+
+  git(&scene.repo, &["reset", "-q", "--hard", "HEAD~1"]);
+
+  let done = scene.run_with(&["deploy", "--commit", &deployed], &[]);
+
+  assert_eq!(done.code, 0, "{}\n{}", done.out, done.err);
+  assert!(!done.err.contains("vendored.txt"), "the checkout's setup does not run: {}", done.err);
+  assert!(
+    scene.dir.path().join("live/deploy-expand/node_modules/.bin/dep-check").exists(),
+    "the commit's setup ran: {}",
+    done.err
+  );
+  assert!(scene.deployed(), "{}", done.err);
+}
+
 // "a check that genuinely fails still blocks the deployment: nothing goes live"
 #[test]
 fn a_check_that_fails_still_blocks_the_deployment() {

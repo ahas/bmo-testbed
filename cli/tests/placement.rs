@@ -42,6 +42,7 @@ use bmo_testbed_cli::placement::{
   BenchFor, MACHINE_ENV_FILE, MachinePlacement, MachineSettings, MachineState, Ordered, PlacementState,
   ReadyBench, STANDING_VARIABLE, machine_hook, reachable_remote,
 };
+use bmo_testbed_core::declaration::Declaration;
 use bmo_testbed_core::events::Hook;
 use bmo_testbed_core::placement::{
   LOADED_EXIT_CODE, LOADED_VARIABLE, PlaceAsk, PlacedRun, Placement, read_placed,
@@ -2554,6 +2555,7 @@ fn passed_at(gate: &PlacedGate<'_>, dir: &Path) -> bmo_testbed_deploy::deploymen
     since: None,
     suite: false,
     heads: &[],
+    declaration: &Declaration::default(),
     earlier: &none_earlier,
   })
 }

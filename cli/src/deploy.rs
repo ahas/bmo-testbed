@@ -61,11 +61,11 @@ pub struct SuiteGate<'a> {
 
 impl Gate for SuiteGate<'_> {
   fn pass(&self, ask: &GateAsk<'_>) -> GateOutcome {
-    // The gate judges the commit's committed trees, by the checkout's declaration (docs/deploy.md, 「What the
+    // The gate judges the commit's committed trees, by the commit's own declaration (docs/deploy.md, 「What the
     // deploy run does, in order」).
     let repo = Repository {
       root: ask.tree.to_path_buf(),
-      declaration: self.repo.declaration.clone(),
+      declaration: ask.declaration.clone(),
     };
     let footing = GateFooting {
       heads: ask.heads.to_vec(),

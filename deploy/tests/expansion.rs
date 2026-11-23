@@ -748,6 +748,47 @@ fn a_commit_moved_in_the_build_tree_stamps_the_paths_it_changed() {
   assert!(stamped > old, "the file the commit moved stands newer than the build before it");
 }
 
+// "the build tree holds the commit it is moved to and nothing the commit before left ... all but its target
+// directory"; "put again at the commit it already stands on, the tree keeps what that commit's own setup laid"
+#[test]
+fn a_build_tree_moved_to_another_commit_keeps_nothing_the_commit_before_left_but_its_target() {
+  use bmo_testbed_deploy::expansion::put_build_tree;
+
+  let root = tempfile::tempdir().unwrap();
+  let source = root.path().join("source");
+  let tree = root.path().join("deploy-expand");
+  let run = runner();
+
+  init_repo(&source);
+  std::fs::write(source.join(".gitignore"), "/installed/\n/target/\n").unwrap();
+  let one = commit(&source, "one\n");
+  let two = commit(&source, "two\n");
+  let leftovers = ["vendored/package.json", "installed/package/index.js", "target/release/app"];
+  let lay = |paths: &[&str]| {
+    for path in paths {
+      let file = tree.join(path);
+
+      std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+      std::fs::write(&file, "left\n").unwrap();
+    }
+  };
+
+  put_build_tree(&tree_at(&source, &tree, root.path(), &one), &run).unwrap();
+  lay(&leftovers);
+  put_build_tree(&tree_at(&source, &tree, root.path(), &one), &run).unwrap();
+
+  for path in leftovers {
+    assert!(tree.join(path).exists(), "the same commit keeps what its own setup laid: {path}");
+  }
+
+  put_build_tree(&tree_at(&source, &tree, root.path(), &two), &run).unwrap();
+
+  assert!(!tree.join("vendored").exists(), "an untracked file of the commit before is taken away");
+  assert!(!tree.join("installed").exists(), "an ignored file of the commit before is taken away");
+  assert!(tree.join("target/release/app").exists(), "the target directory stays warm");
+  assert_eq!(std::fs::read_to_string(tree.join("src/lib.rs")).unwrap(), "two\n");
+}
+
 // "whether a tree is a worktree of the source: the common git directory each names"
 #[test]
 fn a_tree_belongs_to_the_source_whose_common_git_directory_it_names() {

@@ -7,14 +7,16 @@
   watched, and rolled back where they do not come up. What the repository builds, which services it
   runs and how its health is read are its declaration's (`docs/declaration.md`).
 - **A commit is deployed by its own declaration.** The `testbed.toml` the commit carries, read from the
-  commit itself and never from the checkout's work tree, is the one its deployment runs by: the release's
-  setup and env links, the build, the deploy steps, the units it marks, the backup it takes and its
-  directory, quiet, the health, the console probe and whether the backup upload starts. A commit
+  commit itself and never from the checkout's work tree, is the one its deployment runs by: whether the
+  gate runs, the setup of the tree the gate reads and the gate's static check and suite on this machine,
+  the release's setup and env links, the build, the deploy steps, the units it marks, the backup it takes
+  and its directory, quiet, the health, the console probe and whether the backup upload starts. A commit
+  that changes its own steps is therefore judged and built by the steps it changes them to. A commit
   carrying none runs by every default. The checkout's own declaration answers only what the deployment
   needs before it has picked a commit, and what reads the checkout as it stands: the repository's name,
   where the deployment stands (its deploy root, with the deploy tree, the record, the log and the
-  progress under it, and its data root), the event hook, and the steps of the gate run on this machine,
-  which judges the commit's committed trees (「The releases」). A commit whose declaration does not read, names the repository otherwise, places the
+  progress under it, and its data root), the event hook, and the consumers a major change runs the
+  suites of. A commit whose declaration does not read, names the repository otherwise, places the
   deploy root, the deploy tree or the data root elsewhere, or deploys nothing is refused with nothing
   changed; such a commit is deployed from a checkout brought to it.
 - **The hosted deploy tool** puts a commit live for a session the verb refuses, through the tool host
@@ -121,6 +123,14 @@
   time against what it built before, and the build tree is kept warm between deployments. Every path
   the new commit changed is therefore stamped with the moment the tree is put at it, so a build the
   commit moves is a build that runs; a path the commit removed is none to stamp.
+- **The build tree holds the commit it is moved to and nothing the commit before left.** Where the tree
+  is moved from another commit, every file the new commit does not track, untracked and ignored alike, is
+  taken away once it stands at the commit, all but its target directory, which stays warm. A package an
+  earlier commit's setup installed, a tree its steps vendored, or a file a removed step wrote therefore
+  never reaches the gate of the next commit, which judges exactly what that commit holds. Put again at
+  the commit it already stands on, the tree keeps what that commit's own setup laid there, so the build
+  after the gate reads the tree the gate set up. A committed tree outside the repository is put at its
+  main head the same way.
 - **The build tree's target directory lasts three days past the last deployment.** The prune (「The Cargo
   build directory」) removes it once the deployment record was written more than three days ago and no
   deployment of the deploy root is running: the progress record holds no run without an ending whose
@@ -643,10 +653,14 @@ flowchart TD
      before the static check begins, and never in the checkout, whose working tree may stand anywhere; on
      the placed machine it runs in the bench, made ready the same way. A build tree or a tree outside
      the repository that cannot be laid stops the deployment in the check stage with nothing changed.
-   - **The tree the gate reads is set up first.** The `[test].setup` steps the checkout declares run
+     The build tree holds the commit and nothing another commit's setup left in it (「The releases」).
+   - **The gate goes by the commit's declaration.** Its setup, its static check and its suite are the
+     ones the commit declares, as the bench on the placed machine reads them from the commit too; the
+     checkout's working tree, which may stand at an older commit, declares none of them.
+   - **The tree the gate reads is set up first.** The `[test].setup` steps the commit declares run
      there, in order, before the static check and the suite, so a fresh tree holds the packages its
      check needs (`docs/declaration.md`). A step that fails stops the deployment in the check stage with
-     nothing changed. The gate is left out by `--no-check` or the checkout's `gate = false`, and the setup
+     nothing changed. The gate is left out by `--no-check` or the commit's `gate = false`, and the setup
      with it. A release prepared later is set up again in its own tree, by the steps its commit declares
      (「The releases」).
    - **The gate judges the deployed repository alone.** Its formatting and its lints read the

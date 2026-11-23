@@ -187,6 +187,8 @@ pub struct GateAsk<'a> {
   pub suite: bool,
   /// The head of every repository laid beside `tree`, which a gate on this machine judges with it.
   pub heads: &'a [String],
+  /// The commit's own declaration, whose static check and suite a gate on this machine runs over `tree`.
+  pub declaration: &'a Declaration,
   /// The pass an earlier gate wrote on the footing given, asked once the gate knows its footing; none where
   /// none stands.
   pub earlier: &'a dyn Fn(&GateFooting) -> Option<GatePass>,
@@ -1647,8 +1649,8 @@ async fn laid(
   let release = release_dir(&places.deploy_dir, &commit);
   let tracked = listed(run.git(&["ls-tree", "-r", "-z", "--name-only", &commit], source));
 
-  // The commit's own declaration, which everything the run does with the commit goes by from here on; the
-  // checkout's still answers the gate, which judges the checkout.
+  // The commit's own declaration, which everything the run does with the commit goes by from here on, the gate
+  // among it: the checkout's working tree may stand at an older commit, whose steps the commit no longer holds.
   let declared = match run.declared_at(&tracked) {
     Ok(declared) => declared,
     Err(why) => return run.refused(why),
@@ -1852,15 +1854,15 @@ async fn laid(
   let unit_cgroup = ask.unit.is_some().then(own_cgroup).flatten();
   let mut flaky = Vec::new();
 
-  if ask.no_check || !checkout.declaration.deploy.gate {
+  if ask.no_check || !repo.declaration.deploy.gate {
     run.say(&said.gate_left_out);
   } else {
     // The gate on this machine reads the commit's committed trees, never the checkout's working tree: the
-    // build tree put at the commit with its outside trees laid at their committed heads, set up by the
-    // declared steps so a fresh tree holds the packages its check needs (docs/deploy.md, 「What the deploy run
-    // does, in order」).
+    // build tree put at the commit with its outside trees laid at their committed heads, set up by the steps
+    // the commit declares so a fresh tree holds the packages its check needs (docs/deploy.md, 「What the deploy
+    // run does, in order」).
     let tree = run.put_commit_tree().and_then(|(tree, heads)| {
-      run.set_up_test_tree(&checkout.declaration.test.setup, &tree).map(|()| (tree, heads))
+      run.set_up_test_tree(&repo.declaration.test.setup, &tree).map(|()| (tree, heads))
     });
     let (tree, heads) = match tree {
       Ok(tree) => tree,
@@ -1909,6 +1911,7 @@ async fn laid(
           since: since.as_deref(),
           suite: passed_here.is_none(),
           heads: &heads,
+          declaration: &repo.declaration,
           earlier: &earlier,
         });
 
@@ -1977,6 +1980,7 @@ async fn laid(
       since: run.previous.as_ref().map(|previous| previous.commit.as_str()),
       suite: true,
       heads: &[],
+      declaration: &repo.declaration,
       earlier: &none_earlier,
     });
 
