@@ -13,9 +13,10 @@ use bmo_testbed_cli::words::{PruneArgs, Verb, read};
 use bmo_testbed_core::events::Hook;
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::verbs::VERBS;
-use bmo_testbed_deploy::progress::{DeployStart, begin_deploy};
+use bmo_testbed_core::release_target::mark_release_target;
+use bmo_testbed_deploy::progress::{DeployStart, Outcome, begin_deploy};
 use bmo_testbed_suite::ceiling::CeilingSetting;
-use bmo_testbed_suite::crates::checkout_target_name;
+use bmo_testbed_suite::crates::{CHECKOUT_RECORD_NAME, checkout_target_name};
 use bmo_testbed_suite::superseded::CARGO_BUILD_LOCK_NAME;
 use serde_json::Value;
 
@@ -379,4 +380,66 @@ fn over_its_ceiling_a_prune_keeps_what_a_running_deployment_builds_in_and_names_
   assert_eq!(payload["detail"]["holders"][0]["path"], building.to_string_lossy().as_ref());
   assert_eq!(payload["detail"]["holders"][0]["by"], "deployment");
   assert!(payload["detail"]["holders"][0]["bytes"].as_u64().unwrap() > 0);
+}
+
+// A checkout at `checkout` the Cargo verb has built in under the build root at `target`, as its record there names
+// it, its own `target/` holding the binary given.
+fn recorded_checkout(target: &Path, checkout: &Path, binary: &str) -> std::path::PathBuf {
+  let built = checkout.join("target/release").join(binary);
+
+  write(&built, "built");
+  write(
+    &target.join("checkouts").join(checkout_target_name(checkout)).join(CHECKOUT_RECORD_NAME),
+    &checkout.to_string_lossy(),
+  );
+  built
+}
+
+// "The build tree's target directory carries the release build's mark ... so only the mark keeps that window: from
+// the start of the build until the binaries are placed, and past it until the span above, no rule of the prune
+// takes the target directory"; "nor a deployment's build tree's target/, which carries the release build's mark":
+// a deployment between its release build's end and its binaries' placement, its declared steps running and no
+// Cargo process in the build tree, keeps the binary it is about to place through a prune over its ceiling, while
+// an unmarked checkout's own target/ beside it goes as the stray it is.
+#[test]
+fn over_its_ceiling_a_prune_keeps_the_release_build_a_running_deployment_has_yet_to_place() {
+  let dir = tempfile::tempdir().unwrap();
+  let root = dir.path();
+  let target = root.join("target");
+  let env = HashMap::new();
+
+  deployed_checkout(root, "app", &chrono::Utc::now().to_rfc3339());
+  write(&root.join("checkouts.toml"), "checkouts = [\"app\"]\n");
+
+  let deployments = Deployments::of_registry(&root.join("checkouts.toml"), &env);
+  let build_tree = root.join("app-deployed/deploy-expand");
+  let release_build = recorded_checkout(&target, &build_tree, "app");
+  let stray = recorded_checkout(&target, &root.join("hand"), "hand");
+  let shared = built_unit(&target.join("debug"), "shared");
+  let running = DeployStart {
+    unit: None,
+    pid: i64::from(std::process::id()),
+    commit: None,
+    plan: Vec::new(),
+    now: 0,
+    repository: None,
+    record: None,
+  };
+
+  mark_release_target(&build_tree.join("target")).unwrap();
+
+  let run = begin_deploy(&deployments.places[0].progress, &running, || 0);
+  let pruned = prune_in(&prune_words(&[]).unwrap(), &target, &deployments, &[], no_room(), &no_hook());
+
+  assert_eq!(pruned.code, 0);
+  assert!(!shared.exists() && !stray.exists(), "{:?}", pruned.out);
+  assert_eq!(std::fs::read_to_string(&release_build).unwrap(), "built", "{:?}", pruned.out);
+
+  // Once the deployment has ended the mark still keeps it, the build tree's own span the one that takes it.
+  run.end(Outcome::Live, None);
+
+  let after = prune_in(&prune_words(&[]).unwrap(), &target, &deployments, &[], no_room(), &no_hook());
+
+  assert_eq!(after.code, 0);
+  assert!(release_build.exists(), "{:?}", after.out);
 }

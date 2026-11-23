@@ -24,6 +24,7 @@ use bmo_testbed_core::policy::deploy::DEPLOY;
 use bmo_testbed_core::policy::deploy_steps::DeployStep as OwnStep;
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::queue::HeldLock;
+use bmo_testbed_core::release_target::mark_release_target;
 use bmo_testbed_core::silence::{Output, Silence, Watch};
 use bmo_testbed_core::turn::{
   Env, FRONT_VARIABLE, Lane, NOT_RUN_EXIT_CODE, TurnAsk, harness_pid, process_env, take_turn,
@@ -1081,6 +1082,15 @@ impl<'a> Laying<'a> {
     let profile = &build.cargo_profile;
     let target = build_target(&places.deploy_dir);
     let cargo = tree.join("Cargo.toml").exists();
+
+    // Marked before anything is built into it, so the prune never reads it as a stray `target/` from here until
+    // the binaries are placed, while no Cargo process works in the tree (docs/deploy.md, 「The releases」).
+    mark_release_target(&target).map_err(|why| {
+      fill_marks(
+        &said.target_unmarked,
+        &[("target", &target.to_string_lossy()), ("why", &why.to_string())],
+      )
+    })?;
     let failed_at = |id: &str, ran: &StepRan| {
       fill_marks(
         &said.build_failed,

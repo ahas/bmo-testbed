@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use bmo_testbed_core::policy::prune::PRUNE;
+use bmo_testbed_core::release_target::mark_release_target;
 use bmo_testbed_suite::crates::{CHECKOUT_RECORD_NAME, DEPLOYMENT_MARK_NAME, checkout_target_name};
 use bmo_testbed_suite::prune::{
   CARGO_LOCK_NAME, DAY_MS, HOUR_MS, PrunePlan, UnitFingerprint, plan_clear, read_fingerprint,
@@ -323,6 +324,45 @@ fn a_live_checkouts_own_target_is_a_stray_the_prune_takes_away_whole() {
 
   assert!(!own_target.exists());
   assert!(checkout.exists());
+}
+
+// "nor a deployment's build tree's target/, which carries the release build's mark"; "each asked again just before
+// it is removed": a build tree's target/ marked as its release build's own is no stray, and one the plan found
+// before a deployment marked it is passed over when the plan is carried out.
+#[test]
+fn a_target_marked_as_a_deployment_s_release_build_is_no_stray_even_when_marked_after_the_plan() {
+  let scratch = tempfile::tempdir().unwrap();
+  let now = now();
+  let root = scratch.path().join("shared");
+  let build_tree = scratch.path().join("deploy-expand");
+  let own_target = build_tree.join("target");
+  let binary = own_target.join("release").join("app");
+
+  std::fs::create_dir_all(root.join("debug").join(".fingerprint")).unwrap();
+  std::fs::create_dir_all(&build_tree).unwrap();
+  write(
+    &root
+      .join("checkouts")
+      .join(checkout_target_name(&build_tree))
+      .join(CHECKOUT_RECORD_NAME),
+    &build_tree.to_string_lossy(),
+    now,
+  );
+  write(&binary, "built", now);
+
+  let found = plan_prune(&root, now);
+
+  assert_eq!(found.stray_targets, vec![own_target.clone()]);
+
+  mark_release_target(&own_target).unwrap();
+  found.apply();
+
+  assert!(binary.exists());
+  assert!(plan_prune(&root, now).stray_targets.is_empty());
+
+  plan_clear(&root).apply();
+
+  assert!(binary.exists());
 }
 
 #[test]

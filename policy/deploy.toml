@@ -183,6 +183,8 @@ build_failed = "the build failed at {step} (exit {code}): {said}; every service 
 # A build that failed with no exit code to name: binaries not read back, or a connection that broke.
 build_unfinished = "the build failed at {step}: {said}; every service is untouched"
 metadata_failed = "the Cargo workspace's binaries could not be read: {why}; every service is untouched"
+# The build tree's target directory could not carry the release build's mark, which keeps the prune from it.
+target_unmarked = "the build tree's target directory {target} could not be marked as the release build's own: {why}; every service is untouched"
 place_failed = "the binaries could not be placed into the release: {why}; every service is untouched"
 placed = "placed {count} binaries; changed: {changed}"
 before_failed = "the step {step} before the flip failed (exit {code}): {said}; nothing was flipped"

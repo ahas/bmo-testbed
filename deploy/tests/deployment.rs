@@ -16,6 +16,7 @@ use bmo_testbed_core::declaration::Repository;
 use bmo_testbed_core::events::Hook;
 use bmo_testbed_core::policy::deploy::DEPLOY;
 use bmo_testbed_core::policy::fill_marks;
+use bmo_testbed_core::release_target::RELEASE_TARGET_MARK;
 use bmo_testbed_core::turn::Env;
 use bmo_testbed_core::version::platform_day;
 use bmo_testbed_deploy::console::{ConsoleHands, MachineConsole};
@@ -1888,6 +1889,61 @@ fn a_build_that_fails_there_is_not_tried_again_and_names_its_own_exit_code() {
   assert_eq!(code, 1, "{}", said(&hands));
   assert!(said(&hands).contains(&failed), "{failed}\n{}", said(&hands));
   assert!(!said(&hands).contains("trying again"), "{}", said(&hands));
+}
+
+// The scene's declared build step changed by `change`, pushed as a commit of its own.
+fn rebuilt(scene: &Scene, change: impl Fn(&str) -> String) {
+  let declared = std::fs::read_to_string(scene.source.join("testbed.toml")).unwrap();
+
+  scene.write("testbed.toml", &change(&declared));
+  scene.push("rebuilt");
+}
+
+// "The build tree's target directory carries the release build's mark, a file the deployment writes into it before
+// its build stage begins, every time and whether or not the commit holds a Cargo workspace"
+#[test]
+fn the_build_tree_s_target_directory_is_marked_before_anything_is_built_into_it() {
+  let scene = Scene::new();
+  let hands = Hands::default();
+
+  // The step builds only where the mark already stands.
+  rebuilt(&scene, |declared| {
+    declared.replace(
+      "command = \"mkdir -p target/release",
+      &format!("command = \"test -f target/{RELEASE_TARGET_MARK} && mkdir -p target/release"),
+    )
+  });
+
+  let code = scene.run(&hands);
+
+  assert_eq!(code, 0, "{}", said(&hands));
+  assert!(scene.at("live/deploy-expand/target").join(RELEASE_TARGET_MARK).is_file());
+  assert!(scene.at("live/deploy/bin/app").exists(), "{}", said(&hands));
+}
+
+// "A binary that is gone all the same when it is placed fails the deployment with every service untouched, the line
+// naming the file it looked for"
+#[test]
+fn a_binary_gone_from_the_build_before_it_is_placed_fails_the_deployment_naming_it() {
+  let scene = Scene::new();
+  let hands = Hands::default();
+
+  // The step builds the binary and takes it away again, as a removal between the build and the placing would.
+  rebuilt(&scene, |declared| {
+    declared.replace("> target/release/app\"", "> target/release/app && rm target/release/app\"")
+  });
+
+  let code = scene.run(&hands);
+  let gone = scene.at("live/deploy-expand/target/release/app");
+  let failed = fill_marks(
+    &DEPLOY.run.place_failed,
+    &[("why", &format!("{}: No such file or directory (os error 2)", gone.display()))],
+  );
+
+  assert_eq!(code, 1, "{}", said(&hands));
+  assert!(said(&hands).contains(&failed), "{failed}\n{}", said(&hands));
+  assert!(!scene.deploy_dir().exists(), "{}", said(&hands));
+  assert!(scene.names().iter().any(|name| name == "deploy-failed"), "{:?}", scene.names());
 }
 
 // The ticket of a deployment that asked earlier, named by its words alone.

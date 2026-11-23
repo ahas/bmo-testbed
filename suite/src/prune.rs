@@ -15,6 +15,7 @@ use std::process::{Command, Stdio};
 
 use bmo_testbed_core::policy::prune::PRUNE;
 use bmo_testbed_core::queue::{HeldLock, LockWait, Rank, now_ms, take_lock};
+use bmo_testbed_core::release_target::is_release_target;
 use serde_json::Value;
 
 use crate::crates::{CHECKOUT_RECORD_NAME, checkout_target_name, is_deployment_checkout, resolved};
@@ -52,7 +53,8 @@ pub struct PrunePlan {
   pub cleared: Vec<PathBuf>,
   /// The whole `target/` directory of a live checkout, which every build belongs to the shared directory
   /// rather than: a build typed outside the Cargo verb left it, and no build reads it any more. Never the
-  /// shared directory itself, and never one a Cargo process is working in.
+  /// shared directory itself, never one a Cargo process is working in, and never a deployment's build tree's,
+  /// which carries the release build's mark.
   pub stray_targets: Vec<PathBuf>,
   /// About how much disk they hold: each file's allocated size, counted once however many links it has.
   pub bytes: u64,
@@ -73,9 +75,15 @@ impl PrunePlan {
       .collect()
   }
 
-  /// The plan carried out; a path already gone or one that cannot be removed is passed over.
+  /// The plan carried out; a path already gone or one that cannot be removed is passed over, and so is a stray
+  /// `target/` that is no stray any more: the reading between the plan and its removal can take minutes, in
+  /// which a deployment may mark it or a build begin in it.
   pub fn apply(&self) {
     for path in self.paths() {
+      if self.stray_targets.iter().any(|stray| stray == path) && !still_stray(path) {
+        continue;
+      }
+
       remove_path(path);
     }
   }
@@ -277,7 +285,7 @@ fn checkout_gone(dir: &Path, cutoff: i64) -> bool {
 /// A live checkout's own `target/` where it stands apart from the shared build directory at `shared`, or none:
 /// every build belongs to the shared directory, so a checkout's own `target/` is a stray a build typed outside
 /// the Cargo verb left. Never the shared directory itself, nor one containing or contained by it, nor one a
-/// Cargo process is working in.
+/// Cargo process is working in, nor a deployment's build tree's, the release build's own target directory.
 fn stray_target(checkout_root: &Path, shared: &Path) -> Option<PathBuf> {
   let target = checkout_root.join("target");
   let resolved_target = resolved(&target);
@@ -293,7 +301,13 @@ fn stray_target(checkout_root: &Path, shared: &Path) -> Option<PathBuf> {
     return None;
   }
 
-  (!cargo_running_in(checkout_root)).then_some(target)
+  still_stray(&target).then_some(target)
+}
+
+// Whether the checkout's `target/` at `target` is still a stray as it stands now: it carries no release build's
+// mark and no Cargo process is working in its checkout.
+fn still_stray(target: &Path) -> bool {
+  !is_release_target(target) && target.parent().is_some_and(|checkout| !cargo_running_in(checkout))
 }
 
 /// A process as `/proc` shows it to this account: the name of the program it was started as, its working
@@ -345,7 +359,8 @@ fn cargo_running_in(root: &Path) -> bool {
 }
 
 /// The `target/` directories of the live checkouts recorded under `root`, each a stray the prune removes
-/// where it stands apart from the shared directory and no build is working in it.
+/// where it stands apart from the shared directory, no build is working in it and no deployment marked it as
+/// its release build's own.
 fn stray_targets(root: &Path) -> Vec<PathBuf> {
   let shared = resolved(root);
   let mut strays: Vec<PathBuf> = entries_of(&root.join("checkouts"))
@@ -631,7 +646,7 @@ pub fn plan_prune(root: &Path, older_than_ms: i64, now: i64, incremental_older_t
   }
 
   // Every build belongs to the shared directory, so a live checkout's own `target/` is a stray the prune takes
-  // away whole, unless a build is working in it.
+  // away whole, unless a build is working in it or it is a deployment's release build's own.
   plan.stray_targets.extend(stray_targets(root));
   plan.measured()
 }

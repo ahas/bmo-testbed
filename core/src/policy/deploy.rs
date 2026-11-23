@@ -128,6 +128,7 @@ pub struct RunWords {
   pub build_failed: String,
   pub build_unfinished: String,
   pub metadata_failed: String,
+  pub target_unmarked: String,
   pub place_failed: String,
   pub placed: String,
   pub before_failed: String,

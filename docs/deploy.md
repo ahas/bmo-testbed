@@ -126,6 +126,16 @@
   deployment of the deploy root is running: the progress record holds no run without an ending whose
   process is alive. The next deployment builds its release from nothing. A deploy root holding no record
   that reads keeps its build tree's target directory, and the build tree itself always stays.
+- **The build tree's target directory carries the release build's mark,** a file the deployment writes into
+  it before its build stage begins, every time and whether or not the commit holds a Cargo workspace. The
+  build tree is a checkout the gate builds in like any other, and the release build's target directory
+  stands inside it, apart from the build root, so without the mark it would read as a stray `target/` a
+  build typed outside the Cargo verb left (「The Cargo build directory」). Between the release build's end
+  and the binaries' placement no Cargo process works in the build tree, the declared `[build]` steps
+  running there instead, so only the mark keeps that window: from the start of the build until the
+  binaries are placed, and past it until the span above, no rule of the prune takes the target directory.
+  A binary that is gone all the same when it is placed fails the deployment with every service untouched,
+  the line naming the file it looked for.
 - **A build tree made from a checkout that is no longer the deployment's source is discarded and made
   again.** The tree belongs to the deployment's source only while the common git directory it names is
   that source's. A tree naming another checkout, or one whose git directory cannot be read, is removed
@@ -662,7 +672,8 @@ flowchart TD
 4. **Take the backup,** before anything changes (「Backups」).
 5. **Prepare the release,** pruning the releases first. A release of that commit still standing whose
    `bin/built-from` names it is taken as it stands; otherwise it is made afresh.
-6. **Build,** for a release made afresh: the Cargo release build, on the placed machine where the
+6. **Build,** for a release made afresh: the build tree's target directory marked as the release build's
+   own (「The releases」), then the Cargo release build, on the placed machine where the
    settings name one, then the declared `[build]` steps in the build tree, then the
    declared binaries placed into the release's `bin/`, hard-linked or copied, the ones that differ
    noted. `bin/built-from` is written last. A taken release is compared with the live one instead. A
@@ -1100,10 +1111,13 @@ flowchart TD
   - the directory of a checkout that no longer exists, a deployment's bench removed among them, since no
     deployment builds there again;
   - the whole `target/` directory of a live checkout, a stray a build typed outside the Cargo verb
-    left, where it stands apart from the build root and no Cargo process is working in it;
+    left, where it stands apart from the build root, no Cargo process is working in it and it carries no
+    release build's mark, each asked again just before it is removed, since the prune's other reading may
+    have taken minutes since it was found;
   - never a unit a live checkout's current outputs or record stand on, nor anything Cargo does not name
     by a unit hash, nor a `target/` a Cargo process is working in or that is the build root
-    itself, nor anything in a deployment's checkout's directory.
+    itself, nor a deployment's build tree's `target/`, which carries the release build's mark and goes only
+    by its own span (「The releases」), nor anything in a deployment's checkout's directory.
 - **A deployment's checkout keeps its builds, unless the machine sets them a ceiling of their own.** A
   deployment's checkout is one a
   deployment has built in: the Cargo verb, run for a command standing at the front (`docs/testbed.md`,

@@ -350,7 +350,8 @@ fn same_bytes(one: &Path, other: &Path) -> bool {
 
 /// Each binary built into `built` placed into the release's `bin`: hard-linked to the previous release's
 /// file of its name where the bytes are equal, copied in where they differ or there is none. Hands back
-/// the ones that differ, which are what the deployment restarts.
+/// the ones that differ, which are what the deployment restarts; a binary missing from `built` is an error
+/// naming its path.
 pub fn place_binaries(
   binaries: &[String],
   built: &Path,
@@ -373,7 +374,9 @@ pub fn place_binaries(
     let linked = previous.as_ref().is_some_and(|previous| std::fs::hard_link(previous, &staged).is_ok());
 
     if !linked {
-      std::fs::copy(&from, &staged)?;
+      // A binary gone from the build names the file looked for, since the error alone names none.
+      std::fs::copy(&from, &staged)
+        .map_err(|why| std::io::Error::new(why.kind(), format!("{}: {why}", from.display())))?;
       std::fs::set_permissions(&staged, std::os::unix::fs::PermissionsExt::from_mode(0o755))?;
     }
 
