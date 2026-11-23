@@ -31,6 +31,8 @@ pub trait Machine {
   fn shell(&self, command: &str, dir: &Path, env: &[(String, String)]) -> Ran;
   fn clone_repository(&self, url: &str, into: &Path) -> Ran;
   fn fetch(&self, checkout: &Path) -> Ran;
+  /// The checkout moved onto a tag or a commit it holds.
+  fn check_out(&self, checkout: &Path, rev: &str) -> Ran;
   /// The commit the remote's main branch stands at, as the checkout last fetched it.
   fn main_head(&self, checkout: &Path, main: &str) -> Option<String>;
   fn database_exists(&self, name: &str) -> Result<bool, String>;
@@ -105,6 +107,16 @@ impl Machine for Host {
 
   fn fetch(&self, checkout: &Path) -> Ran {
     ran(Command::new("git").arg("-C").arg(checkout).arg("fetch").arg("--quiet").arg("origin"))
+  }
+
+  fn check_out(&self, checkout: &Path, rev: &str) -> Ran {
+    ran(
+      Command::new("git")
+        .arg("-C")
+        .arg(checkout)
+        .args(["-c", "advice.detachedHead=false", "checkout", "--quiet"])
+        .arg(rev),
+    )
   }
 
   fn main_head(&self, checkout: &Path, main: &str) -> Option<String> {

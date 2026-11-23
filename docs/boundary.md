@@ -510,6 +510,10 @@ bmo-testbed install --set <input> [<places>]
   step is done or planned, 1 where one failed, 2 where it refuses, and 3 where it waits for input.
 - It deploys a repository only where its deploy tree does not stand yet, through `deploy` with `--no-check` and `--force-live`, and
   hands that first deployment on without the harness's mark (`docs/install.md`, 「Deploying」).
+- A program a declaration needs and the machine lacks is built from the source its need names, where it names one,
+  cloned under the data root's `install/sources/` (`docs/install.md`, 「A program built from its source」).
+- `--add` on a machine already serving people is the supervising agent's alone, on the owner's approval for that
+  repository (`docs/install.md`, 「The words」).
 
 ### `backups`
 

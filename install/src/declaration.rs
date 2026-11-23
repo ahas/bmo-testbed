@@ -46,6 +46,20 @@ pub struct Need {
   pub program: Option<String>,
   pub check: Option<String>,
   pub what: String,
+  pub source: Option<NeedSource>,
+}
+
+/// Where a missing program is built from (docs/install.md, 「A program built from its source」).
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NeedSource {
+  /// The folder the repository is cloned into under the data root's `install/sources/`.
+  pub name: String,
+  pub repository: String,
+  /// The tag or commit checked out.
+  pub rev: String,
+  /// The command, run from the clone, that builds the program and places it where the need asks for it.
+  pub build: String,
 }
 
 impl Need {

@@ -12,7 +12,7 @@ use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::install::INSTALL;
 use serde::{Deserialize, Serialize};
 
-use crate::declaration::{Encoding, InstallDeclaration, Read};
+use crate::declaration::{Encoding, InstallDeclaration, NeedSource, Read};
 use crate::line::{Line, Status};
 use crate::machine::{Machine, Ran};
 use crate::presets::{FILE as PRESETS_FILE, PresetsFile, Refused, Resolved};
@@ -26,6 +26,10 @@ pub const FEATURES_FILE: &str = "env/console-features.toml";
 pub const STATE_FILE: &str = "install/preset.json";
 /// The ports the install chose, by name, under the data root (docs/install.md, 「Ports」).
 pub const PORTS_FILE: &str = "install/ports.json";
+
+/// Where a missing program's source is cloned, under the data root (docs/install.md, 「A program built from its
+/// source」).
+pub const SOURCES_DIR: &str = "install/sources";
 /// How many ports past its declared number a port is looked for at, where the declared one is taken.
 const PORT_TRIES: u16 = 200;
 
@@ -571,21 +575,51 @@ impl<'a> Install<'a> {
           continue;
         }
 
-        let stands = match (&need.program, &need.check) {
-          (Some(program), _) => self.machine.has_program(program),
-          (None, Some(check)) => self.machine.shell(check, &unit.checkout, &[]).ok(),
+        let env = self.environment(Some(index), unit, &[]);
+        let stands = |machine: &dyn Machine| match (&need.program, &need.check) {
+          (Some(program), _) => machine.has_program(program),
+          (None, Some(check)) => machine.shell(check, &unit.checkout, &env).ok(),
           (None, None) => true,
         };
         let step = format!("needs:{name}");
 
-        if stands {
+        if stands(self.machine) {
           self.line(step, Status::Ok, mark(&said.need_stands, &[("program", &name)]), "");
-        } else {
+          continue;
+        }
+
+        let Some(source) = &need.source else {
           self.line(
             step,
             Status::Failed,
             mark(&said.need_missing, &[("program", &name), ("what", &need.what)]),
             mark(&next.install_program, &[("program", &name)]),
+          );
+          continue;
+        };
+        let shown = [
+          ("program", name.as_str()),
+          ("repository", source.repository.as_str()),
+          ("rev", source.rev.as_str()),
+        ];
+
+        if self.ask.dry_run {
+          self.line(step, Status::Planned, mark(&said.need_build_planned, &shown), "");
+          continue;
+        }
+
+        let built = self.build_source(source, &env);
+
+        if built.ok() && stands(self.machine) {
+          self.line(step, Status::Ok, mark(&said.need_built, &shown), "");
+        } else {
+          let why = if built.ok() { quoted(&need.what) } else { quoted(&built.said) };
+
+          self.line(
+            step,
+            Status::Failed,
+            mark(&said.need_build_failed, &[shown[0], shown[1], shown[2], ("said", &why)]),
+            &next.mend_and_rerun,
           );
         }
       }
@@ -1417,7 +1451,30 @@ impl<'a> Install<'a> {
     false
   }
 
-  // The environment an after-step, a restart or a verification is run with.
+  /// A missing program's source cloned, or fetched where its clone stands, moved onto its revision and built; what
+  /// the first step that did not succeed said.
+  fn build_source(&self, source: &NeedSource, env: &[(String, String)]) -> Ran {
+    let clone = self.ask.data_root.join(SOURCES_DIR).join(&source.name);
+    let reached = if clone.join(".git").exists() {
+      self.machine.fetch(&clone)
+    } else {
+      self.machine.clone_repository(&source.repository, &clone)
+    };
+
+    if !reached.ok() {
+      return reached;
+    }
+
+    let moved = self.machine.check_out(&clone, &source.rev);
+
+    if !moved.ok() {
+      return moved;
+    }
+
+    self.machine.shell(&source.build, &clone, env)
+  }
+
+  // The environment a need's check, a source's build, an after-step, a restart or a verification is run with.
   fn environment(
     &self,
     index: Option<&Path>,

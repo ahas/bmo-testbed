@@ -35,7 +35,10 @@ bmo-testbed install --set <input> [<places>]
 - **`--preset`** installs the named preset whole. `--with` names the repository chosen for each of the
   preset's choices (「The presets file」); a choice left unnamed is a `needs-input` step naming its repositories.
 - **`--add`** installs one more repository into the install the data root holds, with the console features it
-  turns on (「The console features」). A repository already installed is a step that says so.
+  turns on (「The console features」). A repository already installed is a step that says so. On a machine already
+  serving people it puts a new service live beside the running ones, so it is the supervising agent's alone, run
+  only on the owner's approval for that one repository; an agent working on a job never runs it, and asks its
+  supervisor instead.
 - **`--status`** changes nothing: it prints, for every repository of the install the data root holds, whether its
   checkout stands and the commit its deployment record names, `ok` where it stands and is live or deploys nothing,
   `failed` otherwise, and then every port the install chose, one `port:<name>` line each.
@@ -90,9 +93,10 @@ bmo-testbed install --set <input> [<places>]
 3. **`declaration:<repository>`:** each installed repository's `install.toml` read, and its `testbed.toml` with
    it. A repository with no install declaration fails here: its settings are its own documents' to give, and the
    install does not guess them.
-4. **`needs:<program>`:** every program a declaration needs, once each, asked whether it stands. One missing is
-   `failed`, its `detail` saying what it is for and its `next` the declaration's own words on where it comes from.
-   The run stops after this stage where any program is missing.
+4. **`needs:<program>`:** every program a declaration needs, once each, asked whether it stands. One missing whose
+   need names its source is built from it (「A program built from its source」). One missing otherwise, or whose
+   build did not make it stand, is `failed`, its `detail` saying what it is for and its `next` the declaration's
+   own words on where it comes from. The run stops after this stage where any program is missing.
 5. **`place:<repository>` and `port:<name>`:** every repository's deploy root and data root read against the
    install prefix and the data root, one standing elsewhere failed; then every port chosen (「Ports」).
 6. **`input:<name>`:** every input the installed repositories declare, read where it is kept. A required input not
@@ -160,7 +164,7 @@ refused, naming it.
 |---|---|---|
 | `install` | integer | The major of this schema the declaration is written for: `1` |
 | `restart` | command | Restarts the repository's services, run where a settings file it reads changed after its first release |
-| `[[needs]]` | table | A program the machine must hold: `program`, asked with `command -v`, or `check`, a command answering 0 where it stands; `what`, what it is for and where it comes from, in English |
+| `[[needs]]` | table | A program the machine must hold: `program`, asked with `command -v`, or `check`, a command answering 0 where it stands; `what`, what it is for and where it comes from, in English; `source`, where the install builds it from where it is missing (「A program built from its source」) |
 | `[[port]]` | table | A port the repository listens on: `name`, `number` |
 | `[[token]]` | table | A random token: `name`; `file`, where it is kept under the data root; `bytes`, its length before encoding, 32 by default; `encoding`, `hex` or `base64`, `hex` by default |
 | `[[input]]` | table | A value only a person has (「Inputs」): `name`, `what`, `file`, `secret`, `optional`, `default` |
@@ -183,6 +187,20 @@ refused, naming it.
 - **The ports chosen are kept** in `install/ports.json` under the data root, by name, and every later run reads
   them first, so a port never moves once chosen and a packager or a screen reads every service's port from the one
   file. Every template's `{{port.<name>}}` is the number kept.
+
+### A program built from its source
+
+- **A need may name its source,** a table of four keys: `name`, the folder its repository is cloned into under the
+  data root's `install/sources/`; `repository`, the address it is cloned from; `rev`, the tag or commit checked
+  out; and `build`, a command run from the clone that builds the program and places it where the need asks for it.
+  A program no system package carries, such as a terminal host published as source alone, is installed so.
+- **Only a missing program is built.** Where the need stands nothing is cloned. Where it does not, the repository is
+  cloned, or fetched where its clone stands, `rev` is checked out, `build` runs, and the need is asked again: `ok`
+  where it stands now, `failed` otherwise with what the build said, its `next` to mend that and run the install
+  again. A dry run plans the build and runs nothing.
+- **The build is a command like any other:** run with the environment every command is handed (「After-steps」),
+  never a template. What the build itself needs, a compiler of a given version among it, is its `what`'s to name,
+  and a build that lacks it fails saying so.
 
 ### Values
 
@@ -223,8 +241,8 @@ runs. A name nothing declares fails the step naming it.
 - **The command's environment** holds `BMO_DATA_DIR` naming the data root, `BMO_INSTALL_INDEX` the index
   checkout, and for each input the step names in `inputs` a variable `BMO_INPUT_<NAME>` naming the file the input
   is kept in, its name in capitals with every character that is not a letter or a digit written `_`. A value
-  never stands on its command line. Every command, a restart's and a verification's among them, is handed
-  `BMO_DATA_DIR` and `BMO_INSTALL_PREFIX`, the install prefix.
+  never stands on its command line. Every command, a need's check and a source's build, a restart's and a
+  verification's among them, is handed `BMO_DATA_DIR` and `BMO_INSTALL_PREFIX`, the install prefix.
 - **`done` is a command answering 0 where the step's work already stands,** asked first, so a rerun skips it.
   A step whose `run` ends with any other code than 0 is `failed`, and the run stops there.
 
@@ -271,6 +289,11 @@ runs this verb unchanged:
   its deployment keeps (`docs/deploy.md`, 「The unit links」); each unit runs one program with its settings read from
   the data root, so a packager with no user manager can run the same programs as a plain list of processes it
   starts and stops itself. Systemd stays the default on a server.
+- **Running without systemd is not provided yet, and is the next stage's work.** Today every deployment, every
+  restart, every after-step that links a unit and every health read goes through the systemd user manager, and the
+  testbed's own declaration needs one, so a machine without it fails at `needs:` and is not installed. A packaged BMO
+  on a person's own computer, the all-in-one desktop app among them, needs a supervisor of its own that starts,
+  restarts and stops the same programs from the same settings; until it stands, such a package is not offered.
 
 ## The install's own state
 

@@ -16,6 +16,7 @@ struct Stand {
   databases: RefCell<BTreeSet<String>>,
   deployed: RefCell<Vec<String>>,
   ran: RefCell<Vec<String>>,
+  checked_out: RefCell<Vec<String>>,
   taken_port: Option<u16>,
 }
 
@@ -50,6 +51,14 @@ impl Machine for Stand {
   }
 
   fn fetch(&self, _checkout: &Path) -> Ran {
+    Ran {
+      code: 0,
+      said: String::new(),
+    }
+  }
+
+  fn check_out(&self, _checkout: &Path, rev: &str) -> Ran {
+    self.checked_out.borrow_mut().push(rev.to_owned());
     Ran {
       code: 0,
       said: String::new(),
@@ -385,6 +394,89 @@ fn a_missing_program_stops_the_run_naming_it() {
   assert_eq!(missing.status, Status::Failed);
   assert!(missing.detail.contains("git, from the system's packages"));
   assert!(status_of(&lines, "input:one.owner").is_none());
+}
+
+/// The first repository's declaration with one more need, a tool built from its source by `build`.
+fn needing_a_tool(ground: &Ground, build: &str) {
+  let declaration = ground.index.join("services/one/install.toml");
+  let mut text = std::fs::read_to_string(&declaration).unwrap();
+
+  text.push_str(&format!(
+    r#"
+[[needs]]
+check = "test -x \"$BMO_DATA_DIR/bin/tool\""
+what = "the tool, a terminal host published as source alone"
+
+[needs.source]
+name = "tool"
+repository = "https://example.invalid/tool.git"
+rev = "v1"
+build = '''{build}'''
+"#
+  ));
+  std::fs::write(declaration, text).unwrap();
+}
+
+const BUILDS_THE_TOOL: &str = r#"mkdir -p "$BMO_DATA_DIR/bin" && printf '#!/bin/sh\n' > "$BMO_DATA_DIR/bin/tool" && chmod +x "$BMO_DATA_DIR/bin/tool""#;
+
+#[test]
+fn a_missing_program_with_a_source_is_built_from_it_once() {
+  let ground = ground();
+  let machine = Stand::default();
+
+  needing_a_tool(&ground, BUILDS_THE_TOOL);
+
+  let (_, lines) = run(&ground, &machine, solo(), false);
+  let built = status_of(&lines, "needs:test -x \"$BMO_DATA_DIR/bin/tool\"").unwrap();
+
+  assert_eq!(built.status, Status::Ok, "{built:?}");
+  assert_eq!(
+    built.detail,
+    "test -x \"$BMO_DATA_DIR/bin/tool\" was missing and is built from https://example.invalid/tool.git at v1"
+  );
+  assert!(ground.data_root.join("install/sources/tool/.git").exists());
+  assert_eq!(*machine.checked_out.borrow(), ["v1"]);
+  // The run goes on past the programs, to the input only the person has.
+  assert_eq!(status_of(&lines, "input:one.owner").unwrap().status, Status::NeedsInput);
+
+  // Once it stands, a rerun builds nothing.
+  let (_, lines) = run(&ground, &machine, solo(), false);
+  let stands = status_of(&lines, "needs:test -x \"$BMO_DATA_DIR/bin/tool\"").unwrap();
+
+  assert_eq!(stands.status, Status::Ok);
+  assert!(stands.detail.ends_with(" stands"), "{stands:?}");
+  assert_eq!(machine.checked_out.borrow().len(), 1);
+}
+
+#[test]
+fn a_source_whose_build_fails_stops_the_run_with_what_it_said() {
+  let ground = ground();
+  let machine = Stand::default();
+
+  needing_a_tool(&ground, "echo the compiler is too old; exit 3");
+
+  let (outcome, lines) = run(&ground, &machine, solo(), false);
+  let failed = status_of(&lines, "needs:test -x \"$BMO_DATA_DIR/bin/tool\"").unwrap();
+
+  assert_eq!(outcome, Outcome::Failed);
+  assert_eq!(failed.status, Status::Failed);
+  assert!(failed.detail.contains("the compiler is too old"), "{failed:?}");
+  assert!(status_of(&lines, "input:one.owner").is_none());
+}
+
+#[test]
+fn a_dry_run_plans_a_source_build_and_clones_nothing() {
+  let ground = ground();
+  let machine = Stand::default();
+
+  needing_a_tool(&ground, BUILDS_THE_TOOL);
+
+  let (_, lines) = run(&ground, &machine, solo(), true);
+  let planned = status_of(&lines, "needs:test -x \"$BMO_DATA_DIR/bin/tool\"").unwrap();
+
+  assert_eq!(planned.status, Status::Planned);
+  assert!(!ground.data_root.join("install/sources").exists());
+  assert!(machine.checked_out.borrow().is_empty());
 }
 
 #[test]
