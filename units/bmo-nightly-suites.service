@@ -14,7 +14,7 @@ Slice=bmo-suite.slice
 # The deploy tree, whose binary it runs.
 WorkingDirectory=%h/.local/share/bmo-testbed/deploy
 ExecStart=%h/.local/share/bmo-testbed/deploy/bin/bmo-testbed nightly --when-due
-Environment=PATH=%h/.local/bin:%h/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=PATH=%h/.local/bin:%h/.bun/bin:%h/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # The round runs in this unit, as a whole run's unit is marked (docs/boundary.md, 「The environment」).
 Environment=BMO_DEPLOY_UNIT=%n
 # The machine's own environment, the event hook and the round's time of day among it, where the file exists.

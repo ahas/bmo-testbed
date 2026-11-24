@@ -510,6 +510,9 @@
   said」). Its presence is the answer to whether the run has ended.
 - **Every line goes to the run's own log as well,** under the data root's `testbed/`, which its test
   run in the record names once its turn has come (`docs/boundary.md`, 「The record」).
+- **A run that fails before its first unit writes why into its log,** so a tree that could not be put
+  on the head or set up, or a static check that failed, is read from the log its event names as well as
+  from the unit's journal.
 
 ## Reading the output
 

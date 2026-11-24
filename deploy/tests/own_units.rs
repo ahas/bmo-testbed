@@ -7,6 +7,7 @@
 use std::path::{Path, PathBuf};
 
 use bmo_testbed_core::declaration::Repository;
+use bmo_testbed_core::languages::LANGUAGES;
 use bmo_testbed_core::turn::Env;
 use bmo_testbed_deploy::deployment::DeployPlaces;
 use bmo_testbed_deploy::tree::{
@@ -141,4 +142,36 @@ fn the_placed_machine_is_laid_the_prune_s_timer_its_service_and_its_slice_alone(
 
   // The timer laid there is the file kept here, so its schedule is this machine's.
   assert!(marked_units(&files, &read, ".timer", UnitMark::Timer).contains(&placed.laid[0]));
+}
+
+// "every service unit carries the account's tool directories on its PATH, each language naming where its own
+// runner stands under the home" (docs/deploy.md, 「The unit links」; docs/testbed.md, 「Languages」): the round's
+// unit finds bun and cargo, and no unit loses a language's tools.
+#[test]
+fn every_service_unit_names_each_language_s_tool_directory_on_its_path() {
+  let read = |path: &str| std::fs::read_to_string(root().join(path)).unwrap_or_default();
+  let services: Vec<String> = unit_files().into_iter().filter(|file| file.ends_with(".service")).collect();
+
+  assert!(!services.is_empty());
+
+  for file in services {
+    let unit = read(&file);
+    let path = unit
+      .lines()
+      .find_map(|line| line.strip_prefix("Environment=PATH="))
+      .unwrap_or_else(|| panic!("{file} names no PATH"));
+    let entries: Vec<&str> = path.split(':').collect();
+
+    for language in LANGUAGES {
+      if let Some(directory) = language.home_tool_directory() {
+        let named = format!("%h/{directory}");
+
+        assert!(
+          entries.contains(&named.as_str()),
+          "{file}: {} names no {named}: {path}",
+          language.name()
+        );
+      }
+    }
+  }
 }

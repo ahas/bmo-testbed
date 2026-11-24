@@ -178,6 +178,24 @@ fn its_tree_is_made_at_the_head_moved_with_leftovers_cleared_and_set_up_each_tim
   assert_eq!(*set_up.borrow(), [tree.clone(), tree.clone()]);
 }
 
+// "a run that fails before its first unit writes why into its log": a tree that could not be set up.
+#[test]
+fn a_tree_that_could_not_be_set_up_is_written_into_the_run_s_log() {
+  let dir = tempfile::tempdir().unwrap();
+  let log = dir.path().join("full.log");
+  let mut hands = hands();
+
+  hands.prepare =
+    Box::new(|_| Err("the tree's setup `cd packages && bun install` failed: bun: not found".to_owned()));
+
+  assert_eq!(run_full(&hands, "main", log.to_str().unwrap()), (1, FullOutcome::TreeFailed));
+
+  let written = std::fs::read_to_string(&log).unwrap();
+
+  assert!(written.contains("bun: not found"), "{written}");
+  assert!(written.contains("full-suite: FAILED"), "{written}");
+}
+
 // "a failing run tells the failing units, the package each stands in and the log"
 #[test]
 fn a_failing_run_tells_the_failing_units_the_package_each_stands_in_and_the_log() {

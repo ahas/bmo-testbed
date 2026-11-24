@@ -106,6 +106,11 @@ pub trait Language: Sync {
   fn script_command(&self, _script: &str) -> Option<Vec<String>> {
     None
   }
+  /// The directory under the account's home where its runner stands, which a unit that runs its suites
+  /// puts on `PATH`; none for a runner the system itself holds.
+  fn home_tool_directory(&self) -> Option<&'static str> {
+    None
+  }
   /// The command that says which toolchain the machine runs it with, run in a checkout so a toolchain file
   /// the checkout carries is read; none for a language that brings no toolchain of its own.
   fn toolchain_command(&self) -> Option<&'static [&'static str]> {

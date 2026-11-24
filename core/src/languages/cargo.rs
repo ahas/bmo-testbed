@@ -127,6 +127,10 @@ impl Language for Cargo {
     })
   }
 
+  fn home_tool_directory(&self) -> Option<&'static str> {
+    Some(".cargo/bin")
+  }
+
   fn toolchain_command(&self) -> Option<&'static [&'static str]> {
     Some(&["rustc", "-vV"])
   }

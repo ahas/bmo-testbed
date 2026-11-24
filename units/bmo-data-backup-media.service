@@ -12,7 +12,7 @@ Type=oneshot
 Slice=bmo-backup.slice
 WorkingDirectory=%h/.local/share/bmo-testbed/deploy
 ExecStart=%h/.local/share/bmo-testbed/deploy/bin/bmo-testbed backup media
-Environment=PATH=%h/.local/bin:%h/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=PATH=%h/.local/bin:%h/.bun/bin:%h/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 SuccessExitStatus=75
 Nice=10
 IOSchedulingClass=idle

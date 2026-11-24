@@ -412,6 +412,18 @@ fn a_file_language_names_runs_and_checks_its_own() {
   }
 }
 
+// "the directory under the account's home where its runner stands, which a unit that runs its suites puts on
+// PATH": bun's and cargo's; the system's own for node, and browser and the plain language run others'.
+#[test]
+fn a_language_names_the_directory_under_the_home_where_its_runner_stands() {
+  assert_eq!(Bun.home_tool_directory(), Some(".bun/bin"));
+  assert_eq!(Cargo.home_tool_directory(), Some(".cargo/bin"));
+
+  for language in [&Browser as &dyn Language, &Node, PLAIN] {
+    assert_eq!(language.home_tool_directory(), None, "{}", language.name());
+  }
+}
+
 // "bun hands each file as a path, since any other word is a filter it matches within every file's path"
 #[test]
 fn bun_hands_each_file_as_a_path_and_leaves_one_already_written_as_one() {

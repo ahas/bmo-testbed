@@ -161,12 +161,23 @@ fn failed_event(
   }
 }
 
+/// One line the run writes into its own log, so a run that failed before its suite wrote anything still
+/// names why (docs/suite.md, 「The lines the run writes about itself」).
+fn record(log: &str, line: &str) {
+  if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(log) {
+    let _ = writeln!(file, "{line}");
+  }
+}
+
 /// One whole run, in order: the main branch's head, the tree, the static check, every unit with the units a
 /// round never started run again by name; a failure is sent as an event. Its exit code and how it ended.
 pub fn run_full(hands: &impl FullHands, main: &str, log: &str) -> (u8, FullOutcome) {
   let said = &DAILY.run;
   let Some(head) = hands.head() else {
-    hands.say(&fill_marks(&said.no_head, &[("main", main)]));
+    let line = fill_marks(&said.no_head, &[("main", main)]);
+
+    hands.say(&line);
+    record(log, &line);
     hands.tell(failed_event(
       main,
       None,
@@ -182,7 +193,10 @@ pub fn run_full(hands: &impl FullHands, main: &str, log: &str) -> (u8, FullOutco
   hands.say(&fill_marks(&said.begins, &[("head", short(&head)), ("log", log)]));
 
   if let Err(why) = hands.prepare(&head) {
-    hands.say(&fill_marks(&said.failed, &[("why", &why)]));
+    let line = fill_marks(&said.failed, &[("why", &why)]);
+
+    hands.say(&line);
+    record(log, &line);
     hands.tell(failed_event(main, Some(&head), &why, Some(&DAILY.run.setup_step), &[], log));
 
     return (1, FullOutcome::TreeFailed);
@@ -190,6 +204,7 @@ pub fn run_full(hands: &impl FullHands, main: &str, log: &str) -> (u8, FullOutco
 
   if let Some((step, line)) = hands.static_check() {
     hands.say(&line);
+    record(log, &line);
     hands.tell(failed_event(main, Some(&head), &line, Some(&step), &[], log));
 
     return (1, FullOutcome::CheckFailed);

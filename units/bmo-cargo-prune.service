@@ -19,7 +19,7 @@ Slice=bmo-upkeep.slice
 # The deploy tree, whose binary it runs and whose declaration names the hook.
 WorkingDirectory=%h/.local/share/bmo-testbed/deploy
 ExecStart=%h/.local/share/bmo-testbed/deploy/bin/bmo-testbed prune --when-due
-Environment=PATH=%h/.local/bin:%h/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=PATH=%h/.local/bin:%h/.bun/bin:%h/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # The machine's own environment for its timed prune, the event hook and the ceiling among it, where the file
 # exists
 # (docs/deploy.md, 「The Cargo build directory」).

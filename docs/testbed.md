@@ -510,6 +510,8 @@ flowchart TD
     that file's name, which decides the folder its test files run from (`docs/suite.md`, 「Which
     files run」);
   - for a language that runs package scripts, the command that runs a project's script;
+  - for a language whose runner stands in a directory under the account's home, that directory, which a
+    unit that runs its suites puts on `PATH`;
   - for a language whose toolchain a machine installs apart from the repository, the command that says
     which toolchain it is, which the `toolchain` verb runs (`docs/boundary.md`, 「`toolchain`」);
   - for a language whose commands may name a toolchain of their own, the toolchain a command names and the
@@ -551,7 +553,8 @@ flowchart TD
     Cargo workspace is read through `cargo metadata` and a browser file stands in bun's workspace;
   - their toolchains are said by `rustc -vV` for `cargo`, `bun --version` for `bun` and
     `node --version` for `node`; `browser` names none, since it runs on bun and its browsers are the
-    packages the lockfile pins.
+    packages the lockfile pins. `cargo`'s and `bun`'s runners stand in `.cargo/bin` and `.bun/bin`
+    under the home, and `node`'s in the system's own directories.
 - **A command no language claims** still runs through the testbed when it is started there, read by
   the plain language, `plain`: its exit code, its time, and the last lines of its output on a
   failure.

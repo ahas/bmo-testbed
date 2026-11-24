@@ -242,6 +242,9 @@
   with no such file, or with more than one, is refused before the backup.
 - **A marked unit installed as a plain file** is moved aside as `<unit>.before-deploy`, never deleted,
   and linked in its place; one linked anywhere but the deploy tree is relinked to it.
+- **Every service unit carries the account's tool directories on its `PATH`,** each language naming
+  where its own runner stands under the home (`docs/testbed.md`, 「Languages」), so a repository's setup
+  step and its runners find their tools in the unit as they do on the caller's own line.
 - **A repository with no `bot` unit** deploys all the same: it restarts what its marks say and waits on
   no health.
 
