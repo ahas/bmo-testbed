@@ -9,11 +9,9 @@ use bmo_testbed_core::declaration::{Repository, root_of};
 use bmo_testbed_core::events::Hook;
 use bmo_testbed_core::placement::{PlaceAsk, runs_here};
 use bmo_testbed_core::policy::count::COUNT;
-use bmo_testbed_core::policy::deploy::DEPLOY;
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::suite::SUITE;
 use bmo_testbed_core::policy::verbs::VERBS;
-use bmo_testbed_core::queue::now_ms;
 use bmo_testbed_core::turn::{Lane, process_env};
 use bmo_testbed_core::verb::{REFUSED_EXIT_CODE, data_root};
 use bmo_testbed_deploy::deployment::{iso, passed_suite};
@@ -103,8 +101,8 @@ pub fn suite(args: SuiteArgs) -> u8 {
   ended.code
 }
 
-/// `passed`: the passed run of the repository's whole suite on the commit, from a clean tree within the
-/// policy's hours, that this machine's record holds; 0 where it stands, 1 where none does.
+/// `passed`: the passed run of the repository's whole suite on the commit, from a clean tree however long
+/// ago, that this machine's record holds; 0 where it stands, 1 where none does.
 pub fn passed(args: &PassedArgs) -> u8 {
   let said = &VERBS.passed;
   let repo = match repository() {
@@ -120,14 +118,8 @@ pub fn passed(args: &PassedArgs) -> u8 {
     eprintln!("{}", fill_marks(&said.no_commit, &[("named", named)]));
     return REFUSED_EXIT_CODE;
   };
-  let Some(run) = passed_suite(&data_root(), &repo.name(), &commit, now_ms()) else {
-    println!(
-      "{}",
-      fill_marks(
-        &said.none,
-        &[("commit", &short(&commit)), ("hours", &DEPLOY.numbers.passed_suite_hours.to_string())]
-      )
-    );
+  let Some(run) = passed_suite(&data_root(), &repo.name(), &commit) else {
+    println!("{}", fill_marks(&said.none, &[("commit", &short(&commit))]));
     return 1;
   };
 

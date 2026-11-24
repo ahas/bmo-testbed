@@ -301,14 +301,12 @@ pub fn gate_left_out_before(earlier: &GatePass) -> String {
   )
 }
 
-/// The passed run of a repository's whole suite on a commit that the record under a data root holds, begun
-/// within the policy's hours before the moment given (docs/deploy.md, 「What the deploy run does, in
-/// order」); none where it holds none, or cannot be read.
-pub fn passed_suite(data_root: &Path, repository: &str, commit: &str, now_ms: i64) -> Option<TestRun> {
-  let since = now_ms.saturating_sub(DEPLOY.numbers.passed_suite_hours.saturating_mul(60 * 60 * 1000));
-
+/// The passed run of a repository's whole suite on a commit that the record under a data root holds, however
+/// long ago it began (docs/deploy.md, 「What the deploy run does, in order」); none where it holds none, or
+/// cannot be read.
+pub fn passed_suite(data_root: &Path, repository: &str, commit: &str) -> Option<TestRun> {
   Record::open(data_root)
-    .and_then(|record| record.passed_suite(repository, commit, since))
+    .and_then(|record| record.passed_suite(repository, commit))
     .ok()
     .flatten()
 }
@@ -1891,7 +1889,7 @@ async fn laid(
     let passed_here = ask
       .record
       .as_deref()
-      .and_then(|data_root| passed_suite(data_root, &repo.name(), &commit, hands.now_ms()));
+      .and_then(|data_root| passed_suite(data_root, &repo.name(), &commit));
 
     if let Some(found) = &passed_here {
       run.say(&suite_left_out(&SuitePassed {

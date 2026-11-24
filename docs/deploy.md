@@ -646,14 +646,21 @@ flowchart TD
      ran the repository's whole suite on it (`docs/testbed.md`, 「The close line」), so a passed run of
      it is taken in place of the gate's own. The run taken is the newest test run of the repository's
      whole suite (`docs/boundary.md`, 「Members」: kind `suite`, `whole`) begun on exactly the commit,
-     from a checkout with no uncommitted changes to tracked files (`clean`), within the policy's hours,
-     twenty-four; where it passed, the gate runs its static check alone, and the deployment says on one
-     line that the suite is left out, naming the run: its id, when it began, the checkout it ran in with
-     the machine where that is not this one, and its log. Anything less certain runs the suite: no such run; the newest one failed, was
-     not run, still runs or is gone; a run on another commit, from a tree with uncommitted changes, or
-     begun before the limit; a run whose commit, tree or wholeness the record does not hold. The record
-     is asked where the run would have been written (「Where a deployment runs」). The suites a major
-     change runs are never left out.
+     from a checkout with no uncommitted changes to tracked files (`clean`), however long ago it began
+     while the record still keeps it (`docs/boundary.md`, 「The record」: the policy's days, thirty),
+     since the commit and the unmodified tree fix what it ran; where it passed, the gate runs its static
+     check alone, and the deployment says on one line that the suite is left out, naming the run: its
+     id, when it began, the checkout it ran in with the machine where that is not this one, and its log.
+     Anything less certain runs the suite: no such run; the newest one failed, was not run, still runs
+     or is gone; a run on another commit, of part of the suite, or from a tree with uncommitted changes;
+     a run whose commit, tree or wholeness the record does not hold. The record is asked where the run
+     would have been written (「Where a deployment runs」). The suites a major change runs are never left
+     out.
+   - **The gate's own suite is part of the suite where a commit was live.** It then runs over the range
+     from the deployed commit, the tests the change reaches, so its run is written as not `whole` and
+     never stands for a later `passed` (`docs/boundary.md`) of the commit, which only a run of the whole
+     suite on it answers. Where nothing was live it runs the whole suite, and that run stands as any
+     other whole run does.
    - **The gate reads the commit's committed trees.** On this machine it runs in the build tree, put at
      the commit with the trees outside the repository laid at their committed heads (「The releases」)
      before the static check begins, and never in the checkout, whose working tree may stand anywhere; on

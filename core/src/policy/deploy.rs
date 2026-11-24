@@ -47,7 +47,6 @@ pub struct Numbers {
   pub journal_lines: usize,
   pub quiet_poll_ms: u64,
   pub quiet_unanswered_asks: u32,
-  pub passed_suite_hours: i64,
   pub passed_gate_hours: i64,
   pub line_say_seconds: u64,
   pub line_bound_minutes: u64,

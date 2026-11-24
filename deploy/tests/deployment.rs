@@ -1495,10 +1495,10 @@ fn a_passed_whole_suite_on_the_commit_from_a_clean_tree_leaves_the_gate_suite_ou
   );
 }
 
-// "anything less certain runs the suite: a dirty tree, a failed run, another commit, an old run, a run of
-// part of the suite"
+// "anything less certain runs the suite: a dirty tree, a failed run, another commit, a run of part of the
+// suite"
 #[test]
-fn a_dirty_failed_other_old_or_partial_run_leaves_the_gate_suite_in() {
+fn a_dirty_failed_other_or_partial_run_leaves_the_gate_suite_in() {
   const OTHER: &str = "0123456789abcdef0123456789abcdef01234567";
   // Each case: the commit the run stood on, the scene's own where none is named, whether it was whole and
   // clean, how it ended, and how many hours ago it began.
@@ -1506,7 +1506,6 @@ fn a_dirty_failed_other_old_or_partial_run_leaves_the_gate_suite_in() {
     ("a dirty tree", None, true, false, TestRunState::Passed, 1),
     ("a failed run", None, true, true, TestRunState::Failed, 1),
     ("another commit", Some(OTHER), true, true, TestRunState::Passed, 1),
-    ("an old run", None, true, true, TestRunState::Passed, 25),
     ("part of the suite", None, false, true, TestRunState::Passed, 1),
   ];
 
@@ -1530,6 +1529,31 @@ fn a_dirty_failed_other_old_or_partial_run_leaves_the_gate_suite_in() {
     assert_eq!(*gate.suites.borrow(), [true], "{case}: {}", said(&hands));
     assert!(!said(&hands).contains("the suite is left out"), "{case}: {}", said(&hands));
   }
+}
+
+// "however long ago it began while the record still keeps it": a passed whole run from a clean tree twenty
+// days old still leaves the gate's suite out
+#[test]
+fn a_passed_whole_suite_on_the_commit_leaves_the_gate_suite_out_however_long_ago() {
+  let scene = Scene::new();
+  let hands = Hands::default();
+  let head = must(&["rev-parse", "HEAD"], &scene.source);
+  let id = scene.seed(&Seeded {
+    commit: &head,
+    whole: true,
+    clean: true,
+    state: TestRunState::Passed,
+    hours_ago: 20 * 24,
+  });
+  let gate = Asked::default();
+
+  assert_eq!(scene.run_asked(&gate, &hands), 0, "{}", said(&hands));
+  assert_eq!(*gate.suites.borrow(), [false], "{}", said(&hands));
+  assert!(
+    said(&hands).contains(&format!("the suite is left out: test run {id}")),
+    "{}",
+    said(&hands)
+  );
 }
 
 // "a newer run of the whole suite on the commit that failed outweighs an older one that passed"

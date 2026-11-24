@@ -249,8 +249,8 @@ bmo-testbed passed [--commit <sha>] [--json]
 - Answers from this machine's record (「The record」) the run of the repository's whole suite a
   deployment's gate takes in place of its own (`docs/deploy.md`, 「What the deploy run does, in
   order」, step 3): the newest test run of kind `suite` of the repository it is run in that is `whole`,
-  begun on the commit, the checkout's `HEAD` by default, with `clean` true, within the policy's hours,
-  where that run passed. It runs nothing and takes no turn.
+  begun on the commit, the checkout's `HEAD` by default, with `clean` true, however long ago it began
+  while the record keeps it (「The record」), where that run passed. It runs nothing and takes no turn.
 - Prints one line naming the run: its id, the commit, when it began, its checkout and its log.
   **`--json`** prints the test run (「Members」) instead.
 - Exits 0 where such a run stands, 1 where none does, the line saying so, and 2 where its words or the

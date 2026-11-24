@@ -256,6 +256,9 @@ fn events_narrow_by_kind_and_a_resume_past_the_window_is_gone() {
   );
 }
 
+// An hour in milliseconds.
+const HOUR: i64 = 60 * 60 * 1000;
+
 // A run of the repository's suite on a commit, whole or not and from a clean tree or not, begun the given
 // milliseconds before now and ended as asked; its id.
 fn suite_run(
@@ -290,22 +293,19 @@ fn suite_run(
 }
 
 // "the passed suite a deployment takes is the newest whole run of the repository on the commit from a clean
-// tree since the moment asked, where it passed; a run whose wholeness or tree is not held is none"
+// tree however long ago it began, where it passed; a run whose wholeness or tree is not held is none"
 #[test]
 fn the_passed_suite_is_the_newest_whole_clean_run_on_the_commit_where_it_passed() {
   let dir = tempfile::tempdir().unwrap();
   let mut record = Record::open(dir.path()).unwrap();
-  let now = bmo_testbed_core::queue::now_ms();
-  let since = now - 10_000;
-  let passed = |record: &Record, commit: &str| {
-    record.passed_suite("repository", commit, since).unwrap().map(|run| run.id)
-  };
+  let passed =
+    |record: &Record, commit: &str| record.passed_suite("repository", commit).unwrap().map(|run| run.id);
 
   let first = suite_run(&mut record, "aaa", Some(true), Some(true), 1_000, TestRunState::Passed);
 
   assert_eq!(passed(&record, "aaa"), Some(first));
   assert_eq!(passed(&record, "bbb"), None);
-  assert_eq!(record.passed_suite("another", "aaa", since).unwrap(), None);
+  assert_eq!(record.passed_suite("another", "aaa").unwrap(), None);
 
   // Runs that do not count leave the passed one standing.
   suite_run(&mut record, "aaa", Some(false), Some(true), 500, TestRunState::Failed);
@@ -313,11 +313,11 @@ fn the_passed_suite_is_the_newest_whole_clean_run_on_the_commit_where_it_passed(
   suite_run(&mut record, "aaa", None, None, 500, TestRunState::Passed);
   assert_eq!(passed(&record, "aaa"), Some(first));
 
-  // A run begun before the moment asked is none, and so is one held without its wholeness or its tree.
-  suite_run(&mut record, "old", Some(true), Some(true), 60_000, TestRunState::Passed);
+  // A run begun long ago still stands while the record keeps it, while one held without its wholeness or its tree is none.
+  let old = suite_run(&mut record, "old", Some(true), Some(true), 20 * 24 * HOUR, TestRunState::Passed);
   suite_run(&mut record, "unknown", None, Some(true), 1_000, TestRunState::Passed);
   suite_run(&mut record, "unknown", Some(true), None, 1_000, TestRunState::Passed);
-  assert_eq!(passed(&record, "old"), None);
+  assert_eq!(passed(&record, "old"), Some(old));
   assert_eq!(passed(&record, "unknown"), None);
 
   // A newer whole clean run that failed outweighs the older one that passed.

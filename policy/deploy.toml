@@ -62,9 +62,6 @@ quiet_poll_ms = 15000
 # How many asks running the declared `quiet` command may answer neither 0 nor 1 before the deployment
 # fails with nothing changed (docs/deploy.md, 「What the deploy run does, in order」).
 quiet_unanswered_asks = 3
-# How many hours back a passed run of the whole suite on the commit leaves the gate's own suite out
-# (docs/deploy.md, 「What the deploy run does, in order」); a run begun earlier is none.
-passed_suite_hours = 24
 # How many hours back a gate's pass on the same commit, range, sibling heads and toolchains leaves the whole
 # gate out (docs/deploy.md, 「What the deploy run does, in order」); a pass written earlier is none.
 passed_gate_hours = 24

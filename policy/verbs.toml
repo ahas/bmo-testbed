@@ -113,7 +113,8 @@ usage: {verb} passed [--commit <sha>] [--json]
 
 Names the run of the repository's whole suite a deployment's gate takes in place of its own
 (docs/deploy.md): the newest one in this machine's record begun on the commit, from a checkout with no
-uncommitted changes to tracked files, within the policy's hours, where it passed. It runs nothing.
+uncommitted changes to tracked files, however long ago it began while the record keeps it, where it
+passed. It runs nothing.
 Exits 0 where such a run stands and 1 where none does.
 
 --commit  the commit, the checkout's HEAD by default
@@ -423,11 +424,10 @@ holder = "backups"
 locked = "backups: waiting for another run's upload to end"
 
 # What `passed` says (docs/boundary.md, 「The verbs」): {id} the test run, {commit} a short commit, {when}
-# when it began, {checkout} where it ran, {log} its log, {hours} the policy's hours, {named} the commit as
-# given.
+# when it began, {checkout} where it ran, {log} its log, {named} the commit as given.
 [passed]
 found = "passed: test run {id} passed the whole suite on {commit} from a clean tree, begun {when} in {checkout}; its log is {log}"
-none = "passed: no run of the whole suite on {commit} from a clean tree begun within {hours} hours passed in this machine's record"
+none = "passed: no run of the whole suite on {commit} from a clean tree passed in this machine's record"
 no_commit = "passed: {named} names no commit of this checkout"
 
 # What `prune` says (docs/deploy.md, 「The Cargo build directory」): {root} the build directory, {what}
