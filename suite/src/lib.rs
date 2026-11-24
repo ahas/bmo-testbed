@@ -20,6 +20,7 @@ pub mod prune;
 pub mod quick;
 pub mod run;
 pub mod selection;
+pub mod set;
 pub mod static_check;
 pub mod step_fence;
 pub mod superseded;

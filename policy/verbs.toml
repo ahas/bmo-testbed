@@ -27,8 +27,8 @@ cargo     Cargo over the shared build directory, in the machine's turn where it 
           `cargo prune` removes what no build reads
 prune     what no build reads any more, removed from the shared Cargo build directory
 full      the daily whole run of the repository's suite, in a unit of its own
-nightly   the nightly round: every repository of the machine's registry whose main branch's head has
-          no passed whole suite yet, its whole suite run there, one at a time
+nightly   the nightly round: every repository of the set and the machine's registry whose main
+          branch's head has no passed whole suite yet, its whole suite run there, one at a time
 deploy    a commit of the repository put live, in a unit of its own; `deploy commit` as
           the platform names it
 backups   the backups a deployment took, sent away and rotated; `deploy backups` as the
@@ -234,9 +234,11 @@ and exits 1 where it failed; a second run meeting one at work is refused with 2.
 nightly = """
 usage: {verb} nightly [--when-due] [--dry-run]
 
-Runs the nightly round in a unit of its own and ends (docs/suite.md): for every checkout the machine's
-registry names, one at a time, the whole suite at its main branch's head in the tree of its daily whole
-run, a repository whose head already has a passed whole suite in the record skipped. Once the round has
+Runs the nightly round in a unit of its own and ends (docs/suite.md): for every repository of the set
+BMO_TESTBED_SET and BMO_TESTBED_SET_WITH name, as a release reads it, and every checkout of the machine's
+registry the set did not reach, one at a time, the whole suite at its main branch's head in the tree of its
+daily whole run; a repository whose head already has a passed whole suite in the record is skipped, and one
+whose declaration names no test languages passed over. Once the round has
 ended, a nightly-suites-failed event names every repository that failed or was not run; a round that
 passed says nothing. Inside its unit it runs to its end and exits 1 where any repository failed, 75 where
 none failed but one did not run; a second round meeting one at work is refused with 2.

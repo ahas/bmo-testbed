@@ -7,12 +7,14 @@ use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 
 use bmo_testbed_cli::nightly::{
-  AT_VARIABLE, Came, Checkout, Failure, Member, NightlyHands, due, due_at, run_nightly, unit_name,
+  AT_VARIABLE, Came, Checkout, Failure, Member, NightlyHands, Roster, SET_VARIABLE, SET_WITH_VARIABLE, due,
+  due_at, gathers_suite, run_nightly, unit_name,
 };
 use bmo_testbed_core::events::Event;
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::nightly::NIGHTLY;
 use bmo_testbed_core::turn::{Env, NOT_RUN_EXIT_CODE};
+use bmo_testbed_suite::set::read_set;
 use chrono::{NaiveTime, TimeZone};
 use serde_json::Value;
 
@@ -35,6 +37,7 @@ fn head_of(name: &str) -> String {
 struct Set {
   checkouts: Vec<Checkout>,
   heads: Vec<(String, Result<String, String>)>,
+  silent: Vec<String>,
   record: RefCell<Vec<(String, String)>>,
   outcomes: Vec<(String, Came)>,
   ran: RefCell<Vec<String>>,
@@ -47,6 +50,7 @@ impl Set {
     Self {
       checkouts: names.iter().map(|name| Ok(member(name))).collect(),
       heads: Vec::new(),
+      silent: Vec::new(),
       record: RefCell::new(Vec::new()),
       outcomes: Vec::new(),
       ran: RefCell::new(Vec::new()),
@@ -71,8 +75,15 @@ impl Set {
 }
 
 impl NightlyHands for Set {
-  fn checkouts(&self) -> Result<Vec<Checkout>, (String, String)> {
-    Ok(self.checkouts.clone())
+  fn checkouts(&self) -> Result<Roster, (String, String)> {
+    Ok(Roster {
+      checkouts: self.checkouts.clone(),
+      passed_over: vec![(PathBuf::from("/set/group/worktree"), "a second clone".to_owned())],
+    })
+  }
+
+  fn gathers(&self, member: &Member, _: &str) -> bool {
+    !self.silent.contains(&member.name)
   }
 
   fn head(&self, member: &Member) -> Result<String, String> {
@@ -172,6 +183,8 @@ fn failures_are_summarised_in_one_event_once_the_round_has_ended() {
   set
     .checkouts
     .push(Err((PathBuf::from("/checkouts/zeta"), "no testbed.toml".to_owned())));
+  set.checkouts.push(Ok(member("quiet")));
+  set.silent.push("quiet".to_owned());
 
   assert_eq!(run_nightly(&set, false), 1);
   assert_eq!(*set.ran.borrow(), ["beta", "gamma", "delta"]);
@@ -183,7 +196,7 @@ fn failures_are_summarised_in_one_event_once_the_round_has_ended() {
   let (name, summary, detail) = &told[0];
 
   assert_eq!(name, "nightly-suites-failed");
-  assert_eq!(detail["repositories"], 6);
+  assert_eq!(detail["repositories"], 7);
   assert_eq!(detail["passed"], serde_json::json!(["gamma"]));
   assert_eq!(detail["skipped"], serde_json::json!(["alpha"]));
 
@@ -212,7 +225,16 @@ fn failures_are_summarised_in_one_event_once_the_round_has_ended() {
   assert!(summary.contains("Log: /logs/beta.log"), "{summary}");
   assert!(summary.contains(&NIGHTLY.run.busy), "{summary}");
   assert!(summary.contains("the main branch main does not stand"), "{summary}");
-  assert!(!summary.contains("gamma"), "{summary}");
+  assert!(!summary.contains("gamma") && !summary.contains("quiet"), "{summary}");
+
+  let said = set.said.borrow();
+
+  // A repository that gathers no suite at its head is passed over, as the folders of the set passed over are.
+  assert!(
+    said.iter().any(|line| line.contains("quiet") && line.contains("no test languages")),
+    "{said:?}"
+  );
+  assert!(said.iter().any(|line| line.contains("/set/group/worktree")), "{said:?}");
 }
 
 // "a round where none failed but one was not run ends with 75"
@@ -345,6 +367,11 @@ fn nightly(dir: &Path, data: &Path, registry: &Path, hook: &str, args: &[&str]) 
   ran(&mut command)
 }
 
+// A declaration that gathers a suite, its tests run by bun.
+fn bun(name: &str) -> String {
+  format!("testbed = 0\nname = \"{name}\"\n\n[test]\nlanguages = [\"bun\"]\n")
+}
+
 const FAILING: &str = r#"import { expect, test } from "bun:test";
 
 test("fails", () => {
@@ -363,9 +390,9 @@ fn the_round_over_real_checkouts_skips_runs_records_and_tells_once() {
   let failing = dir.path().join("failing");
 
   std::fs::create_dir_all(&data).unwrap();
-  checkout(&settled, "testbed = 0\nname = \"settled\"\n");
-  checkout(&fresh, "testbed = 0\nname = \"fresh\"\n");
-  checkout(&failing, "testbed = 0\nname = \"failing\"\n\n[test]\nlanguages = [\"bun\"]\n");
+  checkout(&settled, &bun("settled"));
+  checkout(&fresh, &bun("fresh"));
+  checkout(&failing, &bun("failing"));
   std::fs::write(failing.join("broken.test.ts"), FAILING).unwrap();
   git(&failing, &["add", "."]);
   git(&failing, &["commit", "-q", "-m", "a failing test"]);
@@ -375,7 +402,7 @@ fn the_round_over_real_checkouts_skips_runs_records_and_tells_once() {
   assert_eq!(before.code, 0, "{}", before.err);
 
   // The person's own checkout carries a change of its own, which the round never runs.
-  std::fs::write(fresh.join("testbed.toml"), "testbed = 0\nname = \"fresh\"\n# edited\n").unwrap();
+  std::fs::write(fresh.join("testbed.toml"), format!("{}# edited\n", bun("fresh"))).unwrap();
 
   let registry = dir.path().join("checkouts.toml");
 
@@ -453,4 +480,138 @@ fn a_registry_that_does_not_read_fails_the_round() {
 
   assert_eq!(round.code, 2, "{}", round.err);
   assert!(std::fs::read_to_string(&told).unwrap().starts_with("nightly-suites-failed "));
+}
+
+// "a declaration gathers a suite where its `[test] languages` names one, as the release's suite gate reads it"
+#[test]
+fn a_declaration_gathers_a_suite_where_it_names_test_languages() {
+  assert!(gathers_suite(&bun("sample")));
+  assert!(!gathers_suite("testbed = 0\nname = \"sample\"\n"));
+  assert!(!gathers_suite("testbed = 0\n\n[test]\nlanguages = []\n"));
+  assert!(!gathers_suite("not toml ["));
+}
+
+// A checkout with one commit and the `origin` remote given, which nothing fetches from.
+fn cloned(dir: &Path, declaration: Option<&str>, remote: Option<&str>) {
+  std::fs::create_dir_all(dir).unwrap();
+  git(dir, &["init", "-q", "-b", "main"]);
+
+  if let Some(declaration) = declaration {
+    std::fs::write(dir.join("testbed.toml"), declaration).unwrap();
+  } else {
+    std::fs::write(dir.join("README.md"), "index\n").unwrap();
+  }
+
+  git(dir, &["add", "."]);
+  git(dir, &["commit", "-q", "-m", "start"]);
+
+  if let Some(remote) = remote {
+    git(dir, &["remote", "add", "origin", remote]);
+  }
+}
+
+// "the set is read as the release reads it: the index, every repository directly in its group folders and the
+// checkouts kept outside it, a linked worktree, a second clone of one remote and a repository with no origin
+// passed over; then the registry's checkouts the set did not reach"
+#[test]
+fn the_round_reads_the_set_as_the_release_does_and_the_registry_beside_it() {
+  let dir = tempfile::tempdir().unwrap();
+  let data = dir.path().join("data");
+  let index = dir.path().join("index");
+  let nowhere = dir.path().join("remotes");
+  let remote = |name: &str| nowhere.join(format!("{name}.git")).display().to_string();
+
+  std::fs::create_dir_all(&data).unwrap();
+  cloned(&index, None, Some(&remote("index")));
+  // A library of the set, which deploys nothing.
+  cloned(&index.join("base/library"), Some(&bun("library")), Some(&remote("library")));
+  cloned(&index.join("services/service"), Some(&bun("service")), Some(&remote("service")));
+  // A second clone of the service's remote, a linked worktree of it, and a repository with no origin.
+  cloned(&index.join("services/service-copy"), Some(&bun("service")), Some(&remote("service")));
+  git(
+    &index.join("services/service"),
+    &["worktree", "add", "-q", "--detach", "../service-tree"],
+  );
+  cloned(&index.join("tools/loose"), Some(&bun("loose")), None);
+  // A repository of the set that gathers no suite.
+  cloned(
+    &index.join("tools/quiet"),
+    Some("testbed = 0\nname = \"quiet\"\n"),
+    Some(&remote("quiet")),
+  );
+
+  let extra = dir.path().join("outside/extra");
+
+  cloned(&extra, Some(&bun("extra")), Some(&remote("extra")));
+
+  let other = dir.path().join("other");
+
+  cloned(&other, Some(&bun("other")), None);
+
+  let registry = dir.path().join("checkouts.toml");
+
+  std::fs::write(
+    &registry,
+    format!(
+      "checkouts = [\"{}\", \"{}\"]\n",
+      index.join("services/service").display(),
+      other.display()
+    ),
+  )
+  .unwrap();
+
+  let (hook, told) = hook(dir.path());
+  let mut command = testbed(dir.path(), &data, &["nightly", "--dry-run"]);
+
+  command
+    .env("BMO_TESTBED_CHECKOUTS", &registry)
+    .env("BMO_TESTBED_EVENT_HOOK", &hook)
+    .env(SET_VARIABLE, &index)
+    .env(SET_WITH_VARIABLE, &extra);
+
+  let done = ran(&mut command);
+  let said = &done.err;
+  let would = |name: &str, at: &Path| {
+    fill_marks(
+      &NIGHTLY.run.would_run,
+      &[("name", name), ("commit", &git(at, &["rev-parse", "HEAD"])[..12])],
+    )
+  };
+  let over = |path: &Path, why: &str| {
+    fill_marks(&NIGHTLY.run.passed_over, &[("path", &path.to_string_lossy()), ("why", why)])
+  };
+
+  assert_eq!(done.code, 0, "{said}");
+  assert!(said.contains(&fill_marks(&NIGHTLY.run.begins, &[("count", "5")])), "{said}");
+
+  for (name, at) in [
+    ("library", index.join("base/library")),
+    ("service", index.join("services/service")),
+    ("extra", extra.clone()),
+    ("other", other.clone()),
+  ] {
+    assert!(said.contains(&would(name, &at)), "{name}: {said}");
+  }
+
+  assert!(said.contains(&over(&index, &NIGHTLY.set.no_declaration)), "{said}");
+  assert!(said.contains(&over(&index.join("tools/loose"), &NIGHTLY.set.no_remote)), "{said}");
+  assert!(
+    said.contains(&over(
+      &index.join("services/service-copy"),
+      &fill_marks(&NIGHTLY.set.second_clone, &[("remote", &remote("service"))])
+    )),
+    "{said}"
+  );
+  assert!(said.contains("quiet") && said.contains("no test languages"), "{said}");
+  assert!(!said.contains("service-tree"), "a linked worktree is no candidate: {said}");
+  assert!(!told.exists());
+
+  // The set's reading alone, with the remotes a stand-in answers.
+  let read = read_set(&index, std::slice::from_ref(&extra), &|checkout: &Path| {
+    (!checkout.ends_with("tools/loose"))
+      .then(|| checkout.file_name().unwrap().to_string_lossy().into_owned())
+  });
+
+  assert!(read.members.iter().any(|(path, _)| *path == extra));
+  assert!(read.passed_over.iter().any(|(path, _)| path.ends_with("tools/loose")));
 }

@@ -41,8 +41,18 @@ not_run = "  not run  {name}: {why}"
 busy = "its daily whole run holds its tree"
 # A checkout whose declaration does not read, named by its {path}.
 unread = "  failed   {path}: {why}"
+# A folder of the set passed over, by its {path}, and a repository whose declaration gathers no suite at its
+# head, by its {name}; {why} one of the reasons under `[set]`.
+passed_over = "  over     {path}: {why}"
+no_suite = "  over     {name} at {commit}: its declaration there names no test languages, so it gathers no suite"
 # What the round came to.
-ended = "nightly: {passed} passed, {skipped} skipped, {failed} failed, {unrun} not run, of {count}"
+ended = "nightly: {passed} passed, {skipped} skipped, {failed} failed, {unrun} not run, {over} passed over, of {count}"
+
+# Why a folder of the set is passed over (docs/suite.md, 「The nightly round」).
+[set]
+no_remote = "it has no origin remote"
+second_clone = "a second clone of {remote}"
+no_declaration = "it holds no testbed.toml"
 
 # The summary of a round where any repository failed or was not run: {count} checkouts, {failed} of them,
 # and each one's {entries}.

@@ -23,7 +23,17 @@ pub struct RunWords {
   pub not_run: String,
   pub busy: String,
   pub unread: String,
+  pub passed_over: String,
+  pub no_suite: String,
   pub ended: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SetWords {
+  pub no_remote: String,
+  pub second_clone: String,
+  pub no_declaration: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -51,6 +61,7 @@ pub struct Nightly {
   pub lock: String,
   pub files_shown: usize,
   pub run: RunWords,
+  pub set: SetWords,
   pub account: AccountWords,
 }
 

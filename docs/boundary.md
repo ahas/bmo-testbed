@@ -445,8 +445,9 @@ bmo-testbed full [--due <HH:MM>]
 bmo-testbed nightly [--when-due] [--dry-run]
 ```
 
-- Runs the nightly round (`docs/suite.md`, 「The nightly round」): for every checkout the machine's registry
-  names, one at a time, the whole suite at its main branch's head in the tree of its daily whole run, a
+- Runs the nightly round (`docs/suite.md`, 「The nightly round」): for every repository of the set
+  `BMO_TESTBED_SET` and `BMO_TESTBED_SET_WITH` name and every checkout of the machine's registry the set did
+  not reach, one at a time, a repository whose declaration gathers no suite passed over, the whole suite at its main branch's head in the tree of its daily whole run, a
   repository whose head already has a passed whole run in the record skipped, and one
   `nightly-suites-failed` event once the round has ended where any repository failed or was not run. Run
   anywhere but its own unit, it starts that unit and ends; inside it, it runs to its end. It runs from any
@@ -687,6 +688,8 @@ verb's own name, and each noun takes what that verb takes.
 | `BMO_TEST_TEMPLATE_URL` | the declared migrate command | Set by `template make`: the database to migrate |
 | `BMO_TEST_HOME` | a consumer's code under test | Set by the test kit's test home: the file's home. A process that carries it is a test |
 | `BMO_FULL_CHECK_DIR` | `full` | The daily whole run's tree |
+| `BMO_TESTBED_SET` | `nightly` | The set's folder, the index's, whose repositories directly in its group folders the nightly round reads as a release does, over the one the machine's testbed environment file names; none names no set |
+| `BMO_TESTBED_SET_WITH` | `nightly` | The set's checkouts kept outside its folder, paths joined by `:`, over the one the machine's testbed environment file names |
 | `BMO_TESTBED_NIGHTLY_AT` | `nightly` | The time of day the nightly round is due at, `HH:MM` on the machine's clock, over the one the machine's testbed environment file names; anything else means the policy's, 03:00 |
 | `BMO_DEPLOY_DIR` | every process of a release | The release a process reads; handed on to what it starts. `deploy` never takes its deploy tree from it |
 | `BMO_TESTBED_CALLED_FROM` | every verb a checkout runs its own of | Set by the hand-over to a checkout's own binary: the directory the words were given in, which a path among them is read from |
@@ -788,7 +791,7 @@ keep (`docs/deploy.md`, 「The unit links」).
   | `placed-disk-low` | `machine` (the placed machine's label), `floor_bytes`, `disks`, each with `path` (as the settings name it), `source` (the filesystem's source, the drive itself for a WSL drive mount) and `free_bytes`. Sent once as a disk there comes to stand below the floor, and again only every two hours one stays below |
   | `disk-trim-failed` | `path` (the build directory the trim was run on), `said` |
   | `full-suite-failed` | `head`, `log`, `step` (the failing setup or static step, or null), `verdict` (the line saying what failed), `failures`, each with `unit` and `package` |
-  | `nightly-suites-failed` | `repositories` (how many the registry named), `passed`, `skipped` (each a repository's name), `failed`, each with `repository`, `root`, `commit` (or null), `outcome` (`failed` or `not-run`), `verdict`, `step` (or null), `log` (or null) and `failures`, each with `unit` and `package`. Sent once a round has ended where any repository failed or was not run |
+  | `nightly-suites-failed` | `repositories` (how many the round read, the folders passed over left out), `passed`, `skipped` (each a repository's name), `failed`, each with `repository`, `root`, `commit` (or null), `outcome` (`failed` or `not-run`), `verdict`, `step` (or null), `log` (or null) and `failures`, each with `unit` and `package`. Sent once a round has ended where any repository failed or was not run |
   | `suite-flaky` | `tests`, each with `test` and `unit`, `units`, `log` |
 
 ## The record

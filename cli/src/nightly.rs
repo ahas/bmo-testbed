@@ -13,6 +13,7 @@ use std::path::{Path, PathBuf};
 
 use bmo_testbed_core::declaration::Repository;
 use bmo_testbed_core::events::{Event, Hook};
+use bmo_testbed_core::policy::declaration::DECLARATION;
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::nightly::NIGHTLY;
 use bmo_testbed_core::queue::{LockWait, now_ms, take_lock};
@@ -23,6 +24,7 @@ use bmo_testbed_deploy::run::stamp_for_name;
 use bmo_testbed_deploy::unit::{DeployUnitStart, deploy_unit_of_process, start_deploy_unit, this_again};
 use bmo_testbed_suite::dependents::{read_registry, registry_path};
 use bmo_testbed_suite::fence::SUITE_SLICE;
+use bmo_testbed_suite::set::{SetRead, read_set};
 use chrono::{DateTime, NaiveTime, TimeZone};
 use serde_json::{Value, json};
 
@@ -35,6 +37,10 @@ use crate::words::NightlyArgs;
 pub const UNIT_PREFIX: &str = "bmo-nightly-suites-";
 /// The variable naming the time of day a round is due at.
 pub const AT_VARIABLE: &str = "BMO_TESTBED_NIGHTLY_AT";
+/// The variable naming the set's folder, whose group folders' repositories a round reads as a release does.
+pub const SET_VARIABLE: &str = "BMO_TESTBED_SET";
+/// The variable naming the set's checkouts kept outside its folder, as a list of paths.
+pub const SET_WITH_VARIABLE: &str = "BMO_TESTBED_SET_WITH";
 /// The event a round that did not pass sends.
 pub const EVENT: &str = "nightly-suites-failed";
 
@@ -99,15 +105,23 @@ pub fn due<Tz: TimeZone>(
   Ok(since)
 }
 
-/// A checkout of the registry whose declaration reads: its declared name and its root.
+/// A checkout of the round whose declaration reads: its declared name and its root.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Member {
   pub name: String,
   pub root: PathBuf,
 }
 
-/// A checkout of the registry, or the path of one whose declaration does not read and why.
+/// A checkout of the round, or the path of one whose declaration does not read and why.
 pub type Checkout = Result<Member, (PathBuf, String)>;
+
+/// What a round goes through: the set's repositories and the registry's checkouts, in that order, and the
+/// folders of the set passed over with why.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Roster {
+  pub checkouts: Vec<Checkout>,
+  pub passed_over: Vec<(PathBuf, String)>,
+}
 
 /// How one repository's run that did not pass ended: its verdict, the failing setup step where that was it,
 /// its log, and each failing unit with its package.
@@ -129,11 +143,13 @@ pub enum Came {
 
 /// Everything a round reaches, so a test holds each path.
 pub trait NightlyHands {
-  /// The checkouts the machine's registry names, in its order; why where the registry does not read, with
-  /// its path.
-  fn checkouts(&self) -> Result<Vec<Checkout>, (String, String)>;
+  /// The repositories of the set the settings name and the checkouts the machine's registry names; why where
+  /// the registry does not read, with its path.
+  fn checkouts(&self) -> Result<Roster, (String, String)>;
   /// The main branch's head of a repository, the remote asked first; why where it does not read.
   fn head(&self, member: &Member) -> Result<String, String>;
+  /// Whether the repository's declaration at the commit gathers a suite: it names test languages.
+  fn gathers(&self, member: &Member, commit: &str) -> bool;
   /// The test run that passed the repository's whole suite on the commit, by its id; none where none did.
   fn passed(&self, member: &Member, commit: &str) -> Option<i64>;
   /// The repository's whole suite run at the commit in its own tree.
@@ -251,8 +267,8 @@ fn round_event(
 /// was not run. Its exit code.
 pub fn run_nightly(hands: &impl NightlyHands, dry_run: bool) -> u8 {
   let said = &NIGHTLY.run;
-  let checkouts = match hands.checkouts() {
-    Ok(checkouts) => checkouts,
+  let roster = match hands.checkouts() {
+    Ok(roster) => roster,
     Err((path, why)) => {
       hands.say(&fill_marks(&said.registry_unread, &[("path", &path), ("why", &why)]));
 
@@ -268,15 +284,20 @@ pub fn run_nightly(hands: &impl NightlyHands, dry_run: bool) -> u8 {
       return REFUSED_EXIT_CODE;
     }
   };
-  let count = checkouts.len();
+  let count = roster.checkouts.len();
 
   hands.say(&fill_marks(&said.begins, &[("count", &count.to_string())]));
 
+  for (path, why) in &roster.passed_over {
+    hands.say(&fill_marks(&said.passed_over, &[("path", &path.to_string_lossy()), ("why", why)]));
+  }
+
+  let mut over = roster.passed_over.len();
   let mut passed: Vec<String> = Vec::new();
   let mut skipped: Vec<String> = Vec::new();
   let mut accounts: Vec<Account> = Vec::new();
 
-  for checkout in checkouts {
+  for checkout in roster.checkouts {
     let member = match checkout {
       Ok(member) => member,
       Err((path, why)) => {
@@ -312,6 +333,13 @@ pub fn run_nightly(hands: &impl NightlyHands, dry_run: bool) -> u8 {
       }
     };
     let at = short(&head).to_owned();
+
+    // A repository that gathers no suite has none to pass, as the release's suite gate reads it.
+    if !hands.gathers(&member, &head) {
+      hands.say(&fill_marks(&said.no_suite, &[("name", &member.name), ("commit", &at)]));
+      over += 1;
+      continue;
+    }
 
     if let Some(id) = hands.passed(&member, &head) {
       hands.say(&fill_marks(
@@ -368,6 +396,7 @@ pub fn run_nightly(hands: &impl NightlyHands, dry_run: bool) -> u8 {
       ("skipped", &skipped.len().to_string()),
       ("failed", &failed.to_string()),
       ("unrun", &unrun.to_string()),
+      ("over", &over.to_string()),
       ("count", &count.to_string()),
     ],
   ));
@@ -465,33 +494,135 @@ impl Here {
   fn repository(&self, member: &Member) -> Result<Repository, String> {
     Repository::read(&member.root).map_err(|refusal| refusal.to_string())
   }
+
+  // A setting: the environment's, else the machine's testbed environment file's; none where neither names one.
+  fn setting(&self, variable: &str) -> Option<String> {
+    self
+      .env
+      .get(variable)
+      .filter(|value| !value.trim().is_empty())
+      .cloned()
+      .or_else(|| assigned(&self.data_root.join(MACHINE_ENV_FILE), variable))
+  }
+
+  // A path as a setting writes it: under `HOME` where it begins with `~/`, as written otherwise.
+  fn expanded(&self, path: &Path) -> PathBuf {
+    match path.strip_prefix("~") {
+      Ok(under_home) => PathBuf::from(self.env.get("HOME").map_or("/", String::as_str)).join(under_home),
+      Err(_) => path.to_path_buf(),
+    }
+  }
+
+  // The set the settings name, read as the release reads it; an empty one where they name no folder.
+  fn set(&self) -> SetRead {
+    let Some(folder) = self.setting(SET_VARIABLE) else {
+      return SetRead::default();
+    };
+    let with: Vec<PathBuf> = self
+      .setting(SET_WITH_VARIABLE)
+      .map(|list| {
+        std::env::split_paths(&list)
+          .filter(|path| !path.as_os_str().is_empty())
+          .map(|path| self.expanded(&path))
+          .collect()
+      })
+      .unwrap_or_default();
+
+    read_set(&self.expanded(Path::new(folder.trim())), &with, &origin_of)
+  }
+}
+
+// A checkout's `origin` remote, none where it has none.
+fn origin_of(checkout: &Path) -> Option<String> {
+  let done = std::process::Command::new("git")
+    .args(["config", "--get", "remote.origin.url"])
+    .current_dir(checkout)
+    .stdin(std::process::Stdio::null())
+    .output()
+    .ok()?;
+
+  Some(String::from_utf8_lossy(&done.stdout).trim().to_owned())
+    .filter(|remote| done.status.success() && !remote.is_empty())
+}
+
+// A checkout of the round, by its declaration.
+fn checkout_at(path: PathBuf) -> Checkout {
+  match Repository::read(&path) {
+    Ok(repo) => Ok(Member {
+      name: repo.name(),
+      root: repo.root,
+    }),
+    Err(refusal) => Err((path, refusal.to_string())),
+  }
+}
+
+/// Whether a declaration's text gathers a suite: its `[test] languages` names at least one, as the release's
+/// suite gate reads it.
+pub fn gathers_suite(declaration: &str) -> bool {
+  declaration
+    .parse::<toml::Table>()
+    .ok()
+    .and_then(|table| {
+      table.get("test")?.get("languages")?.as_array().map(|languages| !languages.is_empty())
+    })
+    .unwrap_or(false)
 }
 
 impl NightlyHands for Here {
-  fn checkouts(&self) -> Result<Vec<Checkout>, (String, String)> {
+  fn checkouts(&self) -> Result<Roster, (String, String)> {
     let paths = read_registry(&self.registry, &self.env)
       .map_err(|fault| (fault.path.to_string_lossy().into_owned(), fault.why))?;
-    let mut seen: Vec<PathBuf> = Vec::new();
-    let mut found = Vec::new();
+    let set = self.set();
+    let mut roster = Roster {
+      passed_over: set.passed_over,
+      ..Roster::default()
+    };
+    let mut seen_paths: Vec<PathBuf> = Vec::new();
+    let mut seen_remotes: Vec<String> = Vec::new();
 
+    for (path, remote) in set.members {
+      seen_paths.push(std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone()));
+      seen_remotes.push(remote);
+
+      if path.join(&DECLARATION.file).is_file() {
+        roster.checkouts.push(checkout_at(path));
+      } else {
+        roster.passed_over.push((path, NIGHTLY.set.no_declaration.clone()));
+      }
+    }
+
+    // The registry's checkouts the set did not reach, by their folder or by a clone of the same remote.
     for path in paths {
       let same = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
 
-      if seen.contains(&same) {
+      if seen_paths.contains(&same) {
         continue;
       }
 
-      seen.push(same);
-      found.push(match Repository::read(&path) {
-        Ok(repo) => Ok(Member {
-          name: repo.name(),
-          root: repo.root,
-        }),
-        Err(refusal) => Err((path, refusal.to_string())),
-      });
+      seen_paths.push(same);
+
+      if let Some(remote) = origin_of(&path) {
+        if seen_remotes.contains(&remote) {
+          continue;
+        }
+
+        seen_remotes.push(remote);
+      }
+
+      roster.checkouts.push(checkout_at(path));
     }
 
-    Ok(found)
+    Ok(roster)
+  }
+
+  fn gathers(&self, member: &Member, commit: &str) -> bool {
+    let shown = std::process::Command::new("git")
+      .args(["show", &format!("{commit}:{}", DECLARATION.file)])
+      .current_dir(&member.root)
+      .stdin(std::process::Stdio::null())
+      .output();
+
+    shown.is_ok_and(|done| done.status.success() && gathers_suite(&String::from_utf8_lossy(&done.stdout)))
   }
 
   fn head(&self, member: &Member) -> Result<String, String> {

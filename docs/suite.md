@@ -417,9 +417,23 @@
   repository's whole suite on the commit in place of running it (`docs/deploy.md`, 「What the deploy run
   does, in order」, step 3; 「`passed`」 in `docs/boundary.md`). Once a night every repository of the
   machine gets one on its main branch's head, at an hour nobody works, so the gates find it standing.
-- **What it is:** the `nightly` verb reads the machine's registry of checkouts (「The dependents of a
-  major change」) and goes through every checkout it names, in the registry's order, one repository at a
-  time:
+- **Which repositories:** the set a release reads, then the registry's checkouts the set did not reach.
+  - **The set** stands where `BMO_TESTBED_SET` names its folder, the index's: the repository whose root is
+    that folder, every repository whose root stands directly in a folder directly inside it, and every
+    checkout `BMO_TESTBED_SET_WITH` names, the set's repositories kept outside its folder, as a list of
+    paths joined by `:`. Each setting is the environment's, else the one the machine's testbed environment
+    file names, and a path may begin with `~/`. Where no folder is named, the set holds nothing.
+  - **A folder of the set is passed over,** and said so, where it is a linked worktree, whose `.git` is a
+    file; where it is a second clone of a remote another clone already reaches by its `origin`, the clone
+    read being the one whose folder's name ends the remote's repository name; where it has no `origin`
+    remote; and where it holds no declaration.
+  - **The registry's checkouts** (「The dependents of a major change」) follow, each one the set did not
+    reach already, by its folder or by a clone of the same `origin` remote, so a repository of the machine
+    outside the set is tested as well.
+  - **A repository whose declaration at its head names no test languages gathers no suite,** as the
+    release's suite gate reads it, and is passed over and said so. A repository that declares no deploy
+    tree is run like any other: its tree stands in its own folder of runs.
+- **What it is:** the `nightly` verb goes through those repositories in that order, one at a time:
   - It reads the main branch's head as the daily whole run does, the remote asked first
     (`docs/declaration.md`, 「The main branch's head」).
   - **Where the record already holds a passed run of the whole suite on that commit,** the one `passed
