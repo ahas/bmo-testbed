@@ -13,6 +13,7 @@ use bmo_testbed_core::policy::events::EVENTS;
 use bmo_testbed_core::policy::install::INSTALL;
 use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::policy::main_branch::MAIN_BRANCH;
+use bmo_testbed_core::policy::nightly::NIGHTLY;
 use bmo_testbed_core::policy::plugin::PLUGIN;
 use bmo_testbed_core::policy::prune::PRUNE;
 use bmo_testbed_core::policy::quick_checks::QUICK_CHECKS;
@@ -35,6 +36,7 @@ fn every_part_reads_as_its_type() {
   LazyLock::force(&STATIC_CHECK);
   LazyLock::force(&COUNT);
   LazyLock::force(&DAILY);
+  LazyLock::force(&NIGHTLY);
   LazyLock::force(&DEPLOY);
   LazyLock::force(&DEPLOY_STEPS);
   LazyLock::force(&DEPLOY_TOOL);

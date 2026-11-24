@@ -1,0 +1,12 @@
+[Unit]
+Description=Nightly round of the machine's whole suites where one is due, asked every quarter of an hour
+# docs/suite.md, 「The nightly round」: its service starts a round only within the window after the time of day
+# it is due at, and only where none started since.
+
+[Timer]
+OnCalendar=*-*-* *:00/15:00
+
+[Install]
+WantedBy=timers.target
+# Linked with its service, enabled and started by every deployment (docs/deploy.md, 「The unit links」).
+X-BMO-Deploy=timer

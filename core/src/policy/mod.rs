@@ -17,6 +17,7 @@ pub mod events;
 pub mod install;
 pub mod lanes;
 pub mod main_branch;
+pub mod nightly;
 pub mod plugin;
 pub mod prune;
 pub mod quick_checks;

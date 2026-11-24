@@ -1,5 +1,5 @@
 [Unit]
-Description=Test suite: every suite run's fence, the daily whole run and the test server
+Description=Test suite: every suite run's fence, the daily whole run, the nightly round and the test server
 # docs/deploy.md, 「The slices」. Every line its units write carries this slice in the journal.
 
 [Install]

@@ -1,0 +1,24 @@
+[Unit]
+Description=Nightly round: the whole suite of every repository of the machine's registry at its main branch's head, where no passed run stands there yet
+# docs/suite.md, 「The nightly round」. Started by its timer every quarter of an hour, which every deployment of
+# this repository links with this unit and starts (docs/deploy.md, 「The unit links」). It starts a round only
+# where the time of day `BMO_TESTBED_NIGHTLY_AT` names, from the environment file below, has come within the
+# window and no round started since, and otherwise says why and ends. This unit is the round's own, so the
+# round runs in it, one repository at a time, each suite in the machine's turn. A round where any repository
+# failed or was not run sends one event to the hook the environment file names, or the owner's supervisor.
+
+[Service]
+Type=oneshot
+# docs/deploy.md, 「The slices」.
+Slice=bmo-suite.slice
+# The deploy tree, whose binary it runs.
+WorkingDirectory=%h/.local/share/bmo-testbed/deploy
+ExecStart=%h/.local/share/bmo-testbed/deploy/bin/bmo-testbed nightly --when-due
+Environment=PATH=%h/.local/bin:%h/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# The round runs in this unit, as a whole run's unit is marked (docs/boundary.md, 「The environment」).
+Environment=BMO_DEPLOY_UNIT=%n
+# The machine's own environment, the event hook and the round's time of day among it, where the file exists.
+EnvironmentFile=-%h/.local/share/bmo/data/env/testbed.env
+# A round where a repository was not run, and none failed.
+SuccessExitStatus=75
+Nice=10

@@ -8,6 +8,7 @@ mod deploy_verbs;
 mod full;
 mod imports;
 mod log;
+mod nightly;
 mod notice;
 mod nouns;
 mod own;

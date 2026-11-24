@@ -36,8 +36,8 @@ binaries = ["bmo-testbed", "deploy-tool"]
 [deploy]
 root = "~/.local/share/bmo-testbed"
 data_root = "~/.local/share/bmo-testbed/data"
-# The prune and the data backup with their timers, and the slices the testbed's units run in, kept by every
-# deployment by their marks.
+# The prune, the data backup and the nightly round with their timers, and the slices the testbed's units run
+# in, kept by every deployment by their marks.
 units = ["units/*.service", "units/*.timer", "units/*.slice"]
 
 # The binary, linked into `.local/bin` under the home directory beside `bmo`, which serves the nouns this

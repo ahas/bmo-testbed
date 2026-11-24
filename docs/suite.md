@@ -11,8 +11,8 @@
 - **Why a process per file:** a test stuck in a synchronous loop, a native call or an import holds its
   whole process; inside one shared process it would hold every file after it. A file in a process of its
   own holds only itself, and the files beside it run on and write their results.
-- **Every caller runs the same verb:** a person, a close, a deployment's check and the daily whole
-  run. A run placed on another machine runs the same verb there (`docs/testbed.md`, 「A run on another
+- **Every caller runs the same verb:** a person, a close, a deployment's check, the daily whole run and
+  the nightly round. A run placed on another machine runs the same verb there (`docs/testbed.md`, 「A run on another
   machine」).
 
 ## One sweep, a process per file
@@ -410,6 +410,53 @@
   unit each stands in, the head it ran at and the log; a tree that could not be set up, or a static
   check that failed, is told the same way with what failed. A run that passes says nothing beyond its
   log.
+
+## The nightly round
+
+- **Why it exists:** a deployment's gate, and a release's gate over the whole set, take a passed run of a
+  repository's whole suite on the commit in place of running it (`docs/deploy.md`, 「What the deploy run
+  does, in order」, step 3; 「`passed`」 in `docs/boundary.md`). Once a night every repository of the
+  machine gets one on its main branch's head, at an hour nobody works, so the gates find it standing.
+- **What it is:** the `nightly` verb reads the machine's registry of checkouts (「The dependents of a
+  major change」) and goes through every checkout it names, in the registry's order, one repository at a
+  time:
+  - It reads the main branch's head as the daily whole run does, the remote asked first
+    (`docs/declaration.md`, 「The main branch's head」).
+  - **Where the record already holds a passed run of the whole suite on that commit,** the one `passed
+    --commit` answers, the repository is skipped: nothing of it runs.
+  - **Otherwise it runs the repository's whole suite at that commit** in the repository's own tree of the
+    daily whole run, never the person's working checkout: the tree is put on the commit, cleared of
+    whatever an earlier run left untracked and set up by the declared setup, exactly as 「The daily whole
+    run」 puts it, and every unit runs through that tree's suite, units a round never started run again by
+    name. No static check runs: the round is there for the suite. Each suite takes the machine's turn like
+    any run, so the round waits behind whatever holds the wide lane and runs one repository at a time.
+  - The suite writes its test run into the record as every run does, whole and from a clean tree, so a
+    whole run that passed is the one `passed --commit` answers from then on, and the next round skips it.
+  - It holds the repository's lock of the daily whole run while it uses that tree, so the two never stand
+    in one tree at once; a repository whose lock another run holds is not run this round.
+  - Its log for a repository is `nightly-<stamp>.log` in that repository's own folder of the daily whole
+    run, `suite-full/<repository>/` under the data root's `testbed/`.
+- **A checkout that does not read, or a main branch whose head does not read, fails that repository alone;**
+  the round goes on to the next. A registry that does not read fails the round.
+- **When:** at the time of day `BMO_TESTBED_NIGHTLY_AT` names, as `HH:MM` on the machine's own clock, the
+  deployment's time zone, else the one the machine's testbed environment file names, else the policy's,
+  03:00. The testbed's own timer, `bmo-nightly-suites.timer`, asks every quarter of an hour with
+  `nightly --when-due`, which starts a round only where none started since that time today and the
+  policy's four hours since it have not passed, so a machine that was off or busy past the window leaves
+  the round to the next night and a deployment during the day starts none. A round writes its start time
+  into `started` under the data root's `testbed/suite-nightly/` before anything else.
+- **Where it runs:** in its own unit. The timer's service, `bmo-nightly-suites.service` in
+  `bmo-suite.slice`, is that unit. Called from anywhere else, the verb starts a transient unit,
+  `bmo-nightly-suites-<stamp>` in the same slice, and ends. One round at a time on a machine: a round
+  holds the nightly lock under the data root's locks, and a second meeting it is refused.
+- **`--dry-run`** reads the registry, each head and the record, and says, for each repository, whether it
+  would run or be skipped and why, in the caller's own process. It takes no turn, holds no lock and runs
+  nothing.
+- **What it tells:** once the round has ended, one `nightly-suites-failed` event naming every repository
+  that failed or was not run, each with the commit, the verdict, the failing units with their packages and
+  the log, goes to the machine's own hook (`docs/boundary.md`, 「Events」), the one the placed machine's
+  events go to, so where no hook is set it reaches the owner's private room as one notice through the
+  receiver. A round where every repository passed or was skipped says nothing beyond its lines.
 
 ## The dependents of a major change
 

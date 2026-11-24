@@ -23,6 +23,7 @@ pub struct UsageWords {
   pub cargo: String,
   pub prune: String,
   pub full: String,
+  pub nightly: String,
   pub deploy: String,
   pub deploy_first: String,
   pub backups: String,

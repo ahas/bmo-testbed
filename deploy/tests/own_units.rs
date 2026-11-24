@@ -1,6 +1,6 @@
 //! This repository's own units (docs/deploy.md, 「The Cargo build directory」, 「The unit links」 and 「The
-//! slices」; docs/backup.md): its declaration reaches them, its deployment keeps the prune's and the data
-//! backup's timers with their services by their marks, each service runs its verb of the binary its own
+//! slices」; docs/backup.md; docs/suite.md, 「The nightly round」): its declaration reaches them, its deployment
+//! keeps the prune's, the data backup's and the nightly round's timers with their services by their marks, each service runs its verb of the binary its own
 //! deploy tree holds, every slice a unit runs in is one it ships, linked by its mark, and the placed machine
 //! is laid the prune's timer, its service and its slice and nothing else.
 
@@ -30,7 +30,7 @@ fn unit_files() -> Vec<String> {
 }
 
 #[test]
-fn the_repositorys_deployment_keeps_the_prune_the_data_backup_and_their_timers() {
+fn the_repositorys_deployment_keeps_the_prune_the_data_backup_the_nightly_round_and_their_timers() {
   let repo = Repository::read(&root()).unwrap();
   let files = unit_files();
   let read = |path: &str| std::fs::read_to_string(root().join(path)).unwrap_or_default();
@@ -48,6 +48,7 @@ fn the_repositorys_deployment_keeps_the_prune_the_data_backup_and_their_timers()
     ("units/bmo-data-backup-drill.timer", "bmo-data-backup-drill.service", " backup drill"),
     ("units/bmo-data-backup-media.timer", "bmo-data-backup-media.service", " backup media"),
     ("units/bmo-data-backup.timer", "bmo-data-backup.service", " backup snapshot"),
+    ("units/bmo-nightly-suites.timer", "bmo-nightly-suites.service", " nightly --when-due"),
   ];
 
   assert_eq!(
@@ -64,6 +65,8 @@ fn the_repositorys_deployment_keeps_the_prune_the_data_backup_and_their_timers()
       "units/bmo-data-backup.service",
       "units/bmo-data-backup.timer",
       "units/bmo-deploy.slice",
+      "units/bmo-nightly-suites.service",
+      "units/bmo-nightly-suites.timer",
       "units/bmo-suite.slice",
       "units/bmo-upkeep.slice",
     ]
@@ -110,6 +113,7 @@ fn every_slice_a_unit_runs_in_is_one_the_repository_ships_and_links() {
     ("bmo-data-backup-drill.service", BACKUP_SLICE),
     ("bmo-data-backup-media.service", BACKUP_SLICE),
     ("bmo-data-backup.service", BACKUP_SLICE),
+    ("bmo-nightly-suites.service", "bmo-suite.slice"),
   ] {
     let unit = read(&format!("units/{service}"));
 

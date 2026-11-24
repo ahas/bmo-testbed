@@ -1,0 +1,64 @@
+# What the nightly round holds to and says (docs/suite.md, 「The nightly round」): when it is due, the
+# lines it writes about each repository of the machine's registry, and the summary its
+# `nightly-suites-failed` event carries (docs/boundary.md, 「Events」). A harness, the journal's reader and
+# the event's reader read them, so they are English. Each `{name}` is filled in with what it names.
+
+# The time of day a round is due at, `HH:MM` on the machine's clock, where neither the environment nor the
+# machine's testbed environment file names one in `BMO_TESTBED_NIGHTLY_AT`.
+at = "03:00"
+# How many hours after that time a round may still start: past them, the round is left to the next night.
+window_hours = 4
+# The round's own folder under the data root's `testbed/`, where its start time stands.
+folder = "suite-nightly"
+# The lock a round holds under the data root's `locks/`, one round at a time on a machine.
+lock = "nightly-suites.lock"
+# How many failing units of one repository the event's summary names; the event's `failures` name every one.
+files_shown = 5
+
+[run]
+# Where it went, since it never runs in its caller's process.
+unit_failed = "nightly: refused, since its unit {unit} could not be started, and it does not run in this shell instead: {said}"
+started = "nightly: running as {unit}, which outlives this call; read it with: journalctl --user -u {unit} --no-pager"
+# A second round meeting one at work.
+refused = "nightly: refused, since another round is going; read it with journalctl --user -u 'bmo-nightly-suites*'"
+# `--when-due` finding no round due, {why} one of the two below.
+not_due = "nightly: no round starts now, since {why}"
+started_since = "a round started at {started}, since {due}"
+window_passed = "{hours} hours have passed since {due}, the window a round may start in"
+# A time of day the setting names that does not read.
+bad_at = "nightly: {value} is no time of day as HH:MM, so the policy's {at} stands"
+# The registry, and the round over it.
+registry_unread = "nightly: FAILED, the checkout registry {path} does not read: {why}"
+begins = "nightly: {count} checkout(s) in the machine's registry"
+# Each repository, its {name} as its declaration names it and {commit} its main branch's head.
+skip = "  skip     {name} at {commit}: test run {id} passed its whole suite there"
+would_run = "  run      {name} at {commit}"
+running = "nightly: {name} at {commit}, its log in {log}"
+passed = "  passed   {name} at {commit}"
+failed = "  failed   {name}: {verdict}"
+not_run = "  not run  {name}: {why}"
+# A repository whose daily whole run holds its tree.
+busy = "its daily whole run holds its tree"
+# A checkout whose declaration does not read, named by its {path}.
+unread = "  failed   {path}: {why}"
+# What the round came to.
+ended = "nightly: {passed} passed, {skipped} skipped, {failed} failed, {unrun} not run, of {count}"
+
+# The summary of a round where any repository failed or was not run: {count} checkouts, {failed} of them,
+# and each one's {entries}.
+[account]
+summary = "the nightly round over {count} repositories did not pass for {failed}: {entries}"
+# One repository: {name}, where it ran, {verdict} what it came to, its failing {files} where any are named,
+# and its {log} where it has one.
+entry = "{name}{at}: {verdict}.{files}{log}"
+at = " at {commit}"
+files = " Failing files: {files}."
+file = "{file} ({unit})"
+more = " and {count} more"
+log = " Log: {log}"
+joiner = ", "
+between = " | "
+# The unit of a file standing in none.
+outside = "outside every unit"
+# A round whose registry did not read: {path} and {why}.
+unread = "the nightly round ran nothing, since the checkout registry {path} does not read: {why}"

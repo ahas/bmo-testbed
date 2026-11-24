@@ -25,7 +25,7 @@ and a release-based deployment of a repository onto the machine it runs on.
 | Document | What it states |
 |---|---|
 | `docs/testbed.md` | The queue: lanes, turns, the front and the next, waiting, width, the result line, languages, placement |
-| `docs/suite.md` | The whole-suite run: sweep, lanes, fence, the test database, what failed runs once more, the daily whole run |
+| `docs/suite.md` | The whole-suite run: sweep, lanes, fence, the test database, what failed runs once more, the daily whole run, the nightly round over the machine's repositories |
 | `docs/checks.md` | Which tests a change runs, the static check, the quick checks, the change check, imports, the test count |
 | `docs/deploy.md` | Releases, adoption, unit marks, the deploy run, progress, the hosted deploy tool, rollback, refusals, backups, the Cargo build directory |
 | `docs/install.md` | The install: a preset of an index's presets file laid onto a fresh machine, each repository's `install.toml`, the steps in order, each printed as one JSON line |

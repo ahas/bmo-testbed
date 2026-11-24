@@ -17,7 +17,7 @@ use bmo_testbed_core::main_branch::MainBranch;
 use bmo_testbed_core::policy::daily::DAILY;
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::queue::{LockWait, now_ms, take_lock};
-use bmo_testbed_core::turn::{NOT_RUN_EXIT_CODE, process_env};
+use bmo_testbed_core::turn::{Env, NOT_RUN_EXIT_CODE, process_env};
 use bmo_testbed_core::verb::{REFUSED_EXIT_CODE, data_root};
 use bmo_testbed_deploy::expansion::bring_submodules;
 use bmo_testbed_deploy::run::{run_quiet, stamp_for_name, words};
@@ -155,6 +155,7 @@ fn failed_event(
       "head": head,
       "log": log,
       "step": step,
+      "verdict": verdict,
       "failures": failed.iter().map(|(unit, package)| json!({ "unit": unit, "package": package })).collect::<Vec<_>>(),
     }),
   }
@@ -299,13 +300,25 @@ pub fn prepare_tree(
   setup(tree)
 }
 
-// The run's hands on this machine: the main branch read in the repository, its own tree, the log, and the hook.
-struct Machine {
-  source: PathBuf,
-  tree: PathBuf,
-  log: PathBuf,
-  main: String,
-  hook: Hook,
+/// The tree a repository's daily whole run stands in where `BMO_FULL_CHECK_DIR` names none: `full-check` beside
+/// its deploy tree, or `tree` in its own folder of runs where it declares no deploy root.
+pub fn own_tree(repo: &Repository, env: &Env, data_root: &Path) -> PathBuf {
+  repo
+    .declaration
+    .deploy
+    .root
+    .as_ref()
+    .map(|root| repo.path(root, env).join("full-check"))
+    .unwrap_or_else(|| runs_folder(data_root, &repo.name()).join("tree"))
+}
+
+/// The run's hands on this machine: the main branch read in the repository, its own tree, the log, and the hook.
+pub(crate) struct Machine {
+  pub(crate) source: PathBuf,
+  pub(crate) tree: PathBuf,
+  pub(crate) log: PathBuf,
+  pub(crate) main: String,
+  pub(crate) hook: Hook,
 }
 
 impl Machine {
@@ -425,14 +438,7 @@ pub fn full(args: &FullArgs) -> u8 {
   let tree = env
     .get(FULL_CHECK_VARIABLE)
     .filter(|named| !named.is_empty())
-    .map(PathBuf::from)
-    .or_else(|| {
-      let deploy = &repo.declaration.deploy;
-      let root = repo.path(deploy.root.as_ref()?, &env);
-
-      Some(root.join("full-check"))
-    })
-    .unwrap_or_else(|| folder.join("tree"));
+    .map_or_else(|| own_tree(&repo, &env, &data_root()), PathBuf::from);
   let now = now_ms();
 
   if deploy_unit_of_process().is_none() {

@@ -14,6 +14,7 @@ pub mod env_file;
 pub mod full;
 pub mod imports;
 pub mod install;
+pub mod nightly;
 pub mod notice;
 pub mod nouns;
 pub mod own;
@@ -460,6 +461,7 @@ pub fn main(args: impl IntoIterator<Item = OsString>) -> u8 {
     Verb::Cargo(args) => run_cargo(args),
     Verb::Prune(args) => cargo::prune(&args),
     Verb::Full(args) => full::full(&args),
+    Verb::Nightly(args) => nightly::nightly(&args),
     Verb::Deploy(args) => run_deploy(args),
     Verb::Backups => deploy::backups(),
     Verb::Backup(args) => backup::backup(&args.word),

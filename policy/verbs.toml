@@ -27,6 +27,8 @@ cargo     Cargo over the shared build directory, in the machine's turn where it 
           `cargo prune` removes what no build reads
 prune     what no build reads any more, removed from the shared Cargo build directory
 full      the daily whole run of the repository's suite, in a unit of its own
+nightly   the nightly round: every repository of the machine's registry whose main branch's head has
+          no passed whole suite yet, its whole suite run there, one at a time
 deploy    a commit of the repository put live, in a unit of its own; `deploy commit` as
           the platform names it
 backups   the backups a deployment took, sent away and rotated; `deploy backups` as the
@@ -229,6 +231,19 @@ branch's head in a tree of its own, set up, the static check, then every unit. A
 and exits 1 where it failed; a second run meeting one at work is refused with 2.
 
 --due  start only where no run started since that time of day, local time"""
+nightly = """
+usage: {verb} nightly [--when-due] [--dry-run]
+
+Runs the nightly round in a unit of its own and ends (docs/suite.md): for every checkout the machine's
+registry names, one at a time, the whole suite at its main branch's head in the tree of its daily whole
+run, a repository whose head already has a passed whole suite in the record skipped. Once the round has
+ended, a nightly-suites-failed event names every repository that failed or was not run; a round that
+passed says nothing. Inside its unit it runs to its end and exits 1 where any repository failed, 75 where
+none failed but one did not run; a second round meeting one at work is refused with 2.
+
+--when-due  start only where the time of day BMO_TESTBED_NIGHTLY_AT names, 03:00 by default, has come
+            today, its window has not passed, and no round started since it
+--dry-run   say for each repository whether it would run or be skipped, and run nothing"""
 deploy = """
 usage: {verb} deploy [--commit <sha>] [--message <why>] [--dry-run] [--no-check] [--before-start <command>] [--force-live] [--first <why> [--by <who>]]
 

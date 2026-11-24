@@ -1411,6 +1411,7 @@
     "cargo",
     "prune",
     "full",
+    "nightly",
     "deploy",
     "backups",
     "backup",

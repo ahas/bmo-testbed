@@ -45,6 +45,7 @@ pub enum Verb {
   Cargo(CargoArgs),
   Prune(PruneArgs),
   Full(FullArgs),
+  Nightly(NightlyArgs),
   Deploy(DeployArgs),
   Backups,
   Backup(BackupArgs),
@@ -77,6 +78,15 @@ fn time_of_day(word: &str) -> Result<chrono::NaiveTime, String> {
 pub struct FullArgs {
   #[arg(long, value_parser = time_of_day)]
   pub due: Option<chrono::NaiveTime>,
+}
+
+/// `nightly`: the round over the machine's repositories, or with `--dry-run` what it would run.
+#[derive(Debug, Args)]
+pub struct NightlyArgs {
+  #[arg(long)]
+  pub when_due: bool,
+  #[arg(long)]
+  pub dry_run: bool,
 }
 
 /// `deploy`, or the platform's `deploy commit` and `deploy backups`.
@@ -596,6 +606,7 @@ pub fn read(args: impl IntoIterator<Item = OsString>) -> Result<Words, clap::Err
     })
     .mut_subcommand("prune", |verb| verb.override_help(usage(&said.prune)))
     .mut_subcommand("full", |verb| verb.override_help(usage(&said.full)))
+    .mut_subcommand("nightly", |verb| verb.override_help(usage(&said.nightly)))
     .mut_subcommand("deploy", |verb| {
       verb
         .override_help(usage(&said.deploy))

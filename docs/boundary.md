@@ -439,6 +439,27 @@ bmo-testbed full [--due <HH:MM>]
   where none started since that time of day (`docs/suite.md`, 「The daily whole run」). Inside its own
   unit it runs to its end and exits 1 where it failed. Exits 2 where another run holds the lock.
 
+### `nightly`
+
+```
+bmo-testbed nightly [--when-due] [--dry-run]
+```
+
+- Runs the nightly round (`docs/suite.md`, 「The nightly round」): for every checkout the machine's registry
+  names, one at a time, the whole suite at its main branch's head in the tree of its daily whole run, a
+  repository whose head already has a passed whole run in the record skipped, and one
+  `nightly-suites-failed` event once the round has ended where any repository failed or was not run. Run
+  anywhere but its own unit, it starts that unit and ends; inside it, it runs to its end. It runs from any
+  folder, inside a repository or not.
+- **`--when-due`** starts a round only where it is due: the time of day `BMO_TESTBED_NIGHTLY_AT` names has
+  come today, the policy's window since it has not passed, and no round started since it. Otherwise it
+  says on one line why none starts and exits 0.
+- **`--dry-run`** prints a line for each repository, whether it would run or be skipped and why, in the
+  caller's own process, and runs nothing.
+- Exits 0 where every repository passed or was skipped, 1 where any failed, 75 where none failed but one
+  was not run, and 2 where the registry does not read or another round holds the lock. A dry run exits 0
+  wherever the registry reads.
+
 ### `deploy`
 
 ```
@@ -656,7 +677,7 @@ verb's own name, and each noun takes what that verb takes.
 | `BMO_TESTBED_PLACEMENT` | `run`, `suite`, `deploy` | The placement endpoint, over the settings and the declaration. Set empty for `deploy`, the testbed's deployment leaves the placed machine's testbed as it stands (`docs/deploy.md`, 「Where a deployment runs」) |
 | `BMO_TESTBED_PLACED_STANDING_MS` | every placed run, `placed` | How often a placed run whose output has not come back says it still runs there, and how often the `placed` verb says its command still works while none of its output passes, in milliseconds, over the lane policy's; anything that is not a positive whole number means the policy's |
 | `BMO_TESTBED_PLACED` | the turn, `placed` | Set by `placed` for the run it starts: `1`. A run finding it is never placed again |
-| `BMO_TESTBED_CHECKOUTS` | `dependents`, `deploy`, `prune`, `check shared-versions`, the hosted deploy tool | The machine's registry of checkouts, over the data root's `testbed/checkouts.toml` |
+| `BMO_TESTBED_CHECKOUTS` | `dependents`, `deploy`, `prune`, `check shared-versions`, `nightly`, the hosted deploy tool | The machine's registry of checkouts, over the data root's `testbed/checkouts.toml` |
 | `BMO_TESTBED_EVENT_HOOK` | every verb that sends events | The event hook, over the declaration's, and the hook for a verb run outside a repository |
 | `RECEIVER_ADDRESS` | `notice` | The receiver's base address, over the one `<data root>/env/receiver.env` names |
 | `RECEIVER_TOKEN` | `notice` | The receiver's bearer token, over the one `<data root>/env/receiver.env` names |
@@ -666,9 +687,10 @@ verb's own name, and each noun takes what that verb takes.
 | `BMO_TEST_TEMPLATE_URL` | the declared migrate command | Set by `template make`: the database to migrate |
 | `BMO_TEST_HOME` | a consumer's code under test | Set by the test kit's test home: the file's home. A process that carries it is a test |
 | `BMO_FULL_CHECK_DIR` | `full` | The daily whole run's tree |
+| `BMO_TESTBED_NIGHTLY_AT` | `nightly` | The time of day the nightly round is due at, `HH:MM` on the machine's clock, over the one the machine's testbed environment file names; anything else means the policy's, 03:00 |
 | `BMO_DEPLOY_DIR` | every process of a release | The release a process reads; handed on to what it starts. `deploy` never takes its deploy tree from it |
 | `BMO_TESTBED_CALLED_FROM` | every verb a checkout runs its own of | Set by the hand-over to a checkout's own binary: the directory the words were given in, which a path among them is read from |
-| `BMO_DEPLOY_UNIT` | `deploy`, `full` | Set inside a deployment's or a whole run's unit: its name. A run finding it runs where it is |
+| `BMO_DEPLOY_UNIT` | `deploy`, `full`, `nightly` | Set inside a deployment's, a whole run's or a nightly round's unit: its name. A run finding it runs where it is |
 | `BMO_DEPLOY_PROGRESS` | `deploy` | Another progress record file |
 | `BMO_UNIT` | `deploy` | Another `bot` service unit name, for a rehearsal |
 | `BMO_BACKUP_DIR` | `deploy`, `backups` | Another backup directory, over the declaration's |
@@ -714,10 +736,13 @@ keep (`docs/deploy.md`, 「The unit links」).
   (`docs/deploy.md`, 「The Cargo build directory」). The testbed reads that one variable out of the file as
   the service manager reads it, the last line assigning it, its value trimmed and a value in quotes
   unquoted, and nothing else of the file. No declaration's hook takes them.
-- **Where neither names a hook, the placed machine's events go to the owner's supervisor:** the hook is
+- **The nightly round's event is the machine's too** (`docs/suite.md`, 「The nightly round」): it goes to the
+  machine's own hook, as the placed machine's do, whatever repositories the round ran.
+- **Where neither names a hook, the machine's events go to the owner's supervisor:** the hook is
   then the running testbed binary's own `notice` (「`notice`」); a program that calls the placement in its
   own process, such as a test harness, has none, and the event is its line. An outage of the placed machine, or its testbed
-  left behind the live release, stops every run placed there, and only the owner can act on it. The
+  left behind the live release, stops every run placed there, and a repository whose whole suite fails on
+  its main branch holds every gate that waits on it, and only the owner can act on either. The
   route that tells him is the receiver's instruction queue, the platform's one road for a system notice
   to the owner: it holds the instruction until his supervisor's session can take it, rather than
   handing it to a session that may be at rest, and the supervisor says it in his private room (the
@@ -762,7 +787,8 @@ keep (`docs/deploy.md`, 「The unit links」).
   | `placed-release-failed` | `machine`, `command`, `live` (the live testbed release's commit), `far` (the commit the testbed there names, or null), `said` (what bringing it came to). Sent once for each live release, by the first run whose placed machine answers but whose testbed could not be brought to that release; that run and every one after it passes on down the order. A run that finds the testbed there at the live release clears this, so a failure after it is sent again (「The placed machine」) |
   | `placed-disk-low` | `machine` (the placed machine's label), `floor_bytes`, `disks`, each with `path` (as the settings name it), `source` (the filesystem's source, the drive itself for a WSL drive mount) and `free_bytes`. Sent once as a disk there comes to stand below the floor, and again only every two hours one stays below |
   | `disk-trim-failed` | `path` (the build directory the trim was run on), `said` |
-  | `full-suite-failed` | `head`, `log`, `step` (the failing setup or static step, or null), `failures`, each with `unit` and `package` |
+  | `full-suite-failed` | `head`, `log`, `step` (the failing setup or static step, or null), `verdict` (the line saying what failed), `failures`, each with `unit` and `package` |
+  | `nightly-suites-failed` | `repositories` (how many the registry named), `passed`, `skipped` (each a repository's name), `failed`, each with `repository`, `root`, `commit` (or null), `outcome` (`failed` or `not-run`), `verdict`, `step` (or null), `log` (or null) and `failures`, each with `unit` and `package`. Sent once a round has ended where any repository failed or was not run |
   | `suite-flaky` | `tests`, each with `test` and `unit`, `units`, `log` |
 
 ## The record
@@ -771,7 +797,7 @@ keep (`docs/deploy.md`, 「The unit links」).
   data root's `testbed/`, which every verb writes and the HTTP service reads: the test runs, the
   deployments with their steps and log lines, the restarts, and the events of each.
 - **A test run** is written by every `run` that is not placed elsewhere, kind `command`, and by every
-  `suite`, kind `suite`, a deployment's gate and the daily whole run among them. It is written once
+  `suite`, kind `suite`, a deployment's gate, the daily whole run and the nightly round among them. It is written once
   its turn has come and ended with its counts; a run ending not run from there on ends `not-run`. A change
   check over several checkouts writes one test run of kind `check` for each repository, its checkout, its
   repository's name and its commit, once the set's turn has come. A run placed elsewhere is written by the
