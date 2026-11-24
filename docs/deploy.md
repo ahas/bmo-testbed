@@ -1211,7 +1211,10 @@ flowchart TD
     lock the prune does not hold, such as one a build began in after the prune took its locks; the
     directory of the checkout or the build tree of a deployment of the machine's registry that is running,
     whose release build's own target directory stands outside the build root under its own span;
-    the directory of a checkout a program built there is running from; and nothing outside the profile
+    the directory of a checkout a program built there is running from; the directory of a checkout whose
+    command holds a seat of the machine's turn, as a whole suite does from its build through its last crate's
+    tests, so the test binaries a run has built and not yet started stay however long ago its directory was
+    last read; and nothing outside the profile
     directories, so each live checkout keeps its directory, its records and its locks.
   - **The placed machine keeps no record of the deployments whose builds it carries;** there a
     deployment's release build is kept as its bench's directory is, by the deployment's mark and the

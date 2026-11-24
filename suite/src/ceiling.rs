@@ -12,10 +12,11 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::os::unix::fs::MetadataExt as _;
 use std::path::{Path, PathBuf};
 
+use bmo_testbed_core::declaration::root_of;
 use bmo_testbed_core::policy::prune::PRUNE;
 use bmo_testbed_core::policy::verbs::VERBS;
 use bmo_testbed_core::queue::HeldLock;
-use bmo_testbed_core::turn::{Env, leading_number};
+use bmo_testbed_core::turn::{Env, Lane, leading_number, lock_path, process_env, read_queue};
 
 use crate::crates::is_deployment_checkout;
 use crate::prune::{
@@ -108,6 +109,8 @@ pub enum HeldBy {
   Deployment,
   /// A program built in the directory is running.
   Program,
+  /// A command run in the checkout holds a seat of the machine's turn.
+  Turn,
 }
 
 impl HeldBy {
@@ -117,6 +120,7 @@ impl HeldBy {
       Self::BuildLock => "build-lock",
       Self::Deployment => "deployment",
       Self::Program => "program",
+      Self::Turn => "turn",
     }
   }
 
@@ -128,6 +132,7 @@ impl HeldBy {
       Self::BuildLock => &said.by_build_lock,
       Self::Deployment => &said.by_deployment,
       Self::Program => &said.by_program,
+      Self::Turn => &said.by_turn,
     }
   }
 }
@@ -151,23 +156,35 @@ pub struct Keepers {
   pub deploying: HashSet<PathBuf>,
   /// The executables of the running processes.
   pub running: Vec<PathBuf>,
+  /// The directories under the build root's `checkouts/` of the checkouts whose command holds a seat of the
+  /// machine's turn: a suite's test binaries stand there from its build until its last crate has run.
+  pub turns: HashSet<PathBuf>,
 }
 
 impl Keepers {
   /// What keeps output in the build directory at `root`: the profile directories whose lock `locks` holds, or
-  /// every one where none are given; the directories of the checkouts and build trees `deploying` names; and
-  /// every program running.
+  /// every one where none are given; the directories of the checkouts and build trees `deploying` names;
+  /// every program running; and the checkouts of every command holding a seat of the machine's turn.
   pub fn read(root: &Path, locks: Option<&[HeldLock]>, deploying: &[PathBuf]) -> Self {
+    let env = process_env();
+    let turns: Vec<PathBuf> = Lane::ALL
+      .iter()
+      .flat_map(|lane| read_queue(&lock_path(&env, *lane)).holders)
+      .filter(|holder| !holder.checkout.is_empty())
+      .filter_map(|holder| root_of(Path::new(&holder.checkout)))
+      .collect();
+
     Self {
       locked: locks
         .map(|locks| locks.iter().filter_map(|lock| lock.path().parent().map(Path::to_path_buf)).collect()),
       deploying: checkout_dirs(root, deploying),
       running: processes().into_iter().filter_map(|process| process.exe).collect(),
+      turns: checkout_dirs(root, &turns),
     }
   }
 
   // What keeps a removal: a profile directory it stands in whose lock the prune does not hold, or the running
-  // deployment or program its directory answers for.
+  // deployment, turn or program its directory answers for.
   fn holder(&self, candidate: &Candidate) -> Option<(PathBuf, HeldBy)> {
     if let Some(locked) = &self.locked
       && let Some(profile) = candidate.profiles.iter().find(|profile| !locked.contains(*profile))
@@ -179,6 +196,10 @@ impl Keepers {
 
     if self.deploying.contains(dir) {
       return Some((dir.clone(), HeldBy::Deployment));
+    }
+
+    if self.turns.contains(dir) {
+      return Some((dir.clone(), HeldBy::Turn));
     }
 
     self

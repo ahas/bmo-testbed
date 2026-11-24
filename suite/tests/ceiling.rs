@@ -369,6 +369,36 @@ fn the_deployments_checkouts_go_after_the_working_ones_and_a_running_one_stays_n
   );
 }
 
+// "It never removes ... the directory of a checkout whose command holds a seat of the machine's turn, as a whole
+// suite does from its build through its last crate's tests": the checkout read longest ago stays while its suite
+// holds the turn, and the event names it
+#[test]
+fn a_checkout_whose_command_holds_the_turn_stays_however_long_ago_it_was_read() {
+  let scratch = tempfile::tempdir().unwrap();
+  let root = scratch.path().join("build");
+  let now = now();
+  let testing_dir = root.join("checkouts").join("testing-0123456789ab");
+  let testing = checkout_of(&root, "testing-0123456789ab", 1, 2, now - 60 * HOUR_MS, false);
+  let idle = checkout_of(&root, "idle-0123456789ab", 3, 2, now - HOUR_MS, false);
+  let keepers = Keepers {
+    turns: [testing_dir.clone()].into(),
+    ..Keepers::default()
+  };
+  let enforcement = enforce(&root, 0, &keepers, true);
+
+  assert!(enforcement.over(), "{enforcement:?}");
+  assert!(idle.iter().all(|one| none_exist(one)));
+  assert!(testing.iter().all(|one| all_exist(one)));
+  assert_eq!(
+    enforcement
+      .holders
+      .iter()
+      .map(|holder| (holder.path.clone(), holder.by))
+      .collect::<Vec<_>>(),
+    [(testing_dir, HeldBy::Turn)]
+  );
+}
+
 // "BMO_CARGO_TARGET_DEPLOYMENT_CEILING_GB ... the prune policy's where the environment names no positive whole
 // number. The policy's is 0, which sets none"
 #[test]

@@ -490,6 +490,7 @@ deployment_dirs = "deployments' checkouts' target directories emptied but their 
 by_build_lock = "a build's lock"
 by_deployment = "a running deployment"
 by_program = "a program built there running"
+by_turn = "a command holding the machine's turn there"
 # The deployments' build trees (docs/deploy.md, 「The releases」): {days} their span, {count} and {named} the
 # deploy roots whose target directories went, {target} one that did not and {why} what it came to.
 build_heading = "prune: deploy build trees' target/ directories, last deployed over {days} days ago with no deployment running, {verb}"
