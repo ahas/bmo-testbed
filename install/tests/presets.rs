@@ -130,8 +130,9 @@ fn a_key_the_schema_does_not_name_is_refused() {
   assert!(matches!(PresetsFile::parse(&format!("{FILE}\nstray = 1\n")), Err(Refused::Unread(_))));
 }
 
-// The index's own presets file, where this checkout stands in one: it reads, and every repository a preset names
-// stands among its entries. A checkout standing alone has none to read.
+// The index's own presets file, where this checkout stands in one: it reads, and every preset resolves to
+// repositories once each choice it holds or inherits through what it extends is settled on its first repository.
+// A checkout standing alone has none to read.
 #[test]
 fn the_index_presets_file_reads_where_it_stands() {
   let index = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
@@ -143,9 +144,17 @@ fn the_index_presets_file_reads_where_it_stands() {
 
   let presets = PresetsFile::read(&index).unwrap();
 
-  for (name, preset) in &presets.preset {
-    let with: Vec<String> =
-      preset.choose.iter().filter_map(|choice| choice.units.first().cloned()).collect();
+  for name in presets.preset.keys() {
+    let mut with: Vec<String> = Vec::new();
+    let mut at = Some(name.as_str());
+
+    while let Some(one) = at {
+      let preset = &presets.preset[one];
+
+      with.extend(preset.choose.iter().filter_map(|choice| choice.units.first().cloned()));
+      at = preset.extends.as_deref();
+    }
+
     let resolved = presets.resolve(name, &with).unwrap();
 
     assert!(!resolved.units.is_empty(), "{name}");
