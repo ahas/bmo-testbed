@@ -714,7 +714,7 @@ fn the_message_overrides_the_subject_and_the_deployed_version_is_recorded() {
   assert_eq!(written.commit, head);
   assert_eq!(written.subject, "a later commit subject");
   assert_eq!(written.message, "hotfix for the placement bug");
-  assert_eq!(written.version, format!("3.5.0-nightly.{day}"));
+  assert_eq!(written.version, format!("3.5.0-0.nightly.{day}"));
 
   let events = scene.events();
 

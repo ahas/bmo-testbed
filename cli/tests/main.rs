@@ -15,7 +15,6 @@ mod passed;
 mod placement;
 mod plugin;
 mod prune;
-mod release;
 mod shell;
 mod stand;
 mod suite_verb;

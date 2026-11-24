@@ -1412,7 +1412,6 @@
     "prune",
     "full",
     "deploy",
-    "release",
     "backups",
     "backup",
     "serve",

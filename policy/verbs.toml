@@ -31,8 +31,6 @@ deploy    a commit of the repository put live, in a unit of its own; `deploy com
           the platform names it
 backups   the backups a deployment took, sent away and rotated; `deploy backups` as the
           platform names it
-release   every repository of the set moved onto the version the owner declares, committed,
-          pushed and tagged; or the step the commits since the last release propose
 backup    the machine's databases and data folders backed up to its destinations, and the
           restore drill: backup snapshot, backup media, backup drill and backup prune
 serve     the HTTP service: the record and the lanes, read-only behind a token
@@ -101,19 +99,6 @@ flags come before its words.
 --since       the commit the change is read from
 --again       what failed, run once more by name and judged on that run
 --json        one command run on standard output once the run has ended, its log the run's own"""
-release = """
-usage: {verb} release --version <X.Y.Z> --set <folder> [--dry-run] [--repository <name>]…
-       {verb} release --propose --set <folder> [--repository <name>]…
-
-Moves every repository of the set standing in the folder onto the version given, each in a commit of its
-own pushed onto its remote's main, then tags each v<version> and pushes the tag (docs/deploy.md, 「The set's
-release」). The owner declares the release; nothing else runs it.
-
---version     the release's version, a plain semantic version above the last release
---set         the folder the set's index stands in
---dry-run     print every change and what it would do in git, changing nothing but the fetch
---propose     print the step the commits since the last release propose, and the version it leads to
---repository  print only the repositories of this name; a release always moves the whole set"""
 dependents = """
 usage: {verb} dependents [--run]
 

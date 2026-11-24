@@ -478,27 +478,6 @@ bmo-testbed deploy first <unit> --why <why> [--by <who>]
   not a running deployment unit, one the testbed's record already holds, the one holding the line and
   one already marked first.
 
-### `release`
-
-```
-bmo-testbed release --version <X.Y.Z> --set <folder> [--dry-run] [--repository <name>]…
-bmo-testbed release --propose --set <folder> [--repository <name>]…
-```
-
-- Moves every repository of the set standing in `--set`'s folder onto the version given, each in a commit
-  `Release <version>` pushed onto its remote's main, then tags each `v<version>` and pushes the tag
-  (`docs/deploy.md`, 「The set's release」). It prints, for each repository, every value it sets, from what
-  to what, the files it leaves naming an own version, and what it does in git; and the repositories it
-  passed over, with why.
-- **`--dry-run`** prints the same and changes nothing but the fetch. **`--propose`** prints the step the
-  commits since the last release propose, each repository's and the set's, and the version it leads to,
-  and changes nothing but the fetch. **`--repository`** limits what either prints to the repositories of
-  that name; a release is always of the whole set.
-- Exits 0 where it released, printed a dry run or proposed; 1 where a commit, a push or a tag failed, naming
-  what landed; 2 where it refused before changing anything: words that do not read, a version that is not a
-  plain semantic version above the last release or that a repository already holds a tag of, a set holding
-  no repository, and a repository or a file that does not read.
-
 ### `install`
 
 ```
@@ -1304,8 +1283,7 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
 - **`plugin`:** the harness plugin: the tool table, the MCP server `mcp` starts, the OpenAPI document
   generated from the client's types and the tool table, and the `bmo-testbed` skill.
 - **`suite`:** the whole-suite run, change selection, the static and quick checks, the Cargo verb, the
-  superseded removal, the prune, and the set's release worked out: the set read, each file's change and
-  the proposed step.
+  superseded removal and the prune.
 - **`deploy`:** releases, the link flip, unit links, the deploy run, the progress record, rollback
   through the tree's and the services' hands, backups. The run asks its gate through a trait of its
   own, which the binary answers with the suite crate's static check and suite, so `deploy` depends on
@@ -1344,8 +1322,8 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
 - **One version, the workspace's,** over everything this document states: the crates, the binary, the
   health's `version`, the OpenAPI document and the MCP server all answer it. It is the set's version
   (bmo-chat's `docs/conventions.md`, 「Versions」): it moves only at a release of the whole set the owner
-  declares, which the `release` verb makes, and between releases a deployment names the day's nightly
-  (`docs/deploy.md`, 「The deployed version」).
+  declares, and between releases a deployment names the day's nightly (`docs/deploy.md`, 「The deployed
+  version」).
 - **What this document states counts toward the set's next step by semver.** A major release removes or
   renames a verb, a flag, an environment variable, a route, a member's field or a tool; changes what an exit
   code, a field, an event, a payload field or a declaration key means; removes an event, a payload

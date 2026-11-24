@@ -7,22 +7,9 @@ use semver::{BuildMetadata, Prerelease, Version};
 
 use crate::policy::versions::VERSIONS;
 
-/// The tag that names a release: the version after the policy's prefix, as `v1.0.0`.
+/// The tag that names a release: the version after the policy's prefix, as `v1.0.0` or `v1.1.0-beta.2`.
 pub fn release_tag(version: &str) -> String {
   format!("{}{version}", VERSIONS.tag_prefix)
-}
-
-/// The release a tag names, or none where the tag is no release tag: the prefix, then a semantic version
-/// carrying no pre-release and no build.
-pub fn release_of_tag(tag: &str) -> Option<Version> {
-  let version = Version::parse(tag.trim().strip_prefix(VERSIONS.tag_prefix.as_str())?).ok()?;
-
-  (version.pre.is_empty() && version.build.is_empty()).then_some(version)
-}
-
-/// The newest release the tags name, or none where they name no release.
-pub fn last_release<'a>(tags: impl IntoIterator<Item = &'a str>) -> Option<Version> {
-  tags.into_iter().filter_map(release_of_tag).max()
 }
 
 /// The day a moment in epoch milliseconds falls on in the platform's time zone, the policy's distance from
@@ -37,24 +24,35 @@ pub fn platform_day(at_ms: i64) -> NaiveDate {
     .date_naive()
 }
 
-/// The nightly a day's deployment after a release is named for: the minor above the release, then the
-/// policy's word and the day, as `1.1.0-nightly.20261124` after `1.0.0`. A version carrying a pre-release of
-/// its own counts from its major and minor alone.
-pub fn nightly(released: &Version, day: NaiveDate) -> Version {
+/// The version main leads to from the version it declares: the version itself where that is an alpha, since
+/// main stays on the alpha's line until its first beta; else the minor above, a stable release's, a beta's or a
+/// release candidate's whose line has a branch of its own, or a revision's before the first release.
+pub fn leads_to(declared: &Version) -> Version {
+  let alpha = declared.pre.as_str().split('.').next().is_some_and(|word| word == VERSIONS.alpha);
+
+  if alpha {
+    Version::new(declared.major, declared.minor, declared.patch)
+  } else {
+    Version::new(declared.major, declared.minor + 1, 0)
+  }
+}
+
+/// The day's nightly of the version main leads to from `declared`: that version, then the policy's
+/// pre-release and the day, as `1.1.0-0.nightly.20261124` after `1.0.0`. Semver orders it after the release
+/// before it and before every alpha, beta, release candidate and release of the version it leads to.
+pub fn nightly(declared: &Version, day: NaiveDate) -> Version {
   let pre = format!("{}.{}", VERSIONS.nightly, day.format("%Y%m%d"));
 
   Version {
-    major: released.major,
-    minor: released.minor + 1,
-    patch: 0,
     pre: Prerelease::new(&pre).unwrap_or(Prerelease::EMPTY),
     build: BuildMetadata::EMPTY,
+    ..leads_to(declared)
   }
 }
 
 /// The version a deployment of a commit names: the declared version where a tag among `tags` names that
-/// release, else the day's nightly after it. A commit declaring none names none, and a declared version
-/// that is no semantic version is named as it is written.
+/// release, else the day's nightly of the version main leads to from it. A commit declaring none names none,
+/// and a declared version that is no semantic version is named as it is written.
 pub fn deployed_version(declared: &str, tags: &[String], day: NaiveDate) -> String {
   let declared = declared.trim();
 
@@ -85,7 +83,7 @@ pub fn declared_version(read: &dyn Fn(&str) -> Option<String>) -> String {
     return text.trim().to_owned();
   }
 
-  let cargo = read(&VERSIONS.release.files.cargo_manifest)
+  let cargo = read(&VERSIONS.cargo_manifest)
     .and_then(|text| text.parse::<toml::Table>().ok())
     .and_then(|manifest| {
       let workspace = manifest.get("workspace").and_then(|workspace| workspace.get("package"));
@@ -101,7 +99,7 @@ pub fn declared_version(read: &dyn Fn(&str) -> Option<String>) -> String {
     return version;
   }
 
-  read(&VERSIONS.release.files.package_manifest)
+  read(&VERSIONS.package_manifest)
     .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
     .and_then(|manifest| manifest.get("version").and_then(serde_json::Value::as_str).map(str::to_owned))
     .unwrap_or_default()

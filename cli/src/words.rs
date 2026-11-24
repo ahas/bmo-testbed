@@ -46,7 +46,6 @@ pub enum Verb {
   Prune(PruneArgs),
   Full(FullArgs),
   Deploy(DeployArgs),
-  Release(ReleaseArgs),
   Backups,
   Backup(BackupArgs),
   Serve(ServeArgs),
@@ -280,23 +279,6 @@ pub struct SuiteArgs {
 pub struct DependentsArgs {
   #[arg(long)]
   pub run: bool,
-}
-
-/// `release`: every repository of the set moved onto the version the owner declares, or the step the commits
-/// since the last release propose.
-#[derive(Debug, Args)]
-#[command(group(clap::ArgGroup::new("what").required(true).args(["version", "propose"])))]
-pub struct ReleaseArgs {
-  #[arg(long, value_name = "X.Y.Z")]
-  pub version: Option<String>,
-  #[arg(long)]
-  pub propose: bool,
-  #[arg(long, value_name = "folder")]
-  pub set: PathBuf,
-  #[arg(long, conflicts_with = "propose")]
-  pub dry_run: bool,
-  #[arg(long, value_name = "name")]
-  pub repository: Vec<String>,
 }
 
 /// `passed`: the passed run of the whole suite on a commit that this machine's record holds.
@@ -596,7 +578,6 @@ pub fn read(args: impl IntoIterator<Item = OsString>) -> Result<Words, clap::Err
     .mut_subcommand("classify", |verb| verb.override_help(usage(&said.classify)))
     .mut_subcommand("suite", |verb| verb.override_help(usage(&said.suite)))
     .mut_subcommand("dependents", |verb| verb.override_help(usage(&said.dependents)))
-    .mut_subcommand("release", |verb| verb.override_help(usage(&said.release)))
     .mut_subcommand("passed", |verb| verb.override_help(usage(&said.passed)))
     .mut_subcommand("toolchain", |verb| verb.override_help(usage(&said.toolchain)))
     .mut_subcommand("count", |verb| verb.override_help(usage(&said.count)))

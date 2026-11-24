@@ -370,7 +370,6 @@ dependencies = [
  "futures-util",
  "libc",
  "reqwest",
- "semver",
  "serde",
  "serde_json",
  "shlex",

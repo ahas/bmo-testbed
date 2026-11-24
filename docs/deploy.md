@@ -790,74 +790,21 @@ commit.
   `version` of its root `package.json`. A commit declaring none is deployed all the same, its version left
   empty.
 - **A commit the release tag names is that release.** Where a tag `v<declared version>` points at the commit
-  itself, the deployed version is the declared one, as `1.0.0` for the commit tagged `v1.0.0`. The tags are
-  read from the repository as the deployment's fetch left it.
-- **Any other commit is the day's nightly:** `<major>.<minor + 1>.0-nightly.<YYYYMMDD>`, the minor above the
-  declared version, which names the last release, then the day the deployment picked its commit in the
-  platform's time zone, Asia/Seoul, which the testbed's policy holds as its distance from UTC: so
-  `1.1.0-nightly.20261124` for a commit after `1.0.0` deployed on that day. A declared version carrying a
-  pre-release of its own counts from its major and minor alone. Semver orders every nightly after the
-  release before it and before the release it leads to. A declared version that is no semantic version is
-  recorded as it is written.
+  itself, the deployed version is the declared one, as `1.0.0` for the commit tagged `v1.0.0` and
+  `1.1.0-beta.2` for the commit tagged `v1.1.0-beta.2`. The tags are read from the repository as the
+  deployment's fetch left it.
+- **Any other commit is the day's nightly** of the version main leads to from the declared one:
+  `<that version>-0.nightly.<YYYYMMDD>`, the day the deployment picked its commit in the platform's time zone,
+  Asia/Seoul, which the testbed's policy holds as its distance from UTC. Main leads to the declared version
+  itself where that is an alpha, as `1.1.0-0.nightly.20261124` after `1.1.0-alpha.2`; and to the minor above
+  anything else, a stable release, a beta or a release candidate whose line has a branch of its own, or a
+  revision before the first release, as `1.1.0-0.nightly.20261124` after `1.0.0`,
+  `1.2.0-0.nightly.20261201` after `1.1.0-beta.1` and `0.2.0-0.nightly.20261124` after `0.1.0-rev.77`. Semver
+  orders every nightly after the release before it and before every alpha, beta, release candidate and
+  release of the version it leads to. A declared version that is no semantic version is recorded as it is
+  written.
 - **The nightly is a name, never a version anything declares.** No manifest and no tag holds it; which
   change is live is the record's commit, which the record names beside it.
-
-## The set's release
-
-The `release` verb moves every repository of the set onto the version the owner declares, each in one commit
-of its own, and tags each `v<version>` (bmo-chat's `docs/conventions.md`, 「Versions」). It knows no repository
-by name: the set is what stands in the folder `--set` names.
-
-- **The set's repositories:** the git repository whose root is that folder, which holds the set's index, and
-  every one whose root stands directly in a folder directly inside it, each read through its primary
-  checkout. A folder whose `.git` is a file is a linked worktree, a job's, and is passed over unsaid. A
-  repository two clones reach, by one `origin` remote, is released once, from the clone whose folder's name
-  ends the remote's repository name, else from the first by path; the other clone is named as passed over,
-  and so is a repository with no `origin` remote, since nothing of it can be pushed.
-- **Each is read as its remote's main holds it:** fetched with its tags, then read at `origin/<main>`, the
-  main branch its own declaration names, never from a working tree.
-- **The last release** is the newest tag `v<major>.<minor>.<patch>` carrying no pre-release that more than
-  half of the set's repositories hold, so an upstream's own tags kept in a fork never count. The version asked for is a semantic version with no pre-release above it, or
-  above `0.1.0` before the set's first release. A version a repository already holds a tag of is refused.
-- **What it sets:** a unit's own version, which is the last release's version, or before the first release
-  `0.1.0` or `0.1.0-rev.<n>`, wherever a repository declares it. Any other value, an upstream's package
-  kept under a fork among them, is left as it stands. Each file is read with its format's own reader and
-  changed where the value stands, so every other byte keeps its layout:
-  - a `Cargo.toml`'s `[package]` and `[workspace.package]` `version`, and in each of its dependency tables
-    the `version` of an entry taken from a sibling by `path`, its operator kept;
-  - a `Cargo.lock`'s packages read from a path, never a registry's;
-  - a `pyproject.toml`'s `[project]` and `[tool.poetry]` `version`;
-  - a `VERSION` file;
-  - in a JSON document, each member of its top-level object whose value is the unit's own version, a build
-    suffix such as `+source` kept, and an OpenAPI document's `info.version`: the `version` of a package
-    manifest, a plugin manifest and an application's configuration among them;
-  - and in a markdown document, the version after "Fixed at" on the line that fixes it.
-
-  The major a declaration names in `testbed` is its schema's, not the set's, and a release leaves it
-  (`docs/declaration.md`).
-
-  A file under a `node_modules/` or a `fixtures/` folder, or one the declaration's
-  `[check.shared_versions] exclude` reaches, is not read. Every other file still naming a unit's own
-  version in a form that can only be one is named as left as it stands, for its repository to move.
-- **The release, in order:** every repository read and its changes worked out before anything changes, so a
-  file that does not read refuses the whole release; then for each repository a detached worktree of
-  `origin/<main>` in a scratch folder, the changes written there and committed as `Release <version>` where
-  anything changed; then each commit pushed onto the remote's main; then each repository tagged
-  `v<version>` with an annotated tag, on its release commit or, where it changed nothing, on its main's head,
-  and the tag pushed; then the scratch worktrees removed. A push that fails stops the release there, naming
-  what landed and what did not, and no tag is made before every push has landed. A repository that declares
-  no version is tagged all the same, so every repository of the set names the release.
-- **`--dry-run`** reads and works everything out the same way and prints it, changing nothing but the
-  fetch.
-- **`--propose`** reads, in each repository, the commits on its main since its last release tag, or every
-  commit before the first, and proposes a step by each commit's subject: one marked breaking, or opening
-  with a word the policy names for taking away or renaming, proposes a major release; one opening with a
-  word for adding, a minor one; any other, a patch. It prints each repository's counts with one subject of
-  its strongest step, then the set's step, the strongest of them, and the version it leads to. It proposes
-  only: the owner's word settles the release.
-- **`--repository <name>`** limits what a dry run or a proposal prints to the repositories of that name,
-  their remote's repository name, so an answer cut at the ceiling is read whole by parts. A release itself
-  always moves the whole set.
 
 ## The console probe
 

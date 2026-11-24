@@ -1,93 +1,17 @@
-# The set's versions (bmo-chat's docs/conventions.md, 「Versions」; docs/deploy.md, 「The deployed version」 and
-# 「The set's release」): how a release is tagged, how a deployment between releases is named, and what the
-# `release` verb reads and says. A harness reads the lines, so they are English. Each `{name}` is filled in
-# with what it names.
+# The set's versions (bmo-chat's docs/conventions.md, 「Versions」; docs/deploy.md, 「The deployed version」): how
+# a release is tagged, how a deployment between releases is named, and where a tree declares its version.
 
 # The platform's time zone, Asia/Seoul, as its distance from UTC in minutes; it keeps no summer time, so the
 # day a nightly names is the same all year.
 platform_offset_minutes = 540
 # What a release tag puts before the version.
 tag_prefix = "v"
-# The pre-release word a nightly's day follows.
-nightly = "nightly"
-# The file a tree declares its version in first, at its root.
+# The pre-release a nightly's day follows: its numeric `0` orders every nightly before every alpha, beta and
+# release candidate of the same version.
+nightly = "0.nightly"
+# The pre-release word of an alpha: main leads to the alpha's own version while one is its last release.
+alpha = "alpha"
+# The file a tree declares its version in first, at its root, then the manifests read after it.
 version_file = "VERSION"
-
-[release]
-# The commit each repository's release is made in, and its tag's message.
-subject = "Release {version}"
-heading = "release {version} over {count} repositories of {set}, from {from}"
-before_first = "the base 0.1.0 and its revisions, before the set's first release"
-dry = "release: a dry run; nothing was changed but the fetch"
-repository = "{name} ({folder}), main at {head}:"
-change = "  {path}: {what} {from} → {to}"
-locked = "  {path}: the packages read from a path, {count} of them → {to}"
-untouched = "  declares no version of its own"
-left = "  left as they stand, naming an own version: {files}"
-more = "{shown} and {more} more"
-joiner = ", "
-commit = "  then: commit \"{subject}\" on origin/{main}, push it, tag {tag} and push the tag"
-tag_only = "  then: tag {tag} on origin/{main}'s head and push the tag"
-passed_over = "passed over: {folder} ({why})"
-second_clone = "a second clone of {remote}"
-no_remote = "no origin remote"
-unread = "release: {folder}: {why}"
-refused_version = "release: {version} is no plain semantic version above the last release, {last}"
-tagged = "release: {repositories} already hold the tag {tag}"
-no_set = "release: {set} holds no repository of the set"
-no_set_folder = "release: {set} is no folder"
-unreadable_files = "release: these files do not read, so nothing was changed: {files}"
-fetch_failed = "release: {folder}: the fetch failed: {why}"
-step_failed = "release: {folder}: {step} failed: {why}"
-landed = "release: landed so far: {landed}; not landed: {rest}"
-released = "release: {version} released over {count} repositories, {commits} of them with a release commit"
-nothing = "none"
-cut_unit = "repositories"
-cut_how = "ask for them by name with --repository <name>"
-
-# The files the release reads, and what of them.
-[release.files]
-# The base every unit stood at before the set's first release, and the word its revisions are counted after.
-base = "0.1.0"
-revision = "rev"
 cargo_manifest = "Cargo.toml"
-cargo_lock = "Cargo.lock"
 package_manifest = "package.json"
-pyproject = "pyproject.toml"
-json_suffix = ".json"
-markdown_suffix = ".md"
-dependency_tables = ["dependencies", "dev-dependencies", "build-dependencies"]
-python_tables = [["project"], ["tool", "poetry"]]
-# Folders whose files are another's: installed packages and recorded test input.
-unread_folders = ["node_modules", "fixtures"]
-# How many files left naming an own version a repository's lines name before counting the rest.
-left_shown = 5
-
-[release.what]
-package = "[package] version"
-workspace = "[workspace.package] version"
-dependency = "{table} {name} version"
-lock = "locked {name}"
-project = "[{table}] version"
-version_file = "version"
-member = "{member}"
-unplaced = "{member} stands in its text where it cannot be told from another member of the same key and value"
-fixed_at = "Fixed at"
-
-[propose]
-# A subject marked so proposes a major release wherever it stands in it.
-breaking = ["BREAKING CHANGE", "BREAKING"]
-# A subject opening with one of these words, read without case, proposes a major release.
-major = ["remove", "rename", "retire", "drop", "delete", "require", "replace"]
-# A subject opening with one of these words, read without case, proposes a minor release; any other a patch.
-minor = ["add", "give", "serve", "show", "offer", "introduce", "support", "expose", "list", "let", "open"]
-# A conventional commit's type that proposes a minor release; a type marked `!` proposes a major one.
-minor_types = ["feat"]
-heading = "propose: {count} repositories, their commits since {since}"
-since_none = "the start, before the set's first release"
-repository = "{name}: {commits} commits: {major} major, {minor} minor, {patch} patch{example}"
-example = "; its {step}: \"{subject}\""
-step = "propose: a {step} release, {from} → {to}; the owner's word settles it"
-major_word = "major"
-minor_word = "minor"
-patch_word = "patch"
