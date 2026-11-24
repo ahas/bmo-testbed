@@ -24,13 +24,16 @@ pub fn platform_day(at_ms: i64) -> NaiveDate {
     .date_naive()
 }
 
-/// The version main leads to from the version it declares: the version itself where that is an alpha, since
+/// The version main leads to from the version it declares, the next unreleased one: the set's first release
+/// where the declared version is from before it, a major of 0; the version itself where that is an alpha, since
 /// main stays on the alpha's line until its first beta; else the minor above, a stable release's, a beta's or a
-/// release candidate's whose line has a branch of its own, or a revision's before the first release.
+/// release candidate's whose line has a branch of its own.
 pub fn leads_to(declared: &Version) -> Version {
   let alpha = declared.pre.as_str().split('.').next().is_some_and(|word| word == VERSIONS.alpha);
 
-  if alpha {
+  if declared.major == 0 {
+    Version::new(1, 0, 0)
+  } else if alpha {
     Version::new(declared.major, declared.minor, declared.patch)
   } else {
     Version::new(declared.major, declared.minor + 1, 0)

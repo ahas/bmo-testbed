@@ -795,11 +795,12 @@ commit.
   deployment's fetch left it.
 - **Any other commit is the day's nightly** of the version main leads to from the declared one:
   `<that version>-0.nightly.<YYYYMMDD>`, the day the deployment picked its commit in the platform's time zone,
-  Asia/Seoul, which the testbed's policy holds as its distance from UTC. Main leads to the declared version
-  itself where that is an alpha, as `1.1.0-0.nightly.20261124` after `1.1.0-alpha.2`; and to the minor above
-  anything else, a stable release, a beta or a release candidate whose line has a branch of its own, or a
-  revision before the first release, as `1.1.0-0.nightly.20261124` after `1.0.0`,
-  `1.2.0-0.nightly.20261201` after `1.1.0-beta.1` and `0.2.0-0.nightly.20261124` after `0.1.0-rev.77`. Semver
+  Asia/Seoul, which the testbed's policy holds as its distance from UTC. Main leads to the next unreleased
+  version: the set's first release, `1.0.0`, from a declared version of major 0, as `1.0.0-0.nightly.20261124`
+  after `0.1.0-rev.77`; the declared version itself where that is an alpha, as `1.1.0-0.nightly.20261124` after
+  `1.1.0-alpha.2`; and the minor above anything else, a stable release, a beta or a release candidate whose
+  line has a branch of its own, as `1.1.0-0.nightly.20261124` after `1.0.0` and `1.2.0-0.nightly.20261201`
+  after `1.1.0-beta.1`. Semver
   orders every nightly after the release before it and before every alpha, beta, release candidate and
   release of the version it leads to. A declared version that is no semantic version is recorded as it is
   written.

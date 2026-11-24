@@ -37,7 +37,7 @@ fn an_untagged_commit_is_the_days_nightly_of_the_version_main_leads_to() {
   assert_eq!(deployed_version("1.1.0-alpha.2", &[], day(2026, 11, 24)), "1.1.0-0.nightly.20261124");
   assert_eq!(deployed_version("1.1.0-beta.1", &[], day(2026, 12, 1)), "1.2.0-0.nightly.20261201");
   assert_eq!(deployed_version("1.1.0-rc.3", &[], day(2026, 12, 1)), "1.2.0-0.nightly.20261201");
-  assert_eq!(deployed_version("0.1.0-rev.77", &[], day(2026, 11, 23)), "0.2.0-0.nightly.20261123");
+  assert_eq!(deployed_version("0.1.0-rev.77", &[], day(2026, 11, 23)), "1.0.0-0.nightly.20261123");
 }
 
 // "A commit the release tag names is that release", whatever its kind
@@ -97,8 +97,9 @@ fn the_five_kinds_of_one_version_sort_nightly_alpha_beta_rc_stable() {
   assert_eq!(nightly(&Version::parse("1.0.0").unwrap(), day(2026, 11, 24)), versions[0]);
 }
 
-// "main leads to the minor above a stable release, to X.Y.Z itself while an alpha of X.Y.Z is main's last
-// release, and to the minor above once a beta of X.Y.Z has cut its release branch"
+// "A nightly names the next unreleased version": the minor above a stable release, X.Y.Z itself while an alpha
+// of X.Y.Z is main's last release, the minor above once a beta of X.Y.Z has cut its release branch, and 1.0.0
+// before the first release
 #[test]
 fn main_leads_to_the_alphas_version_or_the_minor_above() {
   let led = |declared: &str| leads_to(&Version::parse(declared).unwrap()).to_string();
@@ -109,8 +110,8 @@ fn main_leads_to_the_alphas_version_or_the_minor_above() {
   assert_eq!(led("2.0.0-alpha.1"), "2.0.0");
   assert_eq!(led("1.1.0-beta.1"), "1.2.0");
   assert_eq!(led("1.1.0-rc.2"), "1.2.0");
-  assert_eq!(led("0.1.0-rev.9"), "0.2.0");
-  assert_eq!(led("0.1.0"), "0.2.0");
+  assert_eq!(led("0.1.0-rev.9"), "1.0.0");
+  assert_eq!(led("0.1.0"), "1.0.0");
 }
 
 // "the day the deployment picked its commit in the platform's time zone, Asia/Seoul"
