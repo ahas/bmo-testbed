@@ -1,11 +1,18 @@
 //! The set's version names (bmo-chat's `docs/conventions.md`, 「Versions」; docs/deploy.md, 「The deployed
-//! version」): the version a tree declares, the tag that names a release, the day in the platform's time zone,
-//! and the nightly a deployment between releases is named for.
+//! version」): the tag that names a release, the day in the platform's time zone, and the version a deployment
+//! is named for off the tags: the release its commit is tagged with, else the day's nightly.
 
 use chrono::{DateTime, FixedOffset, NaiveDate};
 use semver::{BuildMetadata, Prerelease, Version};
 
 use crate::policy::versions::VERSIONS;
+
+/// The version this build of the testbed answers with: the one a deployment hands its build as `BMO_VERSION`, else
+/// the manifest's placeholder (bmo-chat's `docs/conventions.md`, 「Versions」).
+pub const VERSION: &str = match option_env!("BMO_VERSION") {
+  Some(version) => version,
+  None => env!("CARGO_PKG_VERSION"),
+};
 
 /// The tag that names a release: the version after the policy's prefix, as `v1.0.0` or `v1.1.0-beta.2`.
 pub fn release_tag(version: &str) -> String {
@@ -53,57 +60,29 @@ pub fn nightly(declared: &Version, day: NaiveDate) -> Version {
   }
 }
 
-/// The version a deployment of a commit names: the declared version where a tag among `tags` names that
-/// release, else the day's nightly of the version main leads to from it. A commit declaring none names none,
-/// and a declared version that is no semantic version is named as it is written.
-pub fn deployed_version(declared: &str, tags: &[String], day: NaiveDate) -> String {
-  let declared = declared.trim();
+/// The release a tag names: the policy's prefix before a semantic version of the first major or above that is a
+/// stable release, an alpha, a beta or a release candidate; none for any other tag.
+pub fn release_of_tag(tag: &str) -> Option<Version> {
+  let version = Version::parse(tag.trim().strip_prefix(VERSIONS.tag_prefix.as_str())?).ok()?;
+  let word = version.pre.as_str().split('.').next().unwrap_or_default();
+  let release =
+    version.pre.is_empty() || word == VERSIONS.alpha || VERSIONS.releases.iter().any(|one| one == word);
 
-  if declared.is_empty() {
-    return String::new();
-  }
-
-  let Ok(version) = Version::parse(declared) else {
-    return declared.to_owned();
-  };
-  let tag = release_tag(declared);
-
-  if tags.iter().any(|one| one.trim() == tag) {
-    return declared.to_owned();
-  }
-
-  nightly(&version, day).to_string()
+  (release && version.build.is_empty() && version.major >= VERSIONS.first_major).then_some(version)
 }
 
-/// The version a tree declares at its root, read through `read`, which answers a file's text by its path
-/// from the root or none where the tree holds no such file: the version file's content, else the version
-/// the root Cargo manifest names for its workspace's packages or its package, else the root package
-/// manifest's `version`; empty where none of them names one.
-pub fn declared_version(read: &dyn Fn(&str) -> Option<String>) -> String {
-  if let Some(text) = read(&VERSIONS.version_file)
-    && !text.trim().is_empty()
-  {
-    return text.trim().to_owned();
+/// The version a deployment of a commit names, read off the tags alone: the newest release among `at`, the
+/// tags pointing at the commit itself, where one stands; else the day's nightly of the version main leads to
+/// from the newest release among `reached`, the tags the commit reaches, the set's first release's before any.
+pub fn deployed_version(at: &[String], reached: &[String], day: NaiveDate) -> String {
+  let newest = |tags: &[String]| tags.iter().filter_map(|tag| release_of_tag(tag)).max();
+
+  if let Some(release) = newest(at) {
+    return release.to_string();
   }
 
-  let cargo = read(&VERSIONS.cargo_manifest)
-    .and_then(|text| text.parse::<toml::Table>().ok())
-    .and_then(|manifest| {
-      let workspace = manifest.get("workspace").and_then(|workspace| workspace.get("package"));
-      let package = manifest.get("package");
-
-      [workspace, package]
-        .into_iter()
-        .flatten()
-        .find_map(|table| table.get("version").and_then(toml::Value::as_str).map(str::to_owned))
-    });
-
-  if let Some(version) = cargo {
-    return version;
+  match newest(reached) {
+    Some(last) => nightly(&last, day).to_string(),
+    None => nightly(&Version::new(0, 0, 0), day).to_string(),
   }
-
-  read(&VERSIONS.package_manifest)
-    .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
-    .and_then(|manifest| manifest.get("version").and_then(serde_json::Value::as_str).map(str::to_owned))
-    .unwrap_or_default()
 }

@@ -15,6 +15,7 @@ use bmo_testbed_core::policy::deploy_steps::DeployStep as OwnStep;
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::policy::verbs::VERBS;
+use bmo_testbed_core::policy::versions::VERSIONS;
 use bmo_testbed_core::queue::{LockWait, now_ms, take_lock};
 use bmo_testbed_core::turn::{Env, FRONT_VARIABLE, NOT_RUN_EXIT_CODE, harness_pid, process_env};
 use bmo_testbed_core::verb::{REFUSED_EXIT_CODE, data_root};
@@ -453,7 +454,9 @@ impl Gate for PlacedGate<'_> {
       Err(GateFault::Broken(_)) => return self.broken_build(),
       Err(fault) => return Some(Err(fault)),
     };
-    let build = [self.testbed(), "cargo".to_owned()]
+    // The deployed version goes with the build to the machine it runs on (docs/deploy.md, 「The deployed version」).
+    let version = format!("{}={}", VERSIONS.variable, ask.version);
+    let build = ["env".to_owned(), version, self.testbed(), "cargo".to_owned()]
       .into_iter()
       .chain(["build", "--workspace", "--locked", "--profile", ask.profile].map(str::to_owned))
       .collect::<Vec<_>>();

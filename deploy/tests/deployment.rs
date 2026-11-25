@@ -616,10 +616,13 @@ fn a_commit_goes_live_with_its_bot_restarted_and_watched() {
   let written = read_deploy_record(&scene.at("live/deployed.json")).unwrap();
 
   assert_eq!(written.commit, head);
-  // No reason was named, so the record's message is the commit's subject, and the commit carries no
-  // VERSION file.
+  // No reason was named, so the record's message is the commit's subject, and the commit reaches no release
+  // tag, so it is the day's nightly of the first release.
   assert_eq!(written.message, "first");
-  assert_eq!(written.version, "");
+  assert_eq!(
+    written.version,
+    format!("1.0.0-0.nightly.{}", platform_day(Machine.now_ms()).format("%Y%m%d"))
+  );
   assert_eq!(
     std::fs::read_link(scene.unit_link()).unwrap(),
     scene.deploy_dir().join("units/app.service")
@@ -684,7 +687,7 @@ fn the_message_overrides_the_subject_and_the_deployed_version_is_recorded() {
   let scene = Scene::new();
   let hands = Hands::default();
 
-  scene.write("VERSION", "3.4.0\n");
+  scene.write("released.txt", "the release\n");
   let released = scene.push("the release");
   must(&["tag", "v3.4.0", &released], &scene.source);
 
@@ -1385,18 +1388,21 @@ fn a_major_change_runs_the_dependents_and_a_minor_one_does_not() {
   let scene = Scene::new();
   let hands = Hands::default();
 
-  scene.write("VERSION", "1.0.0\n");
-  scene.push("the first release");
+  scene.write("released.txt", "1.0.0\n");
+  let released = scene.push("the first release");
+  must(&["tag", "v1.0.0", &released], &scene.source);
   assert_eq!(scene.run_with(&DeployAsk::default(), &Told(true), &hands, &scene.env()), 0);
 
-  scene.write("VERSION", "1.1.0\n");
-  scene.push("the same major");
+  scene.write("released.txt", "1.1.0\n");
+  let released = scene.push("the same major");
+  must(&["tag", "v1.1.0", &released], &scene.source);
   let counted = Counted::default();
   assert_eq!(scene.run_with(&DeployAsk::default(), &counted, &hands, &scene.env()), 0);
   assert_eq!(*counted.0.borrow(), 0);
 
-  scene.write("VERSION", "2.0.0\n");
-  scene.push("the next major");
+  scene.write("released.txt", "2.0.0\n");
+  let released = scene.push("the next major");
+  must(&["tag", "v2.0.0", &released], &scene.source);
   let counted = Counted::default();
   assert_eq!(scene.run_with(&DeployAsk::default(), &counted, &hands, &scene.env()), 0);
   assert_eq!(*counted.0.borrow(), 1);

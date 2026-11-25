@@ -162,7 +162,7 @@ async fn health(State(ground): State<Arc<Ground>>) -> Json<Health> {
     reason: opened
       .err()
       .map(|failure| fill_marks(&SERVICE.errors.not_ready, &[("why", &failure.error)])),
-    version: env!("CARGO_PKG_VERSION").to_owned(),
+    version: bmo_testbed_core::version::VERSION.to_owned(),
   })
 }
 

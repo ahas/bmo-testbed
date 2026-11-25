@@ -1,5 +1,5 @@
 # The set's versions (bmo-chat's docs/conventions.md, 「Versions」; docs/deploy.md, 「The deployed version」): how
-# a release is tagged, how a deployment between releases is named, and where a tree declares its version.
+# a release is tagged, how a deployment between releases is named, and how its build is handed that name.
 
 # The platform's time zone, Asia/Seoul, as its distance from UTC in minutes; it keeps no summer time, so the
 # day a nightly names is the same all year.
@@ -11,7 +11,9 @@ tag_prefix = "v"
 nightly = "0.nightly"
 # The pre-release word of an alpha: main leads to the alpha's own version while one is its last release.
 alpha = "alpha"
-# The file a tree declares its version in first, at its root, then the manifests read after it.
-version_file = "VERSION"
-cargo_manifest = "Cargo.toml"
-package_manifest = "package.json"
+# The pre-release words a release tag's version may carry besides the alpha's; any other names no release.
+releases = ["beta", "rc"]
+# The lowest major a release tag names: the set's first release is 1.0.0, so a tag below it is no release.
+first_major = 1
+# The variable the deployment hands its version to every build and step in.
+variable = "BMO_VERSION"

@@ -79,7 +79,7 @@ impl ServerHandler for TestbedServer {
     let mut server = Implementation::default();
 
     server.name = "bmo-testbed".to_owned();
-    server.version = env!("CARGO_PKG_VERSION").to_owned();
+    server.version = bmo_testbed_core::version::VERSION.to_owned();
     info.server_info = server;
     info.instructions = Some(PLUGIN.instructions.clone());
     info

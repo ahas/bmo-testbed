@@ -135,7 +135,7 @@ impl Mcp {
       .await;
 
     assert_eq!(info["serverInfo"]["name"], "bmo-testbed");
-    assert_eq!(info["serverInfo"]["version"], env!("CARGO_PKG_VERSION"));
+    assert_eq!(info["serverInfo"]["version"], bmo_testbed_core::version::VERSION);
     server.send(json!({ "jsonrpc": "2.0", "method": "notifications/initialized" })).await;
     server
   }

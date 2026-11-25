@@ -2653,6 +2653,7 @@ fn a_deployment_s_work_comes_here_where_the_order_names_this_machine_and_its_pla
     profile: "release",
     binaries: &[],
     built: &dir.join("built"),
+    version: "1.0.0-0.nightly.20261125",
   });
 
   assert_eq!(built, None, "the build runs here");
@@ -2677,6 +2678,7 @@ fn a_machine_out_of_reach_answers_broken_whether_or_not_begun_there_and_nothing_
       profile: "release",
       binaries: &[],
       built: &at.join("built"),
+      version: "1.0.0-0.nightly.20261125",
     })
   };
   let (fresh_at, begun_at) = (dir.join("fresh"), dir.join("begun"));

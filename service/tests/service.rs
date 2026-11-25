@@ -130,7 +130,7 @@ async fn every_route_takes_the_token() {
   let health = served.client().health().await.unwrap();
 
   assert!(health.ready && health.reason.is_none());
-  assert_eq!(health.version, env!("CARGO_PKG_VERSION"));
+  assert_eq!(health.version, bmo_testbed_core::version::VERSION);
 }
 
 // "a path or a method no route answers is no-route, a key nothing stands at not-found, a bad query bad-request"

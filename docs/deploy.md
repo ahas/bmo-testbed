@@ -795,25 +795,25 @@ The set the repository belongs to stands at one version, which moves only at a r
 The deployment names which of the two it laid, as its record's `version`, read once it has picked its
 commit.
 
-- **The declared version** is the one the commit itself carries: its `VERSION` file's content where it
-  holds one, else the version its root `Cargo.toml` names in `[workspace.package]` or `[package]`, else the
-  `version` of its root `package.json`. A commit declaring none is deployed all the same, its version left
-  empty.
-- **A commit the release tag names is that release.** Where a tag `v<declared version>` points at the commit
-  itself, the deployed version is the declared one, as `1.0.0` for the commit tagged `v1.0.0` and
-  `1.1.0-beta.2` for the commit tagged `v1.1.0-beta.2`. The tags are read from the repository as the
-  deployment's fetch left it.
-- **Any other commit is the day's nightly** of the version main leads to from the declared one:
-  `<that version>-0.nightly.<YYYYMMDD>`, the day the deployment picked its commit in the platform's time zone,
-  Asia/Seoul, which the testbed's policy holds as its distance from UTC. Main leads to the next unreleased
-  version: the set's first release, `1.0.0`, from a declared version of major 0, as `1.0.0-0.nightly.20261124`
-  after `0.1.0-rev.77`; the declared version itself where that is an alpha, as `1.1.0-0.nightly.20261124` after
-  `1.1.0-alpha.2`; and the minor above anything else, a stable release, a beta or a release candidate whose
-  line has a branch of its own, as `1.1.0-0.nightly.20261124` after `1.0.0` and `1.2.0-0.nightly.20261201`
-  after `1.1.0-beta.1`. Semver
-  orders every nightly after the release before it and before every alpha, beta, release candidate and
-  release of the version it leads to. A declared version that is no semantic version is recorded as it is
-  written.
+- **The version is read off the tags,** as the repository's fetch left them; no file of the commit is read for
+  it. A release tag is the policy's prefix before a semantic version of major 1 or above that is a stable
+  release, an alpha, a beta or a release candidate; any other tag, an upstream's kept in a fork among them,
+  counts for nothing.
+- **A commit a release tag names is that release.** Where release tags point at the commit itself, the deployed
+  version is the newest of them, as `1.0.0` for the commit tagged `v1.0.0` and `1.1.0-beta.2` for the commit
+  tagged `v1.1.0-beta.2`.
+- **Any other commit is the day's nightly** of the version main leads to from the newest release tag the commit
+  reaches: `<that version>-0.nightly.<YYYYMMDD>`, the day the deployment picked its commit in the platform's time
+  zone, Asia/Seoul, which the testbed's policy holds as its distance from UTC. Main leads to the next unreleased
+  version: the set's first release, `1.0.0`, where the commit reaches no release tag, as
+  `1.0.0-0.nightly.20261124`; the version itself where that is an alpha, as `1.1.0-0.nightly.20261124` after
+  `1.1.0-alpha.2`; and the minor above anything else, a stable release, a beta or a release candidate whose line
+  has a branch of its own, as `1.1.0-0.nightly.20261124` after `1.0.0` and `1.2.0-0.nightly.20261201` after
+  `1.1.0-beta.1`. Semver orders every nightly after the release before it and before every alpha, beta, release
+  candidate and release of the version it leads to.
+- **The build carries it.** The deployment hands the version to the Cargo release build, wherever it runs, and to
+  every declared build step and deploy step as `BMO_VERSION`, so what the unit compiles or bundles in is the
+  version its record names.
 - **The nightly is a name, never a version anything declares.** No manifest and no tag holds it; which
   change is live is the record's commit, which the record names beside it.
 

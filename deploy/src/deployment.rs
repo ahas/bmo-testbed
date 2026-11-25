@@ -23,6 +23,7 @@ use bmo_testbed_core::policy::declaration::DECLARATION;
 use bmo_testbed_core::policy::deploy::DEPLOY;
 use bmo_testbed_core::policy::deploy_steps::DeployStep as OwnStep;
 use bmo_testbed_core::policy::fill_marks;
+use bmo_testbed_core::policy::versions::VERSIONS;
 use bmo_testbed_core::queue::HeldLock;
 use bmo_testbed_core::release_target::mark_release_target;
 use bmo_testbed_core::silence::{Output, Silence, Watch};
@@ -30,7 +31,7 @@ use bmo_testbed_core::turn::{
   Env, FRONT_VARIABLE, Lane, NOT_RUN_EXIT_CODE, TurnAsk, harness_pid, process_env, take_turn,
 };
 use bmo_testbed_core::verb::REFUSED_EXIT_CODE;
-use bmo_testbed_core::version::{declared_version, deployed_version, platform_day};
+use bmo_testbed_core::version::{deployed_version, platform_day};
 use bmo_testbed_record::{GateGround, GatePass, Record, say_unwritten};
 use serde_json::{Value, json};
 
@@ -343,6 +344,8 @@ pub struct BuildAsk<'a> {
   pub profile: &'a str,
   pub binaries: &'a [String],
   pub built: &'a Path,
+  /// The deployed version the build compiles in, handed it as the policy's variable.
+  pub version: &'a str,
 }
 
 /// Why the Cargo release build the gate ran on its own machine did not end built: it failed, with the exit
@@ -417,6 +420,8 @@ pub struct StepAsk {
   pub command: Vec<String>,
   pub cwd: PathBuf,
   pub lane: Option<Lane>,
+  /// The variables the step is handed beside the process's own.
+  pub env: Vec<(String, String)>,
 }
 
 /// What a step came to: its code, 75 where its turn did not come; how long it waited and ran; and the start of
@@ -541,6 +546,7 @@ impl DeployHands for Machine {
     let mut command = crate::run::command(&ask.command, Some(&ask.cwd));
 
     command
+      .envs(ask.env.iter().map(|(key, value)| (key, value)))
       .envs(turn.as_ref().and_then(|turn| turn.held_variable()))
       .envs(watch.variable())
       .stdout(Stdio::piped())
@@ -718,8 +724,8 @@ struct Laying<'a> {
   progress: Option<DeployRun>,
   commit: String,
   subject: String,
-  /// The deployed version: the release the commit's tag names, else the day's nightly; empty where the
-  /// commit declares none.
+  /// The deployed version: the release the commit's tag names, else the day's nightly; empty until the commit
+  /// is picked.
   version: String,
   previous: Option<DeployRecord>,
   restarted_at: std::cell::Cell<i64>,
@@ -830,7 +836,15 @@ impl<'a> Laying<'a> {
       progress.began(&ask.id, None);
     }
 
-    let ran = self.hands.step(ask);
+    // Every step of the run is handed the deployed version, which the build compiles or bundles in
+    // (docs/deploy.md, 「The deployed version」).
+    let mut handed = ask.clone();
+
+    if !self.version.is_empty() {
+      handed.env.push((VERSIONS.variable.clone(), self.version.clone()));
+    }
+
+    let ran = self.hands.step(&handed);
 
     self.step_done(&ask.id, None, ran.code, ran.waited_seconds, ran.ran_seconds);
     ran
@@ -1133,6 +1147,7 @@ impl<'a> Laying<'a> {
         profile,
         binaries: &binaries,
         built: &built,
+        version: &self.version,
       };
       let (elsewhere, tries) = self.tried(
         step,
@@ -1171,6 +1186,7 @@ impl<'a> Laying<'a> {
             command: release_build(profile, &target),
             cwd: tree.clone(),
             lane: Some(Lane::Wide),
+            env: Vec::new(),
           };
           let cargo = || crate::run::command(&ask.command[..1], None);
           let alignment = align_path_packages(&tree, &ask.command[1..], &cargo);
@@ -1196,6 +1212,7 @@ impl<'a> Laying<'a> {
         command: shell_words(&one.command),
         cwd: one.dir.as_ref().map_or_else(|| tree.clone(), |dir| tree.join(dir)),
         lane: one.lane,
+        env: Vec::new(),
       };
       let ran = self.step(&ask);
 
@@ -1225,6 +1242,7 @@ impl<'a> Laying<'a> {
       command: shell_words(&step.command),
       cwd: release.to_path_buf(),
       lane: None,
+      env: Vec::new(),
     })
   }
 
@@ -1618,21 +1636,14 @@ async fn laid(
   }
 
   run.subject = run.git(&["log", "-1", "--format=%s", &run.commit], source).out.trim().to_owned();
-  // The deployed version (docs/deploy.md, 「The deployed version」): the release the commit's tag names, else the
-  // day's nightly after the version the commit declares; a commit declaring none deploys all the same.
-  let declared = declared_version(&|file: &str| {
-    let shown = run.git(&["show", &format!("{}:{file}", run.commit)], source);
+  // The deployed version (docs/deploy.md, 「The deployed version」), read off the tags alone: the release the
+  // commit's tag names, else the day's nightly after the newest release the commit reaches.
+  let tags =
+    |args: &[&str]| -> Vec<String> { run.git(args, source).out.lines().map(str::to_owned).collect() };
+  let at = tags(&["tag", "--points-at", &run.commit]);
+  let reached = tags(&["tag", "--merged", &run.commit]);
 
-    shown.ok.then_some(shown.out)
-  });
-  let tags: Vec<String> = run
-    .git(&["tag", "--points-at", &run.commit], source)
-    .out
-    .lines()
-    .map(str::to_owned)
-    .collect();
-
-  run.version = deployed_version(&declared, &tags, platform_day(hands.now_ms()));
+  run.version = deployed_version(&at, &reached, platform_day(hands.now_ms()));
   run.previous = read_deploy_record(&places.record);
 
   let commit = run.commit.clone();
@@ -2435,6 +2446,7 @@ async fn laid(
           command: shell_words(command),
           cwd: deploy_dir.clone(),
           lane: None,
+          env: Vec::new(),
         });
 
         if ran.code != 0 {

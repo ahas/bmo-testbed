@@ -1,5 +1,5 @@
 //! The set's versions (docs/deploy.md, 「The deployed version」): the platform's day, the release tag, the
-//! nightly's pre-release, the alpha's word, and the files a tree declares its version in.
+//! nightly's pre-release, the words a release tag's version carries, and the variable a build is handed it in.
 
 use serde::Deserialize;
 
@@ -10,9 +10,9 @@ pub struct Versions {
   pub tag_prefix: String,
   pub nightly: String,
   pub alpha: String,
-  pub version_file: String,
-  pub cargo_manifest: String,
-  pub package_manifest: String,
+  pub releases: Vec<String>,
+  pub first_major: u64,
+  pub variable: String,
 }
 
 super::part!(pub VERSIONS: Versions = "versions.toml");

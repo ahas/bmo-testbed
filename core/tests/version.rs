@@ -1,11 +1,11 @@
-//! The set's version names (docs/deploy.md, 「The deployed version」): the declared version a tree carries, the
-//! release a tag names, the platform's day and the nightly between releases.
+//! The set's version names (docs/deploy.md, 「The deployed version」): the release a tag names, the platform's day
+//! and the nightly between releases.
 
 use chrono::NaiveDate;
 use semver::Version;
 
 use bmo_testbed_core::version::{
-  declared_version, deployed_version, leads_to, nightly, platform_day, release_tag,
+  deployed_version, leads_to, nightly, platform_day, release_of_tag, release_tag,
 };
 
 fn day(year: i32, month: u32, date: u32) -> NaiveDate {
@@ -16,46 +16,48 @@ fn tags(names: &[&str]) -> Vec<String> {
   names.iter().map(|one| (*one).to_owned()).collect()
 }
 
-// "A commit the release tag names is that release"
+// "A commit a release tag names is that release": the newest release tag pointing at it, whatever its kind
 #[test]
-fn a_commit_tagged_with_its_declared_release_is_that_release() {
-  assert_eq!(deployed_version("1.0.0", &tags(&["v1.0.0"]), day(2026, 11, 24)), "1.0.0");
-  assert_eq!(deployed_version("1.0.0\n", &tags(&["other", "v1.0.0"]), day(2026, 11, 24)), "1.0.0");
+fn a_commit_a_release_tag_names_is_that_release() {
+  let reached = tags(&["v1.0.0-rc.1"]);
+
+  assert_eq!(deployed_version(&tags(&["v1.0.0"]), &reached, day(2026, 11, 24)), "1.0.0");
+  assert_eq!(deployed_version(&tags(&["other", "v1.0.0"]), &[], day(2026, 11, 24)), "1.0.0");
+  assert_eq!(deployed_version(&tags(&["v1.1.0-beta.2"]), &[], day(2026, 11, 24)), "1.1.0-beta.2");
   assert_eq!(release_tag("2.3.0"), "v2.3.0");
-}
-
-// "Any other commit is the day's nightly" of the version main leads to: the minor above a stable release, a
-// beta's or a release candidate's, the alpha's own version, a tag naming another version left aside
-#[test]
-fn an_untagged_commit_is_the_days_nightly_of_the_version_main_leads_to() {
-  assert_eq!(deployed_version("1.0.0", &[], day(2026, 11, 24)), "1.1.0-0.nightly.20261124");
-  assert_eq!(
-    deployed_version("1.0.0", &tags(&["v0.9.0"]), day(2026, 11, 24)),
-    "1.1.0-0.nightly.20261124"
-  );
-  assert_eq!(deployed_version("2.4.1", &[], day(2027, 1, 2)), "2.5.0-0.nightly.20270102");
-  assert_eq!(deployed_version("1.1.0-alpha.2", &[], day(2026, 11, 24)), "1.1.0-0.nightly.20261124");
-  assert_eq!(deployed_version("1.1.0-beta.1", &[], day(2026, 12, 1)), "1.2.0-0.nightly.20261201");
-  assert_eq!(deployed_version("1.1.0-rc.3", &[], day(2026, 12, 1)), "1.2.0-0.nightly.20261201");
-  assert_eq!(deployed_version("0.1.0-rev.77", &[], day(2026, 11, 23)), "1.0.0-0.nightly.20261123");
-}
-
-// "A commit the release tag names is that release", whatever its kind
-#[test]
-fn a_commit_tagged_with_its_declared_pre_release_is_that_pre_release() {
-  assert_eq!(
-    deployed_version("1.1.0-beta.2", &tags(&["v1.1.0-beta.2"]), day(2026, 11, 24)),
-    "1.1.0-beta.2"
-  );
   assert_eq!(release_tag("1.1.0-rc.1"), "v1.1.0-rc.1");
 }
 
-// "A commit declaring none is deployed all the same, its version left empty"; "A declared version that is no
-// semantic version is recorded as it is written"
+// "Any other commit is the day's nightly" of the version main leads to from the newest release tag it reaches:
+// the minor above a stable release, a beta's or a release candidate's, the alpha's own version, and the first
+// release before any
 #[test]
-fn no_declared_version_names_none_and_an_unread_one_stands_as_written() {
-  assert_eq!(deployed_version("", &[], day(2026, 11, 24)), "");
-  assert_eq!(deployed_version("next", &[], day(2026, 11, 24)), "next");
+fn an_untagged_commit_is_the_days_nightly_of_the_version_main_leads_to() {
+  let at_day = |reached: &[&str], on: NaiveDate| deployed_version(&[], &tags(reached), on);
+
+  assert_eq!(at_day(&["v1.0.0"], day(2026, 11, 24)), "1.1.0-0.nightly.20261124");
+  assert_eq!(at_day(&["v1.0.0-beta.1", "v1.0.0"], day(2026, 11, 24)), "1.1.0-0.nightly.20261124");
+  assert_eq!(at_day(&["v2.4.1"], day(2027, 1, 2)), "2.5.0-0.nightly.20270102");
+  assert_eq!(at_day(&["v1.1.0-alpha.2"], day(2026, 11, 24)), "1.1.0-0.nightly.20261124");
+  assert_eq!(at_day(&["v1.1.0-beta.1"], day(2026, 12, 1)), "1.2.0-0.nightly.20261201");
+  assert_eq!(at_day(&["v1.1.0-rc.3"], day(2026, 12, 1)), "1.2.0-0.nightly.20261201");
+  assert_eq!(at_day(&[], day(2026, 11, 23)), "1.0.0-0.nightly.20261123");
+}
+
+// "any other tag, an upstream's kept in a fork among them, counts for nothing"
+#[test]
+fn a_tag_that_names_no_release_of_the_set_counts_for_nothing() {
+  let upstream = ["v0.27.5-beta.3", "v2026.11.23-canary.455", "v0.10.0", "next", "v1.0.0+build"];
+
+  for tag in upstream {
+    assert_eq!(release_of_tag(tag), None, "{tag}");
+  }
+
+  assert_eq!(
+    deployed_version(&tags(&upstream), &tags(&upstream), day(2026, 11, 25)),
+    "1.0.0-0.nightly.20261125"
+  );
+  assert_eq!(release_of_tag("v1.0.0-beta.1"), Some(Version::parse("1.0.0-beta.1").unwrap()));
 }
 
 // "Semver orders every nightly after the release before it and before the release it leads to"
@@ -120,34 +122,4 @@ fn the_day_is_counted_in_the_platforms_time_zone() {
   // 2026-11-23 14:59:59 and 15:00:00 in UTC, the last second of one day in Seoul and the first of the next.
   assert_eq!(platform_day(1_795_445_999_000), day(2026, 11, 23));
   assert_eq!(platform_day(1_795_446_000_000), day(2026, 11, 24));
-}
-
-// "The declared version is the one the commit itself carries": its version file, else the root Cargo
-// manifest's workspace or package version, else the root package manifest's
-#[test]
-fn the_declared_version_is_read_from_the_version_file_then_cargo_then_the_package_manifest() {
-  let tree = |files: &'static [(&'static str, &'static str)]| {
-    move |path: &str| files.iter().find(|(name, _)| *name == path).map(|(_, text)| (*text).to_owned())
-  };
-
-  assert_eq!(
-    declared_version(&tree(&[("VERSION", "1.2.0\n"), ("Cargo.toml", "[package]\nversion = \"9.9.9\"\n")])),
-    "1.2.0"
-  );
-  assert_eq!(
-    declared_version(&tree(&[("Cargo.toml", "[workspace.package]\nversion = \"1.3.0\"\n")])),
-    "1.3.0"
-  );
-  assert_eq!(
-    declared_version(&tree(&[("Cargo.toml", "[package]\nname = \"one\"\nversion = \"1.4.0\"\n")])),
-    "1.4.0"
-  );
-  assert_eq!(
-    declared_version(&tree(&[
-      ("Cargo.toml", "[workspace]\nmembers = []\n"),
-      ("package.json", "{\"version\": \"1.5.0\"}")
-    ])),
-    "1.5.0"
-  );
-  assert_eq!(declared_version(&tree(&[])), "");
 }
