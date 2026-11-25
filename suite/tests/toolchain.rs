@@ -21,6 +21,21 @@ fn rustup(dir: &Path, asked: u8, installed: u8) -> PathBuf {
 
   std::fs::write(&program, script).unwrap();
   std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+  // A process another test forks while the file is still open for writing holds it open until it execs, and the
+  // program cannot be started meanwhile; it is started here until it can be, within a bound, and the line that
+  // start wrote is taken away again.
+  for _ in 0..400 {
+    let started = std::process::Command::new(&program).stderr(std::process::Stdio::null()).status();
+
+    if !started.is_err_and(|why| why.raw_os_error() == Some(libc::ETXTBSY)) {
+      break;
+    }
+
+    std::thread::sleep(std::time::Duration::from_millis(5));
+  }
+
+  let _ = std::fs::remove_file(&calls);
   program
 }
 
