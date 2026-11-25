@@ -187,7 +187,7 @@ text = "PORT={{port.one.web}}\n"
 
 [[after]]
 id = "first-account"
-run = "cat \"$BMO_INPUT_ONE_OWNER\" > made-for && printf %s \"$USER $LOGNAME\" > made-by && touch account"
+run = "cat \"$BMO_INPUT_ONE_OWNER\" > made-for && printf %s \"$USER $LOGNAME\" > made-by && printf %s \"$PGHOST $PGPORT\" > made-on && touch account"
 done = "test -f account"
 inputs = ["one.owner"]
 "#;
@@ -369,6 +369,11 @@ fn a_whole_run_makes_writes_deploys_and_continues_where_it_stopped() {
   assert_eq!(
     std::fs::read_to_string(ground.index.join("services/one/made-by")).unwrap(),
     "tester tester"
+  );
+  // The step's own database client is handed the install's PostgreSQL, never the one its caller's environment names.
+  assert_eq!(
+    std::fs::read_to_string(ground.index.join("services/one/made-on")).unwrap(),
+    "/var/run/postgresql 5432"
   );
 
   let console = std::fs::read_to_string(ground.data_root.join("env/console.env")).unwrap();

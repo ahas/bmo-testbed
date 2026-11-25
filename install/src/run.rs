@@ -1581,9 +1581,13 @@ impl<'a> Install<'a> {
     _unit: &Unit,
     inputs: &[(String, PathBuf)],
   ) -> Vec<(String, String)> {
+    // The PostgreSQL the install made its databases on, so a step's own psql reaches that server and never another
+    // one the machine also runs.
     let mut env = vec![
       ("BMO_DATA_DIR".to_owned(), self.ask.data_root.display().to_string()),
       ("BMO_INSTALL_PREFIX".to_owned(), self.ask.prefix.display().to_string()),
+      ("PGHOST".to_owned(), self.ask.services.postgres_host.clone()),
+      ("PGPORT".to_owned(), self.ask.services.postgres_port.clone()),
     ];
 
     // The account's name, which a database client takes for its role, where the install's own environment lacks

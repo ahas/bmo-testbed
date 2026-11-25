@@ -56,7 +56,8 @@ bmo-testbed install --set <input> [<places>]
   repository's deploy root and data root must stand under it or under the data root (「The order of a run」, step 5).
 - **`--postgres-host` and `--postgres-port`** name the PostgreSQL server the databases are made on and the services
   reach, over `PGHOST` and `PGPORT`, the system's socket folder `/var/run/postgresql` and `5432` where neither names
-  one; **`--valkey`** names the Valkey the console keeps its sessions in, over `BMO_INSTALL_VALKEY`,
+  one; every check, build, after-step, restart and verification the install runs is handed the same `PGHOST` and
+  `PGPORT`, so a step's own database client reaches that server alone; **`--valkey`** names the Valkey the console keeps its sessions in, over `BMO_INSTALL_VALKEY`,
   `redis://127.0.0.1:6379` where neither does. A packager that bundles its own servers names them here.
 - **`--dry-run`** reads everything and changes nothing: every step that would act prints `planned`. It runs no
   after-step's check, no health and no verification, since those reach the services an install sets up.
