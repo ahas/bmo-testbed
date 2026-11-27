@@ -1,6 +1,6 @@
 ---
 name: bmo-testbed
-description: Run heavy test and build commands through a machine's one queue with the bmo-testbed MCP server, and read what they came to. Use before running a whole test suite, a Cargo build or test, a package script that tests, checks or builds, or a browser test on a machine shared with other checkouts, and when reading a test run's counts and log, a change check, the lanes' queue, or a deployment's steps.
+description: How the bmo-testbed MCP tools run heavy test and build commands through the machine's one queue and read what they came to: a test run's counts and log, a change check, the lanes' queue and a deployment's steps.
 ---
 
 # bmo-testbed
@@ -17,10 +17,10 @@ commands through that queue and reads the record back.
 Register the server with the harness as a stdio MCP server:
 
 ```
-bmo-testbed mcp --service http://127.0.0.1:7460
+bmo-testbed mcp --service <the testbed service's address>
 ```
 
-The address is the testbed's HTTP service, which `bmo-testbed serve` starts; the reading tools call it,
+The address is the testbed's HTTP service, which `bmo-testbed serve` starts at the loopback address its policy names, or `BMO_TESTBED_SERVICE` gives; never guess one; the reading tools call it,
 behind the bearer token in the `BMO_TESTBED_TOKEN` environment variable of the server, or `--token`. The
 running tools need no service: they start the server's own binary in the checkout named, so they work
 wherever the binary does.
