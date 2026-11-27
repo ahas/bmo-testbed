@@ -3,7 +3,7 @@
 held_by = "testbed"
 
 [[memory]]
-key = "when"
+key = "testbed.when"
 type = "tip"
 recall_condition = "a test suite, a build, or a commit to put live"
 text = "Run tests through testbed_run or bmo check, and put a commit live only with the testbed deploy tool."
