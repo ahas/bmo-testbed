@@ -145,6 +145,9 @@ carried_live = "{commit} is carried by the commit already live, so laying it dow
 # A deployment asked again (docs/deploy.md, 「The deployment line」): {unit} the deployment standing or failed,
 # {words} its ticket's words, {seconds} how long ago it asked, {commit} a short commit, {when} when it ended and
 # {reason} its reason.
+# A later commit left for a deployment of the repository still waiting rather than a deployment of its own:
+# {unit} that deployment, {words} its ticket's words and {commit} the later commit, short.
+joined_waiting = "{unit} still waits for {words}; it will lay down {commit} in its place, so nothing new is started and this call attaches to it: journalctl --user -u {unit} --no-pager"
 attached = "{unit} already stands for {words}, asked {seconds}s ago; nothing new is started and this call attaches to it: journalctl --user -u {unit} --no-pager"
 failed_unmoved = "{commit} failed in its gate in {unit}, ended {when}, and the main branch still stands on it: {reason}; a new commit on main reopens it, or --first runs the gate again"
 failed_waiting = "{commit} failed in its gate in {unit} while this deployment waited: {reason}; its gate is not run again"

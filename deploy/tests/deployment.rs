@@ -2324,6 +2324,79 @@ fn a_deployment_waiting_in_the_line_lays_down_the_commit_asked_for_behind_it_mea
   assert!(!laid.contains(&earlier.as_str()), "{log}");
 }
 
+// "A later commit asked while a deployment of the repository waits joins it": the call leaves the commit for the
+// waiting deployment, which lays it down in place of its own once its turn comes, the line holding one deployment
+// of the repository throughout.
+#[test]
+fn a_later_commit_left_for_a_waiting_deployment_is_laid_down_in_its_place() {
+  let scene = Scene::new();
+
+  assert_eq!(scene.run(&Hands::default()), 0);
+
+  scene.declare("v2", "true");
+
+  let earlier = scene.push("second");
+
+  scene.declare("v3", "true");
+
+  let later = scene.push("third");
+  let line = line_of(&scene, Duration::from_secs(3600));
+  let held = line.take(&earlier_ticket(), &|_| {}).unwrap();
+  let unit = "bmo-deploy-1795000000000";
+  let ask = DeployAsk {
+    commit: Some(earlier.clone()),
+    unit: Some(unit.to_owned()),
+    root_poll: Some(Duration::from_millis(5)),
+    line: Some(line_of(&scene, Duration::from_secs(3600))),
+    ..DeployAsk::default()
+  };
+  let repo = Repository::read(&scene.source).unwrap();
+  let turn = RootTurn::under(&DeployPlaces::of(&repo, &scene.env()).unwrap().deploy_root).lock;
+  let (told, heard) = std::sync::mpsc::channel();
+  let given_up = Instant::now() + Duration::from_secs(60);
+  let scene = &scene;
+
+  let (code, lines) = std::thread::scope(|scope| {
+    let deploying = scope.spawn(|| {
+      let hands = Hands {
+        told: Some(told),
+        ..Hands::default()
+      };
+
+      (scene.run_with(&ask, &Told(true), &hands, &scene.env()), said(&hands))
+    });
+
+    heard_until(&heard, &[words_of(&DEPLOY.run.line_waiting)], given_up);
+
+    let carries = |later: &str, earlier: &str| {
+      std::process::Command::new("git")
+        .args(["merge-base", "--is-ancestor", earlier, later])
+        .current_dir(&scene.source)
+        .status()
+        .is_ok_and(|status| status.success())
+    };
+    let waiting =
+      bmo_testbed_deploy::again::waiting_behind(&turn, &line.lock, &repo.name(), &later, &carries);
+
+    assert_eq!(waiting.and_then(|ticket| ticket.unit).as_deref(), Some(unit));
+    assert!(bmo_testbed_deploy::line::leave_later(&turn, unit, &later));
+    drop(held);
+
+    deploying.join().unwrap()
+  });
+  let log = std::fs::read_to_string(scene.at("live/deployed.log")).unwrap();
+  let laid: Vec<&str> = log.lines().filter_map(|line| line.split_whitespace().nth(1)).collect();
+
+  assert_eq!(code, 0, "{lines}");
+  assert!(lines.contains(words_of(&DEPLOY.run.joined)), "{lines}");
+  assert_eq!(laid.last().copied(), Some(later.as_str()), "{log}");
+  assert!(!laid.contains(&earlier.as_str()), "{log}");
+  assert!(
+    bmo_testbed_deploy::line::later_left(&turn, unit).is_none(),
+    "the mark is taken away as the run ends"
+  );
+}
+
 impl Scene {
   // A deployment of the commit given that failed in its gate, written into the scene's record as ending now.
   fn failed_in_gate(&self, commit: &str) {

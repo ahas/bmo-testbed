@@ -410,6 +410,15 @@ flowchart TD
     later of the two then ends at its turn on the commit already live, or on the failure below.
   - Where the commit or the remote cannot be read in the caller's process, the verb starts the unit as
     asked, and the unit refuses what is to be refused.
+- **A later commit asked while a deployment of the repository waits joins it.** Where no deployment stands for the
+  commit asked for, and a deployment of the same deploy root waits for its turn or holds it while it still waits in
+  the machine's line, asking for a commit the one asked for carries, the call starts nothing: it leaves the later
+  commit beside the deploy root's turn for that deployment's unit, prints a line naming that deployment and the
+  commit it will lay down, and exits 0, so the line holds one deployment of the repository however many commits
+  are asked. That deployment reads the commit left for it with the ones waiting deployments ask for, at its root's
+  turn and again at its line's, and lays the furthest down in place of its own as below; what was left for it is
+  taken away as it ends. A deployment asked with `--before-start` or `--no-check` is joined by none, nor does an ask
+  with `--before-start`, `--no-check`, `--force-live` or `--first` join one, since each is a promise of its own run.
 - **A commit whose gate failed and that main still stands on is refused.** Before the verb starts a unit, it
   reads the testbed's record for the newest ended deployment of the repository and the commit. Where that one
   failed in its gate (the `check` stage) and the repository's main branch, its remote's as the declaration

@@ -1516,7 +1516,13 @@ pub async fn deploy(
   hands: &dyn DeployHands,
   hook: &Hook,
 ) -> u8 {
-  laid(repo, places, ask, env, gate, hands, hook, Turns::default()).await
+  let code = laid(repo, places, ask, env, gate, hands, hook, Turns::default()).await;
+
+  if let Some(unit) = ask.unit.as_deref() {
+    crate::line::later_taken(&RootTurn::under(&places.deploy_root).lock, unit);
+  }
+
+  code
 }
 
 // The commit a deployment waiting for the deploy root's turn asks for that carries the one in hand, the furthest
@@ -1524,7 +1530,12 @@ pub async fn deploy(
 // asked for after this deployment began may not be in the checkout yet.
 fn later_asked(run: &Laying<'_>, lock: &Path, commit: &str) -> Option<String> {
   let source = &run.places.source;
-  let asked = waiting_commits(lock, &run.repo.name());
+  let mut asked = waiting_commits(lock, &run.repo.name());
+
+  // A later commit a call left for this very deployment rather than standing a deployment of its own.
+  if let Some(later) = run.ask.unit.as_deref().and_then(|unit| crate::line::later_left(lock, unit)) {
+    asked.push(later);
+  }
 
   if asked.is_empty() {
     return None;
@@ -1728,6 +1739,7 @@ async fn laid(
   let ticket = DeployTicket {
     first: ask.first.clone(),
     before_start: ask.before_start.is_some(),
+    no_check: ask.no_check,
     root: Some(places.deploy_root.to_string_lossy().into_owned()),
     ..DeployTicket::asked(&repo.name(), &commit, ask.unit.as_deref())
   };

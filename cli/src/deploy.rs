@@ -715,6 +715,34 @@ fn asked_again(args: &DeployFlags, repo: &Repository, places: &DeployPlaces, env
     main_head: &main_head,
   });
 
+  // A deployment of the repository still waiting takes this later commit in place of its own, so the line keeps one
+  // deployment of the repository rather than one more (docs/deploy.md, 「The deployment line」).
+  if matches!(judged, Asked::Start)
+    && args.before_start.is_none()
+    && !args.no_check
+    && !args.force_live
+    && args.first.is_none()
+  {
+    let turn = RootTurn::under(&places.deploy_root).lock;
+    let line = bmo_testbed_deploy::line::DeployLine::under(&data_root()).lock;
+    let carries = |later: &str, earlier: &str| git(&["merge-base", "--is-ancestor", earlier, later]).ok;
+
+    if let Some(waiting) =
+      bmo_testbed_deploy::again::waiting_behind(&turn, &line, &repo.name(), &commit, &carries)
+      && let Some(unit) = waiting.unit.as_deref()
+      && bmo_testbed_deploy::line::leave_later(&turn, unit, &commit)
+    {
+      println!(
+        "{}",
+        fill_marks(
+          &said.joined_waiting,
+          &[("unit", unit), ("words", &waiting.words), ("commit", &short(&commit))]
+        )
+      );
+      return Some(0);
+    }
+  }
+
   match judged {
     Asked::Standing(standing) => Some(attach(args, &standing, env)),
     Asked::FailedUnmoved(failed) => Some(refused(&fill_marks(

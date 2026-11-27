@@ -100,6 +100,7 @@ pub struct RunWords {
   pub already_live: String,
   pub carried_live: String,
   pub attached: String,
+  pub joined_waiting: String,
   pub failed_unmoved: String,
   pub failed_waiting: String,
   pub major: String,

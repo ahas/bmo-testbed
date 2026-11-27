@@ -34,6 +34,36 @@ pub fn standing_for(
     .find(|ticket| ticket.commit.as_deref().is_some_and(of_commit))
 }
 
+/// A deployment of the repository waiting for the deploy root's turn, or holding it while it still waits in the
+/// machine's line, that asks for a commit the one asked for carries and may lay that one down in its place: one asked
+/// with no command before its start and with its gate (docs/deploy.md, 「The deployment line」). The one to go first
+/// where several do. None where none stands.
+pub fn waiting_behind(
+  turn: &Path,
+  line: &Path,
+  repository: &str,
+  commit: &str,
+  carries: &dyn Fn(&str, &str) -> bool,
+) -> Option<DeployTicket> {
+  let root = standing(turn);
+  let in_line: Vec<String> = standing(line).waiting.into_iter().filter_map(|ticket| ticket.unit).collect();
+  let holder = root
+    .holder
+    .filter(|holder| holder.unit.as_ref().is_some_and(|unit| in_line.contains(unit)));
+
+  holder
+    .into_iter()
+    .chain(root.waiting)
+    .filter(|ticket| ticket.repository.as_deref() == Some(repository) && ticket.unit.is_some())
+    .filter(|ticket| !ticket.before_start && !ticket.no_check)
+    .find(|ticket| {
+      ticket
+        .commit
+        .as_deref()
+        .is_some_and(|earlier| earlier != commit && carries(commit, earlier))
+    })
+}
+
 /// The newest ended deployment of the repository's whole commit in the testbed's record under the data root,
 /// where it failed in its gate and ended no earlier than `since`, in epoch milliseconds; none otherwise, and none
 /// where the record cannot be read, since a record that cannot be read refuses nothing.

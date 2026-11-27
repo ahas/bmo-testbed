@@ -71,6 +71,9 @@ pub struct DeployTicket {
   /// It was asked with a command to run before its start, which runs only in its own restart.
   #[serde(default)]
   pub before_start: bool,
+  /// It was asked with its gate left out, which stands on a pass of its own commit alone.
+  #[serde(default)]
+  pub no_check: bool,
 }
 
 impl DeployTicket {
@@ -91,6 +94,7 @@ impl DeployTicket {
       pid: 0,
       first: None,
       before_start: false,
+      no_check: false,
     }
   }
 
@@ -175,6 +179,41 @@ pub fn waiting_commits(lock: &Path, repository: &str) -> Vec<String> {
     .filter(|ticket| ticket.repository.as_deref() == Some(repository) && !ticket.before_start)
     .filter_map(|ticket| ticket.commit)
     .collect()
+}
+
+// The folder beside a deploy root's turn the later marks stand in, one file a waiting unit.
+const LATER_MARKS: &str = "deploy-later";
+
+fn later_mark(turn: &Path, unit: &str) -> Option<PathBuf> {
+  let plain = !unit.is_empty() && !unit.starts_with('.') && !unit.contains('/');
+
+  plain.then(|| turn.with_file_name(LATER_MARKS).join(format!("{unit}.commit")))
+}
+
+/// A later commit left for a deployment of the deploy root still waiting, by its unit (docs/deploy.md, 「The
+/// deployment line」): the deployment lays it down in place of its own once its turn comes. Whether it was left.
+pub fn leave_later(turn: &Path, unit: &str, commit: &str) -> bool {
+  let Some(mark) = later_mark(turn, unit) else { return false };
+  let staged = mark.with_extension("staged");
+
+  mark.parent().is_some_and(|dir| std::fs::create_dir_all(dir).is_ok())
+    && std::fs::write(&staged, commit.as_bytes()).is_ok()
+    && std::fs::rename(&staged, &mark).is_ok()
+}
+
+/// The later commit left for a unit, none where none was left.
+pub fn later_left(turn: &Path, unit: &str) -> Option<String> {
+  let text = std::fs::read_to_string(later_mark(turn, unit)?).ok()?;
+  let commit = text.trim();
+
+  (!commit.is_empty()).then(|| commit.to_owned())
+}
+
+/// The later commit left for a unit taken away, once its deployment has ended.
+pub fn later_taken(turn: &Path, unit: &str) {
+  if let Some(mark) = later_mark(turn, unit) {
+    let _ = std::fs::remove_file(mark);
+  }
 }
 
 /// The ticket of a deployment of the repository and commit waiting in a unit under any of the locks given, for
