@@ -2397,6 +2397,66 @@ fn a_later_commit_left_for_a_waiting_deployment_is_laid_down_in_its_place() {
   );
 }
 
+// "A deployment whose commit went live while it waited ends there": a deployment waiting for its deploy root's turn
+// whose commit the live one carries ends without the turn, while another holds it still.
+#[test]
+fn a_deployment_whose_commit_the_live_one_carries_ends_while_it_waits() {
+  let scene = Scene::new();
+
+  scene.declare("v2", "true");
+
+  let earlier = scene.push("second");
+
+  scene.declare("v3", "true");
+
+  let later = scene.push("third");
+  let latest = DeployAsk {
+    commit: Some(later.clone()),
+    ..DeployAsk::default()
+  };
+
+  assert_eq!(scene.run_with(&latest, &Told(true), &Hands::default(), &scene.env()), 0);
+
+  let repo = Repository::read(&scene.source).unwrap();
+  let root = RootTurn {
+    poll: Some(Duration::from_millis(5)),
+    ..RootTurn::under(&DeployPlaces::of(&repo, &scene.env()).unwrap().deploy_root)
+  };
+  let held = root.take(&earlier_ticket(), &|_| {}).unwrap();
+  let ask = DeployAsk {
+    commit: Some(earlier.clone()),
+    root_poll: Some(Duration::from_millis(5)),
+    ..DeployAsk::default()
+  };
+  let (told, heard) = std::sync::mpsc::channel();
+  let scene = &scene;
+
+  let (code, lines) = std::thread::scope(|scope| {
+    let deploying = scope.spawn(move || {
+      let hands = Hands {
+        told: Some(told),
+        ..Hands::default()
+      };
+
+      (scene.run_with(&ask, &Told(true), &hands, &scene.env()), said(&hands))
+    });
+
+    // It ends while the turn is still held: nothing is let go for it.
+    heard_until(&heard, &[words_of(&DEPLOY.run.carried_live)], Instant::now() + Duration::from_secs(60));
+
+    let ended = deploying.join().unwrap();
+
+    drop(held);
+    ended
+  });
+  let log = std::fs::read_to_string(scene.at("live/deployed.log")).unwrap();
+  let laid: Vec<&str> = log.lines().filter_map(|line| line.split_whitespace().nth(1)).collect();
+
+  assert_eq!(code, 0, "{lines}");
+  assert!(lines.contains(words_of(&DEPLOY.run.carried_live)), "{lines}");
+  assert!(!laid.contains(&earlier.as_str()), "{log}");
+}
+
 impl Scene {
   // A deployment of the commit given that failed in its gate, written into the scene's record as ending now.
   fn failed_in_gate(&self, commit: &str) {

@@ -225,6 +225,14 @@ pub fn waiting_ticket(locks: &[&Path], repository: &str, commit: &str) -> Option
     .find(|ticket| ticket.is_of(repository, commit) && ticket.unit.is_some())
 }
 
+/// What a wait for a turn came to: the turn held, given up because what the deployment would lay down went live
+/// while it waited, or none.
+pub enum Waited {
+  Held(HeldLock),
+  Gone,
+  None,
+}
+
 /// Where a waiting deployment waits: in the line, or before it for its deploy root's turn.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -569,10 +577,20 @@ impl DeployLine {
   /// none where the bound passed first, said on a line naming the holder the deployment goes on beside. A
   /// ticket marked first stands ahead of every unmarked one, and one a raise marks while it waits moves there.
   pub fn take(&self, ticket: &DeployTicket, say: &dyn Fn(&str)) -> Option<HeldLock> {
+    match self.take_unless(ticket, say, &|| false) {
+      Waited::Held(held) => Some(held),
+      Waited::Gone | Waited::None => None,
+    }
+  }
+
+  /// The line's turn as `take` stands for it, given up at any look where `gone` says what the deployment would
+  /// lay down is live already (docs/deploy.md, 「The deployment line」).
+  pub fn take_unless(&self, ticket: &DeployTicket, say: &dyn Fn(&str), gone: &dyn Fn() -> bool) -> Waited {
     let said = &DEPLOY.run;
     let began = now_ms();
     let bound_at = began.saturating_add(millis(self.bound));
     let stood = RefCell::new(ticket.clone());
+    let given_up = std::cell::Cell::new(false);
 
     if let Some(dir) = self.lock.parent() {
       let _ = std::fs::create_dir_all(dir);
@@ -591,6 +609,11 @@ impl DeployLine {
 
     let rank = if stood.borrow().first.is_some() { Rank::Front } else { Rank::Ordinary };
     let mut wait_on = |ahead: Option<&str>| -> Option<i64> {
+      if gone() {
+        given_up.set(true);
+        return None;
+      }
+
       let now = now_ms();
       let holding = standing(&self.lock)
         .holder
@@ -634,7 +657,7 @@ impl DeployLine {
     let first = self.say_every.min(self.bound).as_secs_f64();
     // Read out before the wait, so no borrow of the ticket outlives this line while the raise marks it.
     let holder = stood.borrow().written();
-    let held = take_lock(
+    let Some(held) = take_lock(
       &self.lock,
       first,
       LockWait {
@@ -644,7 +667,9 @@ impl DeployLine {
         poll: self.poll,
         raise: Some(&mut raise),
       },
-    )?;
+    ) else {
+      return if given_up.get() { Waited::Gone } else { Waited::None };
+    };
 
     held.mark_seated();
 
@@ -654,7 +679,7 @@ impl DeployLine {
       say(&fill_marks(&said.line_taken, &[("seconds", &waited.to_string())]));
     }
 
-    Some(held)
+    Waited::Held(held)
   }
 }
 
@@ -685,14 +710,29 @@ impl RootTurn {
   /// The deploy root's turn, stood for under the ticket given and held until it is dropped. The wait has no
   /// bound, so none comes back only where the pace is zero.
   pub fn take(&self, ticket: &DeployTicket, say: &dyn Fn(&str)) -> Option<HeldLock> {
+    match self.take_unless(ticket, say, &|| false) {
+      Waited::Held(held) => Some(held),
+      Waited::Gone | Waited::None => None,
+    }
+  }
+
+  /// The deploy root's turn as `take` stands for it, given up at any look where `gone` says what the deployment
+  /// would lay down is live already (docs/deploy.md, 「The deployment line」).
+  pub fn take_unless(&self, ticket: &DeployTicket, say: &dyn Fn(&str), gone: &dyn Fn() -> bool) -> Waited {
     let said = &DEPLOY.run;
     let began = now_ms();
+    let given_up = std::cell::Cell::new(false);
 
     if let Some(dir) = self.lock.parent() {
       let _ = std::fs::create_dir_all(dir);
     }
 
     let mut wait_on = |ahead: Option<&str>| -> Option<i64> {
+      if gone() {
+        given_up.set(true);
+        return None;
+      }
+
       let now = now_ms();
       let holding =
         ahead.map_or_else(|| said.line_nobody.clone(), |ahead| DeployTicket::read(ahead).named());
@@ -704,7 +744,7 @@ impl RootTurn {
 
       Some(now.saturating_add(millis(self.say_every)))
     };
-    let held = take_lock(
+    let Some(held) = take_lock(
       &self.lock,
       0.0,
       LockWait {
@@ -713,7 +753,9 @@ impl RootTurn {
         poll: self.poll,
         ..LockWait::default()
       },
-    )?;
+    ) else {
+      return if given_up.get() { Waited::Gone } else { Waited::None };
+    };
 
     held.mark_seated();
 
@@ -723,6 +765,6 @@ impl RootTurn {
       say(&fill_marks(&said.root_taken, &[("seconds", &waited.to_string())]));
     }
 
-    Some(held)
+    Waited::Held(held)
   }
 }

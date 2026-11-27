@@ -1756,9 +1756,41 @@ async fn laid(
     line.enrol(&root.lock);
   }
 
+  // What this deployment would lay down went live while it waited, by another deployment of the deploy root, and
+  // nothing later was left for it: it ends there rather than at its turn (docs/deploy.md, 「The deployment line」).
+  let live_already = || -> Option<bool> {
+    let left_later = ask.unit.as_deref().and_then(|unit| crate::line::later_left(&root.lock, unit));
+
+    if left_later.is_some() {
+      return None;
+    }
+
+    let live = read_deploy_record(&places.record)?.commit;
+
+    if live == commit {
+      Some(false)
+    } else if !live.is_empty() && run.git(&["merge-base", "--is-ancestor", &commit, &live], source).ok {
+      Some(true)
+    } else {
+      None
+    }
+  };
+  let gone = || live_already().is_some();
+  let ended_live = |run: &Laying<'_>| -> u8 {
+    let words = if live_already() == Some(true) { &said.carried_live } else { &said.already_live };
+
+    run.say(&fill_marks(words, &[("commit", &shown)]));
+    0
+  };
+
   let root_turn = match turn {
     Some(held) => Some(held),
-    None => (!carried).then(|| root.take(&ticket, &|line| run.say(line))).flatten(),
+    None if carried => None,
+    None => match root.take_unless(&ticket, &|line| run.say(line), &gone) {
+      crate::line::Waited::Held(held) => Some(held),
+      crate::line::Waited::Gone => return ended_live(&run),
+      crate::line::Waited::None => None,
+    },
   };
 
   // A deployment waiting behind this one asks for a commit that carries it: that commit is put live in its
@@ -1785,7 +1817,14 @@ async fn laid(
   let line_taken_now = held_line.is_none() && ask.line.is_some();
   let line = match held_line {
     Some(held) => Some(held),
-    None => ask.line.as_ref().and_then(|line| line.take(&ticket, &|line| run.say(line))),
+    None => match ask.line.as_ref().map(|line| line.take_unless(&ticket, &|line| run.say(line), &gone)) {
+      Some(crate::line::Waited::Held(held)) => Some(held),
+      Some(crate::line::Waited::Gone) => {
+        drop(root_turn);
+        return ended_live(&run);
+      }
+      _ => None,
+    },
   };
 
   // The line's turn may come long after the root's: a deployment asked meanwhile for a commit that carries this

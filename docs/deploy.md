@@ -449,6 +449,10 @@ flowchart TD
   command runs only in its own restart. A waiting commit whose newest ended deployment in the testbed's record
   failed in its gate is not taken, since its gate would fail again; its own deployment answers for it at its
   own turn.
+- **A deployment whose commit went live while it waited ends there.** At every look while it waits for its deploy
+  root's turn or in the machine's line, a deployment reads the deployment record; where the live commit is its own
+  or carries it, and no later commit was left for it, it says so on a line and ends live at once, its turns let go
+  and nothing laid down, rather than standing in the line until its turn.
 - **A commit the live commit already carries ends the deployment at its turn the same way.** Where the commit
   asked for is an ancestor of the one the record read again names, laying it down would take back every commit
   after it, so the deployment says so on a line and ends live as below, laying nothing down; taking a deployment
