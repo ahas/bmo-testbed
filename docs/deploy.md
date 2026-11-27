@@ -433,7 +433,9 @@ flowchart TD
   on a line: the repository is checked, built and restarted once for all of them, and each deployment it took
   the commit of ends at its own turn on the commit already live, as below. It reads the commit it takes afresh:
   its declaration, its places and every refusal are judged of that commit, and a refusal ends the deployment
-  as any refusal does. Two things keep a deployment to its own commit: its gate left out with `--no-check`,
+  as any refusal does. The line's turn may come long after the root's, so once it does, before the gate, the
+  deployment reads the waiting deployments again and takes the furthest commit asked for meanwhile the same way,
+  holding both turns. Two things keep a deployment to its own commit: its gate left out with `--no-check`,
   since the pass it stands on is its own commit's, and a waiting deployment asked with `--before-start`, whose
   command runs only in its own restart. A waiting commit whose newest ended deployment in the testbed's record
   failed in its gate is not taken, since its gate would fail again; its own deployment answers for it at its

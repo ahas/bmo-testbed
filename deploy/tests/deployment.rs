@@ -2257,6 +2257,73 @@ fn a_deployment_whose_turn_comes_lays_down_the_commit_a_waiting_one_asks_for_tha
   assert!(!laid.contains(&earlier.as_str()), "{log}");
 }
 
+// "The line's turn may come long after the root's": a deployment that took its deploy root's turn at once and then
+// waited in the machine's line lays down the commit asked for behind it meanwhile, once its line turn comes.
+#[test]
+fn a_deployment_waiting_in_the_line_lays_down_the_commit_asked_for_behind_it_meanwhile() {
+  let scene = Scene::new();
+
+  assert_eq!(scene.run(&Hands::default()), 0);
+
+  scene.declare("v2", "true");
+
+  let earlier = scene.push("second");
+
+  scene.declare("v3", "true");
+
+  let later = scene.push("third");
+  let line = line_of(&scene, Duration::from_secs(3600));
+  let held = line.take(&earlier_ticket(), &|_| {}).unwrap();
+  let asking = |commit: &str| DeployAsk {
+    commit: Some(commit.to_owned()),
+    root_poll: Some(Duration::from_millis(5)),
+    line: Some(line_of(&scene, Duration::from_secs(3600))),
+    ..DeployAsk::default()
+  };
+  let (ask_earlier, ask_later) = (asking(&earlier), asking(&later));
+  let (told_earlier, heard_earlier) = std::sync::mpsc::channel();
+  let (told_later, heard_later) = std::sync::mpsc::channel();
+  let given_up = Instant::now() + Duration::from_secs(60);
+  let scene = &scene;
+
+  let ((earlier_code, earlier_said), (later_code, later_said)) = std::thread::scope(|scope| {
+    let deploying_earlier = scope.spawn(move || {
+      let hands = Hands {
+        told: Some(told_earlier),
+        ..Hands::default()
+      };
+
+      (scene.run_with(&ask_earlier, &Told(true), &hands, &scene.env()), said(&hands))
+    });
+
+    // The earlier one holds its deploy root's turn and waits in the line.
+    heard_until(&heard_earlier, &[words_of(&DEPLOY.run.line_waiting)], given_up);
+
+    let deploying_later = scope.spawn(move || {
+      let hands = Hands {
+        told: Some(told_later),
+        ..Hands::default()
+      };
+
+      (scene.run_with(&ask_later, &Told(true), &hands, &scene.env()), said(&hands))
+    });
+
+    heard_until(&heard_later, &[words_of(&DEPLOY.run.root_waiting)], given_up);
+    drop(held);
+
+    (deploying_earlier.join().unwrap(), deploying_later.join().unwrap())
+  });
+  let log = std::fs::read_to_string(scene.at("live/deployed.log")).unwrap();
+  let laid: Vec<&str> = log.lines().filter_map(|line| line.split_whitespace().nth(1)).collect();
+
+  assert_eq!(earlier_code, 0, "{earlier_said}");
+  assert_eq!(later_code, 0, "{later_said}");
+  assert!(earlier_said.contains(words_of(&DEPLOY.run.joined)), "{earlier_said}");
+  assert!(later_said.contains("is already live, so nothing is laid down again"), "{later_said}");
+  assert_eq!(laid.last().copied(), Some(later.as_str()), "{log}");
+  assert!(!laid.contains(&earlier.as_str()), "{log}");
+}
+
 impl Scene {
   // A deployment of the commit given that failed in its gate, written into the scene's record as ending now.
   fn failed_in_gate(&self, commit: &str) {

@@ -1516,7 +1516,7 @@ pub async fn deploy(
   hands: &dyn DeployHands,
   hook: &Hook,
 ) -> u8 {
-  laid(repo, places, ask, env, gate, hands, hook, None).await
+  laid(repo, places, ask, env, gate, hands, hook, Turns::default()).await
 }
 
 // The commit a deployment waiting for the deploy root's turn asks for that carries the one in hand, the furthest
@@ -1556,8 +1556,16 @@ fn later_asked(run: &Laying<'_>, lock: &Path, commit: &str) -> Option<String> {
     })
 }
 
-// The deploy run itself, under its deploy root's turn where one is handed in: a run that took the commit of a
-// deployment waiting behind it starts over on that commit, holding the turn it already has.
+// The turns a run that took a later commit carries into its run on that commit: its deploy root's turn, and the
+// deployment line's where it took the commit once its line turn came.
+#[derive(Default)]
+struct Turns {
+  root: Option<HeldLock>,
+  line: Option<HeldLock>,
+}
+
+// The deploy run itself, under the turns handed in: a run that took the commit of a deployment waiting behind it
+// starts over on that commit, holding the turns it already has.
 #[allow(clippy::too_many_arguments)]
 async fn laid(
   repo: &Repository,
@@ -1567,8 +1575,12 @@ async fn laid(
   gate: &dyn Gate,
   hands: &dyn DeployHands,
   hook: &Hook,
-  turn: Option<HeldLock>,
+  turns: Turns,
 ) -> u8 {
+  let Turns {
+    root: turn,
+    line: held_line,
+  } = turns;
   let said = &DEPLOY.run;
   let original = places.clone();
   let mut run = Laying {
@@ -1750,11 +1762,42 @@ async fn laid(
       ..ask.clone()
     };
 
-    return Box::pin(laid(checkout, &original, &joined, env, gate, hands, hook, root_turn)).await;
+    let turns = Turns {
+      root: root_turn,
+      line: None,
+    };
+
+    return Box::pin(laid(checkout, &original, &joined, env, gate, hands, hook, turns)).await;
+  }
+
+  let line_taken_now = held_line.is_none() && ask.line.is_some();
+  let line = match held_line {
+    Some(held) => Some(held),
+    None => ask.line.as_ref().and_then(|line| line.take(&ticket, &|line| run.say(line))),
+  };
+
+  // The line's turn may come long after the root's: a deployment asked meanwhile for a commit that carries this
+  // one is put live in its place the same way, holding both turns, so the repository is built once for all.
+  if line_taken_now
+    && !carried
+    && !ask.no_check
+    && let Some(later) = later_asked(&run, &root.lock, &commit)
+  {
+    run.say(&fill_marks(&said.joined, &[("commit", &shown), ("later", &short(&later))]));
+
+    let joined = DeployAsk {
+      commit: Some(later),
+      ..ask.clone()
+    };
+    let turns = Turns {
+      root: root_turn,
+      line,
+    };
+
+    return Box::pin(laid(checkout, &original, &joined, env, gate, hands, hook, turns)).await;
   }
 
   let _root_turn = root_turn;
-  let line = ask.line.as_ref().and_then(|line| line.take(&ticket, &|line| run.say(line)));
 
   // A gate of this very commit that failed while this deployment waited would fail again: it ends here, before
   // its gate, with nothing written, since that failure was told already.
