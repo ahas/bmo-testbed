@@ -4,6 +4,7 @@ mod classify;
 mod close_line;
 mod dependents;
 mod deploy_gate;
+mod deploy_history;
 mod deploy_verbs;
 mod full;
 mod imports;

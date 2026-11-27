@@ -276,6 +276,15 @@ already first.
 
 --why  why it goes first, in English
 --by   who raises it; the account this runs as where none is named"""
+deploy_history = """
+usage: {verb} deploy history [--repository <name>] [--limit <n>]
+
+Prints the machine's deployments as the testbed's record keeps them, newest first, one a line: when it
+started, its repository, its commit, how it stands and the sentence beside its outcome (docs/boundary.md,
+`deploy`). Exits 0, and 2 where the record cannot be read.
+
+--repository  one repository's deployments, named with or without a leading bmo-
+--limit       how many, 20 where none is given and 200 at most"""
 backups = """
 usage: {verb} backups
 
@@ -439,6 +448,19 @@ none_declared = "the declaration names no [deploy.backup], so there are no backu
 local_only = "the declaration names no remote, so the backups in {dir} stay on this machine"
 holder = "backups"
 locked = "backups: waiting for another run's upload to end"
+
+# What `deploy history` says (docs/boundary.md, `deploy`): {why} why the record could not be read, {of} the
+# repository asked for, said where one is, and the words each state of a deployment is printed as.
+[history]
+unread = "deploy history: the record could not be read: {why}"
+none = "deploy history: no deployment stands in the record{of}"
+of = " for {repository}"
+running = "running"
+live = "live"
+rolled_back = "rolled back"
+failed = "failed"
+stopped = "stopped"
+gone = "gone"
 
 # What `passed` says (docs/boundary.md, 「The verbs」): {id} the test run, {commit} a short commit, {when}
 # when it began, {checkout} where it ran, {log} its log, {named} the commit as given.

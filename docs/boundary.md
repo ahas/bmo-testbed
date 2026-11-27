@@ -466,6 +466,7 @@ bmo-testbed nightly [--when-due] [--dry-run]
 ```
 bmo-testbed deploy [--commit <sha>] [--message <why>] [--dry-run] [--no-check] [--before-start <command>] [--force-live] [--first <why> [--by <who>]]
 bmo-testbed deploy first <unit> --why <why> [--by <who>]
+bmo-testbed deploy history [--repository <name>] [--limit <n>]
 ```
 
 - Puts the commit live (`docs/deploy.md`). `--message` is the reason the deploy is made, written into
@@ -499,6 +500,11 @@ bmo-testbed deploy first <unit> --why <why> [--by <who>]
   given. It prints one line naming the unit, who and why, and exits 0. It refuses with 2 a unit that is
   not a running deployment unit, one the testbed's record already holds, the one holding the line and
   one already marked first.
+- `deploy history` prints the machine's deployments as the testbed's record keeps them, newest first, one a
+  line: when it started, its repository, its commit, how it stands (`running`, `live`, `rolled back`, `failed`,
+  `stopped` or `gone`) and the sentence beside its outcome. `--repository` keeps one repository's, named with or
+  without a leading `bmo-`; `--limit` how many, 20 where none is given and 200 at most. It exits 0, saying so where
+  no deployment stands, and 2 where the record cannot be read.
 
 ### `install`
 

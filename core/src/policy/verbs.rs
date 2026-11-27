@@ -26,6 +26,7 @@ pub struct UsageWords {
   pub nightly: String,
   pub deploy: String,
   pub deploy_first: String,
+  pub deploy_history: String,
   pub backups: String,
   pub backup: String,
   pub placed: String,
@@ -49,6 +50,20 @@ pub struct BackupsWords {
   pub local_only: String,
   pub holder: String,
   pub locked: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HistoryWords {
+  pub unread: String,
+  pub none: String,
+  pub of: String,
+  pub running: String,
+  pub live: String,
+  pub rolled_back: String,
+  pub failed: String,
+  pub stopped: String,
+  pub gone: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -208,6 +223,7 @@ pub struct Verbs {
   pub imports: ImportsWords,
   pub words: ValueWords,
   pub backups: BackupsWords,
+  pub history: HistoryWords,
   pub passed: PassedWords,
   pub prune: PruneWords,
 }

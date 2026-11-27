@@ -10,6 +10,7 @@ pub mod classify;
 pub mod close_line;
 pub mod dependents;
 pub mod deploy;
+pub mod deploy_history;
 pub mod env_file;
 pub mod full;
 pub mod imports;
@@ -387,6 +388,7 @@ fn run_deploy(args: DeployArgs) -> u8 {
     Some(DeployWord::Commit(flags)) => deploy::deploy(&flags),
     Some(DeployWord::Backups) => deploy::backups(),
     Some(DeployWord::First(args)) => deploy::raise_first(&args),
+    Some(DeployWord::History(args)) => deploy_history::history(&args),
     None => deploy::deploy(&args.flags),
   }
 }

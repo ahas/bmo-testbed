@@ -143,6 +143,17 @@ pub enum DeployWord {
   Backups,
   /// A waiting deployment raised to first in the deployment line.
   First(FirstArgs),
+  /// The machine's deployments as the record keeps them, newest first.
+  History(HistoryArgs),
+}
+
+/// `deploy history`: the machine's deployments, one repository's where one is named.
+#[derive(Debug, Args)]
+pub struct HistoryArgs {
+  #[arg(long, value_parser = named)]
+  pub repository: Option<String>,
+  #[arg(long)]
+  pub limit: Option<usize>,
 }
 
 /// `backup` and the word naming what it does (docs/backup.md).
@@ -613,6 +624,7 @@ pub fn read(args: impl IntoIterator<Item = OsString>) -> Result<Words, clap::Err
         .mut_subcommand("commit", |word| word.override_help(usage(&said.deploy)))
         .mut_subcommand("backups", |word| word.override_help(usage(&said.backups)))
         .mut_subcommand("first", |word| word.override_help(usage(&said.deploy_first)))
+        .mut_subcommand("history", |word| word.override_help(usage(&said.deploy_history)))
     })
     .mut_subcommand("backups", |verb| verb.override_help(usage(&said.backups)))
     .mut_subcommand("backup", |verb| {
