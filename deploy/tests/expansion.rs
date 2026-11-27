@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use bmo_testbed_deploy::deployment::DeployPlaces;
 use bmo_testbed_deploy::expansion::{
   TreeStore, build_target, committed_tree, idle_build_target, last_deployed_ms, lay_outside_trees,
-  remove_build_target,
+  lay_sibling_trees, remove_build_target,
 };
 
 // A package standing in a folder, its library empty.
@@ -106,6 +106,21 @@ impl Laid {
     )
   }
 
+  fn lay_siblings(&self, tree: &Path, checkout: &Path, siblings: &[&str]) -> Result<Vec<String>, String> {
+    let siblings: Vec<PathBuf> = siblings.iter().map(PathBuf::from).collect();
+
+    lay_sibling_trees(
+      tree,
+      checkout,
+      &siblings,
+      &TreeStore {
+        store: &self.store,
+        data_root: &self.data_root,
+      },
+      &runner(),
+    )
+  }
+
   // The committed tree `named` is read from: its repository's worktree in the store, at its path there.
   fn committed_for(&self, named: &Path, checkout: &Path) -> PathBuf {
     committed_tree(named, checkout).unwrap().within(&self.store)
@@ -139,6 +154,35 @@ fn a_tree_named_outside_the_workspace_is_laid_where_its_path_points() {
   assert!(target.starts_with(&laid.store));
   assert_eq!(git_in(&target, &["rev-parse", "HEAD"]), head);
   assert!(reads(&tree));
+}
+
+// "the daily whole run's tree lays each tree `[test] sibling_trees` names beside it, at the same path from the
+// tree as from the checkout, as a link into that repository's committed tree at its main head"
+#[test]
+fn a_sibling_tree_is_laid_beside_the_tree_at_its_main_head() {
+  let root = tempfile::tempdir().unwrap();
+  let sibling = root.path().join("workspace/base/ui");
+  let checkout = root.path().join("workspace/base/chat");
+  let tree = root.path().join("runs/chat/tree");
+  let laid = Laid::under(root.path());
+
+  std::fs::create_dir_all(sibling.join("releases")).unwrap();
+  std::fs::write(sibling.join("releases/pinned.tgz"), "committed").unwrap();
+  let head = committed(&sibling);
+  std::fs::write(sibling.join("releases/pinned.tgz"), "half written").unwrap();
+  std::fs::create_dir_all(&checkout).unwrap();
+  std::fs::create_dir_all(&tree).unwrap();
+
+  assert_eq!(laid.lay_siblings(&tree, &checkout, &["../ui"]).unwrap(), vec![head]);
+
+  let link = root.path().join("runs/chat/ui");
+
+  assert_eq!(symlink(&link), Some(laid.committed_for(&sibling, &checkout)));
+  assert_eq!(std::fs::read_to_string(tree.join("../ui/releases/pinned.tgz")).unwrap(), "committed");
+
+  let absent = laid.lay_siblings(&tree, &checkout, &["../web"]).unwrap_err();
+
+  assert!(absent.contains("../web"), "{absent}");
 }
 
 // "a tree whose checkout works on a job's branch is laid at the main its close pushed, not at the local main

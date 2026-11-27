@@ -532,51 +532,94 @@ pub fn lay_outside_trees(
     let Some(relative) = upward(checkout, &source) else {
       continue;
     };
-    let place = normalize(&tree.join(relative));
-    let committed = committed_tree(&source, checkout)?;
-    let worktree = committed.worktree(store.store);
 
-    heads.push(committed.head.clone());
-
-    put_build_tree(
-      &BuildTree {
-        source: &committed.repository,
-        tree: worktree.clone(),
-        head: &committed.head,
-        data_root: store.data_root,
-        fresh: false,
-      },
+    heads.push(lay_committed_tree(
+      tree,
+      &normalize(&tree.join(relative)),
+      &source,
+      checkout,
+      store,
       run,
-    )?;
-
-    let target = committed.within(store.store);
-
-    if let Some(parent) = place.parent() {
-      std::fs::create_dir_all(parent).map_err(|why| {
-        fill_shown(
-          &DEPLOY.expansion.tree_unlinked,
-          &[("at", &place.display()), ("tree", &tree.display()), ("why", &why.to_string())],
-        )
-      })?;
-    }
-
-    // A tree already standing there is left as it is, unless it is an earlier laying's folder of links:
-    // what is not the deployment's own is nobody's to replace.
-    if std::fs::symlink_metadata(&place).is_ok_and(|meta| !meta.file_type().is_symlink())
-      && !links_only(&place)
-    {
-      continue;
-    }
-
-    put_link(&place, &target).map_err(|why| {
-      fill_shown(
-        &DEPLOY.expansion.tree_unlinked,
-        &[("at", &place.display()), ("tree", &tree.display()), ("why", &why.to_string())],
-      )
-    })?;
+    )?);
   }
 
   Ok(heads)
+}
+
+/// The trees outside the repository its tests read by a path no manifest names — the declaration's `[test]
+/// sibling_trees`, each a path from the checkout — laid beside `tree` at the same paths, each as a link into
+/// its repository's committed tree at the head of its main branch, as `lay_outside_trees` lays a tree a
+/// manifest names (docs/declaration.md, `sibling_trees`). A tree that does not stand beside the checkout, or
+/// that no repository holds, refuses the laying, naming it.
+///
+/// The heads the trees were laid at, one for each tree laid.
+pub fn lay_sibling_trees(
+  tree: &Path,
+  checkout: &Path,
+  siblings: &[PathBuf],
+  store: &TreeStore<'_>,
+  run: CommandRun<'_>,
+) -> Result<Vec<String>, String> {
+  siblings
+    .iter()
+    .map(|sibling| {
+      lay_committed_tree(
+        tree,
+        &normalize(&tree.join(sibling)),
+        &checkout.join(sibling),
+        checkout,
+        store,
+        run,
+      )
+    })
+    .collect()
+}
+
+// One tree outside the checkout, standing at `source`, laid at `place` beside `tree` as a link into its
+// repository's worktree in the store, put at that repository's main head: the head it was laid at. A tree
+// already standing at the place is left as it is, unless it is an earlier laying's folder of links.
+fn lay_committed_tree(
+  tree: &Path,
+  place: &Path,
+  source: &Path,
+  checkout: &Path,
+  store: &TreeStore<'_>,
+  run: CommandRun<'_>,
+) -> Result<String, String> {
+  let committed = committed_tree(source, checkout)?;
+  let worktree = committed.worktree(store.store);
+
+  put_build_tree(
+    &BuildTree {
+      source: &committed.repository,
+      tree: worktree,
+      head: &committed.head,
+      data_root: store.data_root,
+      fresh: false,
+    },
+    run,
+  )?;
+
+  let unlinked = |why: String| {
+    fill_shown(
+      &DEPLOY.expansion.tree_unlinked,
+      &[("at", &place.display()), ("tree", &tree.display()), ("why", &why)],
+    )
+  };
+
+  if let Some(parent) = place.parent() {
+    std::fs::create_dir_all(parent).map_err(|why| unlinked(why.to_string()))?;
+  }
+
+  // What is not the laying's own is nobody's to replace.
+  if std::fs::symlink_metadata(place).is_ok_and(|meta| !meta.file_type().is_symlink()) && !links_only(place)
+  {
+    return Ok(committed.head);
+  }
+
+  put_link(place, &committed.within(store.store)).map_err(|why| unlinked(why.to_string()))?;
+
+  Ok(committed.head)
 }
 
 // The tree to lay for one a manifest names: the root of the Cargo workspace it is a member of, on

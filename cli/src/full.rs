@@ -19,7 +19,8 @@ use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::queue::{LockWait, now_ms, take_lock};
 use bmo_testbed_core::turn::{Env, NOT_RUN_EXIT_CODE, process_env};
 use bmo_testbed_core::verb::{REFUSED_EXIT_CODE, data_root};
-use bmo_testbed_deploy::expansion::bring_submodules;
+use bmo_testbed_deploy::expansion::{TreeStore, bring_submodules, lay_sibling_trees};
+use bmo_testbed_deploy::release::beside;
 use bmo_testbed_deploy::run::{run_quiet, stamp_for_name, words};
 use bmo_testbed_deploy::unit::{DeployUnitStart, deploy_unit_of_process, start_deploy_unit, this_again};
 use bmo_testbed_suite::crates::{owning_crate, workspace_crates};
@@ -346,6 +347,12 @@ fn same_repository(one: &Path, other: &Path) -> bool {
   }
 }
 
+/// The committed trees the daily whole run's tree reads its sibling trees from: `-trees` beside the tree, its
+/// own, apart from a deployment's.
+pub fn sibling_store(tree: &Path) -> PathBuf {
+  beside(tree, "-trees")
+}
+
 /// The tree a repository's daily whole run stands in where `BMO_FULL_CHECK_DIR` names none: `full-check` beside
 /// its deploy tree, or `tree` in its own folder of runs where it declares no deploy root.
 pub fn own_tree(repo: &Repository, env: &Env, data_root: &Path) -> PathBuf {
@@ -391,8 +398,24 @@ impl FullHands for Machine {
   }
 
   fn prepare(&self, commit: &str) -> Result<(), String> {
-    prepare_tree(&self.source, commit, &self.tree, &data_root(), &|tree| {
+    let data_root = data_root();
+
+    prepare_tree(&self.source, commit, &self.tree, &data_root, &|tree| {
       let repo = self.tree_repository()?;
+      let run = |line: &[String], cwd: &Path| run_quiet(line, Some(cwd));
+
+      // The trees its tests read by a path no manifest names stand beside the tree as they stand beside the
+      // checkout, at their main heads, before the setup, which may read them too.
+      lay_sibling_trees(
+        tree,
+        &self.source,
+        &repo.declaration.test.sibling_trees,
+        &TreeStore {
+          store: &sibling_store(tree),
+          data_root: &data_root,
+        },
+        &run,
+      )?;
 
       for line in &repo.declaration.test.setup {
         let ran = run_quiet(&words(["sh", "-c", line]), Some(tree));

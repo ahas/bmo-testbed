@@ -397,6 +397,16 @@
 - **What it is:** the `full` verb puts a detached worktree of its own on the main branch's head, sets
   it up with the repository's declared setup, runs the static check, and runs every unit through the
   suite, waiting its turn like any other run.
+  - **Its setup lays the sibling trees first.** Each tree the declaration's `[test] sibling_trees` names
+    is laid beside the tree at the same path it has from the checkout, as a link into a detached
+    worktree of that tree's repository at the head of the main branch its declaration names, read as
+    `docs/declaration.md`, 「The main branch's head」, says, so a test opening a file in a neighbouring
+    checkout reads it as that checkout's main holds it, never a working tree another job is editing. The
+    worktrees stand in the tree's own folder of committed trees, its name with `-trees` after it, apart
+    from a deployment's. A tree already standing at that path that is neither a link nor a folder of
+    links is left as it is. A sibling tree that does not stand beside the checkout, that no repository
+    holds, or whose main branch does not stand fails the setup, naming it. The declared setup commands
+    run after, in the tree.
   - The tree is `full-check` beside the repository's deploy tree, or wherever `BMO_FULL_CHECK_DIR`
     names; a repository that declares no deploy root keeps it as `tree` in its own folder below. A tree
     standing there that another repository laid, as when a merged repository takes over a deploy root, is
@@ -448,8 +458,11 @@
   - **Otherwise it runs the repository's whole suite at that commit** in the repository's own tree of the
     daily whole run, never the person's working checkout: the tree is put on the commit, cleared of
     whatever an earlier run left untracked and set up by the declared setup, exactly as 「The daily whole
-    run」 puts it, and every unit runs through that tree's suite, units a round never started run again by
-    name. No static check runs: the round is there for the suite. Each suite takes the machine's turn like
+    run」 puts it, its sibling trees laid beside it, and every unit runs through that tree's suite, units a
+    round never started run again by name. No static check runs: the round is there for the suite. So a
+    repository's suite stands on its tracked files, its sibling trees, its declared setup and what each
+    project's own check readies, and on nothing a check step makes: a built output its tests read or a
+    package install they need is a setup command (`docs/declaration.md`, `setup`). Each suite takes the machine's turn like
     any run, so the round waits behind whatever holds the wide lane and runs one repository at a time.
   - The suite writes its test run into the record as every run does, whole and from a clean tree, so a
     whole run that passed is the one `passed --commit` answers from then on, and the next round skips it.
