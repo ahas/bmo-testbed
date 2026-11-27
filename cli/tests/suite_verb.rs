@@ -546,16 +546,16 @@ fn the_count_prints_the_tests_the_tree_holds() {
   assert_eq!((done.code, done.out.trim()), (0, tree.as_str()), "{}", done.err);
 }
 
-// "the suite refuses a range that is no commit before it runs anything"
+// "a range whose base is no commit the checkout holds runs the whole suite and says so"
 #[test]
-fn the_suite_refuses_a_range_that_is_no_commit_before_it_runs_anything() {
+fn a_range_whose_base_the_checkout_does_not_hold_runs_the_whole_suite_and_says_so() {
   let dir = tempfile::tempdir().unwrap();
   let repo = repository(dir.path());
   let done = ended(suite_run(&repo, dir.path(), &["--since", "no-such-commit-777"], None));
-  let opening = fill_marks(&SUITE.selection.not_a_range, &[("since", "no-such-commit-777"), ("why", "")]);
+  let said = fill_marks(&SUITE.selection.commit_not_in_history, &[("since", "no-such-commit-777")]);
 
-  assert_eq!(done.code, 2, "{}", done.err);
-  assert!(done.err.contains(opening.trim_end()), "{}", done.err);
+  assert_ne!(done.code, 2, "{}", done.err);
+  assert!(done.err.contains(said.trim_end()), "{}", done.err);
 }
 
 // "a run that tests a crate brings the lock's path packages to their manifests for the whole run and puts the

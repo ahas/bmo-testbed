@@ -178,6 +178,33 @@ fn its_tree_is_made_at_the_head_moved_with_leftovers_cleared_and_set_up_each_tim
   assert_eq!(*set_up.borrow(), [tree.clone(), tree.clone()]);
 }
 
+// "a tree another repository laid is taken away and laid again from this one"
+#[test]
+fn a_tree_another_repository_laid_is_laid_again_from_this_one() {
+  let root = tempfile::tempdir().unwrap();
+  let before = root.path().join("before");
+  let repo = root.path().join("repo");
+  let tree = root.path().join("full-check");
+
+  for (dir, file) in [(&before, "old.ts"), (&repo, "new.ts")] {
+    std::fs::create_dir_all(dir).unwrap();
+    git(dir, &["init", "-q", "-b", "main"]);
+    std::fs::write(dir.join(file), "x\n").unwrap();
+    git(dir, &["add", "."]);
+    git(dir, &["commit", "-q", "-m", "one"]);
+  }
+
+  let theirs = git(&before, &["rev-parse", "main"]);
+  prepare_tree(&before, &theirs, &tree, root.path(), &|_| Ok(())).unwrap();
+
+  let ours = git(&repo, &["rev-parse", "main"]);
+  prepare_tree(&repo, &ours, &tree, root.path(), &|_| Ok(())).unwrap();
+
+  assert_eq!(git(&tree, &["rev-parse", "HEAD"]), ours);
+  assert!(tree.join("new.ts").exists());
+  assert!(!tree.join("old.ts").exists());
+}
+
 // "a run that fails before its first unit writes why into its log": a tree that could not be set up.
 #[test]
 fn a_tree_that_could_not_be_set_up_is_written_into_the_run_s_log() {

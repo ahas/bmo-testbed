@@ -281,6 +281,19 @@ pub fn prepare_tree(
   let said = &DAILY.tree;
   let at = tree.to_string_lossy().into_owned();
 
+  // A tree laid by another repository, as when a merged repository takes over a deploy root another one laid
+  // its tree beside, can never move to this repository's commit: it is taken away and laid again from here.
+  if tree.join(".git").exists() && !same_repository(tree, source) {
+    let owner = common_dir(tree).and_then(|dir| dir.parent().map(Path::to_path_buf));
+    let cwd = owner.as_deref().unwrap_or(source);
+
+    run_quiet(&words(["git", "worktree", "remove", "--force", &at]), Some(cwd));
+
+    if tree.exists() {
+      let _ = std::fs::remove_dir_all(tree);
+    }
+  }
+
   if tree.join(".git").exists() {
     let moved = run_quiet(&words(["git", "checkout", "-q", "--force", "--detach", commit]), Some(tree));
 
@@ -313,6 +326,24 @@ pub fn prepare_tree(
   })?;
 
   setup(tree)
+}
+
+// The git directory a checkout's history is kept in, shared by every worktree of one repository.
+fn common_dir(checkout: &Path) -> Option<PathBuf> {
+  let ran = run_quiet(
+    &words(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"]),
+    Some(checkout),
+  );
+
+  ran.ok.then(|| PathBuf::from(ran.out.trim())).and_then(|dir| dir.canonicalize().ok())
+}
+
+// Whether two checkouts are worktrees of one repository, so one's commits stand in the other's history.
+fn same_repository(one: &Path, other: &Path) -> bool {
+  match (common_dir(one), common_dir(other)) {
+    (Some(one), Some(other)) => one == other,
+    _ => false,
+  }
 }
 
 /// The tree a repository's daily whole run stands in where `BMO_FULL_CHECK_DIR` names none: `full-check` beside

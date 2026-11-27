@@ -398,7 +398,9 @@
   it up with the repository's declared setup, runs the static check, and runs every unit through the
   suite, waiting its turn like any other run.
   - The tree is `full-check` beside the repository's deploy tree, or wherever `BMO_FULL_CHECK_DIR`
-    names; a repository that declares no deploy root keeps it as `tree` in its own folder below.
+    names; a repository that declares no deploy root keeps it as `tree` in its own folder below. A tree
+    standing there that another repository laid, as when a merged repository takes over a deploy root, is
+    taken away and laid again from this repository, since its history holds none of this one's commits.
   - Its log is kept in the repository's own folder, `suite-full/<repository>/` in the data root's
     `testbed/`, one file per run, the repository named as its declaration names it.
   - One run at a time per repository: a run holds the repository's lock under the data root's locks,
