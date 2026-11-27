@@ -551,7 +551,11 @@ fn the_count_prints_the_tests_the_tree_holds() {
 fn a_range_whose_base_the_checkout_does_not_hold_runs_the_whole_suite_and_says_so() {
   let dir = tempfile::tempdir().unwrap();
   let repo = repository(dir.path());
-  let done = ended(suite_run(&repo, dir.path(), &["--since", "no-such-commit-777"], None));
+  // The probe file is let go before it starts, so the whole run it makes ends at once.
+  let probe = dir.path().join("probe");
+  std::fs::create_dir_all(&probe).unwrap();
+  std::fs::write(probe.join("release"), "").unwrap();
+  let done = ended(suite_run(&repo, dir.path(), &["--since", "no-such-commit-777"], Some(&probe)));
   let said = fill_marks(&SUITE.selection.commit_not_in_history, &[("since", "no-such-commit-777")]);
 
   assert_ne!(done.code, 2, "{}", done.err);
