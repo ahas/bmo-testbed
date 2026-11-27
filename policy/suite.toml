@@ -94,6 +94,7 @@ crate_marked = "  +  {dir}/ (crate): {reason}"
 changed = "{count} paths changed since {since}"
 no_packages = "this checkout declares no workspace packages, so there is nothing to select among and every file runs"
 not_a_range = "--since {since} is not a commit this checkout can read a range from: {why}"
+commit_not_in_history = "the commit {since} is not in this checkout's history; running the whole suite instead"
 no_crates = "the Rust workspace's crates could not be read, so none of them is tested: {why}"
 
 # The test database's template (docs/suite.md, 「The test database」): how long a template another has

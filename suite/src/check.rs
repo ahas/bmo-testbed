@@ -22,7 +22,7 @@ use sha2::{Digest, Sha256};
 use crate::cargo::cargo_verb_line;
 use crate::own_binary::testbed_line;
 use crate::run::{browser_file, file_groups, limit_words, script_runner};
-use crate::selection::changed_paths;
+use crate::selection::{ChangedPaths, changed_paths, tracked_paths};
 use crate::static_check::{CheckStep, TimedRun, run_fenced, spawn_step, static_steps};
 use crate::test_server::test_postgres;
 use crate::test_targets::TargetTests;
@@ -178,7 +178,11 @@ fn project_step(project: &OwnProject, script: &str, test: &Test) -> Step {
 pub fn plan(repo: &Repository, ask: &CheckAsk) -> Result<CheckPlan, String> {
   let (from, changed) = if ask.files.is_empty() {
     let since = ask.since.clone().unwrap_or_else(|| default_since(repo));
-    let changed = changed_paths(&repo.root, &since)?;
+    // A base this checkout's history does not hold narrows nothing: every tracked path counts as changed.
+    let changed = match changed_paths(&repo.root, &since)? {
+      ChangedPaths::Paths(changed) => changed,
+      ChangedPaths::CommitNotInHistory => tracked_paths(&repo.root)?,
+    };
 
     (fill_shown(&SUITE.check.since, &[("since", &since)]), changed)
   } else {

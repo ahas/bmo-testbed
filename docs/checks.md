@@ -337,7 +337,9 @@
     wait and no run, and it counts as passed.
 - **The change is read two ways.** Given files, it is those files. Given none, it is every path changed
   since `--since`, by default the merge base with the main branch, with the working tree and the
-  untracked files.
+  untracked files. A `--since` that names no commit this checkout's history holds, such as another
+  repository's last live commit on a unit this repository took over, narrows nothing: every tracked path
+  counts as changed.
 - **What it touches is one function's answer:** a crate a changed path belongs to or declares it reads
   is tested, and it and every crate depending on it are checked; a test file runs where it changed
   itself or loads a changed file through its imports.

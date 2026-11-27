@@ -32,7 +32,8 @@ use crate::fence::{LiveClear, LiveFence, clear_fence, fence_limits, fence_suite,
 use crate::log::{FailedTest, failed_tests_of, tally_of};
 use crate::own_binary::{running_testbed, testbed_line};
 use crate::selection::{
-  Layout, Selection, changed_paths, glob_matches, select_packages, selected_tests, selection_lines,
+  ChangedPaths, Layout, Selection, changed_paths, glob_matches, select_packages, selected_tests,
+  selection_lines,
 };
 use crate::sweep::{SweepPlan, largest_first, sweep};
 use crate::test_server::{template_name, test_postgres, test_server_settled};
@@ -396,37 +397,42 @@ pub fn run_saying(repo: &Repository, ask: &SuiteAsk, heard: &(dyn Fn(&str) + Syn
   // is refused at once.
   let selected: Option<(Layout, Selection)> = match &ask.since {
     None => None,
-    Some(since) => {
-      let changed = match changed_paths(root, since) {
-        Ok(changed) => changed,
-        Err(why) => {
-          say(&fill_marks(&SUITE.selection.not_a_range, &[("since", since), ("why", &why)]));
-          return ended(2);
-        }
-      };
-      let layout = Layout::of_checkout(repo).unwrap_or_else(|why| {
-        say(&fill_marks(&SUITE.selection.no_crates, &[("why", &why)]));
-        Layout::of_parts(repo, Vec::new())
-      });
-
-      if layout.packages.is_empty() {
-        say(&SUITE.selection.no_packages);
-        None
-      } else {
-        let chosen = select_packages(root, &layout, &changed);
-
-        say(&fill_marks(
-          &SUITE.selection.changed,
-          &[("count", &changed.len().to_string()), ("since", since)],
-        ));
-
-        for line in selection_lines(&layout, &chosen) {
-          say(&line);
-        }
-
-        Some((layout, chosen))
+    Some(since) => match changed_paths(root, since) {
+      Err(why) => {
+        say(&fill_marks(&SUITE.selection.not_a_range, &[("since", since), ("why", &why)]));
+        return ended(2);
       }
-    }
+      // A base this checkout's history does not hold, such as the last live commit of another repository
+      // whose unit this one took over, narrows nothing: the whole suite runs, and the log says why.
+      Ok(ChangedPaths::CommitNotInHistory) => {
+        say(&fill_marks(&SUITE.selection.commit_not_in_history, &[("since", since)]));
+        None
+      }
+      Ok(ChangedPaths::Paths(changed)) => {
+        let layout = Layout::of_checkout(repo).unwrap_or_else(|why| {
+          say(&fill_marks(&SUITE.selection.no_crates, &[("why", &why)]));
+          Layout::of_parts(repo, Vec::new())
+        });
+
+        if layout.packages.is_empty() {
+          say(&SUITE.selection.no_packages);
+          None
+        } else {
+          let chosen = select_packages(root, &layout, &changed);
+
+          say(&fill_marks(
+            &SUITE.selection.changed,
+            &[("count", &changed.len().to_string()), ("since", since)],
+          ));
+
+          for line in selection_lines(&layout, &chosen) {
+            say(&line);
+          }
+
+          Some((layout, chosen))
+        }
+      }
+    },
   };
 
   // The machine's turn, before anything is timed: a run inside its caller's turn starts at once.

@@ -183,15 +183,42 @@ pub struct Selection {
   pub crates: BTreeMap<String, Vec<MarkReason>>,
 }
 
+/// What a range comes to: the paths it changed, or word that its base is no commit this checkout's history
+/// holds, where nothing can be narrowed.
+#[derive(Debug, PartialEq, Eq)]
+pub enum ChangedPaths {
+  /// The base is in this checkout's history, and these paths changed since it.
+  Paths(Vec<String>),
+  /// The base is no commit this checkout can read, such as another repository's last live commit.
+  CommitNotInHistory,
+}
+
 /// Every path a range and the working tree changed: the commits from `since` to HEAD, the tracked files
 /// modified since HEAD whether staged or not, and the files not yet tracked. A rename counts as both of its
-/// paths, since the package the file left is changed as well as the one it went to.
-pub fn changed_paths(root: &Path, since: &str) -> Result<Vec<String>, String> {
-  git_lines(root, &["rev-parse", "--verify", "--quiet", &format!("{since}^{{commit}}")])?;
+/// paths, since the package the file left is changed as well as the one it went to. A base the checkout
+/// cannot read as a commit answers `CommitNotInHistory` rather than failing.
+pub fn changed_paths(root: &Path, since: &str) -> Result<ChangedPaths, String> {
+  if git_lines(root, &["rev-parse", "--verify", "--quiet", &format!("{since}^{{commit}}")]).is_err() {
+    return Ok(ChangedPaths::CommitNotInHistory);
+  }
 
   let mut paths: Vec<String> = git_lines(root, &["diff", "--name-only", "--no-renames", since, "HEAD"])?
     .into_iter()
     .chain(git_lines(root, &["diff", "--name-only", "--no-renames", "HEAD"])?)
+    .chain(git_lines(root, &["ls-files", "--others", "--exclude-standard"])?)
+    .collect::<HashSet<String>>()
+    .into_iter()
+    .collect();
+
+  paths.sort();
+  Ok(ChangedPaths::Paths(paths))
+}
+
+/// Every path the checkout tracks, and the files not yet tracked: what a change counts as having touched
+/// where its base cannot be read.
+pub fn tracked_paths(root: &Path) -> Result<Vec<String>, String> {
+  let mut paths: Vec<String> = git_lines(root, &["ls-files"])?
+    .into_iter()
     .chain(git_lines(root, &["ls-files", "--others", "--exclude-standard"])?)
     .collect::<HashSet<String>>()
     .into_iter()

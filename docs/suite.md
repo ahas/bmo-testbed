@@ -228,6 +228,11 @@
   which picks that unit and no test file.
 - **A selected run keeps only the units its change reaches** (`docs/checks.md`), and a word naming a
   path narrows that further.
+- **A base the checkout's history does not hold runs the whole suite.** A `--since` naming no commit this
+  checkout can read, such as a deployment record's commit that another repository put live on a unit this
+  repository now deploys into, is said in the log as a commit not in this checkout's history, and the run
+  goes on as a whole run rather than failing on the range. A base the checkout holds narrows the run as
+  above.
 
 ## What a test unit is handed
 

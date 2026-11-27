@@ -54,6 +54,7 @@ pub struct SelectionWords {
   pub changed: String,
   pub no_packages: String,
   pub not_a_range: String,
+  pub commit_not_in_history: String,
   pub no_crates: String,
 }
 

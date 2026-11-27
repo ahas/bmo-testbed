@@ -20,7 +20,7 @@ use bmo_testbed_core::turn::{
 use crate::cargo::cargo_verb_line;
 use crate::crates::{CrateDeclaration, workspace_crates};
 use crate::own_binary::testbed_line;
-use crate::selection::{Layout, changed_paths, glob_matches, select_crates};
+use crate::selection::{ChangedPaths, Layout, changed_paths, glob_matches, select_crates};
 use crate::step_fence::{StepFence, say_none};
 
 /// One command of the check, run in a directory of the tree being checked, with `env` over the caller's: in
@@ -210,7 +210,13 @@ pub fn covered_by(step: &declaration::CheckStep) -> Option<DeployStep> {
 // What a change from `since` changed; none where every path is reached: a run with no range, or a range the
 // checkout cannot read.
 fn changed_since(root: &Path, since: Option<&str>) -> Option<Vec<String>> {
-  changed_paths(root, since?).ok()
+  match since {
+    Some(since) => match changed_paths(root, since) {
+      Ok(ChangedPaths::Paths(paths)) => Some(paths),
+      _ => None,
+    },
+    None => None,
+  }
 }
 
 /// Whether a change of `changed` marks any crate of the Cargo workspace. A checkout with no workspace marks

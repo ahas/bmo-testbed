@@ -12,8 +12,8 @@ use bmo_testbed_suite::crates::{CrateDeclaration, workspace_crates};
 use bmo_testbed_suite::imports::{WorkspacePackage, module_specifiers, resolve_import};
 use bmo_testbed_suite::log::failed_files_of;
 use bmo_testbed_suite::selection::{
-  Layout, MarkReason, Selection, changed_paths, glob_matches, import_closure, select_crates,
-  select_packages, selected_tests, selection_lines,
+  ChangedPaths, Layout, MarkReason, Selection, changed_paths, glob_matches, import_closure, select_crates,
+  select_packages, selected_tests, selection_lines, tracked_paths,
 };
 use bmo_testbed_suite::tool_checks::CheckedTool;
 use bmo_testbed_suite::workspace::{OwnProject, git_lines, own_projects};
@@ -1130,16 +1130,34 @@ mod the_changed_paths {
 
     assert_eq!(
       changed_paths(repo, &start).unwrap(),
-      ["notes.md", "packages/util/numbers.ts", "scripts/edit.ts", "scripts/edits.ts"]
+      ChangedPaths::Paths(vec![
+        "notes.md".to_owned(),
+        "packages/util/numbers.ts".to_owned(),
+        "scripts/edit.ts".to_owned(),
+        "scripts/edits.ts".to_owned(),
+      ])
     );
   }
 
-  // "a range that is not a commit is refused"
+  // "a base the checkout cannot read narrows nothing"
   #[test]
-  fn a_range_that_is_not_a_commit_is_refused() {
+  fn a_base_the_checkout_cannot_read_narrows_nothing() {
     let (fixture, _) = committed();
 
-    assert!(changed_paths(fixture.root(), "no-such-commit").is_err());
+    assert!(matches!(
+      changed_paths(fixture.root(), "no-such-commit"),
+      Ok(ChangedPaths::CommitNotInHistory)
+    ));
+  }
+  // "a range that cannot be narrowed counts every tracked path"
+  #[test]
+  fn a_range_that_cannot_be_narrowed_counts_every_tracked_path() {
+    let (fixture, _) = committed();
+    let tracked = git_lines(fixture.root(), &["ls-files"]).unwrap();
+    let counted = tracked_paths(fixture.root()).unwrap();
+
+    assert!(!tracked.is_empty());
+    assert!(tracked.iter().all(|path| counted.contains(path)), "{counted:?}");
   }
 }
 
@@ -1207,7 +1225,11 @@ mod a_flaky_test_in_a_package_the_batch_does_not_reach {
     fn batch_run(&self) -> (Vec<String>, i32, Vec<String>) {
       let dir = self.dir.path();
       let layout = Layout::of_checkout(&repo(dir)).unwrap();
-      let selection = select_packages(dir, &layout, &changed_paths(dir, &self.live).unwrap());
+      let changed = match changed_paths(dir, &self.live) {
+        Ok(ChangedPaths::Paths(paths)) => paths,
+        _ => panic!("unexpected changed_paths result"),
+      };
+      let selection = select_packages(dir, &layout, &changed);
       let tests = git_lines(dir, &["ls-files", "*.test.ts"]).unwrap();
       let ran = selected_tests(&layout, &selection, &tests);
       let run = Command::new("bun")
