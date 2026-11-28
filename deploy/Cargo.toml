@@ -15,13 +15,17 @@ bmo-testbed-client = { path = "../client", default-features = false }
 bmo-testbed-core = { path = "../core" }
 bmo-testbed-record = { path = "../record" }
 chrono = { workspace = true, features = ["clock"] }
+base64.workspace = true
+ed25519-dalek.workspace = true
 glob.workspace = true
+object.workspace = true
 libc.workspace = true
 regex.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+shlex.workspace = true
 tokio.workspace = true
 url.workspace = true
 

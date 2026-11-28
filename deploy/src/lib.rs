@@ -6,12 +6,14 @@
 
 pub mod adopt;
 pub mod again;
+pub mod artifact_deploy;
 pub mod backup;
 pub mod boot;
 pub mod console;
 pub mod deployment;
 pub mod expansion;
 pub mod line;
+pub mod pack;
 pub mod progress;
 pub mod release;
 pub mod remove;

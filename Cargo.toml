@@ -48,6 +48,11 @@ console = { version = "0.16.6", default-features = false, features = ["ansi-pars
 # A placed run's event stream, read event by event as it comes.
 futures-util = { version = "0.3.31", default-features = false, features = ["std"] }
 glob = "0.3.4"
+# An artifact's digest signed and checked with the set's key (docs/artifacts.md, 「The manifest」).
+ed25519-dalek = "2.2.0"
+# The C library versions an artifact's ELF files ask for, read off their version needs (docs/artifacts.md,
+# 「The floor」).
+object = { version = "0.37.3", default-features = false, features = ["read_core", "elf", "std"] }
 # The calendar a timer's elapses are worked out in, by the supervisor.
 jiff = { version = "1.0.2", default-features = false, features = ["std", "tz-system", "tzdb-zoneinfo", "tzdb-bundle-platform"] }
 # Process groups, signals and file locks.

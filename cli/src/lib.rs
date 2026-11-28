@@ -15,6 +15,7 @@ pub mod env_file;
 pub mod full;
 pub mod imports;
 pub mod install;
+pub mod pack;
 pub mod nightly;
 pub mod notice;
 pub mod nouns;
@@ -472,6 +473,7 @@ pub fn main(args: impl IntoIterator<Item = OsString>) -> u8 {
     Verb::Notice(args) => notice::notice(&args.event),
     Verb::Install(args) => install::install(&args),
     Verb::Upgrade(args) => install::upgrade(&args),
+    Verb::Pack(args) => pack::pack(&args),
     Verb::Supervise(args) => supervise::supervise(args.word),
     Verb::Nouns => print_nouns(),
     Verb::Test(args) => run_test(args),

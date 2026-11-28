@@ -77,3 +77,8 @@ brain="$HOME/.local/share/bmo-brain/deploy/bin/bmo-brain"
 [ -x "$brain" ] || exit 0
 "$brain" holder declare deploy/brain-holder.toml
 '''
+
+# The release a person's machine runs, packed as an artifact (docs/artifacts.md): the binaries and declarations
+# every artifact keeps, the units the deployment links, and the deploy tool's own folder.
+[artifact]
+keep = ["units", "tools/deploy"]

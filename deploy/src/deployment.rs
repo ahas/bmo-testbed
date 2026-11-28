@@ -621,7 +621,7 @@ fn under_data(data_root: &Path, path: &Path) -> PathBuf {
 
 // The units of a commit's tracked files the declaration's globs reach, every one where it names none: its
 // services, timers and slices.
-fn unit_files(tracked: &[String], globs: Option<&[String]>) -> Vec<String> {
+pub fn unit_files(tracked: &[String], globs: Option<&[String]>) -> Vec<String> {
   let patterns: Vec<glob::Pattern> = globs
     .unwrap_or_default()
     .iter()

@@ -54,6 +54,8 @@ pub enum Verb {
   Notice(NoticeArgs),
   Install(InstallArgs),
   Upgrade(UpgradeArgs),
+  /// A repository's release built once and packed as an artifact (docs/artifacts.md).
+  Pack(PackArgs),
   Supervise(SuperviseArgs),
   /// The nouns `bmo` dispatches to this binary, one a line.
   Nouns,
@@ -121,6 +123,9 @@ pub struct DeployFlags {
   /// Who marks it first; the account the verb runs as where none is named.
   #[arg(long, value_parser = named, requires = "first")]
   pub by: Option<String>,
+  /// An artifact to put live in place of a commit of the checkout (docs/artifacts.md).
+  #[arg(long, conflicts_with_all = ["commit", "no_check", "before_start", "force_live", "first"])]
+  pub artifact: Option<std::path::PathBuf>,
 }
 
 /// `deploy first`: a waiting deployment raised to first in the deployment line, by its unit.
@@ -525,6 +530,17 @@ pub struct UpgradeArgs {
   pub prefix: Option<PathBuf>,
   #[arg(long)]
   pub dry_run: bool,
+}
+
+/// `pack`: the repository the verb runs in packed at a commit as an artifact (docs/artifacts.md, 「The words」).
+#[derive(Debug, Args)]
+pub struct PackArgs {
+  #[arg(long)]
+  pub commit: Option<String>,
+  #[arg(long)]
+  pub out: Option<PathBuf>,
+  #[arg(long)]
+  pub key: Option<PathBuf>,
 }
 
 /// `supervise`: the set's services run without systemd, and what is asked of them (docs/supervise.md).

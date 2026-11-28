@@ -655,6 +655,11 @@ fn pinned_layer(repository: &str, env: &Env) -> PinnedLayer {
 /// run stay in the caller's process.
 pub fn deploy(args: &DeployFlags) -> u8 {
   let env = process_env();
+
+  if let Some(archive) = &args.artifact {
+    return from_artifact(archive, args, &env);
+  }
+
   let repo = match repository() {
     Ok(repo) => repo,
     Err(code) => return code,
@@ -971,4 +976,29 @@ pub fn backups() -> u8 {
   });
 
   1
+}
+
+// A deployment from an artifact (docs/artifacts.md, 「A deployment from an artifact」): no checkout is read, and the
+// run says each line as it comes and the last one on its own line.
+fn from_artifact(archive: &std::path::Path, args: &DeployFlags, env: &bmo_testbed_core::turn::Env) -> u8 {
+  let ask = bmo_testbed_deploy::artifact_deploy::ArtifactAsk {
+    archive: archive.to_path_buf(),
+    message: args.message.clone(),
+    dry_run: args.dry_run,
+  };
+  let runtime = match tokio::runtime::Builder::new_current_thread().enable_all().build() {
+    Ok(runtime) => runtime,
+    Err(why) => return refused(&why.to_string()),
+  };
+
+  match runtime.block_on(bmo_testbed_deploy::artifact_deploy::deploy_artifact(&ask, env, &|line| println!("{line}"))) {
+    Ok(line) => {
+      println!("{line}");
+      0
+    }
+    Err(why) => {
+      eprintln!("{why}");
+      1
+    }
+  }
 }

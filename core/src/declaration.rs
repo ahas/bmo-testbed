@@ -73,6 +73,22 @@ pub struct Declaration {
   pub runner: Runner,
   #[serde(default)]
   pub events: Events,
+  /// `[artifact]`: what the release runs on, where the repository ships as an artifact (docs/artifacts.md).
+  #[serde(default)]
+  pub artifact: Option<Artifact>,
+}
+
+/// `[artifact]`: the paths of a release an artifact keeps beside the ones every artifact keeps, those it leaves
+/// out under them, and the runtimes packed with it (docs/artifacts.md, 「The declaration」).
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Artifact {
+  #[serde(default)]
+  pub keep: Vec<String>,
+  #[serde(default)]
+  pub drop: Vec<String>,
+  #[serde(default)]
+  pub runtimes: Vec<String>,
 }
 
 impl Default for Declaration {
@@ -90,6 +106,7 @@ impl Default for Declaration {
       deploy: Deploy::default(),
       runner: Runner::default(),
       events: Events::default(),
+      artifact: None,
     }
   }
 }

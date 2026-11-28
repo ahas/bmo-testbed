@@ -4,6 +4,7 @@
 use serde::de::DeserializeOwned;
 
 pub mod answer;
+pub mod artifacts;
 pub mod backups;
 pub mod close_line;
 pub mod count;

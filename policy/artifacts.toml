@@ -1,0 +1,60 @@
+# What `pack` and a deployment from an artifact go by (docs/artifacts.md): the floor an artifact runs on, the
+# paths every artifact keeps, the words a deploy step may not run, the runtimes an artifact may carry, and what
+# each says. An agent reads the words, so they are English. Each `{name}` is filled in with what it names.
+
+[floor]
+# The GNU C library version every kept ELF file must run on: Ubuntu 22.04's.
+glibc = "2.35"
+# The architectures an artifact is packed for, as Rust's target triples begin.
+arches = ["x86_64"]
+
+[keep]
+# The paths, from the release's root, every artifact keeps where they stand.
+always = ["bin", "deploy", "tools", "policy", "lang", "migrations", "testbed.toml", "install.toml", "LICENSE"]
+# The paths left out under every kept one: a checkout's own records and the packages of a language's tooling.
+never = [".git", "**/node_modules/.cache", "**/.nuxt", "**/target"]
+
+[refused]
+# A deploy step whose command holds one of these words builds or reads a checkout, which a person's machine
+# never does; `pack` refuses its declaration (docs/artifacts.md, 「The declaration」).
+words = ["cargo", "bun install", "npm install", "npm ci", "git "]
+
+# The runtimes an artifact may carry, each fetched from its own release at the version named and checked
+# against its digest, packed under the artifact's `runtime/<name>/`.
+[runtimes.bun]
+version = "1.3.5"
+url = "https://github.com/oven-sh/bun/releases/download/bun-v1.3.5/bun-linux-x64-baseline.zip"
+sha256 = ""
+binary = "bun-linux-x64-baseline/bun"
+
+[signing]
+# The set's public key, base64, every artifact's signature is checked against; empty until the set signs, when
+# only a machine whose environment allows unsigned artifacts deploys one.
+public_key = ""
+# The variable that allows an unsigned artifact on this machine, set to 1.
+allow_unsigned = "BMO_ALLOW_UNSIGNED_ARTIFACTS"
+
+[said]
+no_manifest = "the manifest {file} beside the artifact does not read: {why}"
+digest_differs = "{file}'s digest {digest} is not the manifest's {expected}"
+unsigned = "{file} carries no signature, and this machine does not allow unsigned artifacts ({variable}=1)"
+bad_signature = "{file}'s signature does not hold against the set's key"
+floor_above = "{name} asks for glibc {needs}, above this machine's {has}"
+other_repository = "the artifact is {name}'s, but its declaration names {declared}"
+env_missing = "the env file {file} the release links to does not stand"
+laid = "{name} {version} laid at {release}"
+step_failed = "the step {id} failed with {code}: {said}"
+flipped = "the deploy tree now names {release}"
+unit_linked = "linked {name}"
+restarted = "restarted {unit}"
+health_failed = "{name} did not answer its health: {said}"
+rolled_back = "rolled back to {release}"
+live = "{name} {version} is live"
+planned = "a dry run: {name} {version} would be laid at {release} and put live"
+no_table = "{name} declares no [artifact] table in testbed.toml, so it ships no artifact"
+building_step = "{name}'s deploy step {id} builds or reads a checkout ({word}); move that work to a [[build.step]]"
+above_floor = "{file} asks for glibc {version}, above the floor {floor}"
+unknown_runtime = "{name} names the runtime {runtime}, which the policy does not carry"
+runtime_failed = "the runtime {runtime} could not be fetched: {why}"
+built = "{name} {version} packed at {file}: {size}, glibc {glibc}"
+build_failed = "the build of {name} failed at {step}: {said}"
