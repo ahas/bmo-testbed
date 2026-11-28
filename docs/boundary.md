@@ -988,6 +988,9 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   (`docs/deploy.md`, 「The hosted deploy tool」). It serves no resources.
 - **Its arguments** are `repository`, `commit` and `why`, strings and required, `dry_run` and
   `attach`, booleans, and `first`, a string; its input schema, beside its manifest, takes no other.
+- **Its manual,** `manual.md` beside its manifest, says how a supervisor calls it and when: the waiting
+  deployments read first, a repository put live once no related work is left, and what is done once a
+  deployment went live or did not.
   `attach` starts nothing and answers the outcome of the newest deployment of the commit the testbed's
   record holds. `first` marks the deployment first in the deployment line with that reason, the
   session record's `holderName` as who; where a deployment of the same repository and commit already

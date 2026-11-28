@@ -62,7 +62,7 @@ command = '''
 set -eu
 rm -rf tools/deploy/.placed
 mkdir -p tools/deploy/.placed
-cp bin/deploy-tool tools/deploy/tool.toml tools/deploy/deploy.json tools/deploy/.placed/
+cp bin/deploy-tool tools/deploy/tool.toml tools/deploy/deploy.json tools/deploy/manual.md tools/deploy/.placed/
 bmo-pocket put tools/deploy/.placed --placed --service testbed --allow deploy
 '''
 
