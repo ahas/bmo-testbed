@@ -35,14 +35,25 @@ pub trait Machine {
   fn check_out(&self, checkout: &Path, rev: &str) -> Ran;
   /// The commit the remote's main branch stands at, as the checkout last fetched it.
   fn main_head(&self, checkout: &Path, main: &str) -> Option<String>;
+  /// The commit a name of the checkout's stands for: a tag, a branch or `HEAD`.
+  fn commit_of(&self, checkout: &Path, rev: &str) -> Option<String>;
+  /// Whether the checkout's working tree holds changes not committed, tracked or not.
+  fn has_changes(&self, checkout: &Path) -> bool;
+  /// The branch the checkout stands on; none where it stands on a commit alone.
+  fn branch(&self, checkout: &Path) -> Option<String>;
+  /// Every tag the checkout holds.
+  fn tags(&self, checkout: &Path) -> Vec<String>;
+  /// The checkout's main branch moved forward to its remote's head, never merged.
+  fn fast_forward(&self, checkout: &Path, main: &str) -> Ran;
   fn database_exists(&self, name: &str) -> Result<bool, String>;
   fn create_database(&self, name: &str) -> Ran;
   /// Whether nothing listens on the port of the loopback address.
   fn port_free(&self, port: u16) -> bool;
   fn random(&self, bytes: usize) -> Result<Vec<u8>, String>;
-  /// A repository's first release put live from its checkout at the commit, waited for until its deployment
-  /// unit ends; the unit's name where one was started.
-  fn deploy(&self, checkout: &Path, commit: &str, message: &str) -> (Ran, Option<String>);
+  /// A repository's commit put live from its checkout, waited for until its deployment unit ends; the unit's name
+  /// where one was started. A first release goes live at once, since nothing of it is live to wait quiet for; a
+  /// later one waits for quiet (docs/install.md, 「Deploying」 and 「Upgrading: `upgrade`」).
+  fn deploy(&self, checkout: &Path, commit: &str, message: &str, first: bool) -> (Ran, Option<String>);
 }
 
 /// This machine.
@@ -131,6 +142,58 @@ impl Machine for Host {
     head.ok().then_some(head.said)
   }
 
+  fn commit_of(&self, checkout: &Path, rev: &str) -> Option<String> {
+    let commit = ran(
+      Command::new("git")
+        .arg("-C")
+        .arg(checkout)
+        .args(["rev-parse", "--verify", "--quiet"])
+        .arg(format!("{rev}^{{commit}}")),
+    );
+
+    commit.ok().then(|| commit.said.trim().to_owned())
+  }
+
+  fn has_changes(&self, checkout: &Path) -> bool {
+    let status = ran(Command::new("git").arg("-C").arg(checkout).args(["status", "--porcelain"]));
+
+    !status.ok() || !status.said.trim().is_empty()
+  }
+
+  fn branch(&self, checkout: &Path) -> Option<String> {
+    let branch =
+      ran(
+        Command::new("git")
+          .arg("-C")
+          .arg(checkout)
+          .args(["symbolic-ref", "--quiet", "--short", "HEAD"]),
+      );
+
+    branch.ok().then(|| branch.said.trim().to_owned()).filter(|name| !name.is_empty())
+  }
+
+  fn tags(&self, checkout: &Path) -> Vec<String> {
+    let tags = ran(Command::new("git").arg("-C").arg(checkout).args(["tag", "--list"]));
+
+    tags
+      .said
+      .lines()
+      .map(str::trim)
+      .filter(|tag| !tag.is_empty())
+      .map(str::to_owned)
+      .collect()
+  }
+
+  fn fast_forward(&self, checkout: &Path, main: &str) -> Ran {
+    ran(
+      Command::new("git")
+        .arg("-C")
+        .arg(checkout)
+        .args(["merge", "--ff-only", "--quiet"])
+        .arg(format!("origin/{main}")),
+    )
+  }
+
   fn database_exists(&self, name: &str) -> Result<bool, String> {
     // The name is handed to psql as a variable its script quotes, read from standard input, since psql fills a
     // variable only in a script it reads.
@@ -181,9 +244,9 @@ impl Machine for Host {
     Ok(out)
   }
 
-  fn deploy(&self, checkout: &Path, commit: &str, message: &str) -> (Ran, Option<String>) {
-    // A first deployment is not a harness's deployment (docs/install.md, 「Deploying」): the harness's mark is
-    // not handed on, so the deploy verb takes it.
+  fn deploy(&self, checkout: &Path, commit: &str, message: &str, first: bool) -> (Ran, Option<String>) {
+    // An install's or an upgrade's deployment is not a harness's deployment (docs/install.md, 「Deploying」 and
+    // 「Upgrading: `upgrade`」): the harness's mark is not handed on, so the deploy verb takes it.
     // The commands a deployment's steps call, `bmo` and each unit's own, are linked into `.local/bin` under the home
     // directory, which a fresh machine's shell may not hold on its PATH yet.
     let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default();
@@ -192,9 +255,17 @@ impl Machine for Host {
 
     paths.extend(std::env::split_paths(&path));
 
+    let mut words = vec!["deploy", "--no-check"];
+
+    if first {
+      words.push("--force-live");
+    }
+
+    words.extend(["--commit", commit, "--message", message]);
+
     let started = ran(
       Command::new(&self.testbed)
-        .args(["deploy", "--no-check", "--force-live", "--commit", commit, "--message", message])
+        .args(&words)
         .current_dir(checkout)
         .env("PATH", std::env::join_paths(paths).unwrap_or(path))
         .env_remove("CLAUDE_PID"),

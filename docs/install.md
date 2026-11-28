@@ -19,6 +19,7 @@
   file that stands is never rewritten, a database that stands is not made, a repository whose deploy tree stands
   is not deployed, and an after-step whose own check answers done is not run. A run that stopped anywhere is
   taken up again by the same command.
+- **Its sibling verb, `upgrade`, moves an install to a newer state of the set** (「Upgrading: `upgrade`」).
 
 ## The words
 
@@ -146,6 +147,40 @@ bmo-testbed install --set <input> [<places>]
   reads the unit's journal.
 - **The repositories deploy one at a time, in the order the preset lists them,** so one whose deploy steps call
   another's command finds it live.
+
+## Upgrading: `upgrade`
+
+```
+bmo-testbed upgrade [--nightly] [--index <dir>] [--data-root <dir>] [--prefix <dir>] [--dry-run]
+```
+
+- **`upgrade` moves the install the data root holds to a newer state of the set,** every repository at once: it
+  brings each checkout of the install to the one target, then puts each installed repository's commit live through
+  the deployment, one after the other in the install's order. `bmo upgrade` reaches it. It installs nothing new: a
+  repository the install does not hold stays out, and one more is `install --add`'s.
+- **The target is the newest release, or the nightly.** Without `--nightly` every checkout goes to the newest
+  release tag it holds (「The deployed version」 in `docs/deploy.md` names which tags are releases), a stable
+  release, an alpha, a beta or a release candidate, checked out as that commit; a checkout holding no release tag
+  is a `failed` step. With `--nightly` every checkout goes to the head of its main branch, the one its testbed
+  declaration names, `main` where it has none, the branch checked out and moved forward to its remote's head; the
+  deployment names it the day's nightly.
+- **A checkout is only ever moved forward, and never over work.** Each checkout is fetched first. One holding
+  changes not committed, standing on a branch other than its main branch, or whose main branch cannot move to its
+  remote's head without a merge, is a `failed` step that names which, and the run stops after the checkouts, since a
+  service builds against the base libraries checked out beside it and one left behind would build a mixed set.
+- **Each repository is deployed as a later release is,** waiting for quiet: without `--no-check`'s gate, since every
+  commit on a main branch and every release tag passed its suite, and without `--force-live`, so a service at work
+  is not cut short; a repository whose live commit is the target already is `ok` and is not deployed again, and one
+  that deploys nothing is `ok`. A deployment is waited for until its unit ends, and one that does not go live stops
+  the run there, its line naming the deployment's journal, so no later repository goes live on a set that broke.
+- **It prints as `install` does** (「What it prints」): a `target` line naming what it moves to, a
+  `checkout:<repository>` line for every checkout of the install, cloned and installed alike, a `deploy:<repository>`
+  line for every installed repository, and the step `done`. `--dry-run` fetches nothing and moves nothing: it reads
+  every checkout as it stands and prints each move and each deployment as `planned`.
+- **It runs outside the services it moves.** It restarts every service of the install, the agents' among them, so
+  an agent working inside the install never runs it; a person runs it, or an agent in a terminal of its own. Asked
+  so, it hands its deployments on without a harness's mark, as an install hands its first ones (「Deploying」): the
+  restart is what was asked for.
 
 ## The presets file
 

@@ -3,7 +3,7 @@
 //! declaration, and a data root of its own.
 
 use std::cell::RefCell;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use bmo_testbed_install::run::PORTS_FILE;
@@ -18,6 +18,28 @@ struct Stand {
   ran: RefCell<Vec<String>>,
   checked_out: RefCell<Vec<String>>,
   taken_port: Option<u16>,
+  /// The remote's main head, the first one where none is set.
+  origin_main: RefCell<String>,
+  /// Each checkout's own commit, where it moved from the first one.
+  heads: RefCell<BTreeMap<PathBuf, String>>,
+  /// The checkouts standing on a commit alone, off any branch.
+  detached: RefCell<BTreeSet<PathBuf>>,
+  /// The checkouts holding changes not committed.
+  dirty: BTreeSet<PathBuf>,
+  /// The tags every checkout holds, each standing for `c-<tag>`.
+  tags: Vec<String>,
+  /// Every deployment asked: the checkout's folder, the commit and whether it was a first release.
+  deployments: RefCell<Vec<(String, String, bool)>>,
+}
+
+const FIRST: &str = "0123456789abcdef";
+
+impl Stand {
+  fn origin(&self) -> String {
+    let set = self.origin_main.borrow().clone();
+
+    if set.is_empty() { FIRST.to_owned() } else { set }
+  }
 }
 
 impl Machine for Stand {
@@ -57,8 +79,16 @@ impl Machine for Stand {
     }
   }
 
-  fn check_out(&self, _checkout: &Path, rev: &str) -> Ran {
+  fn check_out(&self, checkout: &Path, rev: &str) -> Ran {
     self.checked_out.borrow_mut().push(rev.to_owned());
+
+    if rev == "main" {
+      self.detached.borrow_mut().remove(checkout);
+    } else if rev.starts_with("c-") {
+      self.heads.borrow_mut().insert(checkout.to_path_buf(), rev.to_owned());
+      self.detached.borrow_mut().insert(checkout.to_path_buf());
+    }
+
     Ran {
       code: 0,
       said: String::new(),
@@ -66,7 +96,35 @@ impl Machine for Stand {
   }
 
   fn main_head(&self, _checkout: &Path, _main: &str) -> Option<String> {
-    Some("0123456789abcdef".to_owned())
+    Some(self.origin())
+  }
+
+  fn commit_of(&self, checkout: &Path, rev: &str) -> Option<String> {
+    if rev == "HEAD" {
+      return Some(self.heads.borrow().get(checkout).cloned().unwrap_or_else(|| FIRST.to_owned()));
+    }
+
+    self.tags.iter().any(|tag| tag == rev).then(|| format!("c-{rev}"))
+  }
+
+  fn has_changes(&self, checkout: &Path) -> bool {
+    self.dirty.contains(checkout)
+  }
+
+  fn branch(&self, checkout: &Path) -> Option<String> {
+    (!self.detached.borrow().contains(checkout)).then(|| "main".to_owned())
+  }
+
+  fn tags(&self, _checkout: &Path) -> Vec<String> {
+    self.tags.clone()
+  }
+
+  fn fast_forward(&self, checkout: &Path, _main: &str) -> Ran {
+    self.heads.borrow_mut().insert(checkout.to_path_buf(), self.origin());
+    Ran {
+      code: 0,
+      said: String::new(),
+    }
   }
 
   fn database_exists(&self, name: &str) -> Result<bool, String> {
@@ -91,7 +149,7 @@ impl Machine for Stand {
 
   // A deployment lays the deploy tree's link and the record naming the commit, as the deploy verb does, and refuses
   // a data root that does not stand, as it does too.
-  fn deploy(&self, checkout: &Path, commit: &str, _message: &str) -> (Ran, Option<String>) {
+  fn deploy(&self, checkout: &Path, commit: &str, _message: &str, first: bool) -> (Ran, Option<String>) {
     let root = checkout.join("deploy-root");
 
     if !checkout.join("data").is_dir() {
@@ -105,7 +163,13 @@ impl Machine for Stand {
     }
 
     std::fs::create_dir_all(root.join("deploy-releases/one")).unwrap();
+    let _ = std::fs::remove_file(root.join("deploy"));
     std::os::unix::fs::symlink(root.join("deploy-releases/one"), root.join("deploy")).unwrap();
+    self.deployments.borrow_mut().push((
+      checkout.file_name().unwrap().to_string_lossy().into_owned(),
+      commit.to_owned(),
+      first,
+    ));
     std::fs::write(root.join("deployed.json"), format!("{{\"commit\":\"{commit}\"}}")).unwrap();
     self
       .deployed
@@ -668,4 +732,124 @@ fn the_status_names_each_repository_and_whether_it_is_live() {
     status_of(&lines, "port:one.web").unwrap().detail,
     "one.web listens on 4100, as the install chose before"
   );
+}
+
+// An install laid whole, as the tests of `upgrade` start from (docs/install.md, 「Upgrading: `upgrade`」).
+fn installed(ground: &Ground, machine: &Stand) {
+  std::fs::create_dir_all(ground.data_root.join("env")).unwrap();
+  std::fs::write(ground.data_root.join("env/one-owner"), "owner\n").unwrap();
+  std::fs::write(ground.data_root.join("env/two.minted"), "minted\n").unwrap();
+  assert_eq!(run(ground, machine, solo(), false).0, Outcome::Done);
+  machine.deployments.borrow_mut().clear();
+}
+
+fn nightly() -> Mode {
+  Mode::Upgrade { nightly: true }
+}
+
+#[test]
+fn the_nightly_upgrade_moves_every_checkout_forward_and_deploys_each_repository_waiting_for_quiet() {
+  let ground = ground();
+  let machine = Stand::default();
+
+  installed(&ground, &machine);
+  *machine.origin_main.borrow_mut() = "fedcba9876543210".to_owned();
+
+  let (outcome, lines) = run(&ground, &machine, nightly(), false);
+  let printed: Vec<String> = lines.iter().map(Line::json).collect();
+
+  assert_eq!(outcome, Outcome::Done, "{printed:#?}");
+  assert_eq!(lines.first().unwrap().step, "target");
+  assert!(status_of(&lines, "checkout:one").unwrap().detail.contains("moved to the head of main"));
+  assert_eq!(status_of(&lines, "deploy:two").unwrap().status, Status::Ok);
+  assert_eq!(
+    *machine.deployments.borrow(),
+    vec![
+      ("one".to_owned(), "fedcba9876543210".to_owned(), false),
+      ("two".to_owned(), "fedcba9876543210".to_owned(), false),
+    ],
+    "each repository deployed once, in the install's order, never cutting work short"
+  );
+  assert_eq!(lines.last().unwrap().detail, "repositories upgraded: 2");
+
+  // Run again with nothing newer, nothing moves and nothing is deployed again.
+  let (outcome, lines) = run(&ground, &machine, nightly(), false);
+
+  assert_eq!(outcome, Outcome::Done);
+  assert!(status_of(&lines, "checkout:one").unwrap().detail.contains("already"));
+  assert!(status_of(&lines, "deploy:one").unwrap().detail.contains("already"));
+  assert_eq!(machine.deployments.borrow().len(), 2);
+}
+
+#[test]
+fn a_checkout_holding_changes_stops_the_upgrade_before_anything_is_deployed() {
+  let ground = ground();
+  let machine = Stand {
+    dirty: BTreeSet::from([ground.index.join("services/two")]),
+    ..Stand::default()
+  };
+
+  installed(&ground, &machine);
+  *machine.origin_main.borrow_mut() = "fedcba9876543210".to_owned();
+
+  let (outcome, lines) = run(&ground, &machine, nightly(), false);
+  let stopped = status_of(&lines, "checkout:two").unwrap();
+
+  assert_eq!(outcome, Outcome::Failed);
+  assert_eq!(stopped.status, Status::Failed);
+  assert!(stopped.detail.contains("changes not committed"), "{}", stopped.detail);
+  assert_eq!(stopped.next, "mend what the detail names, then run bmo upgrade --nightly again");
+  assert!(status_of(&lines, "deploy:one").is_none());
+  assert!(machine.deployments.borrow().is_empty());
+}
+
+#[test]
+fn the_release_upgrade_checks_out_the_newest_release_tag() {
+  let ground = ground();
+  let machine = Stand {
+    tags: vec!["v1.0.0-alpha.3".to_owned(), "v1.0.0-beta.1".to_owned(), "upstream-9".to_owned()],
+    ..Stand::default()
+  };
+
+  installed(&ground, &machine);
+
+  let (outcome, lines) = run(&ground, &machine, Mode::Upgrade { nightly: false }, false);
+  let printed: Vec<String> = lines.iter().map(Line::json).collect();
+
+  assert_eq!(outcome, Outcome::Done, "{printed:#?}");
+  assert!(status_of(&lines, "checkout:one").unwrap().detail.contains("v1.0.0-beta.1"));
+  assert!(machine.checked_out.borrow().contains(&"c-v1.0.0-beta.1".to_owned()));
+  assert_eq!(machine.deployments.borrow()[0], ("one".to_owned(), "c-v1.0.0-beta.1".to_owned(), false));
+
+  // From the release, the nightly brings the checkout back onto its main branch first.
+  *machine.origin_main.borrow_mut() = "fedcba9876543210".to_owned();
+  assert_eq!(run(&ground, &machine, nightly(), false).0, Outcome::Done);
+  assert!(machine.checked_out.borrow().contains(&"main".to_owned()));
+  assert_eq!(machine.deployments.borrow().last().unwrap().1, "fedcba9876543210");
+}
+
+#[test]
+fn a_dry_upgrade_plans_every_move_and_deployment_and_changes_nothing() {
+  let ground = ground();
+  let machine = Stand::default();
+
+  installed(&ground, &machine);
+  *machine.origin_main.borrow_mut() = "fedcba9876543210".to_owned();
+
+  let (outcome, lines) = run(&ground, &machine, nightly(), true);
+
+  assert_eq!(outcome, Outcome::Done);
+  assert_eq!(status_of(&lines, "checkout:one").unwrap().status, Status::Planned);
+  assert_eq!(status_of(&lines, "deploy:one").unwrap().status, Status::Planned);
+  assert!(machine.heads.borrow().is_empty());
+  assert!(machine.deployments.borrow().is_empty());
+}
+
+#[test]
+fn an_upgrade_needs_an_install_to_move() {
+  let ground = ground();
+  let machine = Stand::default();
+  let (outcome, _) = run(&ground, &machine, nightly(), false);
+
+  assert!(matches!(outcome, Outcome::Refused(_)));
 }

@@ -1,5 +1,5 @@
-//! `install` (docs/install.md): the words read into what the run is asked, the run made against this machine, and
-//! each step's line printed as it comes.
+//! `install` and `upgrade` (docs/install.md): the words read into what the run is asked, the run made against this
+//! machine, and each step's line printed as it comes.
 
 use std::path::PathBuf;
 
@@ -8,7 +8,7 @@ use bmo_testbed_core::verb::data_root;
 use bmo_testbed_install::{Ask, Host, Install, Line, Mode, Services, exit_code};
 use bmo_testbed_suite::dependents::registry_path;
 
-use crate::words::InstallArgs;
+use crate::words::{InstallArgs, UpgradeArgs};
 
 pub fn install(args: &InstallArgs) -> u8 {
   let mode = match (&args.preset, &args.add, &args.set) {
@@ -38,6 +38,39 @@ pub fn install(args: &InstallArgs) -> u8 {
   let checkouts = registry_path(&data_root, &process_env());
   let ask = Ask {
     mode,
+    index: args.index.clone(),
+    data_root,
+    home,
+    user: bmo_testbed_core::account::account_name(),
+    dry_run: args.dry_run,
+    cwd: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+    prefix,
+    services: services.clone(),
+    checkouts,
+  };
+  let host = Host::new(&services.postgres_host, &services.postgres_port);
+  let mut say = |line: &Line| println!("{}", line.json());
+  let outcome = Install::new(ask, &host, &mut say).run();
+
+  if let bmo_testbed_install::run::Outcome::Refused(why) = &outcome {
+    eprintln!("{why}");
+  }
+
+  exit_code(&outcome)
+}
+
+/// `upgrade` (docs/install.md, 「Upgrading: `upgrade`」): the install the data root holds moved forward, on the
+/// install's own places, where the services reach their servers as the install left them.
+pub fn upgrade(args: &UpgradeArgs) -> u8 {
+  let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("/"));
+  let prefix = args.prefix.clone().unwrap_or_else(|| home.join(".local/share"));
+  let services = Services::default();
+  let data_root = args.data_root.clone().unwrap_or_else(data_root);
+  let checkouts = registry_path(&data_root, &process_env());
+  let ask = Ask {
+    mode: Mode::Upgrade {
+      nightly: args.nightly,
+    },
     index: args.index.clone(),
     data_root,
     home,

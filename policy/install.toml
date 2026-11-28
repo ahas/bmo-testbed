@@ -30,6 +30,23 @@ terminal: a missing value is a needs-input line naming the command that gives it
 
 Exit codes: 0 done, 1 a step failed, 2 refused, 3 waiting for input."""
 
+upgrade_usage = """
+usage: {verb} upgrade [--nightly] [--index <dir>] [--data-root <dir>] [--prefix <dir>] [--dry-run]
+
+Moves the install the data root holds to a newer state of the set (docs/install.md, 「Upgrading: `upgrade`」):
+every checkout of the install fetched and moved forward to the newest release tag, or with --nightly to the head of
+its main branch, never over changes or a diverged branch; then every installed repository deployed in the install's
+order, waiting for quiet, and the run stopped at the first that does not go live. Each step prints one JSON line, as
+install does. Run it outside the services it restarts: by a person, or an agent in a terminal of its own.
+
+--nightly    the head of every main branch, the day's nightly, over the newest release tag
+--index      the index checkout; BMO_INDEX, else the checkout the verb runs in, where neither is given
+--data-root  where the install keeps its own state, over BMO_DATA_DIR
+--prefix     where every repository's deploy root stands; .local/share under the home
+--dry-run    fetch nothing and move nothing: every move and deployment says planned
+
+Exit codes: 0 done, 1 a step failed, 2 refused."""
+
 [numbers]
 # How often, in seconds, the wait for a deployment's unit asks whether it still runs. A pace, never a bound.
 deployment_poll_seconds = 5
@@ -127,6 +144,34 @@ done_planned = "a dry run: repositories that would be installed: {count}"
 done_waiting = "the install waits for answers a person gives: {count}"
 done_failed = "the install stopped at {step}"
 set = "{name} kept at {file}"
+
+[upgrade]
+target_release = "every checkout of the install moves to its newest release tag"
+target_nightly = "every checkout of the install moves to the head of its main branch, the day's nightly"
+release = "its newest release tag {tag}"
+nightly = "the head of {main}"
+checkout_stands = "{name} stands at {commit} already, {target}"
+checkout_moved = "{name} moved to {target}, {commit}"
+checkout_planned = "{name} would move from {from} to {target}, {commit}"
+checkout_absent = "{name} is not checked out at {path}"
+checkout_dirty = "{name} holds changes not committed at {path}"
+checkout_branch = "{name} stands on {branch}, not on its main branch {main}"
+checkout_diverged = "{name}'s {main} cannot move forward to its remote's head: {said}"
+checkout_no_release = "{name} holds no release tag"
+checkout_failed = "{name} could not be moved to {target}: {said}"
+checkouts_stopped = "the deployments wait until every checkout of the install can move"
+deploy_live = "{name} is live at {commit} already"
+deploy_done = "{name} is live at {commit}"
+deploy_planned = "{name} would be put live at {commit}"
+deploy_failed = "{name} did not go live at {commit}: {said}"
+message = "Upgrade to {target}"
+message_release = "the newest release"
+message_nightly = "the nightly"
+done = "repositories upgraded: {count}"
+done_planned = "a dry run: repositories that would be upgraded: {count}"
+done_failed = "the upgrade stopped at {step}"
+rerun = "mend what the detail names, then run bmo upgrade{flag} again"
+rerun_nightly = " --nightly"
 
 [refusal]
 no_index = "no index checkout was found: name it with --index or BMO_INDEX, or run the verb in a checkout holding {file}"

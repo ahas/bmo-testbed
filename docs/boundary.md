@@ -529,6 +529,18 @@ bmo-testbed install --set <input> [<places>]
 - `--add` on a machine already serving people is the supervising agent's alone, on the owner's approval for that
   repository (`docs/install.md`, 「The words」).
 
+### `upgrade`
+
+```
+bmo-testbed upgrade [--nightly] [--index <dir>] [--data-root <dir>] [--prefix <dir>] [--dry-run]
+```
+
+- Moves the install the data root holds to the newest release tag, or with `--nightly` to the head of each main
+  branch, as `docs/install.md` 「Upgrading: `upgrade`」 states whole: every checkout of the install fetched and
+  moved forward, never over changes or a diverged branch, then every installed repository deployed in the install's
+  order, waiting for quiet, without the gate, and stopping at the first that does not go live. It prints as
+  `install` does and exits 0 where every step is done or planned, 1 where one failed and 2 where it refuses.
+
 ### `supervise`
 
 ```
@@ -653,6 +665,7 @@ verb's own name, and each noun takes what that verb takes.
 | `backup drill` | nothing | `backup drill` |
 | `backup prune` | the words `backup prune` takes | `backup prune` |
 | `install` | the words `install` takes | `install` |
+| `upgrade` | the words `upgrade` takes | `upgrade` |
 
 ## The environment
 

@@ -7,10 +7,44 @@ use serde::Deserialize;
 #[serde(deny_unknown_fields)]
 pub struct Install {
   pub usage: String,
+  pub upgrade_usage: String,
   pub numbers: Numbers,
   pub next: Next,
   pub detail: Detail,
+  pub upgrade: Upgrade,
   pub refusal: Refusal,
+}
+
+/// What the `upgrade` verb's lines say (docs/install.md, 「Upgrading: `upgrade`」).
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Upgrade {
+  pub target_release: String,
+  pub target_nightly: String,
+  pub release: String,
+  pub nightly: String,
+  pub checkout_stands: String,
+  pub checkout_moved: String,
+  pub checkout_planned: String,
+  pub checkout_absent: String,
+  pub checkout_dirty: String,
+  pub checkout_branch: String,
+  pub checkout_diverged: String,
+  pub checkout_no_release: String,
+  pub checkout_failed: String,
+  pub checkouts_stopped: String,
+  pub deploy_live: String,
+  pub deploy_done: String,
+  pub deploy_planned: String,
+  pub deploy_failed: String,
+  pub message: String,
+  pub message_release: String,
+  pub message_nightly: String,
+  pub done: String,
+  pub done_planned: String,
+  pub done_failed: String,
+  pub rerun: String,
+  pub rerun_nightly: String,
 }
 
 #[derive(Debug, Deserialize)]

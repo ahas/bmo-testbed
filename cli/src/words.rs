@@ -53,6 +53,7 @@ pub enum Verb {
   Mcp(McpArgs),
   Notice(NoticeArgs),
   Install(InstallArgs),
+  Upgrade(UpgradeArgs),
   Supervise(SuperviseArgs),
   /// The nouns `bmo` dispatches to this binary, one a line.
   Nouns,
@@ -510,6 +511,22 @@ pub struct InstallArgs {
   pub dry_run: bool,
 }
 
+/// `upgrade`: the install moved to the newest release tag, or with `--nightly` to the head of every main branch
+/// (docs/install.md, 「Upgrading: `upgrade`」).
+#[derive(Debug, Args)]
+pub struct UpgradeArgs {
+  #[arg(long)]
+  pub nightly: bool,
+  #[arg(long)]
+  pub index: Option<PathBuf>,
+  #[arg(long)]
+  pub data_root: Option<PathBuf>,
+  #[arg(long)]
+  pub prefix: Option<PathBuf>,
+  #[arg(long)]
+  pub dry_run: bool,
+}
+
 /// `supervise`: the set's services run without systemd, and what is asked of them (docs/supervise.md).
 #[derive(Debug, Args)]
 #[command(disable_help_subcommand = true)]
@@ -638,6 +655,7 @@ pub fn read(args: impl IntoIterator<Item = OsString>) -> Result<Words, clap::Err
     .mut_subcommand("mcp", |verb| verb.override_help(usage(&said.mcp)))
     .mut_subcommand("notice", |verb| verb.override_help(usage(&said.notice)))
     .mut_subcommand("install", |verb| verb.override_help(usage(&INSTALL.usage)))
+    .mut_subcommand("upgrade", |verb| verb.override_help(usage(&INSTALL.upgrade_usage)))
     .mut_subcommand("supervise", |verb| {
       ["serve", "status", "env", "stop-all"]
         .iter()

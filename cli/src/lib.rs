@@ -471,6 +471,7 @@ pub fn main(args: impl IntoIterator<Item = OsString>) -> u8 {
     Verb::Mcp(args) => serve::mcp(&args),
     Verb::Notice(args) => notice::notice(&args.event),
     Verb::Install(args) => install::install(&args),
+    Verb::Upgrade(args) => install::upgrade(&args),
     Verb::Supervise(args) => supervise::supervise(args.word),
     Verb::Nouns => print_nouns(),
     Verb::Test(args) => run_test(args),

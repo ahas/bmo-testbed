@@ -1419,6 +1419,7 @@
     "mcp",
     "notice",
     "install",
+    "upgrade",
     "supervise"
   ],
   "x-events": [

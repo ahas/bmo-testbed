@@ -20,6 +20,8 @@ use crate::machine::{Machine, Ran};
 use crate::presets::{FILE as PRESETS_FILE, PresetsFile, Refused, Resolved};
 use crate::template::{Absent, Source, Unfilled, Values, resolve};
 
+mod upgrade;
+
 /// The variable naming the index checkout where `--index` is not given.
 pub const INDEX_VARIABLE: &str = "BMO_INDEX";
 /// The console features file, under the data root (docs/install.md, 「The console features」).
@@ -38,10 +40,17 @@ const PORT_TRIES: u16 = 200;
 /// What the verb is asked to do.
 #[derive(Clone, Debug)]
 pub enum Mode {
-  Preset { name: String, with: Vec<String> },
+  Preset {
+    name: String,
+    with: Vec<String>,
+  },
   Add(String),
   Status,
   Set(String),
+  /// The install moved to the newest release tag, or with `nightly` to the head of every main branch.
+  Upgrade {
+    nightly: bool,
+  },
 }
 
 /// The verb's words and the places it runs against.
@@ -349,6 +358,7 @@ impl<'a> Install<'a> {
     match self.ask.mode.clone() {
       Mode::Set(name) => self.set(&index, &presets, &name),
       Mode::Status => self.status(&index, &presets),
+      Mode::Upgrade { nightly } => self.upgrade(&index, &presets, nightly),
       Mode::Preset { name, with } => {
         let state = State {
           preset: name,
@@ -1507,7 +1517,7 @@ impl<'a> Install<'a> {
       return false;
     };
     let message = format!("The first install of {}", unit.name);
-    let (ran, deployment) = self.machine.deploy(&unit.checkout, &commit, &message);
+    let (ran, deployment) = self.machine.deploy(&unit.checkout, &commit, &message, true);
     let recorded = unit
       .deploy_root(&self.ask)
       .and_then(|root| std::fs::read_to_string(root.join("deployed.json")).ok())
