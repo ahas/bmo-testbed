@@ -1135,13 +1135,15 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   than its modification time here, while a file whose content the bench already holds keeps the time it has
   there. A build there reads a source by its modification time against what it built before, so a file
   whose time here is older than that build is still one it builds, a file the bench's checkout has just
-  written is never set back to an older time, and an unchanged file builds nothing again; and for a deployment it copies none and takes every untracked file away, since the release
-  is the commit alone; and it lays
+  written is never set back to an older time, and an unchanged file builds nothing again; and for a deployment it copies none and takes every untracked file away, the ones the
+  bench's git ignores among them, so what an earlier run's setup, build or copy left there never stands beside
+  the commit, since the release is the commit alone; and it lays
   every tree outside the repository the checkout's workspace reads by a path, for a deployment the
   workspace at the deployed commit, read as a deployment here reads it, the base libraries and
   the sibling crates among them, each tree those name in turn followed until none is new
   (`docs/deploy.md`, 「The releases」), each tree the declaration's `[test] sibling_trees` names by a
-  path from the checkout, and the checkout holding the shared versions the declaration names, found
+  path from the checkout, and the checkout holding the shared versions the declaration names, for a
+  deployment the declaration the deployed commit holds and never the checkout's working tree's, found
   through this machine's registry, each at its own place under the bench root, so a path a manifest names
   resolves there as it does here, the quick checks find what they read, and a test opening a file in a
   neighbouring checkout reads what it reads here rather than whatever an earlier run left at that place. A
@@ -1152,7 +1154,7 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   repository holding each tree is made ready at its place as the bench is, from its own reachable
   remote, pushed the head of the main branch its declaration names (`docs/declaration.md`, 「The main branch's
   head」) as `bmo-bench`, checked out detached
-  and its untracked files taken away, since a deployment builds committed trees only (`docs/deploy.md`,
+  and its untracked files taken away, ignored ones too, since a deployment builds committed trees only (`docs/deploy.md`,
   「The releases」); a tree no repository holds, or whose main branch does not stand, fails the step. The copy of
   the checkout holding the shared versions leaves their file out, and the caller writes it there instead
   as that checkout's main branch holds it, whole or not at all, so no copy, its own or another run's
@@ -1205,7 +1207,9 @@ Every member has one shape wherever it is answered: alone, in a page, inside an 
   at `testbed/placed/<machine>/<file name>`, `machine` the settings' label, and says on standard error
   `testbed: the failing log kept on <machine> is brought here: <path>`. A file that cannot be read there or
   written here is said on standard error with what was answered, and the run's exit code stays the one it
-  ended with there.
+  ended with there. A deployment's gate brings the log of a suite that failed there the same way: it asks
+  the suite `--json`, takes the log its last line of standard output names, and names the copy here in its
+  reason (`docs/deploy.md`, 「What the deploy run does, in order」).
 - **A machine that cannot be reached passes the run on:** where the machine does not answer, or its
   testbed cannot be brought to the live release, or the machine stops answering while the bench there is
   made ready, the caller says so on a line naming the machine and what it said, and the run goes on down

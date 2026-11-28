@@ -2,11 +2,11 @@
 //! transient unit of its own and run there, its gate answered by the suite crate; and the backups sent away
 //! and rotated, one run at a time. The runs themselves are the deploy crate's; this is the verbs' side.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use bmo_testbed_client::{PageQuery, TestRun, TestRunState};
+use bmo_testbed_client::{CommandRun, PageQuery, TestRun, TestRunState};
 use bmo_testbed_core::declaration::Repository;
 use bmo_testbed_core::events::{Event, Hook};
 use bmo_testbed_core::main_branch::MainBranch;
@@ -40,6 +40,7 @@ use bmo_testbed_deploy::upload::{
   AwsHands, BackupNames, Remote, send_backups, upload_failed_detail, upload_failed_summary,
 };
 use bmo_testbed_record::Record;
+use bmo_testbed_suite::log::{FailedTest, failed_tests_of, failures_of};
 use bmo_testbed_suite::once_more::run_judged;
 use bmo_testbed_suite::quick::shared_versions::find_shared;
 use bmo_testbed_suite::run::{SuiteAsk, SuiteWords, ask_of};
@@ -166,7 +167,7 @@ impl SuiteGate<'_> {
 
     GateOutcome {
       passed: code == 0,
-      reason: fill_marks(&DEPLOY.run.gate_suite, &[("code", &code.to_string())]),
+      reason: suite_reason(i64::from(code), ended.log.as_deref()),
       flaky: flaky.tests.iter().map(|one| (one.test.clone(), one.file.clone())).collect(),
       steps,
       ..GateOutcome::default()
@@ -193,11 +194,58 @@ pub struct PlacedGate<'a> {
   pub brings_testbed: bool,
 }
 
-// What one step the gate ran there came to: its step as the progress record writes it, and whether the connection
-// broke under it.
+// What one step the gate ran there came to: its step as the progress record writes it, whether the connection
+// broke under it, the last line its standard output gave, and the failing logs it kept there, brought here.
 struct FarStep {
   step: GateStep,
   broken: bool,
+  last_line: Option<String>,
+  brought: Vec<PathBuf>,
+}
+
+// The reason a gate's suite ended as it did: its exit, and where it failed the tests its log names as failed
+// and the log itself, where one stands to be read (docs/deploy.md, 「What the deploy run does, in order」).
+fn suite_reason(code: i64, log: Option<&Path>) -> String {
+  let said = &DEPLOY.run;
+  let reason = fill_marks(&said.gate_suite, &[("code", &code.to_string())]);
+  let Some(log) = log.filter(|_| code != 0) else {
+    return reason;
+  };
+  // Each failing test by its name and its unit, as Cargo's and bun's lines give them; where none stands under a
+  // unit, what the sweep names as failed.
+  let failed = std::fs::read_to_string(log)
+    .map(|text| {
+      let placed = failed_tests_of(&text).iter().map(FailedTest::named).collect::<Vec<_>>();
+
+      if placed.is_empty() { failures_of(&text) } else { placed }
+    })
+    .unwrap_or_default();
+  let shown = DEPLOY.numbers.failed_tests_shown;
+  let reason = if failed.is_empty() {
+    reason
+  } else {
+    let named = failed.iter().take(shown).cloned().collect::<Vec<_>>().join(&said.gate_tests_joiner);
+    let tests = if failed.len() > shown {
+      fill_marks(
+        &said.gate_more_tests,
+        &[("tests", &named), ("count", &(failed.len() - shown).to_string())],
+      )
+    } else {
+      named
+    };
+
+    fill_marks(&said.gate_failed_tests, &[("reason", &reason), ("tests", &tests)])
+  };
+
+  logged_reason(reason, Some(log))
+}
+
+// A gate's reason with the log it names, where there is one.
+fn logged_reason(reason: String, log: Option<&Path>) -> String {
+  match log {
+    Some(log) => fill_marks(&DEPLOY.run.gate_log, &[("reason", &reason), ("log", &log.to_string_lossy())]),
+    None => reason,
+  }
 }
 
 impl PlacedGate<'_> {
@@ -257,8 +305,8 @@ impl PlacedGate<'_> {
   // run.
   fn step(&self, bench: &ReadyBench, name: &str, words: &[String], setup: bool) -> FarStep {
     let started = Instant::now();
-    let ended = self.machine.run_there(bench, words, setup, None, &Arc::default());
-    let (code, broken) = match ended {
+    let ran = self.machine.run_read(bench, words, setup, None, &Arc::default());
+    let (code, broken) = match ran.end {
       FarEnd::Ended(code) => (i64::from(code), false),
       FarEnd::Broken => (i64::from(NOT_RUN_EXIT_CODE), true),
     };
@@ -271,7 +319,19 @@ impl PlacedGate<'_> {
         ran_seconds: started.elapsed().as_secs_f64(),
       },
       broken,
+      last_line: ran.last_line,
+      brought: ran.brought,
     }
+  }
+
+  // The suite's log a failed run there named on its `--json` line, brought here; none where the line names none
+  // or the log could not be brought, which is said.
+  fn suite_log(&self, ran: &FarStep) -> Option<PathBuf> {
+    let named: CommandRun = serde_json::from_str(ran.last_line.as_deref()?).ok()?;
+
+    (ran.step.code != 0 && !named.log_path.is_empty())
+      .then(|| self.machine.bring(&named.log_path))
+      .flatten()
   }
 
   // The gate where the connection to the machine broke under it: judged here where the order names this machine,
@@ -337,7 +397,10 @@ impl PlacedGate<'_> {
     if steps[0].code != 0 {
       return GateOutcome {
         passed: false,
-        reason: fill_marks(&DEPLOY.run.gate_check, &[("code", &steps[0].code.to_string())]),
+        reason: logged_reason(
+          fill_marks(&DEPLOY.run.gate_check, &[("code", &steps[0].code.to_string())]),
+          checked.brought.first().map(PathBuf::as_path),
+        ),
         steps,
         ..GateOutcome::default()
       };
@@ -356,23 +419,26 @@ impl PlacedGate<'_> {
       };
     }
 
-    let suite = [self.testbed(), "suite".to_owned(), "--again".to_owned()]
+    // Asked `--json`, the suite there ends on the line naming its log, which a failure brings here.
+    let suite = [self.testbed(), "suite".to_owned(), "--again".to_owned(), "--json".to_owned()]
       .into_iter()
       .chain(since)
       .collect::<Vec<_>>();
     let ran = self.step(bench, OwnStep::Tests.name(), &suite, false);
 
-    steps.push(ran.step);
-
     if ran.broken {
+      steps.push(ran.step);
       return self.broken(steps);
     }
 
-    let code = steps[1].code;
+    let code = ran.step.code;
+    let log = self.suite_log(&ran);
+
+    steps.push(ran.step);
 
     GateOutcome {
       passed: code == 0,
-      reason: fill_marks(&DEPLOY.run.gate_suite, &[("code", &code.to_string())]),
+      reason: suite_reason(code, log.as_deref()),
       steps,
       ..GateOutcome::default()
     }

@@ -39,6 +39,7 @@ pub struct RefusalWords {
 #[serde(deny_unknown_fields)]
 pub struct Numbers {
   pub dirty_shown: usize,
+  pub failed_tests_shown: usize,
   pub quoted_chars: usize,
   pub command_chars: usize,
   pub releases_told_above: usize,
@@ -113,6 +114,10 @@ pub struct RunWords {
   pub gate_failed: String,
   pub gate_check: String,
   pub gate_suite: String,
+  pub gate_failed_tests: String,
+  pub gate_more_tests: String,
+  pub gate_tests_joiner: String,
+  pub gate_log: String,
   pub suite_left_out: String,
   pub on: String,
   pub gate_passed_before: String,

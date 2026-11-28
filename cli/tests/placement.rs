@@ -48,6 +48,7 @@ use bmo_testbed_core::events::Hook;
 use bmo_testbed_core::placement::{
   LOADED_EXIT_CODE, LOADED_VARIABLE, PlaceAsk, PlacedRun, Placement, read_placed,
 };
+use bmo_testbed_core::policy::deploy::DEPLOY;
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::policy::lanes::LANES;
 use bmo_testbed_core::policy::prune::PRUNE;
@@ -2603,6 +2604,114 @@ fn passed_at(gate: &PlacedGate<'_>, dir: &Path) -> bmo_testbed_deploy::deploymen
     declaration: &Declaration::default(),
     earlier: &none_earlier,
   })
+}
+
+// "for a deployment it copies none and takes every untracked file away, the ones its git ignores among them ...
+// the declaration at the deployed commit": a checkout whose working tree has its tracked file edited, a file
+// added, a build's output written and its declaration changed, beside a bench holding what an earlier run built
+// there, has its commit judged exactly as the clean checkout of the same commit was.
+#[test]
+fn a_dirty_working_checkout_leaves_the_gate_judging_the_deployed_commit_alone() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let gate = dropping_gate(&dir, 0);
+  let repo = dir.join("repo");
+  let bench = dir.join("deploy-bench/repo/repo");
+  let judged = |outcome: &bmo_testbed_deploy::deployment::GateOutcome| {
+    let codes = outcome.steps.iter().map(|step| (step.name.clone(), step.code)).collect::<Vec<_>>();
+
+    (outcome.passed, outcome.reason.clone(), codes)
+  };
+
+  std::fs::write(repo.join(".gitignore"), "built/\n").unwrap();
+  std::fs::write(repo.join("marker.txt"), "committed\n").unwrap();
+  std::fs::write(
+    repo.join("testbed.toml"),
+    "testbed = 0\n\n[[check.step]]\nid = \"commit-alone\"\ncommand = \"grep -qx committed marker.txt && test ! -e \
+     untracked.txt && test ! -e built/stale\"\n",
+  )
+  .unwrap();
+  git(&repo, &["add", "."]);
+  git(&repo, &["commit", "-q", "-m", "judged by its commit"]);
+
+  let clean = passed_at(&gate, &dir);
+
+  assert!(clean.passed, "{clean:?}");
+
+  std::fs::write(repo.join("marker.txt"), "edited\n").unwrap();
+  std::fs::write(repo.join("untracked.txt"), "left by a job\n").unwrap();
+  std::fs::create_dir_all(repo.join("built")).unwrap();
+  std::fs::write(repo.join("built/stale"), "a build's output").unwrap();
+  std::fs::write(
+    repo.join("testbed.toml"),
+    "testbed = 0\n\n[test]\nsibling_trees = [\"../absent\"]\n\n[[check.step]]\nid = \"fails\"\ncommand = \"false\"\n",
+  )
+  .unwrap();
+  std::fs::create_dir_all(bench.join("built")).unwrap();
+  std::fs::write(bench.join("built/stale"), "an earlier run's build").unwrap();
+
+  let dirty = passed_at(&gate, &dir);
+
+  assert_eq!(judged(&dirty), judged(&clean));
+  assert!(!bench.join("built").exists(), "the earlier build's output stayed on the bench");
+}
+
+// "Asked `--json`, the suite there ends on the line naming its log, which a failure brings here ... the reason
+// names the tests the log gives as failed and the log brought"
+#[test]
+fn a_placed_gate_s_failed_suite_brings_its_log_here_and_names_the_failed_test() {
+  let dir = tempfile::tempdir().unwrap();
+  let dir = std::fs::canonicalize(dir.path()).unwrap();
+  let mut gate = dropping_gate(&dir, 0);
+  let repo = dir.join("repo");
+  let far_log = dir.join("far-home/far-suite.log");
+  let wrapper = dir.join("far-testbed");
+
+  // The testbed there answers its own verbs, but for a suite, which fails on one test and names its log.
+  install(
+    &format!(
+      r#"#!/bin/sh
+if [ "$1" = suite ]; then
+  printf 'fail 0.1s tests/unit.rs\ntest unit::a_case ... FAILED\n' > {log}
+  printf '{{"exitCode":1,"logPath":"%s","waitedMs":0,"spentMs":0,"testRunId":null}}\n' {log}
+  exit 1
+fi
+exec {real} "$@"
+"#,
+      log = far_log.display(),
+      real = env!("CARGO_BIN_EXE_bmo-testbed"),
+    ),
+    &wrapper,
+  );
+  gate.machine.settings.testbed = wrapper.to_string_lossy().into_owned();
+
+  let commit = git(&repo, &["rev-parse", "HEAD"]);
+  let outcome = gate.pass(&GateAsk {
+    root: &repo,
+    tree: &repo,
+    commit: &commit,
+    since: None,
+    suite: true,
+    heads: &[],
+    declaration: &Declaration::default(),
+    earlier: &none_earlier,
+  });
+  let brought = dir.join("data/testbed/placed/machine-2/far-suite.log");
+  let said = &DEPLOY.run;
+  let failed = fill_marks(
+    &said.gate_failed_tests,
+    &[
+      ("reason", &fill_marks(&said.gate_suite, &[("code", "1")])),
+      ("tests", "unit::a_case (tests/unit.rs)"),
+    ],
+  );
+
+  assert!(!outcome.passed, "{outcome:?}");
+  assert_eq!(
+    outcome.reason,
+    fill_marks(&said.gate_log, &[("reason", &failed), ("log", &brought.to_string_lossy())])
+  );
+  assert_eq!(std::fs::read_to_string(&brought).unwrap(), std::fs::read_to_string(&far_log).unwrap());
 }
 
 // "The connection counts as broken where `ssh` ends with its own code, 255 ... and runs that work again from its

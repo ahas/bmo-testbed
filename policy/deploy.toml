@@ -49,6 +49,8 @@ dirty_shown = 10
 quoted_chars = 300
 # How many characters of a live process's command line a pinned release's account carries.
 command_chars = 200
+# How many failed tests a gate's reason names before it says how many more there are.
+failed_tests_shown = 10
 # How many releases may stand before a prune sends `releases-pinned`.
 releases_told_above = 12
 # How long a wait for the health rests between asks, in milliseconds.
@@ -162,6 +164,13 @@ gate_failed = "the deployment of {commit} did not pass its gate, so nothing went
 # The gate's reason where its static check or its suite did not pass, {code} the exit.
 gate_check = "the static check ended with exit {code}"
 gate_suite = "the suite ended with exit {code}"
+# What a failed gate's reason carries after it (docs/deploy.md, 「What the deploy run does, in order」): the
+# {tests} its log names as failed, joined, and {count} more where it names more than `failed_tests_shown`; and
+# the {log} its suite or its static check wrote, on the machine the deployment runs on.
+gate_failed_tests = "{reason}; failed: {tests}"
+gate_more_tests = "{tests} and {count} more"
+gate_tests_joiner = ", "
+gate_log = "{reason}; its log is {log}"
 # The gate's suite left out for a passed run of the whole suite on the commit: {id} the test run, {commit} a
 # short commit, {when} when it began, {checkout} where it ran, {on} the line below or nothing, {log} its log.
 suite_left_out = "the suite is left out: test run {id} passed the whole suite on {commit} from a clean tree, begun {when} in {checkout}{on}; its log is {log}"

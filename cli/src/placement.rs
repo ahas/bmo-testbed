@@ -317,7 +317,8 @@ fn rsync_over(
 
 /// A repository put at a commit there: where its place holds none, cloned from its remote, or made empty where
 /// it has none or the clone fails there, handed the commit and checked out at it detached, its untracked
-/// files taken away where asked.
+/// files taken away where asked, the ones its git ignores among them, so nothing an earlier run built or
+/// installed there stands beside the commit.
 struct AtCommit<'a> {
   repository: &'a Path,
   remote: &'a str,
@@ -366,7 +367,7 @@ fn put_at_commit(
     return Err(failed(&said_of.unpushed, &pushed));
   }
 
-  let clean = if at.clean { " && git clean -qfd" } else { "" };
+  let clean = if at.clean { " && git clean -qfdx" } else { "" };
   let checked_out = ssh(format!("cd {path} && git checkout -q --force --detach {BENCH_BRANCH}{clean}"));
 
   if !succeeded(&checked_out) {
@@ -396,7 +397,8 @@ pub fn ready_bench(bench: &Bench, source: &BenchSource<'_>) -> Result<(), String
       .output()
   };
 
-  // A bench for a deployment is the commit alone: whatever an earlier run's open files left standing goes.
+  // A bench for a deployment is the commit alone: whatever an earlier run's open files, its setup or its build
+  // left standing goes, ignored or not.
   put_at_commit(
     bench,
     &ssh,
@@ -530,6 +532,7 @@ fn passed_out(from: impl Read, kept: &KeptThere) {
 
   while from.read_until(b'\n', &mut line).is_ok_and(|read| read > 0) {
     kept.hear(&line);
+    kept.last_said(&line);
 
     if writing {
       writing = to.write_all(&line).and_then(|()| to.flush()).is_ok();
@@ -539,24 +542,42 @@ fn passed_out(from: impl Read, kept: &KeptThere) {
   }
 }
 
-// The failing logs a far run's output named as kept there, gathered as its lines pass, each once.
+// The failing logs a far run's output named as kept there, gathered as its lines pass, each once, and the last
+// line its standard output gave that was not blank, which a verb asked `--json` answers on.
 #[derive(Debug, Default)]
-struct KeptThere(Mutex<Vec<String>>);
+struct KeptThere {
+  paths: Mutex<Vec<String>>,
+  last: Mutex<Option<String>>,
+}
 
 impl KeptThere {
   // Notes the file a line names where it is a change check's `failing log kept:` line.
   fn hear(&self, line: &[u8]) {
     let Some(path) = kept_named(&String::from_utf8_lossy(line)) else { return };
-    let mut paths = self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut paths = self.paths.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
 
     if !paths.contains(&path) {
       paths.push(path);
     }
   }
 
+  // Notes a line of standard output as the last one, where it is not blank.
+  fn last_said(&self, line: &[u8]) {
+    let line = String::from_utf8_lossy(line).trim().to_owned();
+
+    if !line.is_empty() {
+      *self.last.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(line);
+    }
+  }
+
   // The files noted, in the order their lines came.
   fn paths(&self) -> Vec<String> {
-    self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone()
+    self.paths.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone()
+  }
+
+  // The last line of standard output noted.
+  fn last(&self) -> Option<String> {
+    self.last.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone()
   }
 }
 
@@ -1115,6 +1136,16 @@ pub enum FarEnd {
   Broken,
 }
 
+/// What words run on the placed machine came to, read back: how they ended, the last line their standard output
+/// gave that was not blank, and each failing log they kept there, brought here (docs/boundary.md, 「The placed
+/// machine」).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FarRun {
+  pub end: FarEnd,
+  pub last_line: Option<String>,
+  pub brought: Vec<PathBuf>,
+}
+
 impl MachinePlacement {
   /// The placement under a data root for an account's home, its events going to the machine's own hook: none where
   /// the settings name no machine or do not read, the reason said on a line.
@@ -1325,7 +1356,15 @@ impl MachinePlacement {
     // the checkout the registry finds: the bench is listed only where it is that copy, so a worker's copy is
     // never a second checkout giving the name (docs/boundary.md, 「The placed machine」).
     let mut known_by_its_shared_copy = false;
-    let repo = Repository::read(checkout).ok();
+    // The declaration naming the sibling trees and the shared versions is the commit's for a deployment, so an
+    // edit standing in the checkout lays nothing a deployment's gate reads (docs/boundary.md, 「The placed
+    // machine」).
+    let repo = match purpose {
+      BenchFor::Deployment(_) => {
+        Some(Repository::at_commit(checkout, commit).map_err(|refused| refused.0)?)
+      }
+      BenchFor::Run => Repository::read(checkout).ok(),
+    };
 
     // The trees its tests read by a path no manifest names, laid as a tree a manifest names is.
     for sibling in repo.iter().flat_map(|repo| &repo.declaration.test.sibling_trees) {
@@ -1584,6 +1623,19 @@ impl MachinePlacement {
     placed: Option<&PlacedRun>,
     heard: &Arc<AtomicU64>,
   ) -> FarEnd {
+    self.run_read(bench, words, setup, placed, heard).end
+  }
+
+  /// The words run in the bench as `run_there` runs them, with what came back: the last line of their standard
+  /// output and the failing logs they kept there, brought here once they ended.
+  pub fn run_read(
+    &self,
+    bench: &ReadyBench,
+    words: &[String],
+    setup: bool,
+    placed: Option<&PlacedRun>,
+    heard: &Arc<AtomicU64>,
+  ) -> FarRun {
     let said = &LANES.placed;
     let line = self.placed_line(bench, words, setup);
 
@@ -1619,31 +1671,40 @@ impl MachinePlacement {
       Some(code) => FarEnd::Ended(u8::try_from(code).unwrap_or(1)),
     };
 
-    if matches!(end, FarEnd::Ended(_)) {
-      self.bring_kept(&kept.paths());
-    }
+    let brought = match end {
+      FarEnd::Ended(_) => kept.paths().iter().filter_map(|far| self.bring(far)).collect(),
+      FarEnd::Broken => Vec::new(),
+    };
 
-    end
+    FarRun {
+      end,
+      last_line: kept.last(),
+      brought,
+    }
   }
 
-  // Each failing log a run kept there, read over `ssh` once it ended and written under this machine's data root
-  // at `testbed/placed/<machine>/` by its own name, each said on standard error (docs/boundary.md, 「The placed
-  // machine」).
-  fn bring_kept(&self, paths: &[String]) {
+  /// A log a run kept there, read over `ssh` and written under this machine's data root at
+  /// `testbed/placed/<machine>/` by its own name, said on standard error: the copy here, none where it could not
+  /// be read there or written here, which is said instead (docs/boundary.md, 「The placed machine」).
+  pub fn bring(&self, far: &str) -> Option<PathBuf> {
     let machine = self.settings.label();
     let dir = self.data_root.join("testbed").join("placed").join(machine);
 
-    for far in paths {
-      let line = match self.brought(far, &dir) {
-        Ok(path) => {
+    match self.brought(far, &dir) {
+      Ok(path) => {
+        eprintln!(
+          "{}",
           fill_marks(&LANES.placed.log_brought, &[("machine", machine), ("path", &path.to_string_lossy())])
-        }
-        Err(said) => {
+        );
+        Some(path)
+      }
+      Err(said) => {
+        eprintln!(
+          "{}",
           fill_marks(&LANES.placed.log_unbrought, &[("machine", machine), ("far", far), ("said", &said)])
-        }
-      };
-
-      eprintln!("{line}");
+        );
+        None
+      }
     }
   }
 

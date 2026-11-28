@@ -682,12 +682,23 @@ flowchart TD
    - **The gate reads the commit's committed trees.** On this machine it runs in the build tree, put at
      the commit with the trees outside the repository laid at their committed heads (「The releases」)
      before the static check begins, and never in the checkout, whose working tree may stand anywhere; on
-     the placed machine it runs in the bench, made ready the same way. A build tree or a tree outside
+     the placed machine it runs in the bench, made ready the same way, every file the commit does not
+     track taken away there, those its git ignores among them, so an earlier gate's installed packages and
+     built output never stand beside the commit (`docs/boundary.md`, 「The placed machine」). A build tree or a tree outside
      the repository that cannot be laid stops the deployment in the check stage with nothing changed.
      The build tree holds the commit and nothing another commit's setup left in it (「The releases」).
    - **The gate goes by the commit's declaration.** Its setup, its static check and its suite are the
-     ones the commit declares, as the bench on the placed machine reads them from the commit too; the
-     checkout's working tree, which may stand at an older commit, declares none of them.
+     ones the commit declares, as the bench on the placed machine reads them from the commit too, and so
+     are the sibling trees and the shared versions' checkout the bench lays beside it; the checkout's
+     working tree, which may stand at an older commit or hold an edit half written, declares none of them,
+     so nothing standing in a checkout changes what the gate answers.
+   - **A failed gate names what failed.** Its reason, which the deployment record keeps, gives the
+     step's exit; for a suite that failed, the tests its log names as failed, each with its unit, up to the
+     policy's number, ten, and how many more there are; and the log the failed step wrote, as it stands
+     on this machine. A gate on the placed machine asks its suite there `--json`, so the suite ends on the
+     line naming its log, and a suite that failed has that log brought here as a static check's kept
+     failing log is (`docs/boundary.md`, 「The placed machine」); the reason names the copy here, so it
+     can be read after the placed machine's own logs have moved on.
    - **The tree the gate reads is set up first.** The `[test].setup` steps the commit declares run
      there, in order, before the static check and the suite, so a fresh tree holds the packages its
      check needs (`docs/declaration.md`). A step that fails stops the deployment in the check stage with

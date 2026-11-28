@@ -752,6 +752,36 @@ impl Repository {
     Ok(Self { root, declaration })
   }
 
+  /// The repository the checkout `dir` stands in as the commit holds it: the checkout's root and the
+  /// declaration at that commit, whatever the working tree holds, every default where the commit has no
+  /// file. Refused where the commit does not read.
+  pub fn at_commit(dir: &Path, commit: &str) -> Result<Self, Refusal> {
+    let root = root_of(dir).unwrap_or_else(|| dir.to_path_buf());
+    let named = format!("{commit}:{}", DECLARATION.file);
+    let git =
+      |args: &[&str]| Command::new("git").arg("-C").arg(&root).args(args).stdin(Stdio::null()).output();
+    let unreadable = |error: String| {
+      Refusal(fill_marks(
+        &DECLARATION.refusal.unreadable,
+        &[("file", &named), ("table", &DECLARATION.refusal.top_level), ("error", &error)],
+      ))
+    };
+    let said = |done: std::io::Result<std::process::Output>| match done {
+      Ok(done) if done.status.success() => Ok(String::from_utf8_lossy(&done.stdout).into_owned()),
+      Ok(done) => Err(unreadable(String::from_utf8_lossy(&done.stderr).trim().to_owned())),
+      Err(error) => Err(unreadable(error.to_string())),
+    };
+    // The tree's listing tells a commit without the file, which takes every default, from one that does not read.
+    let listed = said(git(&["ls-tree", "--name-only", commit, "--", &DECLARATION.file]))?;
+    let declaration = if listed.trim().is_empty() {
+      Declaration::default()
+    } else {
+      Declaration::parse(&named, &said(git(&["show", &named]))?)?
+    };
+
+    Ok(Self { root, declaration })
+  }
+
   /// The repository's name: the one declared, or the root directory's.
   pub fn name(&self) -> String {
     self.declaration.name.clone().unwrap_or_else(|| {
