@@ -991,7 +991,9 @@ fn from_artifact(archive: &std::path::Path, args: &DeployFlags, env: &bmo_testbe
     Err(why) => return refused(&why.to_string()),
   };
 
-  match runtime.block_on(bmo_testbed_deploy::artifact_deploy::deploy_artifact(&ask, env, &|line| println!("{line}"))) {
+  match runtime.block_on(bmo_testbed_deploy::artifact_deploy::deploy_artifact(&ask, env, &|line| {
+    println!("{line}")
+  })) {
     Ok(line) => {
       println!("{line}");
       0

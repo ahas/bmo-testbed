@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use bmo_testbed_install::run::PORTS_FILE;
-use bmo_testbed_install::run::{Outcome, STATE_FILE};
+use bmo_testbed_install::run::{ARTIFACT_MARK, Outcome, STATE_FILE};
 use bmo_testbed_install::{Ask, Install, Line, Machine, Mode, Ran, Services, Status};
 
 #[derive(Default)]
@@ -30,6 +30,10 @@ struct Stand {
   tags: Vec<String>,
   /// Every deployment asked: the checkout's folder, the commit and whether it was a first release.
   deployments: RefCell<Vec<(String, String, bool)>>,
+  /// Every artifact put live, by its archive.
+  artifact_deploys: RefCell<Vec<String>>,
+  /// Where each archive was unpacked, and the commit it holds, as the test lays them.
+  unpacked_at: RefCell<BTreeMap<PathBuf, PathBuf>>,
 }
 
 const FIRST: &str = "0123456789abcdef";
@@ -117,6 +121,39 @@ impl Machine for Stand {
 
   fn tags(&self, _checkout: &Path) -> Vec<String> {
     self.tags.clone()
+  }
+
+  fn channel_file(&self, channel: &str, file: &str) -> Result<Vec<u8>, String> {
+    std::fs::read(Path::new(channel).join(file)).map_err(|why| why.to_string())
+  }
+
+  fn unpack(&self, archive: &Path, into: &Path) -> Ran {
+    // The test's archive is a JSON map of file names to their text, standing in for a packed release.
+    let files: BTreeMap<String, String> = serde_json::from_slice(&std::fs::read(archive).unwrap()).unwrap();
+
+    std::fs::create_dir_all(into).unwrap();
+
+    for (name, text) in files {
+      std::fs::write(into.join(name), text).unwrap();
+    }
+
+    self.unpacked_at.borrow_mut().insert(archive.to_path_buf(), into.to_path_buf());
+
+    Ran {
+      code: 0,
+      said: String::new(),
+    }
+  }
+
+  fn deploy_artifact(&self, archive: &Path, message: &str) -> Ran {
+    self.artifact_deploys.borrow_mut().push(archive.display().to_string());
+
+    let checkout = self.unpacked_at.borrow().get(archive).cloned().unwrap();
+    let mark: serde_json::Value =
+      serde_json::from_str(&std::fs::read_to_string(checkout.join(ARTIFACT_MARK)).unwrap()).unwrap();
+    let commit = mark["commit"].as_str().unwrap().to_owned();
+
+    self.deploy(&checkout, &commit, message, true).0
   }
 
   fn fast_forward(&self, checkout: &Path, _main: &str) -> Ran {
@@ -331,6 +368,7 @@ fn ask(ground: &Ground, mode: Mode, dry_run: bool) -> Ask {
     prefix: ground.index.clone(),
     services: Services::default(),
     checkouts: ground.data_root.join("testbed/checkouts.toml"),
+    artifacts: None,
   }
 }
 
@@ -852,4 +890,69 @@ fn an_upgrade_needs_an_install_to_move() {
   let (outcome, _) = run(&ground, &machine, nightly(), false);
 
   assert!(matches!(outcome, Outcome::Refused(_)));
+}
+
+// A channel laid as the test's own folder: the presets file, and for each repository its manifest and its archive,
+// the archive holding the repository's declarations for the folder it will be unpacked into.
+fn channel(ground: &Ground) -> PathBuf {
+  let channel = ground.data_root.parent().unwrap().join("channel");
+  let index = ground.data_root.join("install/index");
+
+  std::fs::create_dir_all(&channel).unwrap();
+  std::fs::write(channel.join("presets.toml"), PRESETS).unwrap();
+
+  for (name, declaration) in [("one", ONE), ("two", TWO)] {
+    let unpacked = index.join("services").join(name);
+    let files = serde_json::json!({ "install.toml": declaration, "testbed.toml": testbed(&unpacked) });
+    let file = format!("{name}-1.0.0-x86_64.tar.zst");
+
+    std::fs::write(channel.join(&file), files.to_string()).unwrap();
+    std::fs::write(
+      channel.join(format!("{name}.json")),
+      serde_json::json!({ "name": name, "version": "1.0.0", "commit": format!("c0ffee{name}"), "file": file }).to_string(),
+    )
+    .unwrap();
+  }
+
+  channel
+}
+
+#[test]
+fn an_install_from_a_channel_unpacks_each_artifact_and_deploys_it_with_nothing_cloned_or_built() {
+  let ground = ground();
+  let machine = Stand::default();
+  let channel = channel(&ground);
+
+  // The repositories stand nowhere but in the channel.
+  std::fs::remove_dir_all(ground.index.join("services")).unwrap();
+  std::fs::create_dir_all(ground.data_root.join("env")).unwrap();
+  std::fs::write(ground.data_root.join("env/one-owner"), "owner\n").unwrap();
+  std::fs::write(ground.data_root.join("env/two.minted"), "minted\n").unwrap();
+
+  let mut asked = ask(&ground, solo(), false);
+
+  asked.index = None;
+  asked.prefix = ground.data_root.join("install/index");
+  asked.artifacts = Some(channel.display().to_string());
+
+  let mut lines = Vec::new();
+  let mut say = |line: &Line| lines.push(line.clone());
+  let outcome = Install::new(asked, &machine, &mut say).run();
+  let printed: Vec<String> = lines.iter().map(Line::json).collect();
+
+  assert_eq!(outcome, Outcome::Done, "{printed:#?}");
+  assert!(ground.data_root.join("install/index/presets.toml").is_file());
+  assert!(ground.data_root.join("install/index/services/one").join(ARTIFACT_MARK).is_file());
+  assert!(
+    ground.data_root.join("install/artifacts/one-1.0.0-x86_64.json").is_file(),
+    "the manifest kept beside"
+  );
+  assert_eq!(machine.artifact_deploys.borrow().len(), 2, "each repository deployed from its artifact");
+  assert_eq!(
+    *machine.deployments.borrow(),
+    vec![
+      ("one".to_owned(), "c0ffeeone".to_owned(), true),
+      ("two".to_owned(), "c0ffeetwo".to_owned(), true),
+    ]
+  );
 }

@@ -47,6 +47,7 @@ pub fn install(args: &InstallArgs) -> u8 {
     prefix,
     services: services.clone(),
     checkouts,
+    artifacts: args.from.clone(),
   };
   let host = Host::new(&services.postgres_host, &services.postgres_port);
   let mut say = |line: &Line| println!("{}", line.json());
@@ -80,6 +81,7 @@ pub fn upgrade(args: &UpgradeArgs) -> u8 {
     prefix,
     services: services.clone(),
     checkouts,
+    artifacts: None,
   };
   let host = Host::new(&services.postgres_host, &services.postgres_port);
   let mut say = |line: &Line| println!("{}", line.json());

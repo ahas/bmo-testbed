@@ -514,6 +514,9 @@ pub struct InstallArgs {
   pub valkey: Option<String>,
   #[arg(long, conflicts_with_all = ["status", "set"])]
   pub dry_run: bool,
+  /// The artifact channel every repository is taken from in place of a clone (docs/artifacts.md).
+  #[arg(long, value_parser = named)]
+  pub from: Option<String>,
 }
 
 /// `upgrade`: the install moved to the newest release tag, or with `--nightly` to the head of every main branch

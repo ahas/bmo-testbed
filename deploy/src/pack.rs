@@ -9,8 +9,8 @@ use bmo_testbed_core::declaration::{Artifact, Declaration, Repository};
 use bmo_testbed_core::policy::artifacts::ARTIFACTS;
 use bmo_testbed_core::policy::fill_marks;
 use bmo_testbed_core::version::{deployed_version, platform_day};
-use object::read::elf::{ElfFile64, FileHeader};
 use object::Endianness;
+use object::read::elf::{ElfFile64, FileHeader};
 use serde_json::json;
 use sha2::{Digest, Sha256};
 
@@ -175,14 +175,18 @@ fn copy_kept(from: &Path, to: &Path, path: &str) -> std::io::Result<()> {
 // under the release's `runtime/<name>/`.
 fn place_runtime(name: &str, release: &Path, cache: &Path) -> Result<(), String> {
   let said_runtime = |why: &str| said(&ARTIFACTS.said.runtime_failed, &[("runtime", name), ("why", why)]);
-  let runtime = ARTIFACTS.runtimes.get(name).ok_or_else(|| said_runtime("the policy does not carry it"))?;
+  let runtime = ARTIFACTS
+    .runtimes
+    .get(name)
+    .ok_or_else(|| said_runtime("the policy does not carry it"))?;
   let folder = cache.join(format!("{name}-{}", runtime.version));
   let archive = folder.join("archive.zip");
 
   std::fs::create_dir_all(&folder).map_err(|why| said_runtime(&why.to_string()))?;
 
   if !archive.exists() {
-    ran(Command::new("curl").args(["-fsSL", "-o"]).arg(&archive).arg(&runtime.url)).map_err(|why| said_runtime(&why))?;
+    ran(Command::new("curl").args(["-fsSL", "-o"]).arg(&archive).arg(&runtime.url))
+      .map_err(|why| said_runtime(&why))?;
   }
 
   let bytes = std::fs::read(&archive).map_err(|why| said_runtime(&why.to_string()))?;
@@ -193,7 +197,8 @@ fn place_runtime(name: &str, release: &Path, cache: &Path) -> Result<(), String>
     return Err(said_runtime(&format!("its digest {digest} is not the policy's {}", runtime.sha256)));
   }
 
-  ran(Command::new("unzip").args(["-o", "-q"]).arg(&archive).arg("-d").arg(&folder)).map_err(|why| said_runtime(&why))?;
+  ran(Command::new("unzip").args(["-o", "-q"]).arg(&archive).arg("-d").arg(&folder))
+    .map_err(|why| said_runtime(&why))?;
 
   let binary = folder.join(&runtime.binary);
   let file_name = binary.file_name().ok_or_else(|| said_runtime("its binary has no name"))?;
@@ -248,9 +253,16 @@ pub fn pack(ask: &PackAsk, say: &dyn Fn(&str)) -> Result<Packed, String> {
   let repository = Repository::read(&ask.checkout).map_err(|why| format!("{why:?}"))?;
   let declaration = &repository.declaration;
   let name = declaration.name.clone().unwrap_or_else(|| {
-    repository.root.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default()
+    repository
+      .root
+      .file_name()
+      .map(|name| name.to_string_lossy().into_owned())
+      .unwrap_or_default()
   });
-  let artifact = declaration.artifact.clone().ok_or_else(|| said(&artifacts.no_table, &[("name", &name)]))?;
+  let artifact = declaration
+    .artifact
+    .clone()
+    .ok_or_else(|| said(&artifacts.no_table, &[("name", &name)]))?;
 
   if let Some((id, word)) = building_steps(declaration).into_iter().next() {
     return Err(said(&artifacts.building_step, &[("name", &name), ("id", &id), ("word", &word)]));
@@ -262,11 +274,20 @@ pub fn pack(ask: &PackAsk, say: &dyn Fn(&str)) -> Result<Packed, String> {
     }
   }
 
-  let commit = git(&repository.root, &["rev-parse", &format!("{}^{{commit}}", ask.commit.as_deref().unwrap_or("HEAD"))])?
-    .trim()
-    .to_owned();
-  let at: Vec<String> = git(&repository.root, &["tag", "--points-at", &commit])?.lines().map(str::to_owned).collect();
-  let reached: Vec<String> = git(&repository.root, &["tag", "--merged", &commit])?.lines().map(str::to_owned).collect();
+  let commit = git(
+    &repository.root,
+    &["rev-parse", &format!("{}^{{commit}}", ask.commit.as_deref().unwrap_or("HEAD"))],
+  )?
+  .trim()
+  .to_owned();
+  let at: Vec<String> = git(&repository.root, &["tag", "--points-at", &commit])?
+    .lines()
+    .map(str::to_owned)
+    .collect();
+  let reached: Vec<String> = git(&repository.root, &["tag", "--merged", &commit])?
+    .lines()
+    .map(str::to_owned)
+    .collect();
   let now_ms = chrono::Utc::now().timestamp_millis();
   let version = deployed_version(&at, &reached, platform_day(now_ms));
   let arch = ARTIFACTS.floor.arches.first().cloned().unwrap_or_else(|| "x86_64".to_owned());
@@ -277,7 +298,10 @@ pub fn pack(ask: &PackAsk, say: &dyn Fn(&str)) -> Result<Packed, String> {
 
   let result = (|| {
     // The build tree, a worktree at the commit, and the release laid from the commit's own files.
-    git(&repository.root, &["worktree", "add", "--detach", &stage.build.to_string_lossy(), &commit])?;
+    git(
+      &repository.root,
+      &["worktree", "add", "--detach", &stage.build.to_string_lossy(), &commit],
+    )?;
     std::fs::create_dir_all(&stage.release).map_err(|why| why.to_string())?;
 
     ran(Command::new("sh").arg("-c").arg(format!(
@@ -310,7 +334,10 @@ pub fn pack(ask: &PackAsk, say: &dyn Fn(&str)) -> Result<Packed, String> {
         let parts = version_parts(&needed);
 
         if parts > version_parts(&floor) {
-          return Err(said(&artifacts.above_floor, &[("file", path), ("version", &needed), ("floor", &floor)]));
+          return Err(said(
+            &artifacts.above_floor,
+            &[("file", path), ("version", &needed), ("floor", &floor)],
+          ));
         }
 
         if parts > highest {
@@ -325,7 +352,15 @@ pub fn pack(ask: &PackAsk, say: &dyn Fn(&str)) -> Result<Packed, String> {
     let archive = ask.out.join(format!("{stem}.tar.zst"));
     let manifest = ask.out.join(format!("{stem}.json"));
 
-    ran(Command::new("tar").arg("--zstd").arg("-cf").arg(&archive).arg("-C").arg(&stage.pack).arg("."))?;
+    ran(
+      Command::new("tar")
+        .arg("--zstd")
+        .arg("-cf")
+        .arg(&archive)
+        .arg("-C")
+        .arg(&stage.pack)
+        .arg("."),
+    )?;
 
     let bytes = std::fs::read(&archive).map_err(|why| why.to_string())?;
     let digest = Sha256::digest(&bytes);
@@ -337,6 +372,7 @@ pub fn pack(ask: &PackAsk, say: &dyn Fn(&str)) -> Result<Packed, String> {
       "arch": arch,
       "glibc": glibc,
       "sha256": format!("{digest:x}"),
+      "file": format!("{stem}.tar.zst"),
     });
 
     if let Some(key) = &ask.key {
@@ -391,7 +427,8 @@ fn build(
   version: &str,
   commit: &str,
 ) -> Result<(), String> {
-  let failed = |step: &str, why: String| said(&ARTIFACTS.said.build_failed, &[("step", step), ("said", &why)]);
+  let failed =
+    |step: &str, why: String| said(&ARTIFACTS.said.build_failed, &[("step", step), ("said", &why)]);
   let build = &declaration.build;
 
   if stage.build.join("Cargo.toml").exists() {
@@ -428,7 +465,8 @@ fn build(
     std::fs::create_dir_all(&bin).map_err(|why| why.to_string())?;
 
     for binary in &binaries {
-      std::fs::copy(built.join(binary), bin.join(binary)).map_err(|why| failed("place", format!("{binary}: {why}")))?;
+      std::fs::copy(built.join(binary), bin.join(binary))
+        .map_err(|why| failed("place", format!("{binary}: {why}")))?;
     }
 
     std::fs::write(bin.join("built-from"), format!("{commit}\n")).map_err(|why| why.to_string())?;
@@ -437,8 +475,14 @@ fn build(
   for step in &build.steps {
     let dir = step.dir.as_ref().map_or_else(|| stage.build.clone(), |dir| stage.build.join(dir));
 
-    ran(Command::new("sh").arg("-c").arg(&step.command).current_dir(dir).env("BMO_VERSION", version))
-      .map_err(|why| failed(&step.id, why))?;
+    ran(
+      Command::new("sh")
+        .arg("-c")
+        .arg(&step.command)
+        .current_dir(dir)
+        .env("BMO_VERSION", version),
+    )
+    .map_err(|why| failed(&step.id, why))?;
   }
 
   Ok(())

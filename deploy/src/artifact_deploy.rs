@@ -48,7 +48,9 @@ fn ran(command: &mut Command) -> (i32, String) {
 /// The GNU C library version this machine runs, as `2.35`.
 pub fn machine_glibc() -> String {
   // SAFETY: gnu_get_libc_version returns a pointer to a static, NUL-terminated string the C library owns.
-  unsafe { std::ffi::CStr::from_ptr(libc::gnu_get_libc_version()) }.to_string_lossy().into_owned()
+  unsafe { std::ffi::CStr::from_ptr(libc::gnu_get_libc_version()) }
+    .to_string_lossy()
+    .into_owned()
 }
 
 fn parts(version: &str) -> Vec<u64> {
@@ -71,14 +73,19 @@ pub fn checked(archive: &Path, env: &Env) -> Result<serde_json::Value, String> {
   let manifest: serde_json::Value = std::fs::read_to_string(&manifest_path)
     .map_err(|why| why.to_string())
     .and_then(|text| serde_json::from_str(&text).map_err(|why| why.to_string()))
-    .map_err(|why| said(&words.no_manifest, &[("file", &manifest_path.display().to_string()), ("why", &why)]))?;
+    .map_err(|why| {
+      said(&words.no_manifest, &[("file", &manifest_path.display().to_string()), ("why", &why)])
+    })?;
   let field = |name: &str| manifest[name].as_str().unwrap_or_default().to_owned();
   let bytes = std::fs::read(archive).map_err(|why| format!("{shown}: {why}"))?;
   let digest = Sha256::digest(&bytes);
   let hex = format!("{digest:x}");
 
   if hex != field("sha256") {
-    return Err(said(&words.digest_differs, &[("file", &shown), ("digest", &hex), ("expected", &field("sha256"))]));
+    return Err(said(
+      &words.digest_differs,
+      &[("file", &shown), ("digest", &hex), ("expected", &field("sha256"))],
+    ));
   }
 
   let signing = &ARTIFACTS.signing;
@@ -164,7 +171,13 @@ pub async fn deploy_artifact(ask: &ArtifactAsk, env: &Env, say: &dyn Fn(&str)) -
   // The declaration it carries, read before anything is laid, so the places are known first.
   let peek = tempdir_beside(&ask.archive)?;
   let (code, out) = ran(
-    Command::new("tar").arg("--zstd").arg("-xf").arg(&ask.archive).arg("-C").arg(&peek).arg("./testbed.toml"),
+    Command::new("tar")
+      .arg("--zstd")
+      .arg("-xf")
+      .arg(&ask.archive)
+      .arg("-C")
+      .arg(&peek)
+      .arg("./testbed.toml"),
   );
 
   if code != 0 {
@@ -206,7 +219,11 @@ pub async fn deploy_artifact(ask: &ArtifactAsk, env: &Env, say: &dyn Fn(&str)) -
   std::fs::create_dir_all(&places.data_root).map_err(|why| why.to_string())?;
 
   for link in &deploy.env_links {
-    let target = if link.target.is_absolute() { link.target.clone() } else { places.data_root.join(&link.target) };
+    let target = if link.target.is_absolute() {
+      link.target.clone()
+    } else {
+      places.data_root.join(&link.target)
+    };
 
     if !target.exists() {
       return Err(said(&words.env_missing, &[("file", &target.display().to_string())]));
@@ -288,8 +305,10 @@ pub async fn deploy_artifact(ask: &ArtifactAsk, env: &Env, say: &dyn Fn(&str)) -
   let restarted = marked(".service", UnitMark::Restart);
   let bound = marked(".service", UnitMark::Binary);
   let timers = marked(".timer", UnitMark::Timer);
-  let linked_only: Vec<String> =
-    [".service", ".slice"].into_iter().flat_map(|suffix| marked(suffix, UnitMark::Link)).collect();
+  let linked_only: Vec<String> = [".service", ".slice"]
+    .into_iter()
+    .flat_map(|suffix| marked(suffix, UnitMark::Link))
+    .collect();
   let declared_units: Vec<String> = restarted
     .iter()
     .chain(&bound)
@@ -304,7 +323,12 @@ pub async fn deploy_artifact(ask: &ArtifactAsk, env: &Env, say: &dyn Fn(&str)) -
   set_aside_plain_units(&places.unit_dir, &declared_units);
 
   let installed: Vec<String> = std::fs::read_dir(&places.unit_dir)
-    .map(|entries| entries.flatten().map(|entry| entry.file_name().to_string_lossy().into_owned()).collect())
+    .map(|entries| {
+      entries
+        .flatten()
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .collect()
+    })
     .unwrap_or_default();
   let installs = units_to_link(&declared_units, deploy_dir, &installed);
 

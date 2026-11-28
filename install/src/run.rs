@@ -70,6 +70,25 @@ pub struct Ask {
   pub services: Services,
   /// The machine's registry of checkouts, which the install names every checkout it holds in.
   pub checkouts: PathBuf,
+  /// The artifact channel every repository is taken from in place of a clone, a folder or an address
+  /// (docs/artifacts.md); none clones and builds from source.
+  pub artifacts: Option<String>,
+}
+
+/// The file an artifact unpacked in place of a checkout keeps beside it: the archive and what it holds.
+pub const ARTIFACT_MARK: &str = ".artifact.json";
+
+/// Whether a repository's folder stands: a checkout, or an artifact unpacked.
+fn stands(path: &Path) -> bool {
+  path.join(".git").exists() || path.join(ARTIFACT_MARK).exists()
+}
+
+/// The archive and the commit an unpacked artifact names.
+fn artifact_of(path: &Path) -> Option<(PathBuf, String)> {
+  let mark: serde_json::Value =
+    serde_json::from_str(&std::fs::read_to_string(path.join(ARTIFACT_MARK)).ok()?).ok()?;
+
+  Some((PathBuf::from(mark["archive"].as_str()?), mark["commit"].as_str()?.to_owned()))
 }
 
 /// The servers the installed services reach, as the install's values name them (docs/install.md, 「Values」).
@@ -347,7 +366,29 @@ impl<'a> Install<'a> {
 
   /// The run, as its words ask.
   pub fn run(mut self) -> Outcome {
-    let Some(index) = find_index(&self.ask) else {
+    // From a channel, the index is the install's own, its presets file the channel's.
+    let index = match self.ask.artifacts.clone() {
+      Some(channel) => {
+        let index = self.ask.index.clone().unwrap_or_else(|| self.ask.data_root.join("install/index"));
+
+        if !index.join(PRESETS_FILE).exists() || !self.ask.dry_run {
+          match self.machine.channel_file(&channel, PRESETS_FILE) {
+            Ok(bytes) => {
+              if let Err(why) = std::fs::create_dir_all(&index)
+                .and_then(|()| std::fs::write(index.join(PRESETS_FILE), bytes))
+              {
+                return Self::refused(&why.to_string());
+              }
+            }
+            Err(why) => return Self::refused(&why),
+          }
+        }
+
+        Some(index)
+      }
+      None => find_index(&self.ask),
+    };
+    let Some(index) = index else {
       return Self::refused(&mark(&INSTALL.refusal.no_index, &[("file", PRESETS_FILE)]));
     };
     let presets = match PresetsFile::read(&index) {
@@ -406,6 +447,43 @@ impl<'a> Install<'a> {
     }
 
     Ok(resolved)
+  }
+
+  // One repository's artifact taken from the channel: its manifest, `<name>.json`, then the archive it names, both
+  // kept under the data root's `install/artifacts/`, the archive unpacked into the repository's folder with the
+  // mark naming it.
+  fn unpacked(&self, channel: &str, name: &str, path: &Path) -> Result<(), String> {
+    let manifest_bytes = self.machine.channel_file(channel, &format!("{name}.json"))?;
+    let manifest: serde_json::Value =
+      serde_json::from_slice(&manifest_bytes).map_err(|why| why.to_string())?;
+    let file = manifest["file"]
+      .as_str()
+      .ok_or_else(|| format!("{name}.json names no file"))?
+      .to_owned();
+    let commit = manifest["commit"].as_str().unwrap_or_default().to_owned();
+    let kept = self.ask.data_root.join("install/artifacts");
+    let archive = kept.join(&file);
+    let beside = kept.join(format!("{}.json", file.trim_end_matches(".tar.zst")));
+
+    std::fs::create_dir_all(&kept).map_err(|why| why.to_string())?;
+    std::fs::write(&beside, &manifest_bytes).map_err(|why| why.to_string())?;
+
+    if !archive.exists() {
+      let bytes = self.machine.channel_file(channel, &file)?;
+
+      std::fs::write(&archive, bytes).map_err(|why| why.to_string())?;
+    }
+
+    let ran = self.machine.unpack(&archive, path);
+
+    if !ran.ok() {
+      return Err(ran.said);
+    }
+
+    let mark_text =
+      serde_json::json!({ "archive": archive, "commit": commit, "version": manifest["version"] });
+
+    std::fs::write(path.join(ARTIFACT_MARK), mark_text.to_string()).map_err(|why| why.to_string())
   }
 
   fn checkout_of(index: &Path, presets: &PresetsFile, name: &str) -> PathBuf {
@@ -471,7 +549,29 @@ impl<'a> Install<'a> {
       let step = format!("clone:{name}");
       let values = [("name", name.as_str()), ("url", entry.url.as_str()), ("path", shown.as_str())];
 
-      if path.join(".git").exists() {
+      if let Some(channel) = self.ask.artifacts.clone() {
+        let values = [("name", name.as_str()), ("url", channel.as_str()), ("path", shown.as_str())];
+
+        if stands(&path) {
+          standing.insert(name.clone());
+          self.line(step, Status::Ok, mark(&said.clone_stands, &values), "");
+        } else if self.ask.dry_run {
+          self.line(step, Status::Planned, mark(&said.clone_planned, &values), "");
+        } else {
+          match self.unpacked(&channel, name, &path) {
+            Ok(()) => {
+              standing.insert(name.clone());
+              self.line(step, Status::Ok, mark(&said.clone_made, &values), "");
+            }
+            Err(why) => self.line(
+              step,
+              Status::Failed,
+              mark(&said.clone_failed, &[("name", name), ("url", &channel), ("said", &quoted(&why))]),
+              &next.mend_and_rerun,
+            ),
+          }
+        }
+      } else if path.join(".git").exists() {
         if !self.ask.dry_run {
           let _ = self.machine.fetch(&path);
         }
@@ -1505,7 +1605,12 @@ impl<'a> Install<'a> {
       return false;
     }
 
-    let Some(commit) = self.machine.main_head(&unit.checkout, &main) else {
+    let from_artifact = artifact_of(&unit.checkout);
+    let Some(commit) = from_artifact
+      .as_ref()
+      .map(|(_, commit)| commit.clone())
+      .or_else(|| self.machine.main_head(&unit.checkout, &main))
+    else {
       let why = format!("origin/{main} does not resolve");
 
       self.line(
@@ -1517,7 +1622,10 @@ impl<'a> Install<'a> {
       return false;
     };
     let message = format!("The first install of {}", unit.name);
-    let (ran, deployment) = self.machine.deploy(&unit.checkout, &commit, &message, true);
+    let (ran, deployment) = match &from_artifact {
+      Some((archive, _)) => (self.machine.deploy_artifact(archive, &message), None),
+      None => self.machine.deploy(&unit.checkout, &commit, &message, true),
+    };
     let recorded = unit
       .deploy_root(&self.ask)
       .and_then(|root| std::fs::read_to_string(root.join("deployed.json")).ok())
@@ -1798,7 +1906,7 @@ impl<'a> Install<'a> {
 
     for name in &resolved.units {
       let checkout = Self::checkout_of(index, presets, name);
-      let cloned = checkout.join(".git").exists();
+      let cloned = stands(&checkout);
       let testbed = cloned
         .then(|| Repository::read(&checkout).ok())
         .flatten()

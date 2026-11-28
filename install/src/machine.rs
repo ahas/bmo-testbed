@@ -54,6 +54,13 @@ pub trait Machine {
   /// where one was started. A first release goes live at once, since nothing of it is live to wait quiet for; a
   /// later one waits for quiet (docs/install.md, 「Deploying」 and 「Upgrading: `upgrade`」).
   fn deploy(&self, checkout: &Path, commit: &str, message: &str, first: bool) -> (Ran, Option<String>);
+  /// One file of an artifact channel, a folder or an address, read whole (docs/artifacts.md).
+  fn channel_file(&self, channel: &str, file: &str) -> Result<Vec<u8>, String>;
+  /// An artifact archive unpacked into a folder made afresh.
+  fn unpack(&self, archive: &Path, into: &Path) -> Ran;
+  /// An artifact put live by the deploy verb, waited for until it ends (docs/artifacts.md, 「A deployment from
+  /// an artifact」).
+  fn deploy_artifact(&self, archive: &Path, message: &str) -> Ran;
 }
 
 /// This machine.
@@ -242,6 +249,57 @@ impl Machine for Host {
       .and_then(|mut source| source.read_exact(&mut out))
       .map_err(|why| why.to_string())?;
     Ok(out)
+  }
+
+  fn channel_file(&self, channel: &str, file: &str) -> Result<Vec<u8>, String> {
+    if channel.starts_with("http://") || channel.starts_with("https://") {
+      let address = format!("{}/{file}", channel.trim_end_matches('/'));
+      let output = Command::new("curl")
+        .args(["-fsSL", "--retry", "3", &address])
+        .stdin(Stdio::null())
+        .output()
+        .map_err(|why| why.to_string())?;
+
+      if output.status.success() {
+        Ok(output.stdout)
+      } else {
+        Err(format!("{address}: {}", String::from_utf8_lossy(&output.stderr).trim()))
+      }
+    } else {
+      let path = Path::new(channel).join(file);
+
+      std::fs::read(&path).map_err(|why| format!("{}: {why}", path.display()))
+    }
+  }
+
+  fn unpack(&self, archive: &Path, into: &Path) -> Ran {
+    let _ = std::fs::remove_dir_all(into);
+
+    if let Err(why) = std::fs::create_dir_all(into) {
+      return Ran {
+        code: -1,
+        said: why.to_string(),
+      };
+    }
+
+    ran(Command::new("tar").arg("--zstd").arg("-xf").arg(archive).arg("-C").arg(into))
+  }
+
+  fn deploy_artifact(&self, archive: &Path, message: &str) -> Ran {
+    let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default();
+    let path = std::env::var_os("PATH").unwrap_or_default();
+    let mut paths = vec![home.join(".local/bin")];
+
+    paths.extend(std::env::split_paths(&path));
+    ran(
+      Command::new(&self.testbed)
+        .arg("deploy")
+        .arg("--artifact")
+        .arg(archive)
+        .args(["--message", message])
+        .env("PATH", std::env::join_paths(paths).unwrap_or(path))
+        .env_remove("CLAUDE_PID"),
+    )
   }
 
   fn deploy(&self, checkout: &Path, commit: &str, message: &str, first: bool) -> (Ran, Option<String>) {
