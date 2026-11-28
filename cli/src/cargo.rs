@@ -280,16 +280,40 @@ fn send_over(root: &Path, enforcement: &Enforcement, hook: &Hook) {
   });
 }
 
+/// The ceiling a prune holds the shared build directory to: the size it is set to, and how the free space of the
+/// filesystem holding the directory is read, since the ceiling is never more than what leaves the policy's room
+/// free there (docs/deploy.md, 「The Cargo build directory」).
+#[derive(Clone, Copy)]
+pub struct CeilingAsk<'a> {
+  pub setting: CeilingSetting,
+  /// What the filesystem holding a path has free for this account, in bytes.
+  pub free: &'a dyn Fn(&Path) -> u64,
+}
+
+impl CeilingAsk<'static> {
+  /// The ceiling the environment sets, against the free space the disk itself answers.
+  pub fn of(env: &Env) -> Self {
+    Self {
+      setting: CeilingSetting::of(env),
+      free: &disk_free_bytes,
+    }
+  }
+}
+
 // The shared build directory pruned at `root` and, unless it is cleared whole, its ceiling enforced: what it
 // says, a refusal where its disk keeps no access times.
 fn prune_shared(
   args: &PruneArgs,
   root: &Path,
   (days, hours): (f64, f64),
-  setting: CeilingSetting,
+  ceiling: CeilingAsk<'_>,
   deployments: &Deployments,
   hook: &Hook,
 ) -> Said {
+  let CeilingAsk {
+    setting,
+    free: free_of,
+  } = ceiling;
   let said = &VERBS.prune;
   let shown = root.to_string_lossy();
 
@@ -323,7 +347,7 @@ fn prune_shared(
   // same.
   let ceiling_plan = |planned: &PrunePlan, now: i64| {
     let held = directory_bytes(root).saturating_sub(planned.bytes);
-    let free = disk_free_bytes(root).saturating_add(planned.bytes);
+    let free = free_of(root).saturating_add(planned.bytes);
 
     CeilingPlan::of(root, &planned.paths(), Ceiling::of(setting, held, free), held, now)
   };
@@ -350,7 +374,7 @@ fn prune_shared(
   let locks = take_prune_locks(root, LANES.numbers.notice_seconds as f64, &|profile| {
     eprintln!("{}", fill_marks(&said.locked, &[("profile", &profile.to_string_lossy())]));
   });
-  let before = disk_free_bytes(root);
+  let before = free_of(root);
   let now = now_ms();
   let building = deployments.building();
   let planned = plan_at(now, &building);
@@ -370,7 +394,7 @@ fn prune_shared(
 
   answer.out.push(fill_marks(
     &said.free,
-    &[("before", &gigabytes(before)), ("after", &gigabytes(disk_free_bytes(root)))],
+    &[("before", &gigabytes(before)), ("after", &gigabytes(free_of(root)))],
   ));
 
   if let Some(enforcement) = enforcement {
@@ -542,11 +566,13 @@ fn trim_when_due(args: &PruneArgs, root: &Path, trim: &[String], hook: &Hook) ->
 }
 
 /// Where `args` asks for a prune only where one is due and none is at `now` (docs/deploy.md, 「The Cargo build
-/// directory」): the line saying what the directory at `root` holds of its ceiling under `setting` and how long ago
+/// directory」): the line saying what the directory at `root` holds of its ceiling under `ceiling` and how long ago
 /// it was last pruned. None where the prune is to run: it was not asked to wait for its due, the directory does not
 /// exist or holds no mark of a prune, its last prune ended the prune policy's span ago or more, or the directory or
 /// its deployments' checkouts hold more than their ceilings.
-pub fn not_due(args: &PruneArgs, root: &Path, setting: CeilingSetting, now: i64) -> Option<String> {
+pub fn not_due(args: &PruneArgs, root: &Path, ceiling: CeilingAsk<'_>, now: i64) -> Option<String> {
+  let CeilingAsk { setting, free } = ceiling;
+
   if !args.when_due || !root.exists() {
     return None;
   }
@@ -558,7 +584,7 @@ pub fn not_due(args: &PruneArgs, root: &Path, setting: CeilingSetting, now: i64)
   }
 
   let held = directory_bytes(root);
-  let ceiling = Ceiling::of(setting, held, disk_free_bytes(root));
+  let ceiling = Ceiling::of(setting, held, free(root));
   let shown = gigabytes(ceiling.bytes);
   // The deployments' checkouts are read only where the machine sets them a ceiling of their own.
   let over = held > ceiling.bytes
@@ -585,7 +611,7 @@ pub fn prune_in(
   root: &Path,
   deployments: &Deployments,
   trim: &[String],
-  ceiling: CeilingSetting,
+  ceiling: CeilingAsk<'_>,
   hook: &Hook,
 ) -> Said {
   let said = &VERBS.prune;
@@ -707,7 +733,7 @@ pub fn placed_disk(machine: &MachinePlacement, root: &Path, send: bool, hook: &H
 pub fn prune(args: &PruneArgs) -> u8 {
   let env = process_env();
   let root = cargo_target_root();
-  let ceiling = CeilingSetting::of(&env);
+  let ceiling = CeilingAsk::of(&env);
 
   if let Some(line) = not_due(args, &root, ceiling, now_ms()) {
     forget_sent(&root.join(OVER_SENT_MARK_NAME));

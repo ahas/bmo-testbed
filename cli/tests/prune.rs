@@ -10,7 +10,7 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
-use bmo_testbed_cli::cargo::{Deployments, not_due, prune_in};
+use bmo_testbed_cli::cargo::{CeilingAsk, Deployments, not_due, prune_in};
 use bmo_testbed_cli::words::{PruneArgs, Verb, read};
 use bmo_testbed_core::events::Hook;
 use bmo_testbed_core::policy::fill_marks;
@@ -36,17 +36,29 @@ fn prune_words(given: &[&str]) -> Result<PruneArgs, clap::Error> {
   })
 }
 
-// The ceiling the policy sets, which no directory a test makes reaches.
-fn policy_ceiling() -> CeilingSetting {
-  CeilingSetting::of(&HashMap::new())
+// A filesystem far roomier than the policy's ceiling and the room it leaves free, which the prune is handed in
+// place of the disk the test runs on, so no ceiling here falls with that disk's free space.
+fn roomy_disk(_: &Path) -> u64 {
+  10_000 * 1_000_000_000
+}
+
+// The ceiling the policy sets, on a roomy disk, which no directory a test makes reaches.
+fn policy_ceiling() -> CeilingAsk<'static> {
+  CeilingAsk {
+    setting: CeilingSetting::of(&HashMap::new()),
+    free: &roomy_disk,
+  }
 }
 
 // A ceiling of nothing, which every directory a test makes stands over.
-fn no_room() -> CeilingSetting {
-  CeilingSetting {
-    bytes: 0,
-    named: true,
-    deployments: None,
+fn no_room() -> CeilingAsk<'static> {
+  CeilingAsk {
+    setting: CeilingSetting {
+      bytes: 0,
+      named: true,
+      deployments: None,
+    },
+    free: &roomy_disk,
   }
 }
 
