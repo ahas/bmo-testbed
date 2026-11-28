@@ -205,7 +205,7 @@ refused, naming it.
 |---|---|---|
 | `install` | integer | The major of this schema the declaration is written for: `1` |
 | `restart` | command | Restarts the repository's services, run where a settings file it reads changed after its first release |
-| `[[needs]]` | table | A program the machine must hold: `program`, asked with `command -v`, or `check`, a command answering 0 where it stands; `what`, what it is for and where it comes from, in English; `source`, where the install builds it from where it is missing (「A program built from its source」) |
+| `[[needs]]` | table | A program the machine must hold: `program`, asked with `command -v`, or `check`, a command answering 0 where it stands; `build`, true where only building the repository from source needs it, so an install from an artifact channel (docs/artifacts.md) passes it over; `what`, what it is for and where it comes from, in English; `source`, where the install builds it from where it is missing (「A program built from its source」) |
 | `[[port]]` | table | A port the repository listens on: `name`, `number` |
 | `[[token]]` | table | A random token: `name`; `file`, where it is kept under the data root; `bytes`, its length before encoding, 32 by default; `encoding`, `hex` or `base64`, `hex` by default |
 | `[[input]]` | table | A value only a person has (「Inputs」): `name`, `what`, `file`, `secret`, `optional`, `default` |

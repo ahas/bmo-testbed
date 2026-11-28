@@ -47,6 +47,9 @@ pub struct Need {
   pub check: Option<String>,
   pub what: String,
   pub source: Option<NeedSource>,
+  /// Whether only a build from source needs it, so an install from an artifact channel passes it over.
+  #[serde(default)]
+  pub build: bool,
 }
 
 /// Where a missing program is built from (docs/install.md, 「A program built from its source」).

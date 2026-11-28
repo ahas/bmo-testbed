@@ -693,6 +693,11 @@ impl<'a> Install<'a> {
       for need in &unit.declaration.needs {
         let name = need.name();
 
+        // A program only a build from source needs is no need of an install from artifacts.
+        if need.build && self.ask.artifacts.is_some() {
+          continue;
+        }
+
         if !asked.insert(name.clone()) {
           continue;
         }
